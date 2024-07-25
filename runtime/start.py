@@ -35,6 +35,7 @@ env_vars = {
 os.system("git -C /opt/latch/plots-faas pull origin master")
 os.system("git -C /opt/latch/plots-faas rev-parse HEAD > /opt/latch/plots_faas_version")
 
+os.chdir("/opt/latch/plots-faas")
 os.execle(
     "/usr/bin/nice",
     "-n",
