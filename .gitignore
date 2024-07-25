@@ -1,0 +1,6 @@
+.DS_Store
+__pycache__
+/credentials
+/scratch-local
+*.sw*
+.pdm-python
