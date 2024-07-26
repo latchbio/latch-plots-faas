@@ -1143,21 +1143,23 @@ async def main() -> None:
     _inject.kernel = k
     await k.send({"type": "ready"})
 
+    shutdown_wait_task = asyncio.create_task(shutdown_event.wait())
     while not shutdown_event.is_set():
         try:
-            accept_coro = k.accept()
-            await asyncio.wait(
+            accept_task = asyncio.create_task(k.accept())
+            done, pending = await asyncio.wait(
                 # note(maximsmol):
                 # a task cancelled here from inside a signal handler will NOT abort
                 # this seems to be because the loop is already committed to a epoll
                 # we add an Event in here to let us wake up the loop so it can
                 # realize the coro is cancelled and clean up
-                [accept_coro, shutdown_event.wait()],
+                [accept_task, shutdown_wait_task],
                 return_when=asyncio.FIRST_COMPLETED,
             )
 
             # if shutting down, accept_coro will be cancelled, so we need to await it
-            await accept_coro
+            if accept_task in pending:
+                await accept_task
         except Exception:
             traceback.print_exc()
             continue
