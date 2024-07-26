@@ -1120,21 +1120,22 @@ class Kernel:
 
 
 loop: asyncio.AbstractEventLoop | None = None
-shutdown_event: asyncio.Event = asyncio.Event()
+shutdown_requested = False
 
 
 def sigterm_handler(signum: int, frame: FrameType | None) -> None:
     for t in asyncio.all_tasks(loop):
         t.cancel("SIGTERM")
 
-    shutdown_event.set()
+    global shutdown_requested
+    shutdown_requested = True
 
 
 async def main() -> None:
     global loop
     loop = asyncio.get_running_loop()
 
-    signal.signal(signal.SIGTERM, sigterm_handler)
+    loop.add_signal_handler(signal.SIGTERM, sigterm_handler)
 
     sock = socket.socket(family=socket.AF_UNIX, fileno=int(sys.argv[-1]))
     sock.setblocking(False)
@@ -1143,23 +1144,9 @@ async def main() -> None:
     _inject.kernel = k
     await k.send({"type": "ready"})
 
-    shutdown_wait_task = asyncio.create_task(shutdown_event.wait())
-    while not shutdown_event.is_set():
+    while not shutdown_requested:
         try:
-            accept_task = asyncio.create_task(k.accept())
-            done, pending = await asyncio.wait(
-                # note(maximsmol):
-                # a task cancelled here from inside a signal handler will NOT abort
-                # this seems to be because the loop is already committed to a epoll
-                # we add an Event in here to let us wake up the loop so it can
-                # realize the coro is cancelled and clean up
-                [accept_task, shutdown_wait_task],
-                return_when=asyncio.FIRST_COMPLETED,
-            )
-
-            # if shutting down, accept_coro will be cancelled, so we need to await it
-            if accept_task in pending:
-                await accept_task
+            await k.accept()
         except Exception:
             traceback.print_exc()
             continue
