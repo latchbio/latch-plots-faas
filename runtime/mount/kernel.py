@@ -1135,18 +1135,17 @@ shutdown_requested = False
 def sigterm_handler(signum: int, frame: FrameType | None) -> None:
     log("SIGTERM")
     for t in asyncio.all_tasks(loop):
-        log("cancel", t)
         t.cancel("SIGTERM")
 
-    global shutdown_requested
-    shutdown_requested = True
+    # try to exit using KeyboardInterrupt
+    signal.raise_signal(signal.SIGINT)
 
 
 async def main() -> None:
     global loop
     loop = asyncio.get_running_loop()
 
-    loop.add_signal_handler(signal.SIGTERM, sigterm_handler)
+    signal.signal(signal.SIGTERM, sigterm_handler)
 
     sock = socket.socket(family=socket.AF_UNIX, fileno=int(sys.argv[-1]))
     sock.setblocking(False)
