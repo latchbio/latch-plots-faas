@@ -1119,17 +1119,17 @@ class Kernel:
             return
 
 
-shutdown_requested: bool = False
+shutdown_requested = asyncio.Event()
 
 
 def shutdown(signum: int, frame: FrameType | None) -> None:
-    global shutdown_requested
     print("Recieved signal", signum)
-    shutdown_requested = True
+    shutdown_requested.set()
 
 
 async def main() -> None:
     signal.signal(signal.SIGTERM, shutdown)
+
     sock = socket.socket(family=socket.AF_UNIX, fileno=int(sys.argv[-1]))
     sock.setblocking(False)
 
@@ -1137,9 +1137,12 @@ async def main() -> None:
     _inject.kernel = k
     await k.send({"type": "ready"})
 
-    while not shutdown_requested:
+    while not shutdown_requested.is_set():
         try:
-            await k.accept()
+            await asyncio.wait(
+                [k.accept(), shutdown_requested.wait()],
+                return_when=asyncio.FIRST_COMPLETED,
+            )
         except Exception:
             traceback.print_exc()
             continue
