@@ -32,7 +32,7 @@ env_vars = {
     "auth_self_signed_jwk": "",
 }
 
-os.system("git -C /opt/latch/plots-faas pull origin master")
+os.system("git -C /opt/latch/plots-faas pull origin main")
 os.system("git -C /opt/latch/plots-faas rev-parse HEAD > /opt/latch/plots_faas_version")
 
 os.chdir("/opt/latch/plots-faas")
