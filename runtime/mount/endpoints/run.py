@@ -58,10 +58,11 @@ async def raise_for_status(x: aiohttp.ClientResponse) -> None:
 
 
 connection_idx = 0
+active_cell: str | None = None
 
 
 async def run(ctx: Context) -> HandlerResult:
-    global connection_idx
+    global connection_idx, active_cell
 
     sess_hash = secrets.token_hex(32)
     await ctx.accept_connection()
@@ -106,6 +107,9 @@ async def run(ctx: Context) -> HandlerResult:
     )
     connection_idx += 1
 
+    if active_cell is not None and cell_status[active_cell] == "running":
+        await ctx.send_message({"type": "cell_running", "cell_id": active_cell})
+
     try:
         while True:
             msg = await receive_json(ctx.receive)
@@ -115,6 +119,10 @@ async def run(ctx: Context) -> HandlerResult:
                 cell_status.pop(cell_id, None)
                 cell_last_run_outputs.pop(cell_id, None)
                 cell_sequencers.pop(cell_id, None)
+
+            if msg["type"] == "run_cell":
+                cell_status[msg["cell_id"]] = "running"
+                active_cell = msg["cell_id"]
 
             await conn_k.send(msg)
     except WebsocketConnectionClosedError:
