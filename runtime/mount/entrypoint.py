@@ -180,6 +180,7 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
             cell_id = msg["cell_id"]
             active_cell = cell_id
             cell_sequencers[cell_id] = msg["run_sequencer"]
+            cell_status[cell_id] = "running"
 
             await gql_query(
                 auth=auth,
