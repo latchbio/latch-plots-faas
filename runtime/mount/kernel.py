@@ -1119,12 +1119,23 @@ class Kernel:
             return
 
 
+from pathlib import Path
+
+log_f = Path("/log.txt").open("w")
+
+
+def log(*args):
+    print(*args, file=log_f, flush=True)
+
+
 loop: asyncio.AbstractEventLoop | None = None
 shutdown_requested = False
 
 
 def sigterm_handler(signum: int, frame: FrameType | None) -> None:
+    log("SIGTERM")
     for t in asyncio.all_tasks(loop):
+        log("cancel", t)
         t.cancel("SIGTERM")
 
     global shutdown_requested
@@ -1145,8 +1156,10 @@ async def main() -> None:
     await k.send({"type": "ready"})
 
     while not shutdown_requested:
+        log("loop", shutdown_requested)
         try:
             await k.accept()
+            log("await accept")
         except Exception:
             traceback.print_exc()
             continue
