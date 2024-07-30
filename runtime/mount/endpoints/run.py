@@ -105,6 +105,7 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
         session_token = auth_header_regex_match.group("session_token")
 
         if oauth_token is not None:
+            # todo(rteqs): expose functionality in latch_asgi
             auth_data = jwt.decode(oauth_token, options={"verify_signature": False})
             s.set_attribute("auth0_sub", auth_data.get("sub"))
             s.set_attribute("name", auth_data.get("name"))
