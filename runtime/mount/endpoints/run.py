@@ -14,8 +14,8 @@ from latch_asgi.framework.websocket import (
     receive_json,
 )
 from latch_data_validation.data_validation import validate
-from latch_o11y.o11y import trace_function_with_span
-from opentelemetry.trace import Span, get_tracer
+from latch_o11y.o11y import trace_app_function_with_span
+from opentelemetry.trace import Span
 
 from ..entrypoint import (
     cell_last_run_outputs,
@@ -63,8 +63,6 @@ async def raise_for_status(x: aiohttp.ClientResponse) -> None:
     x.raise_for_status()
 
 
-tracer = get_tracer(__name__)
-
 connection_idx = 0
 
 auth_header_regex = re.compile(
@@ -78,9 +76,11 @@ auth_header_regex = re.compile(
 )
 
 
-@trace_function_with_span(tracer)
+@trace_app_function_with_span
 async def run(s: Span, ctx: Context) -> HandlerResult:
     global connection_idx
+
+    connection_idx += 1
 
     sess_hash = secrets.token_hex(32)
     await ctx.accept_connection()
@@ -89,10 +89,15 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
 
     notebook_id = auth_msg.notebook_id
 
-    s.set_attribute("notebook_id", notebook_id)
-    s.set_attribute("pod_id", pod_id)
-    s.set_attribute("pod_session_id", pod_session_id)
-    s.set_attribute("sess_hash", sess_hash)
+    s.set_attributes(
+        {
+            "notebook_id": notebook_id,
+            "pod_id": pod_id,
+            "pod_session_id": pod_session_id,
+            "sess_hash": sess_hash,
+            "connection_idx": connection_idx,
+        }
+    )
 
     auth_header_regex_match = auth_header_regex.match(auth_msg.token)
     if auth_header_regex_match is not None:
@@ -140,9 +145,6 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
             allow_nan=False,
         )
     )
-    connection_idx += 1
-
-    s.set_attribute("connection_idx", connection_idx)
 
     try:
         while True:
