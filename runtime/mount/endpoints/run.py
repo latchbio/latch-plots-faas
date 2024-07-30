@@ -1,9 +1,11 @@
 import json
+import re
 import secrets
 from contextlib import suppress
 from dataclasses import dataclass
 
 import aiohttp
+import jwt
 import orjson
 from latch_asgi.context.websocket import Context, HandlerResult
 from latch_asgi.framework.websocket import (
@@ -12,6 +14,8 @@ from latch_asgi.framework.websocket import (
     receive_json,
 )
 from latch_data_validation.data_validation import validate
+from latch_o11y.o11y import trace_app_function_with_span
+from opentelemetry.trace import Span
 
 from ..entrypoint import (
     cell_last_run_outputs,
@@ -20,6 +24,8 @@ from ..entrypoint import (
     contexts,
     gql_query,
     k_proc,
+    pod_id,
+    pod_session_id,
     ready_ev,
 )
 
@@ -59,9 +65,22 @@ async def raise_for_status(x: aiohttp.ClientResponse) -> None:
 
 connection_idx = 0
 
+auth_header_regex = re.compile(
+    r"""
+    ^(
+        Bearer \s+ (?P<oauth_token>.*) |
+        Latch-Session-Token \s+ (?P<session_token>.*) |
+    )$
+    """,
+    re.IGNORECASE | re.VERBOSE,
+)
 
-async def run(ctx: Context) -> HandlerResult:
+
+@trace_app_function_with_span
+async def run(s: Span, ctx: Context) -> HandlerResult:
     global connection_idx
+
+    connection_idx += 1
 
     sess_hash = secrets.token_hex(32)
     await ctx.accept_connection()
@@ -69,6 +88,29 @@ async def run(ctx: Context) -> HandlerResult:
     auth_msg = await ctx.receive_message(MAuth)
 
     notebook_id = auth_msg.notebook_id
+
+    s.set_attributes(
+        {
+            "notebook_id": notebook_id,
+            "pod_id": pod_id,
+            "pod_session_id": pod_session_id,
+            "sess_hash": sess_hash,
+            "connection_idx": connection_idx,
+        }
+    )
+
+    auth_header_regex_match = auth_header_regex.match(auth_msg.token)
+    if auth_header_regex_match is not None:
+        oauth_token = auth_header_regex_match.group("oauth_token")
+        session_token = auth_header_regex_match.group("session_token")
+
+        if oauth_token is not None:
+            # todo(rteqs): expose functionality in latch_asgi
+            auth_data = jwt.decode(oauth_token, options={"verify_signature": False})
+            s.set_attribute("auth0_sub", auth_data.get("sub"))
+            s.set_attribute("name", auth_data.get("name"))
+        elif session_token is not None:
+            s.set_attribute("session_token", session_token)
 
     data_q = await gql_query(
         auth=auth_msg.token,
@@ -104,7 +146,6 @@ async def run(ctx: Context) -> HandlerResult:
             allow_nan=False,
         )
     )
-    connection_idx += 1
 
     try:
         while True:

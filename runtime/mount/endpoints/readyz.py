@@ -1,5 +1,4 @@
-from latch_asgi.context.common import Context
-from latch_asgi.context.http import HandlerResult
+from latch_asgi.context.http import Context, HandlerResult
 from latch_asgi.framework.http import HTTPInternalServerError
 
 from ..entrypoint import k_proc, start_kernel_proc
