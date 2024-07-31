@@ -513,10 +513,24 @@ class Kernel:
 
                 tg.create_task(self.send_output_value(key, cell_id=cell_id))
 
+            # note: plots with filter tables have two layers of indirection.
+            # key -> controlling viewer -> viewer
+            touched_viewers = {
+                f"df_{viewer_id}"
+                for viewer_id, (key,) in self.viewer_pagination_settings.items()
+                if key in self.k_globals.touched
+            }
+            touched_viewers |= {
+                f"df_{viewer_id}"
+                for viewer_id, (key,) in self.viewer_pagination_settings.items()
+                if key in touched_viewers
+            }
+
             for viewer_id, (key, key_type) in self.viewer_cell_selections.items():
-                if key not in self.k_globals.touched:
+                if key not in self.k_globals.touched and key not in touched_viewers:
                     continue
 
+                touched_viewers.add(f"df_{viewer_id}")
                 if key_type == "key":
                     tg.create_task(self.send_output_value(key, viewer_id=viewer_id))
                 elif key_type == "ldata_node_id":
@@ -533,7 +547,7 @@ class Kernel:
                     tg.create_task(self.send_output_value(url=key, viewer_id=viewer_id))
 
             for plot_id, key in self.plot_data_selections.items():
-                if key not in self.k_globals.touched:
+                if key not in self.k_globals.touched and key not in touched_viewers:
                     continue
 
                 tg.create_task(self.send_plot_data(plot_id, key))
@@ -1006,7 +1020,6 @@ class Kernel:
 
         if msg["type"] == "run_cell":
             await self.exec(cell_id=msg["cell_id"], code=msg["code"])
-            await self.send_global_updates()
             return
 
         if msg["type"] == "dispose_cell":
@@ -1044,7 +1057,6 @@ class Kernel:
                         self.cell_pagination_settings[msg["cell_id"]][msg["key"]], k, v
                     )
                 await self.send_output_value(msg["key"], cell_id=msg["cell_id"])
-                await self.send_global_updates()
 
             if "viewer_id" in msg:
                 viewer_id = msg["viewer_id"]
@@ -1118,7 +1130,6 @@ class Kernel:
                     traceback.print_exc()
                     continue
 
-            await self.send_global_updates()
             return
 
 
