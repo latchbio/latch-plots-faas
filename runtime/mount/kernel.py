@@ -1006,6 +1006,7 @@ class Kernel:
 
         if msg["type"] == "run_cell":
             await self.exec(cell_id=msg["cell_id"], code=msg["code"])
+            await self.send_global_updates()
             return
 
         if msg["type"] == "dispose_cell":
@@ -1043,6 +1044,7 @@ class Kernel:
                         self.cell_pagination_settings[msg["cell_id"]][msg["key"]], k, v
                     )
                 await self.send_output_value(msg["key"], cell_id=msg["cell_id"])
+                await self.send_global_updates()
 
             if "viewer_id" in msg:
                 viewer_id = msg["viewer_id"]
@@ -1084,7 +1086,7 @@ class Kernel:
 
                 else:
                     raise RuntimeError(
-                        "Requested value without key, ldata_node_id or registry_table_id"
+                        "Requested value without key, ldata_node_id, registry_table_id or url"
                     )
 
                 assert key_fields is not None
@@ -1116,6 +1118,7 @@ class Kernel:
                     traceback.print_exc()
                     continue
 
+            await self.send_global_updates()
             return
 
 
