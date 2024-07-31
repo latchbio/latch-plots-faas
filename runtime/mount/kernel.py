@@ -530,7 +530,6 @@ class Kernel:
                 if key not in self.k_globals.touched and key not in touched_viewers:
                     continue
 
-                touched_viewers.add(f"df_{viewer_id}")
                 if key_type == "key":
                     tg.create_task(self.send_output_value(key, viewer_id=viewer_id))
                 elif key_type == "ldata_node_id":
