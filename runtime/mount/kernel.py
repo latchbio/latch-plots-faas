@@ -513,8 +513,21 @@ class Kernel:
 
                 tg.create_task(self.send_output_value(key, cell_id=cell_id))
 
+            # note: plots with filter tables have two layers of indirection.
+            # key -> controlling viewer -> viewer
+            touched_viewers = {
+                f"df_{viewer_id}"
+                for viewer_id, (key,) in self.viewer_pagination_settings.items()
+                if key in self.k_globals.touched
+            }
+            touched_viewers |= {
+                f"df_{viewer_id}"
+                for viewer_id, (key,) in self.viewer_pagination_settings.items()
+                if key in touched_viewers
+            }
+
             for viewer_id, (key, key_type) in self.viewer_cell_selections.items():
-                if key not in self.k_globals.touched:
+                if key not in self.k_globals.touched and key not in touched_viewers:
                     continue
 
                 if key_type == "key":
@@ -533,7 +546,7 @@ class Kernel:
                     tg.create_task(self.send_output_value(url=key, viewer_id=viewer_id))
 
             for plot_id, key in self.plot_data_selections.items():
-                if key not in self.k_globals.touched:
+                if key not in self.k_globals.touched and key not in touched_viewers:
                     continue
 
                 tg.create_task(self.send_plot_data(plot_id, key))
@@ -1084,7 +1097,7 @@ class Kernel:
 
                 else:
                     raise RuntimeError(
-                        "Requested value without key, ldata_node_id or registry_table_id"
+                        "Requested value without key, ldata_node_id, registry_table_id or url"
                     )
 
                 assert key_fields is not None
