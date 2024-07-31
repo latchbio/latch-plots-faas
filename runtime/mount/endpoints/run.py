@@ -80,8 +80,6 @@ auth_header_regex = re.compile(
 async def run(s: Span, ctx: Context) -> HandlerResult:
     global connection_idx
 
-    connection_idx += 1
-
     sess_hash = secrets.token_hex(32)
     await ctx.accept_connection()
 
@@ -146,6 +144,8 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
             allow_nan=False,
         )
     )
+
+    connection_idx += 1
 
     try:
         while True:
