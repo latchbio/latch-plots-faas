@@ -20,7 +20,7 @@ def w_row(
 
     w: RowWidgetState = {
         "type": "row",
-        "items": set(item_keys),
+        "items": list(item_keys),
     }
 
     _emit.emit_widget(key, w)
