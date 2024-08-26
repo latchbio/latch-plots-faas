@@ -1,14 +1,13 @@
 from typing import Literal
 
-from runtime.mount.lplots.widgets.checkbox import CheckboxWidget
-from runtime.mount.lplots.widgets.dataframe import DataframePicker
-from runtime.mount.lplots.widgets.ldata import LDataPicker
-from runtime.mount.lplots.widgets.multiselect import MultiSelect
-from runtime.mount.lplots.widgets.radio import RadioGroups
-from runtime.mount.lplots.widgets.registry import RegistryTablePicker
-from runtime.mount.lplots.widgets.select import Select
-
 from . import _emit, _state
+from .checkbox import CheckboxWidget
+from .dataframe import DataframePicker
+from .ldata import LDataPicker
+from .multiselect import MultiSelect
+from .radio import RadioGroups
+from .registry import RegistryTablePicker
+from .select import Select
 
 AllowedWidgets = (
     CheckboxWidget
