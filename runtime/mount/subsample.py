@@ -1,4 +1,5 @@
 import datetime
+import traceback
 from typing import TYPE_CHECKING, Literal, NotRequired, TypedDict
 
 import duckdb
@@ -7,6 +8,8 @@ from pandas import DataFrame
 from plotly.basedatatypes import BaseFigure
 
 from runtime.mount.kernel import get_presigned_url
+
+from .entrypoint import auth_token_sdk, gql_query
 
 conn = duckdb.connect(
     database=":memory:plots-faas",
@@ -45,7 +48,7 @@ class DownsamplePlotConfig(TypedDict):
     width_px: NotRequired[float]
 
 
-def check_generation(
+async def check_generation(
     table_name: str, source_type: Literal["kernel", "ldata"] = "kernel"
 ) -> tuple[bool, int | None, datetime.datetime | None]:
     cur_gen = (
@@ -55,6 +58,39 @@ def check_generation(
     )
 
     # todo(rteqs): ldata_last_modified_time gql query to check latest ldata_node_id event
+    last_modified_time = None
+    if source_type == "ldata":
+        try:
+            resp = await gql_query(
+                auth=auth_token_sdk,
+                query="""
+                    query GetLDataLastModifiedTime($ldataNodeId: BigInt!) {
+                        ldataNodeEvents(
+                            filter: {
+                            type: { equalTo: INGRESS }
+                            ldataNodeId: { equalTo: $ldataNodeId }
+                            }
+                            orderBy: TIME_DESC
+                            first: 1
+                        ) {
+                            nodes {
+                            id
+                            time
+                            }
+                        }
+                    }
+                """,
+                variables={"ldataNodeId": int(table_name.split("_")[1])},
+            )
+            data = resp["data"]["ldataNodeEvents"]["nodes"]
+            if len(data) > 0:
+                # todo(rteqs): check if this is right
+                last_modified_time = datetime.datetime.fromisoformat(data[0]["time"])
+        except Exception:
+            traceback.print_exc()
+            # todo(rteqs): or smtg
+            raise
+
     last_modified_time = datetime.datetime.now(tz=datetime.UTC)
 
     duckdb_gen = conn.sql(
@@ -74,8 +110,11 @@ def check_generation(
         },
     ).fetchone()
 
-    if duckdb_gen is None or not isinstance(duckdb_gen[0], bool):
-        raise ValueError(f"Unexpected generation value: {duckdb_gen}")
+    if duckdb_gen is None:
+        return False, None, None
+
+    if not isinstance(duckdb_gen[0], bool):
+        raise TypeError(f"Unexpected generation value: {duckdb_gen}")
 
     if TYPE_CHECKING:
         assert isinstance(duckdb_gen[0], bool)
