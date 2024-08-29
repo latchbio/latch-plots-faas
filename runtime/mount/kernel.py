@@ -16,10 +16,10 @@ from traceback import format_exc
 from types import FrameType
 from typing import TYPE_CHECKING, Any, Literal, TypedDict, TypeVar
 
+import aiohttp
 import numpy as np
 import pandas as pd
 from latch.registry.table import Table
-from latch_cli import tinyrequests
 from latch_cli.utils import get_auth_header
 from latch_sdk_config.latch import config as latch_config
 from lplots import _inject
@@ -125,6 +125,8 @@ class TracedDict(dict[str, Signal[object]]):
 
     dataframes: Signal[set[str]]
 
+    generation_counter: defaultdict[str, int]
+
     def __init__(self) -> None:
         self.touched = set()
         self.removed = set()
@@ -144,6 +146,7 @@ class TracedDict(dict[str, Signal[object]]):
 
     def __setitem__(self, __key: str, __value: object) -> None:
         self.touched.add(__key)
+        self.generation_counter[__key] += 1
 
         dfs = self.dataframes.sample()
         if hasattr(__value, "iloc") and __key not in dfs:
@@ -390,31 +393,38 @@ def paginate(*, df: DataFrame, pagination_settings: PaginationSettings) -> DataF
     return data
 
 
-def get_presigned_url(path: str) -> str:
+async def get_presigned_url(path: str) -> str:
     endpoint = latch_config.api.data.get_signed_url
 
-    res = tinyrequests.post(
-        endpoint, headers={"Authorization": get_auth_header()}, json={"path": path}
-    )
+    headers = {"Authorization": get_auth_header()}
+    json_data = {"path": path}
 
-    if res.status_code != 200:
-        err = res.json()["error"]
-        msg = f"failed to fetch presigned url(s) for path {path}"
-        if res.status_code == 400:
-            raise ValueError(f"{msg}: download request invalid: {err}")
-        if res.status_code == 401:
-            raise RuntimeError(f"authorization token invalid: {err}")
-        raise RuntimeError(f"{msg} with code {res.status_code}: {res.json()['error']}")
+    async with (
+        aiohttp.ClientSession() as session,
+        session.post(endpoint, headers=headers, json=json_data) as response,
+    ):
+        res = await response.json()
 
-    data = res.json()
+        if res.status_code != 200:
+            err = res.json()["error"]
+            msg = f"failed to fetch presigned url(s) for path {path}"
+            if res.status_code == 400:
+                raise ValueError(f"{msg}: download request invalid: {err}")
+            if res.status_code == 401:
+                raise RuntimeError(f"authorization token invalid: {err}")
+            raise RuntimeError(
+                f"{msg} with code {res.status_code}: {res.json()['error']}"
+            )
 
-    return data["data"]["url"]
+        data = res.json()
+
+        return data["data"]["url"]
 
 
 def pagination_settings_dict_factory() -> (
     defaultdict[str, defaultdict[str, PaginationSettings]]
 ):
-    return defaultdict(lambda: defaultdict(lambda: PaginationSettings()))
+    return defaultdict(lambda: defaultdict(PaginationSettings))
 
 
 @dataclass
@@ -764,10 +774,6 @@ class Kernel:
 
         # todo(maximsmol): handle subsampling
 
-        if hasattr(res, "compute"):
-            # Dask support
-            res = res.compute()
-
         await self.send(
             {
                 "type": "plot_data",
@@ -1013,7 +1019,7 @@ class Kernel:
                     df: DataFrame | None = None
                     if key_type == "ldata_node_id":
                         path_str = f"latch://{data_id}.node"
-                        presigned_url = get_presigned_url(path_str)
+                        presigned_url = await get_presigned_url(path_str)
 
                         if data_id not in self.ldata_dataframes:
                             self.ldata_dataframes[data_id] = pd.read_csv(presigned_url)
@@ -1103,7 +1109,7 @@ class Kernel:
                     path_str = f"latch://{ldata_node_id}.node"
 
                     if ldata_node_id not in self.ldata_dataframes:
-                        presigned_url = get_presigned_url(path_str)
+                        presigned_url = await get_presigned_url(path_str)
                         self.ldata_dataframes[ldata_node_id] = pd.read_csv(
                             presigned_url
                         )
