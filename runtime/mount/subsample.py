@@ -1,10 +1,12 @@
-from time import time
-from typing import Literal, NotRequired, TypedDict
+import datetime
+from typing import TYPE_CHECKING, Literal, NotRequired, TypedDict
 
 import duckdb
 from lplots import _inject
 from pandas import DataFrame
 from plotly.basedatatypes import BaseFigure
+
+from runtime.mount.kernel import get_presigned_url
 
 conn = duckdb.connect(
     database=":memory:plots-faas",
@@ -43,9 +45,9 @@ class DownsamplePlotConfig(TypedDict):
     width_px: NotRequired[float]
 
 
-def has_latest_generation(
+def check_generation(
     table_name: str, source_type: Literal["kernel", "ldata"] = "kernel"
-) -> bool:
+) -> tuple[bool, int | None, datetime.datetime | None]:
     cur_gen = (
         _inject.kernel.k_globals.generation_counter.get(table_name)
         if source_type == "kernel"
@@ -53,7 +55,7 @@ def has_latest_generation(
     )
 
     # todo(rteqs): ldata_last_modified_time gql query to check latest ldata_node_id event
-    last_modified_time = time()
+    last_modified_time = datetime.datetime.now(tz=datetime.UTC)
 
     duckdb_gen = conn.sql(
         """
@@ -75,7 +77,10 @@ def has_latest_generation(
     if duckdb_gen is None or not isinstance(duckdb_gen[0], bool):
         raise ValueError(f"Unexpected generation value: {duckdb_gen}")
 
-    return duckdb_gen[0]
+    if TYPE_CHECKING:
+        assert isinstance(duckdb_gen[0], bool)
+
+    return duckdb_gen[0], cur_gen, last_modified_time
 
 
 def downsample(
@@ -215,23 +220,59 @@ def downsample(
     return relations
 
 
-def downsample_ldata(
+async def downsample_ldata(
     ldata_node_id: str, config: DownsamplePlotConfig
 ) -> list[DataFrame]:
-    if not has_latest_generation(f"ldata_{ldata_node_id}", "ldata"):
-        pass
+    is_latest, _, last_modified_time = check_generation(
+        f"ldata_{ldata_node_id}", "ldata"
+    )
+
+    if not is_latest:
+        # todo(rteqs): pull get_presigned_url out as a shared library
+        url = await get_presigned_url(f"latch://{ldata_node_id}.node")
+        conn.read_csv(url).to_table(f"ldata_{ldata_node_id}")
+        conn.execute(
+            """
+            insert into
+                plots_faas_catalog
+            values
+                ($name, null, $last_modified_time)
+            on conflict
+                (name)
+            do update
+            set
+                last_modified_time = $last_modified_time
+            """,
+            parameters={
+                "name": f"ldata_{ldata_node_id}",
+                "last_modified_time": last_modified_time,
+            },
+        )
 
     # todo(rteqs): process json on our own to avoid extra cost of going through pandas
     return [rel.df() for rel in downsample(ldata_node_id, config)]
 
 
-# def downsample(key: str):
-
-
 def downsample_fig(key: str, fig: BaseFigure) -> BaseFigure:
-    if not has_latest_generation(key):
-        # todo(rteqs): import
-        pass
+    is_latest, cur_gen, _ = check_generation(key)
+    if not is_latest:
+        # todo(rteqs): figure out how to convert plotly fig to duckdb table
+        # df
+        # conn.register(key, df)
+        conn.execute(
+            """
+            insert into
+                plots_faas_catalog
+            values
+                ($key, $cur_gen, null)
+            on conflict
+                (name)
+            do update
+            set
+                cur_gen = $cur_gen
+            """,
+            parameters={"name": key, "cur_gen": cur_gen},
+        )
 
     # convert fig to downsample config
     config: DownsamplePlotConfig = {"traces": [{"x": "x", "y": "y"}]}
@@ -241,8 +282,23 @@ def downsample_fig(key: str, fig: BaseFigure) -> BaseFigure:
 def downsample_df(
     key: str, df: DataFrame, config: DownsamplePlotConfig
 ) -> list[DataFrame]:
-    if not has_latest_generation(key):
-        pass
+    is_latest, cur_gen, _ = check_generation(key)
+    if not is_latest:
+        conn.register(key, df)
+        conn.execute(
+            """
+            insert into
+                plots_faas_catalog
+            values
+                ($key, $cur_gen, null)
+            on conflict
+                (name)
+            do update
+            set
+                cur_gen = $cur_gen
+            """,
+            parameters={"name": key, "cur_gen": cur_gen},
+        )
 
     # todo(rteqs): process json on our own to avoid extra cost of going through pandas
     return [rel.df() for rel in downsample(key, config)]
