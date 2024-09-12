@@ -30,6 +30,9 @@ env_vars = {
     "domain": domain,
     "auth_audience": "",
     "auth_self_signed_jwk": "",
+    "CONDA_DEFAULT_ENV": "plots-faas",
+    "CONDA_PREFIX": "/opt/mamba/envs/plots-faas",
+    "PATH": "/opt/latch/bin:/opt/mamba/envs/plots-faas/bin:/opt/mamba/condabin:/usr/local/bin:/usr/bin",
 }
 
 os.system("git -C /opt/latch/plots-faas pull origin main")
