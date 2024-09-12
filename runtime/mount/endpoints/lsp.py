@@ -1,6 +1,5 @@
 import asyncio
 import json
-from typing import Any
 
 from latch_asgi.context.websocket import Context, HandlerResult
 from latch_asgi.framework.websocket import WebsocketConnectionClosedError, receive_json
@@ -8,30 +7,18 @@ from latch_o11y.o11y import trace_app_function_with_span
 from opentelemetry.trace import Span
 
 
-async def send_lsp_msg(stdin: asyncio.StreamWriter, message: dict[str, Any]) -> None:
-    global request_id
-    request_id += 1
-
-    body = json.dumps(message, indent=2)
-    content_length = len(body)
-    header = f"Content-Length: {content_length}\r\n\r\n"
-
-    stdin.write((header + body).encode("utf-8"))
-    await stdin.drain()
-
-
-async def recv_lsp_msg(stdout: asyncio.StreamReader) -> dict[str, Any]:
-    response = await stdout.readuntil(b"\r\n\r\n")
+async def recv_lsp_msg(stdout: asyncio.StreamReader) -> bytes:
+    headers_raw = await stdout.readuntil(b"\r\n\r\n")
 
     content_length = 0
-    headers = response.decode("utf-8").split("\r\n")
-    for header in headers:
+    headers_parsed = headers_raw.decode("utf-8").split("\r\n")
+    for header in headers_parsed:
         if header.startswith("Content-Length:"):
             content_length = int(header.split(": ")[1])
             break
 
     body = await stdout.readexactly(content_length)
-    return json.loads(body.decode("utf-8"))
+    return headers_raw + body
 
 
 @trace_app_function_with_span
@@ -43,18 +30,20 @@ async def lsp_proxy(s: Span, ctx: Context) -> HandlerResult:
         while True:
             # todo(rteqs): probably need to include header as well
             data = await recv_lsp_msg(stdout)
-            await ctx.send_message(data)
+            await ctx.send_message(json.dumps({"type": "msg", "data": data}))
 
     async def poll_lsp_err(stderr: asyncio.StreamReader) -> None:
         while True:
             line = (await stderr.readline()).decode("utf-8")
-            await ctx.send_message(line)
+            # todo(rteqs): probably don't need to send cz server should handle everything including restarting pyright if it fails
+            await ctx.send_message(json.dumps({"type": "error", "data": line}))
 
     stdin_pipe = asyncio.subprocess.PIPE
     stdout_pipe = asyncio.subprocess.PIPE
     stderr_pipe = asyncio.subprocess.PIPE
 
     proc = await asyncio.subprocess.create_subprocess_exec(
+        "/opt/mamba/envs/plots-faas/bin/node",
         "/opt/mamba/envs/plots-faas/bin/pyright-langserver",
         "--stdio",
         stdin=stdin_pipe,
@@ -65,17 +54,23 @@ async def lsp_proxy(s: Span, ctx: Context) -> HandlerResult:
     stdout = proc.stdout
     stderr = proc.stderr
 
+    assert stdin is not None
+    assert stdout is not None
+    assert stderr is not None
+
     try:
         async with asyncio.TaskGroup() as tg:
             tg.create_task(poll_lsp_msg(stdout))
             tg.create_task(poll_lsp_err(stderr))
             while True:
+                # todo(rteqs): probably need different types for this
                 msg = await receive_json(ctx.receive)
-                await send_lsp_msg(stdin, msg)
+                stdin.write(msg)
+                await stdin.drain()
 
     except WebsocketConnectionClosedError:
         ...
 
     proc.kill()
     await proc.wait()
-    return
+    return "Ok"
