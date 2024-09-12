@@ -29,7 +29,7 @@ async def lsp_proxy(s: Span, ctx: Context) -> HandlerResult:
         while True:
             # todo(rteqs): probably need to include header as well
             data = await recv_lsp_msg(stdout)
-            await ctx.send_message(data)
+            await ctx.send_message(data.decode("utf-8"))
 
     async def poll_lsp_err(stderr: asyncio.StreamReader) -> None:
         while True:
