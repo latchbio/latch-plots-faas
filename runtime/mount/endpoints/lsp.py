@@ -37,6 +37,7 @@ async def recv_lsp_msg(stdout: asyncio.StreamReader) -> dict[str, Any]:
 @trace_app_function_with_span
 async def lsp_proxy(s: Span, ctx: Context) -> HandlerResult:
     # todo(rteqs): auth
+    await ctx.accept_connection()
 
     async def poll_lsp_msg(stdout: asyncio.StreamReader) -> None:
         while True:
