@@ -65,7 +65,9 @@ async def lsp_proxy(s: Span, ctx: Context) -> HandlerResult:
                 msg = await receive_data(ctx.receive)
                 if isinstance(msg, str):
                     msg = msg.encode("utf-8")
-                stdin.write(msg)
+                content_length = len(msg)
+                header = f"Content-Length: {content_length}\r\n\r\n".encode()
+                stdin.write(header + msg)
                 await stdin.drain()
 
         except WebsocketConnectionClosedError:
