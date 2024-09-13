@@ -57,19 +57,20 @@ async def lsp_proxy(s: Span, ctx: Context) -> HandlerResult:
     assert stdout is not None
     assert stderr is not None
 
-    try:
-        async with asyncio.TaskGroup() as tg:
-            tg.create_task(poll_lsp_msg(stdout))
-            tg.create_task(poll_lsp_err(stderr))
+    async with asyncio.TaskGroup() as tg:
+        poll_msg_task = tg.create_task(poll_lsp_msg(stdout))
+        poll_err_task = tg.create_task(poll_lsp_err(stderr))
+        try:
             while True:
                 msg = await receive_data(ctx.receive)
                 if isinstance(msg, str):
-                    msg = bytes(msg, "utf-8")
+                    msg = msg.encode("utf-8")
                 stdin.write(msg)
                 await stdin.drain()
 
-    except WebsocketConnectionClosedError:
-        ...
+        except WebsocketConnectionClosedError:
+            poll_msg_task.cancel()
+            poll_err_task.cancel()
 
     proc.kill()
     await proc.wait()
