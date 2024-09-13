@@ -1,7 +1,7 @@
 import asyncio
 
 from latch_asgi.context.websocket import Context, HandlerResult
-from latch_asgi.framework.websocket import WebsocketConnectionClosedError, receive_json
+from latch_asgi.framework.websocket import WebsocketConnectionClosedError, receive_data
 from latch_o11y.o11y import trace_app_function_with_span
 from opentelemetry.trace import Span
 
@@ -16,8 +16,7 @@ async def recv_lsp_msg(stdout: asyncio.StreamReader) -> bytes:
             content_length = int(header.split(": ")[1])
             break
 
-    body = await stdout.readexactly(content_length)
-    return headers_raw + body
+    return await stdout.readexactly(content_length)
 
 
 @trace_app_function_with_span
@@ -27,16 +26,14 @@ async def lsp_proxy(s: Span, ctx: Context) -> HandlerResult:
 
     async def poll_lsp_msg(stdout: asyncio.StreamReader) -> None:
         while True:
-            # todo(rteqs): probably need to include header as well
             data = await recv_lsp_msg(stdout)
             await ctx.send_message(data.decode("utf-8"))
 
     async def poll_lsp_err(stderr: asyncio.StreamReader) -> None:
         while True:
             line = (await stderr.readline()).decode("utf-8")
-            print(line)  # todo(rteqs): debug
-            # todo(rteqs): probably don't need to send cz server should handle everything including restarting pyright if it fails
-            # await ctx.send_message(json.dumps({"type": "error", "data": line}))
+            print(line)
+            # todo(rteqs): error handling
 
     stdin_pipe = asyncio.subprocess.PIPE
     stdout_pipe = asyncio.subprocess.PIPE
@@ -65,8 +62,9 @@ async def lsp_proxy(s: Span, ctx: Context) -> HandlerResult:
             tg.create_task(poll_lsp_msg(stdout))
             tg.create_task(poll_lsp_err(stderr))
             while True:
-                # todo(rteqs): probably need different types for this
-                msg = await receive_json(ctx.receive)
+                msg = await receive_data(ctx.receive)
+                if isinstance(msg, str):
+                    msg = bytes(msg, "utf-8")
                 stdin.write(msg)
                 await stdin.drain()
 
