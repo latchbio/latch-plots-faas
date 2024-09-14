@@ -941,6 +941,9 @@ class Kernel:
     async def send_globals_summary(self) -> None:
         summary = {}
         for key, value in self.k_globals.items():
+            if isinstance(value, Signal):
+                value = value.sample()
+
             if isinstance(value, pd.DataFrame):
                 summary[key] = {
                     "type": "DataFrame",
@@ -957,7 +960,6 @@ class Kernel:
             else:
                 summary[key] = {
                     "type": type(value).__name__,
-                    "repr": repr(value),
                 }
 
         await self.send({
