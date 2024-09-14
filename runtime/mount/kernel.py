@@ -948,7 +948,7 @@ class Kernel:
                 summary[key] = {
                     "type": "DataFrame",
                     "columns": list(value.columns),
-                    "dtypes": value.dtypes.to_dict(),
+                    "dtypes": {str(k): str(v) for k, v in value.dtypes.to_dict().items()},
                     "shape": value.shape
                 }
             elif isinstance(value, pd.Series):
