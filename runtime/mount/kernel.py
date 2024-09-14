@@ -940,7 +940,8 @@ class Kernel:
 
     async def send_globals_summary(self) -> None:
         summary = {}
-        for key, value in self.k_globals.items():
+        for key, s in self.k_globals.items():
+            value = s.sample()
             if isinstance(value, pd.DataFrame):
                 summary[key] = {
                     "type": "DataFrame",
