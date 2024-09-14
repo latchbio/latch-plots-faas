@@ -551,6 +551,8 @@ class Kernel:
 
                 tg.create_task(self.send_plot_data(plot_id, key))
 
+            tg.create_task(self.send_globals_summary())
+
     async def on_tick_finished(self, updated_signals: dict[int, Signal]) -> None:
         # todo(maximsmol): this can be optimizied
         # 1. we can just update nodes that actually re-ran last tick instead of everything
@@ -936,6 +938,35 @@ class Kernel:
             }
         )
 
+    async def send_globals_summary(self) -> None:
+        summary = {}
+        for key, value in self.k_globals.items():
+            if isinstance(value, Signal):
+                value = value.sample()
+
+            if isinstance(value, pd.DataFrame):
+                summary[key] = {
+                    "type": "DataFrame",
+                    "columns": list(value.columns),
+                    "dtypes": {str(k): str(v) for k, v in value.dtypes.to_dict().items()},
+                    "shape": value.shape
+                }
+            elif isinstance(value, pd.Series):
+                summary[key] = {
+                    "type": "Series",
+                    "dtype": str(value.dtype),
+                    "shape": value.shape
+                }
+            else:
+                summary[key] = {
+                    "type": type(value).__name__,
+                }
+
+        await self.send({
+            "type": "globals_summary",
+            "summary": summary,
+        })
+
     async def accept(self) -> None:
         # print("[kernel] accept")
         msg = await self.conn.recv()
@@ -1129,6 +1160,10 @@ class Kernel:
                     traceback.print_exc()
                     continue
 
+            return
+
+        if msg["type"] == "globals_summary":
+            await self.send_globals_summary()
             return
 
 
