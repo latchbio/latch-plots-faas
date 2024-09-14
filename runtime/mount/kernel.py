@@ -936,6 +936,32 @@ class Kernel:
             }
         )
 
+    async def send_globals_summary(self) -> None:
+        summary = {}
+        for key, value in self.k_globals.items():
+            if isinstance(value, pd.DataFrame):
+                summary[key] = {
+                    "type": "DataFrame",
+                    "columns": list(value.columns),
+                    "dtypes": value.dtypes.to_dict(),
+                    "shape": value.shape
+                }
+            elif isinstance(value, pd.Series):
+                summary[key] = {
+                    "type": "Series",
+                    "dtype": str(value.dtype),
+                    "shape": value.shape
+                }
+            else:
+                summary[key] = {
+                    "type": type(value).__name__
+                }
+
+        await self.send({
+            "type": "globals_summary",
+            "summary": summary,
+        })
+
     async def accept(self) -> None:
         # print("[kernel] accept")
         msg = await self.conn.recv()
@@ -1135,31 +1161,6 @@ class Kernel:
             await self.send_globals_summary()
             return
 
-    async def send_globals_summary(self) -> None:
-        summary = {}
-        for key, value in self.k_globals.items():
-            if isinstance(value, pd.DataFrame):
-                summary[key] = {
-                    "type": "DataFrame",
-                    "columns": list(value.columns),
-                    "dtypes": value.dtypes.to_dict(),
-                    "shape": value.shape
-                }
-            elif isinstance(value, pd.Series):
-                summary[key] = {
-                    "type": "Series",
-                    "dtype": str(value.dtype),
-                    "shape": value.shape
-                }
-            else:
-                summary[key] = {
-                    "type": type(value).__name__
-                }
-
-        await self.send({
-            "type": "globals_summary",
-            "summary": json.dumps(summary)
-        })
 
 loop: asyncio.AbstractEventLoop | None = None
 shutdown_requested = False
