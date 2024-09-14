@@ -733,7 +733,7 @@ class Kernel:
         await self.send_global_updates()
 
     async def send(self, msg: object) -> None:
-        print("[kernel] >", msg)
+        # print("[kernel] >", msg)
         await self.conn.send(msg)
 
     async def send_plot_data(self, plot_id: str, key: str) -> None:
@@ -1191,7 +1191,6 @@ async def main() -> None:
     k = Kernel(conn=await SocketIo.from_socket(sock))
     _inject.kernel = k
     await k.send({"type": "ready"})
-    await k.send_globals_summary()
 
     while not shutdown_requested:
         try:
