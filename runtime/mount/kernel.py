@@ -1162,6 +1162,10 @@ class Kernel:
 
             return
 
+        if msg["type"] == "globals_summary":
+            await self.send_globals_summary()
+            return
+
 
 loop: asyncio.AbstractEventLoop | None = None
 shutdown_requested = False
