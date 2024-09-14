@@ -1042,7 +1042,6 @@ class Kernel:
                             df=df, pagination_settings=pagination_settings
                         )
 
-            await self.send_globals_summary()
             return
 
         if msg["type"] == "debug_state":
@@ -1188,6 +1187,7 @@ async def main() -> None:
     k = Kernel(conn=await SocketIo.from_socket(sock))
     _inject.kernel = k
     await k.send({"type": "ready"})
+    await k.send_globals_summary()
 
     while not shutdown_requested:
         try:
