@@ -1157,7 +1157,7 @@ class Kernel:
 
             return
 
-        if msg["type"] == "get_globals_summary":
+        if msg["type"] == "globals_summary":
             await self.send_globals_summary()
             return
 
