@@ -1042,6 +1042,7 @@ class Kernel:
                             df=df, pagination_settings=pagination_settings
                         )
 
+            await self.send_globals_summary()
             return
 
         if msg["type"] == "debug_state":
