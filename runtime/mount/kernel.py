@@ -957,7 +957,8 @@ class Kernel:
                 }
             else:
                 summary[key] = {
-                    "type": type(value).__name__
+                    "type": type(value).__name__,
+                    "repr": repr(value),
                 }
 
         await self.send({
