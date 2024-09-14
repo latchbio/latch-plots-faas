@@ -733,7 +733,7 @@ class Kernel:
         await self.send_global_updates()
 
     async def send(self, msg: object) -> None:
-        # print("[kernel] >", msg)
+        print("[kernel] >", msg)
         await self.conn.send(msg)
 
     async def send_plot_data(self, plot_id: str, key: str) -> None:
