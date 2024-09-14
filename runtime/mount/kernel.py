@@ -551,6 +551,8 @@ class Kernel:
 
                 tg.create_task(self.send_plot_data(plot_id, key))
 
+            tg.create_task(self.send_globals_summary())
+
     async def on_tick_finished(self, updated_signals: dict[int, Signal]) -> None:
         # todo(maximsmol): this can be optimizied
         # 1. we can just update nodes that actually re-ran last tick instead of everything
@@ -1155,10 +1157,6 @@ class Kernel:
                     traceback.print_exc()
                     continue
 
-            return
-
-        if msg["type"] == "globals_summary":
-            await self.send_globals_summary()
             return
 
 
