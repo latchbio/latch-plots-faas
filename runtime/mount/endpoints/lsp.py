@@ -76,4 +76,5 @@ async def lsp_proxy(s: Span, ctx: Context) -> HandlerResult:
 
     proc.kill()
     await proc.wait()
+    # todo(rteqs): node process is getting leaked for some reason. pyright terminates properly
     return "Ok"
