@@ -9,7 +9,7 @@ from opentelemetry.trace import Span
 
 async def send_lsp_msg(stdin: asyncio.StreamWriter, msg: bytes) -> None:
     content_length = len(msg)
-    header = f"Content-Length: {content_length}\r\n\r\n".encode()
+    header = f"Content-Length: {content_length}\r\n\r\n".encode("ascii")
     stdin.write(header + msg)
     await stdin.drain()
 
@@ -18,7 +18,7 @@ async def recv_lsp_msg(stdout: asyncio.StreamReader) -> bytes:
     headers_raw = await stdout.readuntil(b"\r\n\r\n")
 
     content_length = 0
-    headers_parsed = headers_raw.decode("utf-8").split("\r\n")
+    headers_parsed = headers_raw.decode("ascii").split("\r\n")
     for header in headers_parsed:
         if header.startswith("Content-Length:"):
             content_length = int(header.split(": ")[1])
@@ -29,7 +29,6 @@ async def recv_lsp_msg(stdout: asyncio.StreamReader) -> bytes:
 
 @trace_app_function_with_span
 async def lsp_proxy(s: Span, ctx: Context) -> HandlerResult:
-    # todo(rteqs): auth
     await ctx.accept_connection()
 
     async def poll_lsp_msg(stdout: asyncio.StreamReader) -> None:
@@ -53,9 +52,7 @@ async def lsp_proxy(s: Span, ctx: Context) -> HandlerResult:
         stdin=stdin_pipe,
         stdout=stdout_pipe,
         stderr=stderr_pipe,
-        env={
-            "PATH": "/opt/latch/bin:/opt/mamba/envs/plots-faas/bin:/opt/mamba/condabin:/usr/local/bin:/usr/bin"
-        },
+        env={"PATH": "/usr/local/bin"},
     )
     stdin = proc.stdin
     stdout = proc.stdout
@@ -76,6 +73,9 @@ async def lsp_proxy(s: Span, ctx: Context) -> HandlerResult:
                 await send_lsp_msg(stdin, msg)
 
         except WebsocketConnectionClosedError:
+            ...
+
+        finally:
             poll_msg_task.cancel()
             poll_err_task.cancel()
 
