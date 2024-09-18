@@ -1,5 +1,6 @@
 import asyncio
 import json
+import os
 
 from latch_asgi.context.websocket import Context, HandlerResult
 from latch_asgi.framework.websocket import WebsocketConnectionClosedError, receive_data
@@ -27,6 +28,10 @@ async def recv_lsp_msg(stdout: asyncio.StreamReader) -> bytes:
     return await stdout.readexactly(content_length)
 
 
+def encode_utf8(data: dict[str, str]) -> bytes:
+    return json.dumps(data).encode("utf-8")
+
+
 @trace_app_function_with_span
 async def lsp_proxy(s: Span, ctx: Context) -> HandlerResult:
     await ctx.accept_connection()
@@ -52,9 +57,7 @@ async def lsp_proxy(s: Span, ctx: Context) -> HandlerResult:
         stdin=stdin_pipe,
         stdout=stdout_pipe,
         stderr=stderr_pipe,
-        env={
-            "PATH": "/opt/mamba/envs/plots-faas/bin:/opt/mamba/condabin:/usr/local/bin"
-        },
+        env={"PATH": "/opt/mamba/envs/plots-faas/bin:" + os.environ["PATH"]},
     )
     stdin = proc.stdin
     stdout = proc.stdout
@@ -81,10 +84,10 @@ async def lsp_proxy(s: Span, ctx: Context) -> HandlerResult:
             poll_msg_task.cancel()
             poll_err_task.cancel()
 
-    shutdown_msg = json.dumps({"jsonrpc": "2.0", "method": "shtudown"}).encode("utf-8")
+    shutdown_msg = encode_utf8({"jsonrpc": "2.0", "method": "shutdown"})
     await send_lsp_msg(stdin, shutdown_msg)
 
-    exit_msg = json.dumps({"jsonrpc": "2.0", "method": "exit"}).encode("utf-8")
+    exit_msg = encode_utf8({"jsonrpc": "2.0", "method": "exit"})
     await send_lsp_msg(stdin, exit_msg)
 
     proc.kill()
