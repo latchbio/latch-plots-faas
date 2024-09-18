@@ -74,8 +74,8 @@ async def check_generation(
                             first: 1
                         ) {
                             nodes {
-                            id
-                            time
+                              id
+                              time
                             }
                         }
                     }
@@ -88,7 +88,6 @@ async def check_generation(
                 last_modified_time = datetime.datetime.fromisoformat(data[0]["time"])
         except Exception:
             traceback.print_exc()
-            # todo(rteqs): or smtg
             raise
 
     last_modified_time = datetime.datetime.now(tz=datetime.UTC)
@@ -262,7 +261,7 @@ def downsample(
 async def downsample_ldata(
     ldata_node_id: str, config: DownsamplePlotConfig
 ) -> list[DataFrame]:
-    is_latest, _, last_modified_time = check_generation(
+    is_latest, _, last_modified_time = await check_generation(
         f"ldata_{ldata_node_id}", "ldata"
     )
 
@@ -318,10 +317,10 @@ def downsample_fig(key: str, fig: BaseFigure) -> BaseFigure:
     relations = downsample(key, config)
 
 
-def downsample_df(
+async def downsample_df(
     key: str, df: DataFrame, config: DownsamplePlotConfig
 ) -> list[DataFrame]:
-    is_latest, cur_gen, _ = check_generation(key)
+    is_latest, cur_gen, _ = await check_generation(key)
     if not is_latest:
         conn.register(key, df)
         conn.execute(
