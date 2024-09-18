@@ -52,7 +52,9 @@ async def lsp_proxy(s: Span, ctx: Context) -> HandlerResult:
         stdin=stdin_pipe,
         stdout=stdout_pipe,
         stderr=stderr_pipe,
-        env={"PATH": "/usr/local/bin"},
+        env={
+            "PATH": "/opt/mamba/envs/plots-faas/bin:/opt/mamba/condabin:/usr/local/bin"
+        },
     )
     stdin = proc.stdin
     stdout = proc.stdout
