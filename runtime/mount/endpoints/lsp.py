@@ -1,9 +1,17 @@
 import asyncio
+import json
 
 from latch_asgi.context.websocket import Context, HandlerResult
 from latch_asgi.framework.websocket import WebsocketConnectionClosedError, receive_data
 from latch_o11y.o11y import trace_app_function_with_span
 from opentelemetry.trace import Span
+
+
+async def send_lsp_msg(stdin: asyncio.StreamWriter, msg: bytes) -> None:
+    content_length = len(msg)
+    header = f"Content-Length: {content_length}\r\n\r\n".encode()
+    stdin.write(header + msg)
+    await stdin.drain()
 
 
 async def recv_lsp_msg(stdout: asyncio.StreamReader) -> bytes:
@@ -65,16 +73,18 @@ async def lsp_proxy(s: Span, ctx: Context) -> HandlerResult:
                 msg = await receive_data(ctx.receive)
                 if isinstance(msg, str):
                     msg = msg.encode("utf-8")
-                content_length = len(msg)
-                header = f"Content-Length: {content_length}\r\n\r\n".encode()
-                stdin.write(header + msg)
-                await stdin.drain()
+                await send_lsp_msg(stdin, msg)
 
         except WebsocketConnectionClosedError:
             poll_msg_task.cancel()
             poll_err_task.cancel()
 
+    shutdown_msg = json.dumps({"jsonrpc": "2.0", "method": "shtudown"}).encode("utf-8")
+    await send_lsp_msg(stdin, shutdown_msg)
+
+    exit_msg = json.dumps({"jsonrpc": "2.0", "method": "exit"}).encode("utf-8")
+    await send_lsp_msg(stdin, exit_msg)
+
     proc.kill()
     await proc.wait()
-    # todo(rteqs): node process is getting leaked for some reason. pyright terminates properly
     return "Ok"
