@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Any, Literal, TypedDict, TypeVar
 import aiohttp
 import numpy as np
 import pandas as pd
+from duckdb import DuckDBPyConnection
 from latch.registry.table import Table
 from latch_cli.utils import get_auth_header
 from latch_sdk_config.latch import config as latch_config
@@ -30,6 +31,8 @@ from numpy.typing import NDArray
 from pandas import DataFrame, MultiIndex, Series
 from pandas.io.json._table_schema import build_table_schema
 from plotly.basedatatypes import BaseFigure
+
+from .subsample import downsample_df, initialize_duckdb
 
 sys.path.append(str(Path(__file__).parent.absolute()))
 from socketio import SocketIo
@@ -133,7 +136,7 @@ class TracedDict(dict[str, Signal[object]]):
 
         self.dataframes = Signal(set())
 
-    def __getitem__(self, __key: str) -> object:
+    def __getitem__(self, __key: str) -> object:  # type: ignore
         return self.getitem_signal(__key).sample()
 
     def getitem_signal(self, __key: str) -> Signal[object]:
@@ -463,6 +466,8 @@ class Kernel:
         str, defaultdict[str, PaginationSettings]
     ] = field(default_factory=pagination_settings_dict_factory)
 
+    duckdb_conn: DuckDBPyConnection = field(default=initialize_duckdb())
+
     def __post_init__(self) -> None:
         self.k_globals["exit"] = cell_exit
         self.k_globals.clear()
@@ -748,6 +753,7 @@ class Kernel:
 
     async def send_plot_data(self, plot_id: str, key: str) -> None:
         res = self.k_globals[key]
+        # todo(rteqs): handle Series data type
 
         if isinstance(res, BaseFigure):
             await self.send(
@@ -773,19 +779,29 @@ class Kernel:
             return
 
         # todo(maximsmol): handle subsampling
+        if isinstance(res, DataFrame):
+            df_size_mb = sum(res.memory_usage().value_counts()) / 10**6
 
-        await self.send(
-            {
-                "type": "plot_data",
-                "plot_id": plot_id,
-                "key": key,
-                "dataframe_json": {
-                    "schema": build_table_schema(res, version=False),
-                    # todo(maximsmol): get rid of the json reload
-                    "data": json.loads(res.to_json(orient="split", date_format="iso")),
-                },
-            }
-        )
+            res = (
+                res
+                if df_size_mb <= 50 or self.duckdb_conn is None
+                else downsample_df(self.duckdb_conn, key, res)
+            )  # todo(rteqs): pass config
+
+            await self.send(
+                {
+                    "type": "plot_data",
+                    "plot_id": plot_id,
+                    "key": key,
+                    "dataframe_json": {
+                        "schema": build_table_schema(res, version=False),
+                        # todo(maximsmol): get rid of the json reload
+                        "data": json.loads(
+                            res.to_json(orient="split", date_format="iso")
+                        ),
+                    },
+                }
+            )
 
     def lookup_pagination_settings(
         self,
@@ -854,6 +870,7 @@ class Kernel:
             return
 
         if hasattr(res, "iloc"):
+            # todo(rteqs): handle series types. currently broken
             pagination_settings = self.lookup_pagination_settings(
                 cell_id=cell_id,
                 viewer_id=viewer_id,
@@ -962,17 +979,12 @@ class Kernel:
                 summary[key] = {
                     "type": "Series",
                     "dtype": str(value.dtype),
-                    "shape": value.shape
+                    "shape": value.shape,
                 }
             else:
-                summary[key] = {
-                    "type": type(value).__name__,
-                }
+                summary[key] = {"type": type(value).__name__}
 
-        await self.send({
-            "type": "globals_summary",
-            "summary": summary,
-        })
+        await self.send({"type": "globals_summary", "summary": summary})
 
     async def accept(self) -> None:
         # print("[kernel] accept")

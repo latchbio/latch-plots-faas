@@ -3,6 +3,7 @@ import traceback
 from typing import TYPE_CHECKING, Literal, NotRequired, TypedDict
 
 import duckdb
+from duckdb import DuckDBPyConnection
 from lplots import _inject
 from pandas import DataFrame
 from plotly.basedatatypes import BaseFigure
@@ -11,21 +12,24 @@ from runtime.mount.kernel import get_presigned_url
 
 from .entrypoint import auth_token_sdk, gql_query
 
-conn = duckdb.connect(
-    database=":memory:plots-faas",
-    read_only=False,
-    config={"enable_progress_bar": False},
-)
 
-conn.execute(
-    """
-    create table plots_faas_catalog (
-        name string not null unique,
-        generation integer,
-        last_modified_time timestamp
+def initialize_duckdb() -> DuckDBPyConnection:
+    conn = duckdb.connect(
+        database=":memory:plots-faas",
+        read_only=False,
+        config={"enable_progress_bar": False},
     )
-    """
-)
+
+    conn.execute(
+        """
+        create table plots_faas_catalog (
+            name string not null unique,
+            generation integer,
+            last_modified_time timestamp
+        )
+        """
+    )
+    return conn
 
 
 class Trace(TypedDict):
@@ -49,7 +53,9 @@ class DownsamplePlotConfig(TypedDict):
 
 
 async def check_generation(
-    table_name: str, source_type: Literal["kernel", "ldata"] = "kernel"
+    conn: DuckDBPyConnection,
+    table_name: str,
+    source_type: Literal["kernel", "ldata"] = "kernel",
 ) -> tuple[bool, int | None, datetime.datetime | None]:
     cur_gen = (
         _inject.kernel.k_globals.generation_counter.get(table_name)
@@ -122,7 +128,7 @@ async def check_generation(
 
 
 def downsample(
-    table_name: str, config: DownsamplePlotConfig
+    conn: DuckDBPyConnection, table_name: str, config: DownsamplePlotConfig
 ) -> list[duckdb.DuckDBPyRelation]:
     custom_data = config.get("custom_data")
     custom_data_str = ", ".join(custom_data) if custom_data is not None else None
@@ -259,10 +265,10 @@ def downsample(
 
 
 async def downsample_ldata(
-    ldata_node_id: str, config: DownsamplePlotConfig
+    conn: DuckDBPyConnection, ldata_node_id: str, config: DownsamplePlotConfig
 ) -> list[DataFrame]:
     is_latest, _, last_modified_time = await check_generation(
-        f"ldata_{ldata_node_id}", "ldata"
+        conn, f"ldata_{ldata_node_id}", "ldata"
     )
 
     if not is_latest:
@@ -288,11 +294,13 @@ async def downsample_ldata(
         )
 
     # todo(rteqs): process json on our own to avoid extra cost of going through pandas
-    return [rel.df() for rel in downsample(ldata_node_id, config)]
+    return [rel.df() for rel in downsample(conn, ldata_node_id, config)]
 
 
-def downsample_fig(key: str, fig: BaseFigure) -> BaseFigure:
-    is_latest, cur_gen, _ = check_generation(key)
+async def downsample_fig(
+    conn: DuckDBPyConnection, key: str, fig: BaseFigure
+) -> BaseFigure:
+    is_latest, cur_gen, _ = await check_generation(conn, key)
     if not is_latest:
         # todo(rteqs): figure out how to convert plotly fig to duckdb table
         # df
@@ -314,13 +322,13 @@ def downsample_fig(key: str, fig: BaseFigure) -> BaseFigure:
 
     # convert fig to downsample config
     config: DownsamplePlotConfig = {"traces": [{"x": "x", "y": "y"}]}
-    relations = downsample(key, config)
+    relations = downsample(conn, key, config)
 
 
 async def downsample_df(
-    key: str, df: DataFrame, config: DownsamplePlotConfig
+    conn: DuckDBPyConnection, key: str, df: DataFrame, config: DownsamplePlotConfig
 ) -> list[DataFrame]:
-    is_latest, cur_gen, _ = await check_generation(key)
+    is_latest, cur_gen, _ = await check_generation(conn, key)
     if not is_latest:
         conn.register(key, df)
         conn.execute(
@@ -339,4 +347,4 @@ async def downsample_df(
         )
 
     # todo(rteqs): process json on our own to avoid extra cost of going through pandas
-    return [rel.df() for rel in downsample(key, config)]
+    return [rel.df() for rel in downsample(conn, key, config)]

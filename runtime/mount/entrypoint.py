@@ -12,6 +12,7 @@ from typing import Any, TypedDict, TypeVar
 
 import aiohttp
 from aiohttp import ClientSession
+from duckdb import DuckDBPyConnection
 from latch_asgi.framework.websocket import WebsocketConnectionClosedError
 from latch_data_validation.data_validation import validate
 from yarl import URL
@@ -99,6 +100,7 @@ class PlotsNotebookKernelStateResp:
 
 
 sess: aiohttp.ClientSession | None = None
+conn: DuckDBPyConnection | None = None
 
 
 async def get_global_http_sess() -> aiohttp.ClientSession:  # noqa: RUF029
@@ -140,7 +142,7 @@ async def gql_query(query: str, variables: dict[str, Any], auth: str) -> Any:
         return res
 
 
-async def add_pod_event(*, auth: str, event_type: str):
+async def add_pod_event(*, auth: str, event_type: str) -> None:
     try:
         await gql_query(
             auth=auth,
