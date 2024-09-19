@@ -945,10 +945,12 @@ class Kernel:
                 value = value.sample()
 
             if isinstance(value, pd.DataFrame):
+                columns = list(value.columns)[:20]
+                dtypes = {str(k): str(v) for k, v in list(value.dtypes.items())[:20]}
                 summary[key] = {
                     "type": "DataFrame",
-                    "columns": list(value.columns),
-                    "dtypes": {str(k): str(v) for k, v in value.dtypes.to_dict().items()},
+                    "columns": columns,
+                    "dtypes": dtypes,
                     "shape": value.shape
                 }
             elif isinstance(value, pd.Series):
