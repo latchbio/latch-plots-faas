@@ -945,12 +945,11 @@ class Kernel:
                 value = value.sample()
 
             if isinstance(value, pd.DataFrame):
-                columns = list(value.columns)[:20]
-                dtypes = {str(k): str(v) for k, v in list(value.dtypes.items())[:20]}
                 summary[key] = {
                     "type": "DataFrame",
-                    "columns": columns,
-                    "dtypes": dtypes,
+                    "columns": list(value.columns)[:50],
+                    "dtypes": {str(k): str(v) for k, v in list(value.dtypes.items())[:50]},
+                    "column_preview_truncated": len(value.columns) > 50,
                     "shape": value.shape
                 }
             elif isinstance(value, pd.Series):
