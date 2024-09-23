@@ -37,14 +37,14 @@ class Trace(TypedDict):
     y: str
     color_by: NotRequired[str]
     error_bar: NotRequired[str]
+    marker_size: NotRequired[str]
 
 
-class DownsamplePlotConfig(TypedDict):
+class PlotConfig(TypedDict):
     traces: list[Trace]
     custom_data: NotRequired[list[str]]
 
     facet: NotRequired[str]
-    marker_size_axis: NotRequired[str]
 
     xrange: NotRequired[tuple[float | int, float | int]]
     yrange: NotRequired[tuple[float | int, float | int]]
@@ -127,8 +127,9 @@ async def check_generation(
     return duckdb_gen[0], cur_gen, last_modified_time
 
 
+# todo(rteqs): marker size
 def downsample(
-    conn: DuckDBPyConnection, table_name: str, config: DownsamplePlotConfig
+    conn: DuckDBPyConnection, table_name: str, config: PlotConfig
 ) -> list[duckdb.DuckDBPyRelation]:
     custom_data = config.get("custom_data")
     custom_data_str = ", ".join(custom_data) if custom_data is not None else None
@@ -265,7 +266,7 @@ def downsample(
 
 
 async def downsample_ldata(
-    conn: DuckDBPyConnection, ldata_node_id: str, config: DownsamplePlotConfig
+    conn: DuckDBPyConnection, ldata_node_id: str, config: PlotConfig
 ) -> list[DataFrame]:
     is_latest, _, last_modified_time = await check_generation(
         conn, f"ldata_{ldata_node_id}", "ldata"
@@ -321,12 +322,12 @@ async def downsample_fig(
         )
 
     # convert fig to downsample config
-    config: DownsamplePlotConfig = {"traces": [{"x": "x", "y": "y"}]}
+    config: PlotConfig = {"traces": [{"x": "x", "y": "y"}]}
     relations = downsample(conn, key, config)
 
 
 async def downsample_df(
-    conn: DuckDBPyConnection, key: str, df: DataFrame, config: DownsamplePlotConfig
+    conn: DuckDBPyConnection, key: str, df: DataFrame, config: PlotConfig
 ) -> list[DataFrame]:
     is_latest, cur_gen, _ = await check_generation(conn, key)
     if not is_latest:

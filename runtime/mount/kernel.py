@@ -32,7 +32,7 @@ from pandas import DataFrame, MultiIndex, Series
 from pandas.io.json._table_schema import build_table_schema
 from plotly.basedatatypes import BaseFigure
 
-from .subsample import downsample_df, initialize_duckdb
+from .subsample import PlotConfig, downsample_df, initialize_duckdb
 
 sys.path.append(str(Path(__file__).parent.absolute()))
 from socketio import SocketIo
@@ -466,6 +466,7 @@ class Kernel:
         str, defaultdict[str, PaginationSettings]
     ] = field(default_factory=pagination_settings_dict_factory)
 
+    plot_configs: dict[str, PlotConfig] = field(default_factory=dict)
     duckdb_conn: DuckDBPyConnection = field(default=initialize_duckdb())
 
     def __post_init__(self) -> None:
@@ -751,7 +752,9 @@ class Kernel:
         # print("[kernel] >", msg)
         await self.conn.send(msg)
 
-    async def send_plot_data(self, plot_id: str, key: str) -> None:
+    async def send_plot_data(
+        self, plot_id: str, key: str, config: PlotConfig | None
+    ) -> None:
         res = self.k_globals[key]
         # todo(rteqs): handle Series data type
 
@@ -778,28 +781,25 @@ class Kernel:
             )
             return
 
-        # todo(maximsmol): handle subsampling
         if isinstance(res, DataFrame):
             df_size_mb = sum(res.memory_usage().value_counts()) / 10**6
 
-            res = (
-                res
-                if df_size_mb <= 50 or self.duckdb_conn is None
-                else downsample_df(self.duckdb_conn, key, res)
-            )  # todo(rteqs): pass config
+            schema = build_table_schema(res, version=False)
+
+            # todo(rteqs): just send schema if its oversized and there's no conig
+            # todo(rteqs): get rid of the json reload
+            data = (
+                res.to_json(orient="split", date_format="iso")
+                if df_size_mb <= 50 or self.duckdb_conn is None or config is None
+                else await downsample_df(self.duckdb_conn, key, res, config)
+            )
 
             await self.send(
                 {
                     "type": "plot_data",
                     "plot_id": plot_id,
                     "key": key,
-                    "dataframe_json": {
-                        "schema": build_table_schema(res, version=False),
-                        # todo(maximsmol): get rid of the json reload
-                        "data": json.loads(
-                            res.to_json(orient="split", date_format="iso")
-                        ),
-                    },
+                    "dataframe_json": {"schema": schema, "data": data},
                 }
             )
 
@@ -1084,8 +1084,10 @@ class Kernel:
 
         if msg["type"] == "get_plot_data":
             self.plot_data_selections[msg["plot_id"]] = msg["key"]
+            config: PlotConfig | None = None
+            # if "config"
 
-            await self.send_plot_data(msg["plot_id"], msg["key"])
+            await self.send_plot_data(msg["plot_id"], msg["key"], config)
 
         if msg["type"] == "get_global":
             pagination_settings = {
