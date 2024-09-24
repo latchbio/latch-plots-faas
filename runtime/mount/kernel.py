@@ -27,7 +27,6 @@ from lplots import _inject
 from lplots.reactive import Node, Signal, ctx
 from lplots.utils.nothing import Nothing
 from lplots.widgets._emit import WidgetState
-from numpy.typing import NDArray
 from pandas import DataFrame, MultiIndex, Series
 from pandas.io.json._table_schema import build_table_schema
 from plotly.basedatatypes import BaseFigure
@@ -36,6 +35,9 @@ from .subsample import PlotConfig, downsample_df, initialize_duckdb
 
 sys.path.append(str(Path(__file__).parent.absolute()))
 from socketio import SocketIo
+
+if TYPE_CHECKING:
+    from numpy.typing import NDArray
 
 sys.path.pop()
 
