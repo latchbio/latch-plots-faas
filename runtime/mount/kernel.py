@@ -135,6 +135,7 @@ class TracedDict(dict[str, Signal[object]]):
         self.removed = set()
 
         self.dataframes = Signal(set())
+        self.generation_counter = defaultdict(int)
 
     def __getitem__(self, __key: str) -> object:  # type: ignore
         return self.getitem_signal(__key).sample()
