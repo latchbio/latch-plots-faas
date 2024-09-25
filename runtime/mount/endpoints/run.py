@@ -22,12 +22,12 @@ from ..entrypoint import (
     cell_sequencers,
     cell_status,
     contexts,
-    gql_query,
     k_proc,
     pod_id,
     pod_session_id,
     ready_ev,
 )
+from ..utils import gql_query
 
 
 @dataclass(frozen=True)

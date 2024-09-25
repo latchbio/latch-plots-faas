@@ -8,17 +8,14 @@ import traceback
 from asyncio.subprocess import Process
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, TypedDict, TypeVar
+from typing import TypedDict, TypeVar
 
-import aiohttp
-from aiohttp import ClientSession
 from duckdb import DuckDBPyConnection
 from latch_asgi.framework.websocket import WebsocketConnectionClosedError
 from latch_data_validation.data_validation import validate
-from yarl import URL
 
-from ..config import config
 from .socketio import SocketIo
+from .utils import get_global_http_sess, gql_query
 
 dir_p = Path(__file__).parent
 
@@ -99,16 +96,7 @@ class PlotsNotebookKernelStateResp:
     data: PlotsNotebookKernelState
 
 
-sess: aiohttp.ClientSession | None = None
 conn: DuckDBPyConnection | None = None
-
-
-async def get_global_http_sess() -> aiohttp.ClientSession:  # noqa: RUF029
-    global sess
-    if sess is None:
-        sess = ClientSession()
-
-    return sess
 
 
 async def try_send_message(ctx: Context, msg: str) -> None:
@@ -121,25 +109,6 @@ async def broadcast_message(msg: str) -> None:
         asyncio.create_task(try_send_message(ctx, msg)) for ctx in contexts.values()
     ]
     await asyncio.gather(*tasks)
-
-
-async def gql_query(query: str, variables: dict[str, Any], auth: str) -> Any:
-    sess = await get_global_http_sess()
-    async with sess.post(
-        URL(f"https://vacuole.{config.domain}") / "graphql",
-        headers={
-            "Content-Type": "application/json",
-            "User-Agent": "LatchPlotsFaas/0.2.0",
-            "Authorization": auth,
-        },
-        json={"query": query, "variables": variables},
-    ) as resp:
-        resp.raise_for_status()
-
-        res = await resp.json()
-        if "errors" in res:
-            raise RuntimeError(f"graphql error: {res}")
-        return res
 
 
 async def add_pod_event(*, auth: str, event_type: str) -> None:
@@ -433,5 +402,5 @@ async def shutdown() -> None:
         sock.close()
 
     with contextlib.suppress(Exception):
-        sess = await get_global_http_sess()
+        sess = get_global_http_sess()
         await sess.close()

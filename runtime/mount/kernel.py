@@ -726,7 +726,7 @@ class Kernel:
         await self.conn.send(msg)
 
     async def send_plot_data(
-        self, plot_id: str, key: str, config: PlotConfig | None
+        self, plot_id: str, key: str, config: PlotConfig | None = None
     ) -> None:
         res = self.k_globals[key]
         # todo(rteqs): handle Series data type

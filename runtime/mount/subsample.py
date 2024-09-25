@@ -8,8 +8,7 @@ from lplots import _inject
 from pandas import DataFrame
 from plotly.basedatatypes import BaseFigure
 
-from .entrypoint import auth_token_sdk, gql_query
-from .utils import get_presigned_url
+from .utils import auth_token_sdk, get_presigned_url, gql_query
 
 
 def initialize_duckdb() -> DuckDBPyConnection:
