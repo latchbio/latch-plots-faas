@@ -365,6 +365,7 @@ async def start_kernel_proc() -> None:
 
     await add_pod_event(auth=auth_token_sdk, event_type="runtime_ready")
     await ready_ev.wait()
+    # todo(rteqs): need to init plot configs
     await conn_k.send(
         {
             "type": "init",

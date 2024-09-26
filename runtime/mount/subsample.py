@@ -122,7 +122,11 @@ def downsample(
     conn: DuckDBPyConnection, table_name: str, config: PlotConfig
 ) -> list[duckdb.DuckDBPyRelation]:
     custom_data = config.get("custom_data")
-    custom_data_str = ", ".join(custom_data) if custom_data is not None else None
+    custom_data_str = (
+        ", ".join(custom_data)
+        if custom_data is not None and len(custom_data) > 0
+        else None
+    )
 
     facet = config.get("facet")
     marker_size_axis = config.get("marker_size_axis")
@@ -153,7 +157,7 @@ def downsample(
         ).fetchone()
 
         if res is not None and res[0] > 50:
-            # todo(rteqs): wip
+            # todo(rteqs): send error to frontend
             raise ValueError("Too many facets")
 
     relations: list[duckdb.DuckDBPyRelation] = []
