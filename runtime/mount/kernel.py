@@ -438,7 +438,7 @@ class Kernel:
         str, defaultdict[str, PaginationSettings]
     ] = field(default_factory=pagination_settings_dict_factory)
 
-    plot_configs: dict[str, PlotConfig] = field(default_factory=dict)
+    plot_configs: dict[str, PlotConfig | None] = field(default_factory=dict)
     duckdb_conn: DuckDBPyConnection = field(default=initialize_duckdb())
 
     def __post_init__(self) -> None:
@@ -1064,7 +1064,7 @@ class Kernel:
 
         if msg["type"] == "get_plot_data":
             self.plot_data_selections[msg["plot_id"]] = msg["key"]
-            config: PlotConfig | None = None
+            config = self.plot_configs[msg["plot_id"]] = msg.get("config")
 
             await self.send_plot_data(msg["plot_id"], msg["key"], config)
 
