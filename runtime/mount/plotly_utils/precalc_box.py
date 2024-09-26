@@ -64,10 +64,11 @@ def precalc_box(trace: Any):
     # >>> Update result
     if boxpoints != "all":
         trace[data_axis] = outliers.tolist()
-        trace["boxpoints"] = "all"
-    else:
-        # todo(maximsmol): unsupported
-        ...
+
+        if "boxpoints" not in trace:
+            # note(maximsmol): the default for box plots with precomputed
+            # statistics is "all" for some reason
+            trace["boxpoints"] = "outliers"
 
     trace["q1"] = float(q1)
     trace["median"] = float(median)
