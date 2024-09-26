@@ -30,6 +30,8 @@ from numpy.typing import NDArray
 from pandas import DataFrame, MultiIndex, Series
 from pandas.io.json._table_schema import build_table_schema
 from plotly.basedatatypes import BaseFigure
+import plotly.io._json as pio_json
+from plotly_utils.precalc_box import precalc_box
 
 sys.path.append(str(Path(__file__).parent.absolute()))
 from socketio import SocketIo
@@ -424,6 +426,28 @@ class CategorizedCellOutputs:
     figures: list[str] = field(default_factory=list)
 
 
+def serialize_plotly_figure(x: BaseFigure):
+    res = x.to_dict()
+
+    for trace in res["data"]:
+        try:
+            if trace["type"] == "box":
+                precalc_box(trace)
+        except:
+            traceback.print_exc()
+
+    modules = {
+        "sage_all": pio_json.get_module("sage.all", should_load=False),
+        "np": pio_json.get_module("numpy", should_load=False),
+        "pd": pio_json.get_module("pandas", should_load=False),
+        "image": pio_json.get_module("PIL.Image", should_load=False),
+    }
+
+    # note(maximsmol): plotly itself does a bunch of escaping to avoid XSS
+    # when embedding directly into HTML. we never do that so we don't care
+    return pio_json.clean_to_json_compatible(res, modules=modules)
+
+
 @dataclass(kw_only=True)
 class Kernel:
     conn: SocketIo
@@ -746,7 +770,7 @@ class Kernel:
                     "plot_id": plot_id,
                     "key": key,
                     # todo(maximsmol): get rid of the json reload
-                    "plotly_json": json.loads(res.to_json()),
+                    "plotly_json": serialize_plotly_figure(res),
                 }
             )
             return
@@ -842,7 +866,7 @@ class Kernel:
                     "type": "output_value",
                     **(id_fields),
                     **(key_fields),
-                    "plotly_json": res.to_json(),
+                    "plotly_json": json.dumps(serialize_plotly_figure(res)),
                 }
             )
             return
@@ -948,25 +972,22 @@ class Kernel:
                 summary[key] = {
                     "type": "DataFrame",
                     "columns": list(value.columns)[:50],
-                    "dtypes": {str(k): str(v) for k, v in list(value.dtypes.items())[:50]},
+                    "dtypes": {
+                        str(k): str(v) for k, v in list(value.dtypes.items())[:50]
+                    },
                     "column_preview_truncated": len(value.columns) > 50,
-                    "shape": value.shape
+                    "shape": value.shape,
                 }
             elif isinstance(value, pd.Series):
                 summary[key] = {
                     "type": "Series",
                     "dtype": str(value.dtype),
-                    "shape": value.shape
+                    "shape": value.shape,
                 }
             else:
-                summary[key] = {
-                    "type": type(value).__name__,
-                }
+                summary[key] = {"type": type(value).__name__}
 
-        await self.send({
-            "type": "globals_summary",
-            "summary": summary,
-        })
+        await self.send({"type": "globals_summary", "summary": summary})
 
     async def accept(self) -> None:
         # print("[kernel] accept")
