@@ -841,8 +841,11 @@ class Kernel:
             data: Any = res.to_json()
 
             for trace in data["data"]:
-                if trace["type"] == "box":
-                    precalc_box(trace)
+                try:
+                    if trace["type"] == "box":
+                        precalc_box(trace)
+                except:
+                    traceback.print_exc()
 
             await self.send(
                 {
