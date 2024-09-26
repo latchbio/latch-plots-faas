@@ -402,6 +402,20 @@ def pagination_settings_dict_factory() -> (
     return defaultdict(lambda: defaultdict(PaginationSettings))
 
 
+class DfJsonSplitFormat(TypedDict):
+    columns: list[str]
+    index: list | None
+    data: list[list[Any]]
+
+
+def df_to_json(df: DataFrame) -> DfJsonSplitFormat:
+    return {
+        "columns": df.columns.to_list(),
+        "index": df.index.to_list(),
+        "data": df.to_numpy().tolist(),
+    }
+
+
 @dataclass
 class CategorizedCellOutputs:
     all: list[str] = field(default_factory=list)
@@ -760,16 +774,13 @@ class Kernel:
                 "type": "plot_data",
                 "plot_id": plot_id,
                 "key": key,
-                "dataframe_json": {"schema": schema, "data": []},
+                "dataframe_json": {"schema": schema},
             }
 
             df_size_mb = res.memory_usage(index=True, deep=True).sum() / 10**6
 
             if df_size_mb <= 1:
-                # todo(rteqs): get rid of the json reload
-                msg["dataframe_json"]["data"] = json.loads(
-                    res.to_json(orient="split", date_format="iso")
-                )
+                msg["dataframe_json"]["data"] = df_to_json(res)
 
             elif self.duckdb_conn is not None and config is not None:
                 subsampled_data = await downsample_df(

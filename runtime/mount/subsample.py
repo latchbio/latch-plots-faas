@@ -153,7 +153,7 @@ def downsample(
             # todo(rteqs): send error to frontend
             raise ValueError("Too many facets")
 
-    relations: list[duckdb.DuckDBPyRelation] = []
+    relations: list[DuckDBPyRelation] = []
 
     for i, trace in enumerate(config["traces"]):
         x = trace["x"]
