@@ -844,6 +844,8 @@ class Kernel:
                 try:
                     if trace["type"] == "box":
                         precalc_box(trace)
+                    else:
+                        print("will not precalc: wrong trace type", trace["type"])
                 except:
                     traceback.print_exc()
 
