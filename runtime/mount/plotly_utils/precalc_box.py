@@ -63,7 +63,7 @@ def precalc_box(trace: Any):
 
     # >>> Update result
     if boxpoints != "all":
-        trace[data_axis] = outliers.tolist()
+        trace[data_axis] = [outliers.tolist()]
 
         if "boxpoints" not in trace:
             # note(maximsmol): the default for box plots with precomputed
