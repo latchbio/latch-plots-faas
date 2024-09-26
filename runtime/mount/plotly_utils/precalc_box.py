@@ -56,7 +56,7 @@ def precalc_box(trace: Any):
     lower_fence = data[lower_fence_idx]
     upper_fence = data[upper_fence_idx]
 
-    outliers = np.extract(data < lower_fence | data > upper_fence, data)
+    outliers = np.extract((data < lower_fence) | (data > upper_fence), data)
     # todo(maximsmol): support subsampling outliers
 
     notch_span = 1.57 * iqr / sqrt(len(data))
