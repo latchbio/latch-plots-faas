@@ -187,7 +187,7 @@ def downsample(
         # todo(rteqs): handle categorical axis
         min_max = trace_data.aggregate(
             f"min({x}) as min_x, min({y}) as min_y, max({x}) as max_x, max({y}) as max_y"
-        )
+        ).set_alias("min_max")
 
         cell_size = 2
         max_occupancy = 3
