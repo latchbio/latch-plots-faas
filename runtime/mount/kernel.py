@@ -426,7 +426,8 @@ class CategorizedCellOutputs:
 
 
 def serialize_plotly_figure(x: BaseFigure):
-    res: Any = x.to_json()
+    # todo(maximsmol): get rid of the json reload
+    res: Any = json.loads(x.to_json())
 
     for trace in res["data"]:
         try:
@@ -435,7 +436,7 @@ def serialize_plotly_figure(x: BaseFigure):
         except:
             traceback.print_exc()
 
-    return res
+    return json.dumps(res)
 
 
 @dataclass(kw_only=True)
