@@ -63,17 +63,17 @@ def precalc_box(trace: Any):
 
     # >>> Update result
     if boxpoints != "all":
-        trace[data_axis] = list(outliers)
+        trace[data_axis] = outliers.tolist()
         trace["boxpoints"] = "all"
     else:
         # todo(maximsmol): unsupported
         ...
 
-    trace["q1"] = q1
-    trace["median"] = median
-    trace["q3"] = q3
-    trace["lowerfence"] = lower_fence
-    trace["upperfence"] = upper_fence
-    trace["mean"] = mean
-    trace["sd"] = sd
-    trace["notchspan"] = notch_span
+    trace["q1"] = float(q1)
+    trace["median"] = float(median)
+    trace["q3"] = float(q3)
+    trace["lowerfence"] = float(lower_fence)
+    trace["upperfence"] = float(upper_fence)
+    trace["mean"] = float(mean)
+    trace["sd"] = float(sd)
+    trace["notchspan"] = float(notch_span)
