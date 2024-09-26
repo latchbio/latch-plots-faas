@@ -177,6 +177,7 @@ def downsample(
                 else ""
             )
         )
+        print(f"{cols=}")
 
         # note: can't do parameterized arguments for column and table names
         trace_data = conn.sql(
@@ -210,6 +211,7 @@ def downsample(
             """
             )
             .filter(f"row_num <= {max_occupancy}")
+            .project("* exclude(row_num, min_x, max_x, min_y, max_y)")
         )
 
         # todo(rteqs): slow to join with very large number of points, but if you have that many groups on the x-axis, you probably aren't using error bars
