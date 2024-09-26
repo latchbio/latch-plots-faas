@@ -40,41 +40,51 @@ def precalc_box(trace: Any):
     data = np.sort(np.array(trace.get(data_axis, [])))
     # todo(maximsmol): do not go through `to_json` to avoid serializing to Python arrays
 
-    mean = np.mean(data)
-    sd = np.std(data, mean=mean) * trace.get("sdmultiple", 1.0)
+    boxmean = trace.get("boxmean")
+    if boxmean is True or boxmean == "sd":
+        trace.pop("boxmean")
+
+        mean = np.mean(data)
+        trace["mean"] = [float(mean)]
+
+        if boxmean == "sd":
+            sd = np.std(data, mean=mean) * trace.get("sdmultiple", 1.0)
+            trace["sd"] = [float(sd)]
 
     q1, median, q3 = np.quantile(data, [0.25, 0.5, 0.75], method="hazen")
+    trace["q1"] = [float(q1)]
+    trace["median"] = [float(median)]
+    trace["q3"] = [float(q3)]
+
     iqr = q3 - q1
 
     fence_thres = 1.5 * iqr
     lower_fence_thres = q1 - fence_thres
     upper_fence_thres = q3 + fence_thres
 
-    lower_fence_idx = np.searchsorted(data, lower_fence_thres, side="right")
+    lower_fence_idx = max(np.searchsorted(data, lower_fence_thres, side="right") - 1, 0)
     upper_fence_idx = np.searchsorted(data, upper_fence_thres, side="left")
 
     lower_fence = data[lower_fence_idx]
     upper_fence = data[upper_fence_idx]
 
-    outliers = np.extract((data < lower_fence) | (data > upper_fence), data)
-    # todo(maximsmol): support subsampling outliers
+    trace["lowerfence"] = [float(lower_fence)]
+    trace["upperfence"] = [float(upper_fence)]
 
-    notch_span = 1.57 * iqr / sqrt(len(data))
+    has_notch = trace.get("notched", "notchwidth" in trace or "notchspan" in trace)
+    if has_notch:
+        trace.pop("notched")
 
-    # >>> Update result
+        notch_span = 1.57 * iqr / sqrt(len(data))
+        trace["notchspan"] = [float(notch_span)]
+
     if boxpoints != "all":
+        outliers = np.extract((data < lower_fence) | (data > upper_fence), data)
+        # todo(maximsmol): support subsampling outliers
+
         trace[data_axis] = [outliers.tolist()]
 
         if "boxpoints" not in trace:
             # note(maximsmol): the default for box plots with precomputed
             # statistics is "all" for some reason
             trace["boxpoints"] = "outliers"
-
-    trace["q1"] = [float(q1)]
-    trace["median"] = [float(median)]
-    trace["q3"] = [float(q3)]
-    trace["lowerfence"] = [float(lower_fence)]
-    trace["upperfence"] = [float(upper_fence)]
-    trace["mean"] = [float(mean)]
-    trace["sd"] = [float(sd)]
-    trace["notchspan"] = [float(notch_span)]
