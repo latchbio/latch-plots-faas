@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Literal, NotRequired, TypedDict
 
 import duckdb
-from duckdb import DuckDBPyConnection
+from duckdb import ColumnExpression, ConstantExpression, DuckDBPyConnection
 from pandas import DataFrame
 from plotly.basedatatypes import BaseFigure
 
@@ -88,22 +88,17 @@ async def check_generation(
 
     last_modified_time = datetime.datetime.now(tz=datetime.UTC)
 
-    duckdb_gen = conn.sql(
-        """
-        select
-            generation = $cur_gen or
-            last_modified_time > $last_modified_time
-        from
-            plots_faas_catalog
-        where
-            name = $table_name
-        """,
-        params={
-            "table_name": table_name,
-            "cur_gen": cur_gen,
-            "last_modified_time": last_modified_time,
-        },
-    ).fetchone()
+    duckdb_gen = (
+        conn.table(table_name)
+        .project(
+            (ColumnExpression("generation") == ConstantExpression(cur_gen))
+            or (
+                ColumnExpression("last_modified_time")
+                > ConstantExpression(last_modified_time)
+            )
+        )
+        .fetchone()
+    )
 
     if duckdb_gen is None:
         return False, None
@@ -142,19 +137,11 @@ def downsample(
             facet_and_color_by.add(color_by)
 
     if len(facet_and_color_by) > 0:
-        select_parts = "+ ".join(
+        agg_expr = "+ ".join(
             [f"approx_count_distinct({col})" for col in facet_and_color_by]
         )
 
-        res = conn.sql(
-            """
-            select
-                $select_parts
-            from
-                $table_name
-            """,
-            params={"table_name": table_name, "select_parts": select_parts},
-        ).fetchone()
+        res = conn.table(table_name).aggregate(agg_expr).fetchone()
 
         if res is not None and res[0] > 50:
             # todo(rteqs): send error to frontend
@@ -185,19 +172,15 @@ def downsample(
             )
         )
 
+        # note: can't do parameterized arguments for column and table names
         trace_data = conn.sql(
-            """
+            f"""
             select
-                distinct on ($distinct_cols)
-                $cols
+                distinct on ({distinct_cols})
+                {cols}
             from
-                $table_name
-            """,
-            params={
-                "table_name": table_name,
-                "distinct_cols": distinct_cols,
-                "cols": cols,
-            },
+                {table_name}
+            """
         ).set_alias(f"trace_{i}")
 
         # todo(rteqs): handle categorical axis
@@ -209,7 +192,7 @@ def downsample(
         max_occupancy = 3
 
         trace_data = (
-            trace_data.join(min_max, condition="1 = 1")  # cross join
+            trace_data.join(min_max, "1 = 1")
             .project(
                 f"""
                 *,
@@ -225,33 +208,19 @@ def downsample(
 
         # todo(rteqs): slow to join with very large number of points, but if you have that many groups on the x-axis, you probably aren't using error bars
         if error_bar == "sem":
-            sem = conn.sql(
-                """
-                select
-                    $x,
-                    stddev($y) / sqrt(count($y)) as sem
-                from
-                    $table_name
-                group by
-                    $x
-                """,
-                params={"table_name": table_name, "x": x, "y": y},
-            ).set_alias(f"sem_{i}")
+            sem = (
+                conn.table(table_name)
+                .aggregate(f"{x}, stddev({y} / sqrt(count({y}))) as sem")
+                .set_alias(f"sem_{i}")
+            )
             trace_data = trace_data.join(sem, f"trace_{i}.{x} = sem_{i}.{x}")
 
         elif error_bar == "stddev":
-            stddev = conn.sql(
-                """
-                select
-                    $x,
-                    stddev($y) as stddev
-                from
-                    $table_name
-                group by
-                    $x
-                """,
-                params={"table_name": table_name, "x": x, "y": y},
-            ).set_alias("stddev")
+            stddev = (
+                conn.table(table_name)
+                .aggregate(f"{x}, stddev({y}) as stddev")
+                .set_alias(f"stddev_{i}")
+            )
             trace_data = trace_data.join(stddev, f"trace_{i}.{x} = stddev_{i}.{x}")
 
         relations.append(trace_data)
