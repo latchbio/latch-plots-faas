@@ -89,7 +89,8 @@ async def check_generation(
     last_modified_time = datetime.datetime.now(tz=datetime.UTC)
 
     duckdb_gen = (
-        conn.table(table_name)
+        conn.table("plots_faas_catalog")
+        .filter(ColumnExpression("name") == ConstantExpression(table_name))
         .project(
             (ColumnExpression("generation") == ConstantExpression(cur_gen))
             or (
