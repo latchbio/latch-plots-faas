@@ -185,7 +185,7 @@ def downsample(
         ).set_alias(f"trace_{i}")
 
         # todo(rteqs): handle categorical axis
-        min_max = trace_data.project(
+        min_max = trace_data.aggregate(
             f"min({x}) as min_x, min({y}) as min_y, max({x}) as max_x, max({y}) as max_y"
         )
 
@@ -294,7 +294,7 @@ async def downsample_df(
 ) -> list[DataFrame]:
     is_latest, _ = await check_generation(conn, key, cur_gen=cur_gen)
     if not is_latest:
-        conn.register(key, df)
+        conn.register(key, df.assign(index=df.index))
         conn.execute(
             """
             insert into
