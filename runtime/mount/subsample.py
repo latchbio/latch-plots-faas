@@ -331,7 +331,7 @@ async def downsample_df(
                 (name)
             do update
             set
-                cur_gen = $cur_gen
+                generation = $cur_gen
             """,
             parameters={"name": key, "cur_gen": cur_gen},
         )
