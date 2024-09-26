@@ -62,8 +62,8 @@ def precalc_box(trace: Any):
     lower_fence_thres = q1 - fence_thres
     upper_fence_thres = q3 + fence_thres
 
-    lower_fence_idx = max(np.searchsorted(data, lower_fence_thres, side="right") - 1, 0)
-    upper_fence_idx = np.searchsorted(data, upper_fence_thres, side="left")
+    lower_fence_idx = np.searchsorted(data, lower_fence_thres, side="left")
+    upper_fence_idx = max(np.searchsorted(data, upper_fence_thres, side="right") - 1, 0)
 
     lower_fence = data[lower_fence_idx]
     upper_fence = data[upper_fence_idx]
