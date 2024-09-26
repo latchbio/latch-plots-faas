@@ -1,3 +1,4 @@
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -5,7 +6,8 @@ from aiohttp import ClientSession
 from latch_sdk_config.latch import config as latch_config
 from yarl import URL
 
-from ..config import config
+sys.path.append(str(Path(__file__).parent.parent.absolute()))
+from config import config
 
 latch_p = Path("/root/.latch")
 sdk_token = (latch_p / "token").read_text()

@@ -1,5 +1,7 @@
 import datetime
+import sys
 import traceback
+from pathlib import Path
 from typing import TYPE_CHECKING, Literal, NotRequired, TypedDict
 
 import duckdb
@@ -7,7 +9,8 @@ from duckdb import DuckDBPyConnection
 from pandas import DataFrame
 from plotly.basedatatypes import BaseFigure
 
-from .utils import auth_token_sdk, get_presigned_url, gql_query
+sys.path.append(str(Path(__file__).parent.absolute()))
+from utils import auth_token_sdk, get_presigned_url, gql_query
 
 
 def initialize_duckdb() -> DuckDBPyConnection:
