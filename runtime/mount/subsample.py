@@ -4,7 +4,6 @@ from typing import TYPE_CHECKING, Literal, NotRequired, TypedDict
 
 import duckdb
 from duckdb import DuckDBPyConnection
-from lplots import _inject
 from pandas import DataFrame
 from plotly.basedatatypes import BaseFigure
 
@@ -54,14 +53,8 @@ async def check_generation(
     conn: DuckDBPyConnection,
     table_name: str,
     source_type: Literal["kernel", "ldata"] = "kernel",
-) -> tuple[bool, int | None, datetime.datetime | None]:
-    cur_gen = (
-        _inject.kernel.k_globals.generation_counter.get(table_name)
-        if source_type == "kernel"
-        else None
-    )
-
-    # todo(rteqs): ldata_last_modified_time gql query to check latest ldata_node_id event
+    cur_gen: int | None = None,
+) -> tuple[bool, datetime.datetime | None]:
     last_modified_time = None
     if source_type == "ldata":
         try:
@@ -114,7 +107,7 @@ async def check_generation(
     ).fetchone()
 
     if duckdb_gen is None:
-        return False, None, None
+        return False, None
 
     if not isinstance(duckdb_gen[0], bool):
         raise TypeError(f"Unexpected generation value: {duckdb_gen}")
@@ -122,7 +115,7 @@ async def check_generation(
     if TYPE_CHECKING:
         assert isinstance(duckdb_gen[0], bool)
 
-    return duckdb_gen[0], cur_gen, last_modified_time
+    return duckdb_gen[0], last_modified_time
 
 
 # todo(rteqs): marker size
@@ -266,12 +259,11 @@ def downsample(
 async def downsample_ldata(
     conn: DuckDBPyConnection, ldata_node_id: str, config: PlotConfig
 ) -> list[DataFrame]:
-    is_latest, _, last_modified_time = await check_generation(
-        conn, f"ldata_{ldata_node_id}", "ldata"
+    is_latest, last_modified_time = await check_generation(
+        conn, f"ldata_{ldata_node_id}", "ldata", None
     )
 
     if not is_latest:
-        # todo(rteqs): pull get_presigned_url out as a shared library
         url = await get_presigned_url(f"latch://{ldata_node_id}.node")
         conn.read_csv(url).to_table(f"ldata_{ldata_node_id}")
         conn.execute(
@@ -297,9 +289,9 @@ async def downsample_ldata(
 
 
 async def downsample_fig(
-    conn: DuckDBPyConnection, key: str, fig: BaseFigure
+    conn: DuckDBPyConnection, key: str, fig: BaseFigure, cur_gen: int
 ) -> BaseFigure:
-    is_latest, cur_gen, _ = await check_generation(conn, key)
+    is_latest, _ = await check_generation(conn, key, cur_gen=cur_gen)
     if not is_latest:
         # todo(rteqs): figure out how to convert plotly fig to duckdb table
         # df
@@ -325,9 +317,9 @@ async def downsample_fig(
 
 
 async def downsample_df(
-    conn: DuckDBPyConnection, key: str, df: DataFrame, config: PlotConfig
+    conn: DuckDBPyConnection, key: str, df: DataFrame, config: PlotConfig, cur_gen: int
 ) -> list[DataFrame]:
-    is_latest, cur_gen, _ = await check_generation(conn, key)
+    is_latest, _ = await check_generation(conn, key, cur_gen=cur_gen)
     if not is_latest:
         conn.register(key, df)
         conn.execute(

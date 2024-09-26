@@ -763,8 +763,14 @@ class Kernel:
             # todo(rteqs): get rid of the json reload
             data = (
                 res.to_json(orient="split", date_format="iso")
-                if df_size_mb <= 50 or self.duckdb_conn is None or config is None
-                else await downsample_df(self.duckdb_conn, key, res, config)
+                if df_size_mb <= 1 or self.duckdb_conn is None or config is None
+                else await downsample_df(
+                    self.duckdb_conn,
+                    key,
+                    res,
+                    config,
+                    self.k_globals.generation_counter[key],
+                )
             )
 
             await self.send(
@@ -1060,7 +1066,6 @@ class Kernel:
         if msg["type"] == "get_plot_data":
             self.plot_data_selections[msg["plot_id"]] = msg["key"]
             config: PlotConfig | None = None
-            # if "config"
 
             await self.send_plot_data(msg["plot_id"], msg["key"], config)
 
