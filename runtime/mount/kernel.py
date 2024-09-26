@@ -30,7 +30,7 @@ from numpy.typing import NDArray
 from pandas import DataFrame, MultiIndex, Series
 from pandas.io.json._table_schema import build_table_schema
 from plotly.basedatatypes import BaseFigure
-from .plotly.precalc_box import precalc_box
+from .plotly_utils.precalc_box import precalc_box
 
 sys.path.append(str(Path(__file__).parent.absolute()))
 from socketio import SocketIo
