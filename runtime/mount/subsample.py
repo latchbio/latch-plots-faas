@@ -300,14 +300,14 @@ async def downsample_fig(
             insert into
                 plots_faas_catalog
             values
-                ($key, $cur_gen, null)
+                ($name, $generation, null)
             on conflict
                 (name)
             do update
             set
-                cur_gen = $cur_gen
+                generation = $generation
             """,
-            parameters={"name": key, "cur_gen": cur_gen},
+            parameters={"name": key, "generation": cur_gen},
         )
 
     # convert fig to downsample config
@@ -326,14 +326,14 @@ async def downsample_df(
             insert into
                 plots_faas_catalog
             values
-                ($key, $cur_gen, null)
+                ($name, $generation, null)
             on conflict
                 (name)
             do update
             set
-                generation = $cur_gen
+                generation = $generation
             """,
-            parameters={"name": key, "cur_gen": cur_gen},
+            parameters={"name": key, "generation": cur_gen},
         )
 
     # todo(rteqs): process json on our own to avoid extra cost of going through pandas
