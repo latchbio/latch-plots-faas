@@ -754,9 +754,7 @@ class Kernel:
             return
 
         if isinstance(res, DataFrame):
-            df_size_mb = (
-                res.memory_usage(index=True, deep=True).value_counts().sum() / 10**6
-            )
+            df_size_mb = res.memory_usage(index=True, deep=True).sum() / 10**6
 
             schema = build_table_schema(res, version=False)
 
