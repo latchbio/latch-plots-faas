@@ -30,7 +30,7 @@ from numpy.typing import NDArray
 from pandas import DataFrame, MultiIndex, Series
 from pandas.io.json._table_schema import build_table_schema
 from plotly.basedatatypes import BaseFigure
-from _plotly_utils.utils import PlotlyJSONEncoder
+import plotly.io._json as pio_json
 from plotly_utils.precalc_box import precalc_box
 
 sys.path.append(str(Path(__file__).parent.absolute()))
@@ -436,9 +436,16 @@ def serialize_plotly_figure(x: BaseFigure):
         except:
             traceback.print_exc()
 
+    modules = {
+        "sage_all": pio_json.get_module("sage.all", should_load=False),
+        "np": pio_json.get_module("numpy", should_load=False),
+        "pd": pio_json.get_module("pandas", should_load=False),
+        "image": pio_json.get_module("PIL.Image", should_load=False),
+    }
+
     # note(maximsmol): plotly itself does a bunch of escaping to avoid XSS
     # when embedding directly into HTML. we never do that so we don't care
-    return res
+    return pio_json.clean_to_json_compatible(res, modules=modules)
 
 
 @dataclass(kw_only=True)
@@ -859,9 +866,7 @@ class Kernel:
                     "type": "output_value",
                     **(id_fields),
                     **(key_fields),
-                    "plotly_json": json.dumps(
-                        serialize_plotly_figure(res), cls=PlotlyJSONEncoder
-                    ),
+                    "plotly_json": json.dumps(serialize_plotly_figure(res)),
                 }
             )
             return
