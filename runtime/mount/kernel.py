@@ -761,7 +761,7 @@ class Kernel:
             # todo(rteqs): just send schema if its oversized and there's no config
             # todo(rteqs): get rid of the json reload
             data = (
-                res.to_json(orient="split", date_format="iso")
+                json.loads(res.to_json(orient="split", date_format="iso"))
                 if df_size_mb <= 1 or self.duckdb_conn is None or config is None
                 else await downsample_df(
                     self.duckdb_conn,

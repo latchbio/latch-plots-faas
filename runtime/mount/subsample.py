@@ -14,11 +14,7 @@ from utils import auth_token_sdk, get_presigned_url, gql_query
 
 
 def initialize_duckdb() -> DuckDBPyConnection:
-    conn = duckdb.connect(
-        database=":memory:plots-faas",
-        read_only=False,
-        config={"enable_progress_bar": False},
-    )
+    conn = duckdb.connect(database=":memory:plots-faas", read_only=False)
 
     conn.execute(
         """
