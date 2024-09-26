@@ -70,11 +70,11 @@ def precalc_box(trace: Any):
             # statistics is "all" for some reason
             trace["boxpoints"] = "outliers"
 
-    trace["q1"] = float(q1)
-    trace["median"] = float(median)
-    trace["q3"] = float(q3)
-    trace["lowerfence"] = float(lower_fence)
-    trace["upperfence"] = float(upper_fence)
-    trace["mean"] = float(mean)
-    trace["sd"] = float(sd)
-    trace["notchspan"] = float(notch_span)
+    trace["q1"] = [float(q1)]
+    trace["median"] = [float(median)]
+    trace["q3"] = [float(q3)]
+    trace["lowerfence"] = [float(lower_fence)]
+    trace["upperfence"] = [float(upper_fence)]
+    trace["mean"] = [float(mean)]
+    trace["sd"] = [float(sd)]
+    trace["notchspan"] = [float(notch_span)]
