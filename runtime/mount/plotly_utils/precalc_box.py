@@ -17,12 +17,10 @@ def precalc_box(trace: Any):
             "notchspan",
         ]
     ):
-        print("will not precalc box: has summary column")
         return
 
     boxpoints = trace.get("boxpoints", "outliers")
     if boxpoints == "all":
-        print("will not precalc box: has unsupported boxpoints")
         # todo(maximsmol): support subsampling points
         return
 
@@ -35,7 +33,6 @@ def precalc_box(trace: Any):
     index_axis = "x" if orientation == "v" else "y"
 
     if index_axis in trace or f"{index_axis}0" in trace or f"d{index_axis}" in trace:
-        print("will not precalc box: has index column")
         # todo(maximsmol): support multibox traces
         # todo(maximsmol): support generated index axes
         return

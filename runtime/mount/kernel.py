@@ -425,6 +425,19 @@ class CategorizedCellOutputs:
     figures: list[str] = field(default_factory=list)
 
 
+def serialize_plotly_figure(x: BaseFigure):
+    res: Any = x.to_json()
+
+    for trace in res["data"]:
+        try:
+            if trace["type"] == "box":
+                precalc_box(trace)
+        except:
+            traceback.print_exc()
+
+    return res
+
+
 @dataclass(kw_only=True)
 class Kernel:
     conn: SocketIo
@@ -747,7 +760,7 @@ class Kernel:
                     "plot_id": plot_id,
                     "key": key,
                     # todo(maximsmol): get rid of the json reload
-                    "plotly_json": json.loads(res.to_json()),
+                    "plotly_json": json.loads(serialize_plotly_figure(res)),
                 }
             )
             return
@@ -838,23 +851,12 @@ class Kernel:
         assert len(key_fields) == 1
 
         if isinstance(res, BaseFigure):
-            data: Any = res.to_json()
-
-            for trace in data["data"]:
-                try:
-                    if trace["type"] == "box":
-                        precalc_box(trace)
-                    else:
-                        print("will not precalc: wrong trace type", trace["type"])
-                except:
-                    traceback.print_exc()
-
             await self.send(
                 {
                     "type": "output_value",
                     **(id_fields),
                     **(key_fields),
-                    "plotly_json": data,
+                    "plotly_json": serialize_plotly_figure(res),
                 }
             )
             return
