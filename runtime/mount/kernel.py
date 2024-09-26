@@ -28,11 +28,10 @@ from pandas import DataFrame, MultiIndex, Series
 from pandas.io.json._table_schema import build_table_schema
 from plotly.basedatatypes import BaseFigure
 
-from .subsample import PlotConfig, downsample_df, initialize_duckdb
-from .utils import get_presigned_url
-
 sys.path.append(str(Path(__file__).parent.absolute()))
 from socketio import SocketIo
+from subsample import PlotConfig, downsample_df, initialize_duckdb
+from utils import get_presigned_url
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -759,7 +758,7 @@ class Kernel:
 
             schema = build_table_schema(res, version=False)
 
-            # todo(rteqs): just send schema if its oversized and there's no conig
+            # todo(rteqs): just send schema if its oversized and there's no config
             # todo(rteqs): get rid of the json reload
             data = (
                 res.to_json(orient="split", date_format="iso")
