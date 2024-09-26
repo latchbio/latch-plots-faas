@@ -2,10 +2,15 @@ import datetime
 import sys
 import traceback
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal, NotRequired, TypedDict
+from typing import TYPE_CHECKING, Any, Literal, NotRequired, TypedDict
 
-import duckdb
-from duckdb import ColumnExpression, ConstantExpression, DuckDBPyConnection
+from duckdb import (
+    ColumnExpression,
+    ConstantExpression,
+    DuckDBPyConnection,
+    DuckDBPyRelation,
+)
+from duckdb import connect as duckdb_connect
 from pandas import DataFrame
 from plotly.basedatatypes import BaseFigure
 
@@ -14,7 +19,7 @@ from utils import auth_token_sdk, get_presigned_url, gql_query
 
 
 def initialize_duckdb() -> DuckDBPyConnection:
-    conn = duckdb.connect(database=":memory:plots-faas", read_only=False)
+    conn = duckdb_connect(database=":memory:plots-faas", read_only=False)
 
     conn.execute(
         """
@@ -116,7 +121,7 @@ async def check_generation(
 # todo(rteqs): marker size
 def downsample(
     conn: DuckDBPyConnection, table_name: str, config: PlotConfig
-) -> list[duckdb.DuckDBPyRelation]:
+) -> list[DuckDBPyRelation]:
     custom_data = config.get("custom_data")
     custom_data_str = (
         ", ".join(custom_data)
@@ -231,7 +236,7 @@ def downsample(
 
 async def downsample_ldata(
     conn: DuckDBPyConnection, ldata_node_id: str, config: PlotConfig
-) -> list[DataFrame]:
+) -> list[list[Any]]:
     is_latest, last_modified_time = await check_generation(
         conn, f"ldata_{ldata_node_id}", "ldata", None
     )
@@ -257,8 +262,7 @@ async def downsample_ldata(
             },
         )
 
-    # todo(rteqs): process json on our own to avoid extra cost of going through pandas
-    return [rel.df() for rel in downsample(conn, ldata_node_id, config)]
+    return [rel.fetchall() for rel in downsample(conn, ldata_node_id, config)]
 
 
 async def downsample_fig(
@@ -291,7 +295,7 @@ async def downsample_fig(
 
 async def downsample_df(
     conn: DuckDBPyConnection, key: str, df: DataFrame, config: PlotConfig, cur_gen: int
-) -> list[DataFrame]:
+) -> list[list[Any]]:
     is_latest, _ = await check_generation(conn, key, cur_gen=cur_gen)
     if not is_latest:
         conn.register(key, df.assign(index=df.index))
@@ -310,5 +314,4 @@ async def downsample_df(
             parameters={"name": key, "generation": cur_gen},
         )
 
-    # todo(rteqs): process json on our own to avoid extra cost of going through pandas
-    return [rel.df() for rel in downsample(conn, key, config)]
+    return [rel.fetchall() for rel in downsample(conn, key, config)]

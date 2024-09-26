@@ -754,32 +754,34 @@ class Kernel:
             return
 
         if isinstance(res, DataFrame):
-            df_size_mb = res.memory_usage(index=True, deep=True).sum() / 10**6
-
             schema = build_table_schema(res, version=False)
 
-            # todo(rteqs): just send schema if its oversized and there's no config
-            # todo(rteqs): get rid of the json reload
-            data = (
-                json.loads(res.to_json(orient="split", date_format="iso"))
-                if df_size_mb <= 1 or self.duckdb_conn is None or config is None
-                else await downsample_df(
+            msg = {
+                "type": "plot_data",
+                "plot_id": plot_id,
+                "key": key,
+                "dataframe_json": {"schema": schema, "data": []},
+            }
+
+            df_size_mb = res.memory_usage(index=True, deep=True).sum() / 10**6
+
+            if df_size_mb <= 1:
+                # todo(rteqs): get rid of the json reload
+                msg["dataframe_json"]["data"] = json.loads(
+                    res.to_json(orient="split", date_format="iso")
+                )
+
+            elif self.duckdb_conn is not None and config is not None:
+                subsampled_data = await downsample_df(
                     self.duckdb_conn,
                     key,
                     res,
                     config,
                     self.k_globals.generation_counter[key],
                 )
-            )
+                msg["dataframe_json"]["subsampled_data"] = subsampled_data
 
-            await self.send(
-                {
-                    "type": "plot_data",
-                    "plot_id": plot_id,
-                    "key": key,
-                    "dataframe_json": {"schema": schema, "data": data},
-                }
-            )
+            await self.send(msg)
 
     def lookup_pagination_settings(
         self,
