@@ -30,6 +30,7 @@ from numpy.typing import NDArray
 from pandas import DataFrame, MultiIndex, Series
 from pandas.io.json._table_schema import build_table_schema
 from plotly.basedatatypes import BaseFigure
+from _plotly_utils.utils import PlotlyJSONEncoder
 from plotly_utils.precalc_box import precalc_box
 
 sys.path.append(str(Path(__file__).parent.absolute()))
@@ -426,8 +427,7 @@ class CategorizedCellOutputs:
 
 
 def serialize_plotly_figure(x: BaseFigure):
-    # todo(maximsmol): get rid of the json reload
-    res: Any = json.loads(x.to_json())
+    res = x.to_dict()
 
     for trace in res["data"]:
         try:
@@ -436,7 +436,9 @@ def serialize_plotly_figure(x: BaseFigure):
         except:
             traceback.print_exc()
 
-    return json.dumps(res)
+    # note(maximsmol): plotly itself does a bunch of escaping to avoid XSS
+    # when embedding directly into HTML. we never do that so we don't care
+    return res
 
 
 @dataclass(kw_only=True)
@@ -761,7 +763,7 @@ class Kernel:
                     "plot_id": plot_id,
                     "key": key,
                     # todo(maximsmol): get rid of the json reload
-                    "plotly_json": json.loads(serialize_plotly_figure(res)),
+                    "plotly_json": serialize_plotly_figure(res),
                 }
             )
             return
@@ -857,7 +859,9 @@ class Kernel:
                     "type": "output_value",
                     **(id_fields),
                     **(key_fields),
-                    "plotly_json": serialize_plotly_figure(res),
+                    "plotly_json": json.dumps(
+                        serialize_plotly_figure(res), cls=PlotlyJSONEncoder
+                    ),
                 }
             )
             return
