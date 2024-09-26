@@ -63,7 +63,7 @@ def precalc_box(trace: Any):
 
     # >>> Update result
     if boxpoints != "all":
-        trace[data_axis] = outliers
+        trace[data_axis] = list(outliers)
         trace["boxpoints"] = "all"
     else:
         # todo(maximsmol): unsupported
