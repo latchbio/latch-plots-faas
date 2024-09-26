@@ -30,6 +30,7 @@ from numpy.typing import NDArray
 from pandas import DataFrame, MultiIndex, Series
 from pandas.io.json._table_schema import build_table_schema
 from plotly.basedatatypes import BaseFigure
+from .plotly.precalc_box import precalc_box
 
 sys.path.append(str(Path(__file__).parent.absolute()))
 from socketio import SocketIo
@@ -837,12 +838,18 @@ class Kernel:
         assert len(key_fields) == 1
 
         if isinstance(res, BaseFigure):
+            data: Any = res.to_json()
+
+            for trace in data["data"]:
+                if trace["type"] == "box":
+                    precalc_box(trace)
+
             await self.send(
                 {
                     "type": "output_value",
                     **(id_fields),
                     **(key_fields),
-                    "plotly_json": res.to_json(),
+                    "plotly_json": data,
                 }
             )
             return
@@ -948,25 +955,22 @@ class Kernel:
                 summary[key] = {
                     "type": "DataFrame",
                     "columns": list(value.columns)[:50],
-                    "dtypes": {str(k): str(v) for k, v in list(value.dtypes.items())[:50]},
+                    "dtypes": {
+                        str(k): str(v) for k, v in list(value.dtypes.items())[:50]
+                    },
                     "column_preview_truncated": len(value.columns) > 50,
-                    "shape": value.shape
+                    "shape": value.shape,
                 }
             elif isinstance(value, pd.Series):
                 summary[key] = {
                     "type": "Series",
                     "dtype": str(value.dtype),
-                    "shape": value.shape
+                    "shape": value.shape,
                 }
             else:
-                summary[key] = {
-                    "type": type(value).__name__,
-                }
+                summary[key] = {"type": type(value).__name__}
 
-        await self.send({
-            "type": "globals_summary",
-            "summary": summary,
-        })
+        await self.send({"type": "globals_summary", "summary": summary})
 
     async def accept(self) -> None:
         # print("[kernel] accept")
