@@ -2,7 +2,7 @@ import datetime
 import sys
 import traceback
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, NotRequired, TypedDict
+from typing import TYPE_CHECKING, Literal, NotRequired, TypedDict
 
 from duckdb import (
     ColumnExpression,
@@ -55,6 +55,11 @@ class PlotConfig(TypedDict):
 
     height_px: NotRequired[float]
     width_px: NotRequired[float]
+
+
+class DownsampleResult(TypedDict):
+    columns: list
+    data: list
 
 
 async def check_generation(
@@ -245,7 +250,7 @@ def downsample(
 
 async def downsample_ldata(
     conn: DuckDBPyConnection, ldata_node_id: str, config: PlotConfig
-) -> list[tuple[list, list[Any]]]:
+) -> list[DownsampleResult]:
     is_latest, last_modified_time = await check_generation(
         conn, f"ldata_{ldata_node_id}", "ldata", None
     )
@@ -271,7 +276,10 @@ async def downsample_ldata(
             },
         )
 
-    return [(rel.columns, rel.fetchall()) for rel in downsample(conn, key, config)]
+    return [
+        {"columns": rel.columns, "data": rel.fetchall()}
+        for rel in downsample(conn, f"ldata_{ldata_node_id}", config)
+    ]
 
 
 async def downsample_fig(
@@ -304,7 +312,7 @@ async def downsample_fig(
 
 async def downsample_df(
     conn: DuckDBPyConnection, key: str, df: DataFrame, config: PlotConfig, cur_gen: int
-) -> list[tuple[list, list[Any]]]:
+) -> list[DownsampleResult]:
     is_latest, _ = await check_generation(conn, key, cur_gen=cur_gen)
     if not is_latest:
         conn.register(key, df.assign(index=df.index))
@@ -323,4 +331,7 @@ async def downsample_df(
             parameters={"name": key, "generation": cur_gen},
         )
 
-    return [(rel.columns, rel.fetchall()) for rel in downsample(conn, key, config)]
+    return [
+        {"columns": rel.columns, "data": rel.fetchall()}
+        for rel in downsample(conn, key, config)
+    ]
