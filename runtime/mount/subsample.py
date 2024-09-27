@@ -33,7 +33,9 @@ def initialize_duckdb() -> DuckDBPyConnection:
     return conn
 
 
-# todo(rteqs): a bunch of queries need to be escaped
+# todo(rteqs): sanitize queries properly
+def quote(x: str) -> str:
+    return f'"{x}"'
 
 
 class Trace(TypedDict):
@@ -131,12 +133,8 @@ async def check_generation(
 def downsample(
     conn: DuckDBPyConnection, table_name: str, config: PlotConfig
 ) -> list[DuckDBPyRelation]:
-    custom_data = config.get("custom_data")
-    custom_data_str = (
-        ", ".join(custom_data)
-        if custom_data is not None and len(custom_data) > 0
-        else None
-    )
+    custom_data = [quote(col) for col in config.get("custom_data", [])]
+    custom_data_str = ", ".join(custom_data) if len(custom_data) > 0 else None
 
     facet = config.get("facet")
     width_px = config.get("width_px", 2000)
@@ -170,11 +168,17 @@ def downsample(
         if trace["type"] != "scattergl" and trace["type"] != "scatter":
             continue
 
-        x = trace["x"]
-        y = trace["y"]
+        x = quote(trace["x"])
+        y = quote(trace["y"])
+
         color_by = trace.get("color_by")
+        color_by = quote(color_by) if color_by is not None else None
+
         error_bar = trace.get("error_bar")
+        error_bar = quote(error_bar) if error_bar is not None else None
+
         marker_size = trace.get("marker_size")
+        marker_size = quote(marker_size) if marker_size is not None else None
 
         distinct_cols = (
             f"{x}, {y}"
