@@ -36,7 +36,9 @@ def precalc_violin(trace: Any):
         l = len(data)
         trace["count"].append(l)
 
-        mean = trace["mean"][data_i]
+        mean = trace.get("mean", []).get(data_i)
+        if mean is None:
+            mean = np.mean(data)
 
         q1 = trace["q1"][data_i]
         q3 = trace["q3"][data_i]
