@@ -232,6 +232,7 @@ def downsample(
                 *,
                 row_number() over (
                     partition by
+                        {f"{facet}, " if facet is not None else ""}
                         floor((({x} - min_x) / (max_x - min_x) * {width_px}) / {cell_size}) +
                         floor((({y} - min_y) / (max_y - min_y) * {height_px}) / {cell_size}) * ceil({width_px} / {cell_size})
                 ) as row_num
