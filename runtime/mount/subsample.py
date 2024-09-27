@@ -186,8 +186,8 @@ def downsample(
             distinct_cols
             + (f", {min_x} as min_x" if min_x is not None else "")
             + (f", {max_x} as max_x" if max_x is not None else "")
-            + (f", {min_y} as min_x" if min_y is not None else "")
-            + (f", {max_y} as min_x" if max_y is not None else "")
+            + (f", {min_y} as min_y" if min_y is not None else "")
+            + (f", {max_y} as max_y" if max_y is not None else "")
             + (f", {error_bar}" if error_bar not in {None, "sem", "stddev"} else "")
             + (f", {marker_size_axis}" if marker_size_axis is not None else "")
             + (
