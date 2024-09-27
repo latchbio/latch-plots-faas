@@ -196,7 +196,6 @@ def downsample(
                 else ""
             )
         )
-        print(f"{cols=}")
 
         # note: can't do parameterized arguments for column and table names
         trace_data = conn.sql(
@@ -209,14 +208,15 @@ def downsample(
             """
         ).set_alias(f"trace_{i}")
 
-        agg_expr = ", ".join(
-            [
-                f"min({x}) as min_x" if min_x is None else "",
-                f"max({x}) as max_x" if max_x is None else "",
-                f"min({y}) as min_y" if min_y is None else "",
-                f"max({y}) as max_y" if max_y is None else "",
-            ]
-        )
+        agg_expr = ""
+        for col, val in [
+            (f"min({x}) as min_x", min_x),
+            (f"max({x}) as max_x", max_x),
+            (f"min({y}) as min_y", min_y),
+            (f"max({y}) as max_y", max_y),
+        ]:
+            if val is None:
+                agg_expr += f", {col}" if len(agg_expr) > 0 else col
 
         # todo(rteqs): handle categorical axis
         if len(agg_expr) != 0:
