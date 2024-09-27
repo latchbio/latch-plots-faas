@@ -32,7 +32,7 @@ from pandas.io.json._table_schema import build_table_schema
 from plotly.basedatatypes import BaseFigure
 import plotly.io._json as pio_json
 from plotly_utils.precalc_box import precalc_box
-from .plotly_utils.precalc_violin import precalc_violin
+from plotly_utils.precalc_violin import precalc_violin
 
 sys.path.append(str(Path(__file__).parent.absolute()))
 from socketio import SocketIo
