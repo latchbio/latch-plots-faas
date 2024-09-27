@@ -29,6 +29,7 @@ def precalc_violin(trace: Any):
     trace["maxKDE"] = []
     trace["count"] = []
 
+    means = trace.get("mean")
     for data_i in range(1):
         # todo(maximsmol): avoid sorting a second time after `precalc_box``
         data = np.sort(np.array(trace.get(data_axis, [])))
@@ -36,9 +37,7 @@ def precalc_violin(trace: Any):
         l = len(data)
         trace["count"].append(l)
 
-        mean = trace.get("mean", []).get(data_i)
-        if mean is None:
-            mean = np.mean(data)
+        mean = means[data_i] if means is not None else np.mean(data)
 
         q1 = trace["q1"][data_i]
         q3 = trace["q3"][data_i]
