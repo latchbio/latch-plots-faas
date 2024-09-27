@@ -779,7 +779,7 @@ class Kernel:
 
             df_size_mb = res.memory_usage(index=True, deep=True).sum() / 10**6
 
-            if df_size_mb <= 1:
+            if df_size_mb <= 10:
                 msg["dataframe_json"]["data"] = df_to_json(res)
 
             elif self.duckdb_conn is not None and config is not None:
