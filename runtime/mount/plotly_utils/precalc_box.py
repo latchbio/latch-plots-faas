@@ -88,6 +88,7 @@ def precalc_box(trace: Any):
     if boxpoints != "all":
         outliers = np.extract((data < lower_fence) | (data > upper_fence), data)
         # todo(maximsmol): support subsampling outliers
+        # todo(maximsmol): limit max number of outliers shown
 
         # todo(maximsmol): fixup `trace.ids`, `trace.text` etc.
         trace[data_axis] = [outliers]
