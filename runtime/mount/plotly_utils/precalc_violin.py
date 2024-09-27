@@ -13,10 +13,6 @@ def gaussian(x):
 
 # todo(maximsmol): handle non-numeric data
 def precalc_violin(trace: Any):
-    # todo(maximsmol): we don't necessarily need all the data here
-    if not precalc_box(trace):
-        return
-
     orientation = trace.get("orientation", "v")
     data_axis = "y" if orientation == "v" else "x"
     index_axis = "x" if orientation == "v" else "y"
@@ -25,14 +21,22 @@ def precalc_violin(trace: Any):
         # todo(maximsmol): support multibox traces
         return
 
+    # note(maximsmol): box precalc will replace this with outliers
+    # which we want to happen, but we also need the original data
+    # todo(maximsmol): avoid sorting a second time in `precalc_box`
+    trace_data = np.sort(np.array(trace.get(data_axis, [])))
+
+    # todo(maximsmol): we don't necessarily need all the data here
+    if not precalc_box(trace):
+        return
+
     trace["density"] = []
     trace["maxKDE"] = []
     trace["count"] = []
 
     means = trace.get("mean")
     for data_i in range(1):
-        # todo(maximsmol): avoid sorting a second time after `precalc_box``
-        data = np.sort(np.array(trace.get(data_axis, [])))
+        data = trace_data
 
         l = len(data)
         trace["count"].append(l)
