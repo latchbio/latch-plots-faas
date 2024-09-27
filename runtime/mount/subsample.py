@@ -33,7 +33,9 @@ def initialize_duckdb() -> DuckDBPyConnection:
     return conn
 
 
-# todo(rteqs): just send plotParameters imo and store them?
+# todo(rteqs): a bunch of queries need to be escaped
+
+
 class Trace(TypedDict):
     type: str
     x: str
@@ -49,7 +51,6 @@ class PlotConfig(TypedDict):
 
     facet: NotRequired[str]
 
-    # todo(rteqs): remove ranges? removing points out of range leads to a weird lag when panning based on previous thing
     xrange: NotRequired[tuple[float | int, float | int]]
     yrange: NotRequired[tuple[float | int, float | int]]
 
@@ -127,7 +128,6 @@ async def check_generation(
     return duckdb_gen[0], last_modified_time
 
 
-# todo(rteqs): marker size
 def downsample(
     conn: DuckDBPyConnection, table_name: str, config: PlotConfig
 ) -> list[DuckDBPyRelation]:
@@ -139,7 +139,6 @@ def downsample(
     )
 
     facet = config.get("facet")
-    marker_size_axis = config.get("marker_size_axis")
     width_px = config.get("width_px", 2000)
     height_px = config.get("height_px", 600)
 
@@ -175,6 +174,7 @@ def downsample(
         y = trace["y"]
         color_by = trace.get("color_by")
         error_bar = trace.get("error_bar")
+        marker_size = trace.get("marker_size")
 
         distinct_cols = (
             f"{x}, {y}"
@@ -189,7 +189,7 @@ def downsample(
             + (f", {min_y} as min_y" if min_y is not None else "")
             + (f", {max_y} as max_y" if max_y is not None else "")
             + (f", {error_bar}" if error_bar not in {None, "sem", "stddev"} else "")
-            + (f", {marker_size_axis}" if marker_size_axis is not None else "")
+            + (f", {marker_size}" if marker_size is not None else "")
             + (
                 f", array_value({custom_data_str}) as custom_data"
                 if custom_data_str is not None
