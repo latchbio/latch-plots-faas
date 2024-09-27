@@ -184,7 +184,7 @@ def downsample(
             + (f", {error_bar}" if error_bar not in {None, "sem", "stddev"} else "")
             + (f", {marker_size_axis}" if marker_size_axis is not None else "")
             + (
-                f", array_value({custom_data_str})"
+                f", array_value({custom_data_str}) as custom_data"
                 if custom_data_str is not None
                 else ""
             )
@@ -251,6 +251,7 @@ def downsample(
 async def downsample_ldata(
     conn: DuckDBPyConnection, ldata_node_id: str, config: PlotConfig
 ) -> list[DownsampleResult]:
+    # todo(rteqs): wip
     is_latest, last_modified_time = await check_generation(
         conn, f"ldata_{ldata_node_id}", "ldata", None
     )
