@@ -35,6 +35,12 @@ def precalc_violin(trace: Any):
     trace["count"] = []
 
     means = trace.get("mean")
+    spanmode = trace.get("spanmode", "tight")
+
+    if spanmode != "manual":
+        trace["spanmode"] = "manual"
+        trace["span"] = []
+
     for data_i in range(1):
         data = trace_data
 
@@ -70,8 +76,6 @@ def precalc_violin(trace: Any):
         # >>> span
         span_loose = [q0 - 2 * bandwidth, q4 + 2 * bandwidth]
 
-        spanmode = trace.get("spanmode", "tight")
-
         trace_span = trace.get("span", span_loose)
         if isinstance(trace_span[0], (list, np.ndarray)):
             trace_span = trace_span[data_i]
@@ -82,8 +86,7 @@ def precalc_violin(trace: Any):
             elif spanmode == "soft":
                 trace_span = [q0 - 2 * bandwidth, q4 + 2 * bandwidth]
 
-            trace["spanmode"] = "manual"
-            trace["span"] = trace_span
+            trace["span"].append(trace_span)
 
         # >>> KDE
         factor = 1 / (l * bandwidth)
