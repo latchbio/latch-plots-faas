@@ -35,7 +35,7 @@ def precalc_violin(trace: Any):
     trace["count"] = []
 
     means = trace.get("mean")
-    spanmode = trace.get("spanmode", "tight")
+    spanmode = trace.get("spanmode", "soft")
 
     if spanmode != "manual":
         trace["spanmode"] = "manual"
