@@ -160,7 +160,7 @@ def downsample(
     relations: list[DuckDBPyRelation] = []
 
     for i, trace in enumerate(config["traces"]):
-        if trace["type"] != "scattergl" or trace["type"] != "scatter":
+        if trace["type"] != "scattergl" and trace["type"] != "scatter":
             continue
 
         x = trace["x"]

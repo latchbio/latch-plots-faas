@@ -794,7 +794,7 @@ class Kernel:
 
                 # todo(rteqs): this is kinda dumb but we need a way to still plot non scatter plot without sending the whole dataframe
                 for trace in config.get("traces", []):
-                    if trace["type"] != "scattergl" or trace["type"] != "scatter":
+                    if trace["type"] != "scattergl" and trace["type"] != "scatter":
                         msg["dataframe_json"]["data"] = df_to_json(res)
                         break
 
