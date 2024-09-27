@@ -227,11 +227,20 @@ def downsample(
             min_max = trace_data.aggregate(agg_expr).set_alias("min_max")
             trace_data = trace_data.join(min_max, "1 = 1")
 
-        cell_size = 2
+        cell_size = 3
         max_occupancy = 3
 
+        slack = ConstantExpression(1.5)
         trace_data = (
-            trace_data.project(
+            trace_data.filter(
+                ColumnExpression("min_x") * slack
+                <= ColumnExpression(x)
+                <= ColumnExpression("max_x") * slack
+                and ColumnExpression("min_y") * slack
+                <= ColumnExpression(y)
+                <= ColumnExpression("max_y") * slack
+            )
+            .project(
                 f"""
                 *,
                 row_number() over (
@@ -337,20 +346,32 @@ async def downsample_df(
     is_latest, _ = await check_generation(conn, key, cur_gen=cur_gen)
     if not is_latest:
         conn.register(key, df.assign(index=df.index))
-        conn.execute(
-            """
-            insert into
-                plots_faas_catalog
-            values
-                ($name, $generation, null)
-            on conflict
-                (name)
-            do update
-            set
-                generation = $generation
-            """,
-            parameters={"name": key, "generation": cur_gen},
-        )
+
+        retries = 0
+        max_retries = 10
+
+        while retries < max_retries:
+            try:
+                conn.begin()
+                conn.execute(
+                    """
+                    insert into
+                        plots_faas_catalog
+                    values
+                        ($name, $generation, null)
+                    on conflict
+                        (name)
+                    do update
+                    set
+                        generation = $generation
+                    """,
+                    parameters={"name": key, "generation": cur_gen},
+                )
+                conn.commit()
+                break
+            except Exception:
+                conn.rollback()
+                retries += 1
 
     return [
         {"columns": rel.columns, "data": rel.fetchall()}
