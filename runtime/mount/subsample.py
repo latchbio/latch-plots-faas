@@ -140,8 +140,11 @@ def downsample(
 
     facet = config.get("facet")
     marker_size_axis = config.get("marker_size_axis")
-    width_px = config.get("width_px")
-    height_px = config.get("height_px")
+    width_px = config.get("width_px", 2000)
+    height_px = config.get("height_px", 600)
+
+    [min_x, max_x] = config.get("xrange", [None, None])
+    [min_y, max_y] = config.get("yrange", [None, None])
 
     facet_and_color_by: set[str] = set()
     if facet is not None:
@@ -181,6 +184,10 @@ def downsample(
 
         cols = (
             distinct_cols
+            + (f", {min_x} as min_x" if min_x is not None else "")
+            + (f", {max_x} as max_x" if max_x is not None else "")
+            + (f", {min_y} as min_x" if min_y is not None else "")
+            + (f", {max_y} as min_x" if max_y is not None else "")
             + (f", {error_bar}" if error_bar not in {None, "sem", "stddev"} else "")
             + (f", {marker_size_axis}" if marker_size_axis is not None else "")
             + (
@@ -202,17 +209,25 @@ def downsample(
             """
         ).set_alias(f"trace_{i}")
 
+        agg_expr = ", ".join(
+            [
+                f"min({x}) as min_x" if min_x is None else "",
+                f"max({x}) as max_x" if max_x is None else "",
+                f"min({y}) as min_y" if min_y is None else "",
+                f"max({y}) as max_y" if max_y is None else "",
+            ]
+        )
+
         # todo(rteqs): handle categorical axis
-        min_max = trace_data.aggregate(
-            f"min({x}) as min_x, min({y}) as min_y, max({x}) as max_x, max({y}) as max_y"
-        ).set_alias("min_max")
+        if len(agg_expr) != 0:
+            min_max = trace_data.aggregate(agg_expr).set_alias("min_max")
+            trace_data = trace_data.join(min_max, "1 = 1")
 
         cell_size = 2
         max_occupancy = 3
 
         trace_data = (
-            trace_data.join(min_max, "1 = 1")
-            .project(
+            trace_data.project(
                 f"""
                 *,
                 row_number() over (
