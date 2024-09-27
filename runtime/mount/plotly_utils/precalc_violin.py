@@ -102,9 +102,10 @@ def precalc_violin(trace: Any):
         t = trace_span[0]
         while i < n and t < trace_span[1] + step / 2:
             density[i] = kernel(t)
+            maxKDE = max(maxKDE, density[i])
+
             i += 1
             t += step
-            maxKDE = max(maxKDE, density[i])
 
         trace["density"].append(density)
         trace["maxKDE"].append(maxKDE)
