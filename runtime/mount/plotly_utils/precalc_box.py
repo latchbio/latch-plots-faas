@@ -92,9 +92,11 @@ def precalc_box(trace: Any):
         # todo(maximsmol): fixup `trace.ids`, `trace.text` etc.
         trace[data_axis] = [outliers]
 
-        if "boxpoints" not in trace:
+        if trace["type"] == "box" and "boxpoints" not in trace:
             # note(maximsmol): the default for box plots with precomputed
             # statistics is "all" for some reason
             trace["boxpoints"] = "outliers"
+        if trace["type"] == "violin" and "points" not in trace:
+            trace["points"] = "outliers"
 
     return True
