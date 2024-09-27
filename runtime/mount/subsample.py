@@ -243,19 +243,20 @@ def downsample(
             min_max = trace_data.aggregate(agg_expr).set_alias("min_max")
             trace_data = trace_data.join(min_max, "1 = 1")
 
-        cell_size = 3
+        cell_size = 4
         max_occupancy = 3
 
         slack = ConstantExpression(1.5)
         trace_data = (
-            trace_data.filter(
-                ColumnExpression("min_x") * slack
-                <= ColumnExpression(x)
-                <= ColumnExpression("max_x") * slack
-                and ColumnExpression("min_y") * slack
-                <= ColumnExpression(y)
-                <= ColumnExpression("max_y") * slack
-            )
+            trace_data
+            # .filter(
+            #     ColumnExpression("min_x") * slack
+            #     <= ColumnExpression(x)
+            #     <= ColumnExpression("max_x") * slack
+            #     and ColumnExpression("min_y") * slack
+            #     <= ColumnExpression(y)
+            #     <= ColumnExpression("max_y") * slack
+            # )
             .project(
                 f"""
                 *,
