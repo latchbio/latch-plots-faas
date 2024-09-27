@@ -36,6 +36,7 @@ def precalc_violin(trace: Any):
 
     means = trace.get("mean")
     spanmode = trace.get("spanmode", "soft")
+    og_trace_span = trace.get("span")
 
     if spanmode != "manual":
         trace["spanmode"] = "manual"
@@ -76,7 +77,7 @@ def precalc_violin(trace: Any):
         # >>> span
         span_loose = [q0 - 2 * bandwidth, q4 + 2 * bandwidth]
 
-        trace_span = trace.get("span", span_loose)
+        trace_span = og_trace_span if og_trace_span is not None else span_loose
         if isinstance(trace_span[0], (list, np.ndarray)):
             trace_span = trace_span[data_i]
 
