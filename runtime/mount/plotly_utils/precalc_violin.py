@@ -99,14 +99,14 @@ def precalc_violin(trace: Any):
         n = ceil(span / (bandwidth / 3))
         step = span / n
 
-        density = np.ndarray((n,))
+        density = []
         maxKDE = 0
 
         i = 0
         t = trace_span[0]
         while i < n and t < trace_span[1] + step / 2:
             kde = kernel(t)
-            density[i] = {"v": kde, "t": t}
+            density.append({"v": kde, "t": t})
             maxKDE = max(maxKDE, kde)
 
             i += 1
