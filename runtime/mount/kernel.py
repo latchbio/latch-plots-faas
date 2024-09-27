@@ -792,6 +792,13 @@ class Kernel:
                 )
                 msg["dataframe_json"]["subsampled_data"] = subsampled_data
 
+                # todo(rteqs): this is kinda dumb but we need a way to still plot non scatter plot without sending the whole dataframe
+                for trace in config.get("traces", []):
+                    if trace["type"] != "scattergl" or trace["type"] != "scatter":
+                        msg["dataframe_json"]["data"] = df_to_json(res)
+                        break
+
+            # todo(rteqs): need to handle an edge case whenever we restart the server, config will be none and this overwrites the existing subsampled plot to null
             await self.send(msg)
 
     def lookup_pagination_settings(

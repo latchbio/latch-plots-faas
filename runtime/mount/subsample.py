@@ -33,7 +33,9 @@ def initialize_duckdb() -> DuckDBPyConnection:
     return conn
 
 
+# todo(rteqs): just send plotParameters imo and store them?
 class Trace(TypedDict):
+    type: str
     x: str
     y: str
     color_by: NotRequired[str]
@@ -47,8 +49,10 @@ class PlotConfig(TypedDict):
 
     facet: NotRequired[str]
 
+    # todo(rteqs): remove ranges? removing points out of range leads to a weird lag when panning based on previous thing
     xrange: NotRequired[tuple[float | int, float | int]]
     yrange: NotRequired[tuple[float | int, float | int]]
+
     height_px: NotRequired[float]
     width_px: NotRequired[float]
 
@@ -156,6 +160,9 @@ def downsample(
     relations: list[DuckDBPyRelation] = []
 
     for i, trace in enumerate(config["traces"]):
+        if trace["type"] != "scattergl" or trace["type"] != "scatter":
+            continue
+
         x = trace["x"]
         y = trace["y"]
         color_by = trace.get("color_by")
