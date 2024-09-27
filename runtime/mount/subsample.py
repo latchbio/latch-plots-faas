@@ -245,7 +245,7 @@ def downsample(
 
 async def downsample_ldata(
     conn: DuckDBPyConnection, ldata_node_id: str, config: PlotConfig
-) -> list[list[Any]]:
+) -> list[tuple[list, list[Any]]]:
     is_latest, last_modified_time = await check_generation(
         conn, f"ldata_{ldata_node_id}", "ldata", None
     )
@@ -271,7 +271,7 @@ async def downsample_ldata(
             },
         )
 
-    return [rel.fetchall() for rel in downsample(conn, ldata_node_id, config)]
+    return [(rel.columns, rel.fetchall()) for rel in downsample(conn, key, config)]
 
 
 async def downsample_fig(
@@ -304,7 +304,7 @@ async def downsample_fig(
 
 async def downsample_df(
     conn: DuckDBPyConnection, key: str, df: DataFrame, config: PlotConfig, cur_gen: int
-) -> list[list[Any]]:
+) -> list[tuple[list, list[Any]]]:
     is_latest, _ = await check_generation(conn, key, cur_gen=cur_gen)
     if not is_latest:
         conn.register(key, df.assign(index=df.index))
@@ -323,4 +323,4 @@ async def downsample_df(
             parameters={"name": key, "generation": cur_gen},
         )
 
-    return [rel.fetchall() for rel in downsample(conn, key, config)]
+    return [(rel.columns, rel.fetchall()) for rel in downsample(conn, key, config)]
