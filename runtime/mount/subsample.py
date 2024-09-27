@@ -105,18 +105,31 @@ async def check_generation(
 
     last_modified_time = datetime.datetime.now(tz=datetime.UTC)
 
-    duckdb_gen = (
-        conn.table("plots_faas_catalog")
-        .filter(ColumnExpression("name") == ConstantExpression(table_name))
-        .project(
-            (ColumnExpression("generation") == ConstantExpression(cur_gen))
-            or (
-                ColumnExpression("last_modified_time")
-                > ConstantExpression(last_modified_time)
+    # fixme(rteqs): whut? transaction aborted error
+    retries = 0
+    max_retries = 10
+    duckdb_gen = None
+
+    while retries < max_retries:
+        try:
+            duckdb_gen = (
+                conn.table("plots_faas_catalog")
+                .filter(ColumnExpression("name") == ConstantExpression(table_name))
+                .project(
+                    (ColumnExpression("generation") == ConstantExpression(cur_gen))
+                    or (
+                        ColumnExpression("last_modified_time")
+                        > ConstantExpression(last_modified_time)
+                    )
+                )
+                .fetchone()
             )
-        )
-        .fetchone()
-    )
+            break
+        except Exception:
+            conn.rollback()
+            retries += 1
+            if retries == max_retries:
+                raise
 
     if duckdb_gen is None:
         return False, None
@@ -137,6 +150,8 @@ def downsample(
     custom_data_str = ", ".join(custom_data) if len(custom_data) > 0 else None
 
     facet = config.get("facet")
+    facet = quote(facet) if facet is not None else None
+
     width_px = config.get("width_px", 2000)
     height_px = config.get("height_px", 600)
 
@@ -148,6 +163,7 @@ def downsample(
         facet_and_color_by.add(facet)
     for trace in config["traces"]:
         color_by = trace.get("color_by")
+        color_by = quote(color_by) if color_by is not None else None
         if color_by is not None:
             facet_and_color_by.add(color_by)
 
@@ -372,6 +388,8 @@ async def downsample_df(
             except Exception:
                 conn.rollback()
                 retries += 1
+                if retries == max_retries:
+                    raise
 
     return [
         {"columns": rel.columns, "data": rel.fetchall()}
