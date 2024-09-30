@@ -246,16 +246,16 @@ def downsample(
 
         trace_data = (
             trace_data.filter(
-                (
-                    Col("min_x") <= Col(x)
-                    and Col(x) <= Col("max_x")
-                    and Col("min_y") <= Col(y)
-                    and Col(y) <= Col("max_y")
-                )
-                or Col(x) == Col("global_min_x")
-                or Col(x) == Col("global_max_x")
-                or Col(y) == Col("global_min_y")
-                or Col(y) == Col("global_max_y")
+                f"""
+                    (
+                        min_x <= {x} and {x} <= max_x and
+                        min_y <= {y} and {y} <= max_y
+                    )
+                    or {x} = global_min_x
+                    or {x} = global_max_x
+                    or {y} = global_min_y
+                    or {y} = global_max_y
+                """
             )
             .project(
                 f"""
