@@ -35,20 +35,18 @@ async def get_presigned_url(path: str) -> str:
     async with sess.post(endpoint, headers=headers, json=json_data) as response:
         res = await response.json()
 
-        if res.status_code != 200:
-            err = res.json()["error"]
+        if response.status != 200:
+            err = res["error"]
             msg = f"failed to fetch presigned url(s) for path {path}"
-            if res.status_code == 400:
+            if response.status == 400:
                 raise ValueError(f"{msg}: download request invalid: {err}")
-            if res.status_code == 401:
+            if response.status == 401:
                 raise RuntimeError(f"authorization token invalid: {err}")
             raise RuntimeError(
                 f"{msg} with code {res.status_code}: {res.json()['error']}"
             )
 
-        data = res.json()
-
-        return data["data"]["url"]
+        return res["data"]["url"]
 
 
 async def gql_query(query: str, variables: dict[str, Any], auth: str) -> Any:
