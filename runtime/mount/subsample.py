@@ -242,7 +242,7 @@ def downsample(
         trace_data = trace_data.join(min_max, "1 = 1")
 
         cell_size = 4
-        max_occupancy = 3
+        max_occupancy = 2
 
         trace_data = (
             trace_data.filter(
@@ -265,6 +265,7 @@ def downsample(
                         {f"{facet}, " if facet is not None else ""}
                         floor((({x} - min_x) / (max_x - min_x) * {width_px}) / {cell_size}) +
                         floor((({y} - min_y) / (max_y - min_y) * {height_px}) / {cell_size}) * ceil({width_px} / {cell_size})
+                        {f", {color_by}" if color_by is not None else ""}
                 ) as row_num
             """
             )
