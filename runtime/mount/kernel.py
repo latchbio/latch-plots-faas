@@ -551,7 +551,9 @@ class Kernel:
                 if key not in self.k_globals.touched and key not in touched_viewers:
                     continue
 
-                tg.create_task(self.send_plot_data(plot_id, key))
+                tg.create_task(
+                    self.send_plot_data(plot_id, key, self.plot_configs.get(plot_id))
+                )
 
             tg.create_task(self.send_globals_summary())
 
@@ -741,6 +743,11 @@ class Kernel:
     async def send_plot_data(
         self, plot_id: str, key: str, config: PlotConfig | None = None
     ) -> None:
+        if config is not None and config == self.plot_configs.get(plot_id):
+            return
+
+        self.plot_configs[plot_id] = config
+
         res = self.k_globals[key]
         # todo(rteqs): handle Series data type
 
