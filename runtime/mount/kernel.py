@@ -735,8 +735,8 @@ class Kernel:
     async def send_plot_data(
         self, plot_id: str, key: str, config: PlotConfig | None = None
     ) -> None:
-        # if config is not None and config == self.plot_configs.get(plot_id):
-        #     return
+        if config is not None and config == self.plot_configs.get(plot_id):
+            return
 
         self.plot_configs[plot_id] = config
 
@@ -1085,9 +1085,8 @@ class Kernel:
 
         if msg["type"] == "get_plot_data":
             self.plot_data_selections[msg["plot_id"]] = msg["key"]
-            config = self.plot_configs[msg["plot_id"]] = msg.get("config")
 
-            await self.send_plot_data(msg["plot_id"], msg["key"], config)
+            await self.send_plot_data(msg["plot_id"], msg["key"], msg.get("config"))
 
         if msg["type"] == "get_global":
             pagination_settings = {
