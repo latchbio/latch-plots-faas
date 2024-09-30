@@ -4,12 +4,9 @@ import traceback
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal, NotRequired, TypedDict
 
-from duckdb import (
-    ColumnExpression,
-    ConstantExpression,
-    DuckDBPyConnection,
-    DuckDBPyRelation,
-)
+from duckdb import ColumnExpression as Col
+from duckdb import ConstantExpression as Const
+from duckdb import DuckDBPyConnection, DuckDBPyRelation
 from duckdb import connect as duckdb_connect
 from pandas import DataFrame
 from plotly.basedatatypes import BaseFigure
@@ -114,13 +111,10 @@ async def check_generation(
         try:
             duckdb_gen = (
                 conn.table("plots_faas_catalog")
-                .filter(ColumnExpression("name") == ConstantExpression(table_name))
+                .filter(Col("name") == Const(table_name))
                 .project(
-                    (ColumnExpression("generation") == ConstantExpression(cur_gen))
-                    or (
-                        ColumnExpression("last_modified_time")
-                        > ConstantExpression(last_modified_time)
-                    )
+                    (Col("generation") == Const(cur_gen))
+                    or (Col("last_modified_time") > Const(last_modified_time))
                 )
                 .fetchone()
             )
@@ -234,29 +228,35 @@ def downsample(
             (f"max({x}) as max_x", max_x),
             (f"min({y}) as min_y", min_y),
             (f"max({y}) as max_y", max_y),
+            # extremas
+            (f"min({x}) as global_min_x", None),
+            (f"max({x}) as global_max_x", None),
+            (f"min({y}) as global_min_y", None),
+            (f"max({y}) as global_max_y", None),
         ]:
             if val is None:
                 agg_expr += f", {col}" if len(agg_expr) > 0 else col
 
         # todo(rteqs): handle categorical axis
-        if len(agg_expr) != 0:
-            min_max = trace_data.aggregate(agg_expr).set_alias("min_max")
-            trace_data = trace_data.join(min_max, "1 = 1")
+        min_max = trace_data.aggregate(agg_expr).set_alias("min_max")
+        trace_data = trace_data.join(min_max, "1 = 1")
 
         cell_size = 4
         max_occupancy = 3
 
-        slack = ConstantExpression(1.5)
         trace_data = (
-            trace_data
-            # .filter(
-            #     ColumnExpression("min_x") * slack
-            #     <= ColumnExpression(x)
-            #     <= ColumnExpression("max_x") * slack
-            #     and ColumnExpression("min_y") * slack
-            #     <= ColumnExpression(y)
-            #     <= ColumnExpression("max_y") * slack
-            # )
+            trace_data.filter(
+                (
+                    Col("min_x") <= Col(x)
+                    and Col(x) <= Col("max_x")
+                    and Col("min_y") <= Col(y)
+                    and Col(y) <= Col("max_y")
+                )
+                or Col(x) == Col("global_min_x")
+                or Col(x) == Col("global_max_x")
+                or Col(y) == Col("global_min_y")
+                or Col(y) == Col("global_max_y")
+            )
             .project(
                 f"""
                 *,
@@ -269,7 +269,9 @@ def downsample(
             """
             )
             .filter(f"row_num <= {max_occupancy}")
-            .project("* exclude(row_num, min_x, max_x, min_y, max_y)")
+            .project(
+                "* exclude(row_num, min_x, max_x, min_y, max_y, global_min_x, global_max_x, global_min_y, global_max_y)"
+            )
         )
 
         # todo(rteqs): slow to join with very large number of points, but if you have that many groups on the x-axis, you probably aren't using error bars
