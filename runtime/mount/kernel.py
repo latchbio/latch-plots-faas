@@ -408,19 +408,6 @@ class DfJsonSplitFormat(TypedDict):
     data: list[list[Any]]
 
 
-def df_to_json(df: DataFrame) -> DfJsonSplitFormat:
-    df = df.fillna(value=None)
-
-    for col in df.select_dtypes(include=["datetime"]):
-        df[col] = df[col].apply(lambda x: x.timestamp() if x is not None else None)
-
-    return {
-        "columns": df.columns.to_list(),
-        "index": df.index.to_list(),
-        "data": df.fillna().to_numpy().tolist(),
-    }
-
-
 @dataclass
 class CategorizedCellOutputs:
     all: list[str] = field(default_factory=list)
@@ -793,7 +780,9 @@ class Kernel:
             df_size_mb = res.memory_usage(index=True, deep=True).sum() / 10**6
 
             if df_size_mb <= 10:
-                msg["dataframe_json"]["data"] = df_to_json(res)
+                msg["dataframe_json"]["data"] = (
+                    json.loads(res.to_json(orient="split", date_format="iso")),
+                )
 
             elif self.duckdb_conn is not None and config is not None:
                 subsampled_data = await downsample_df(
@@ -808,7 +797,9 @@ class Kernel:
                 # todo(rteqs): this is kinda dumb but we need a way to still plot non scatter plot without sending the whole dataframe
                 for trace in config.get("traces", []):
                     if trace["type"] != "scattergl" and trace["type"] != "scatter":
-                        msg["dataframe_json"]["data"] = df_to_json(res)
+                        msg["dataframe_json"]["data"] = (
+                            json.loads(res.to_json(orient="split", date_format="iso")),
+                        )
                         break
 
             # todo(rteqs): need to handle an edge case whenever we restart the server, config will be none and this overwrites the existing subsampled plot to null
