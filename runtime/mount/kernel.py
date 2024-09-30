@@ -409,10 +409,15 @@ class DfJsonSplitFormat(TypedDict):
 
 
 def df_to_json(df: DataFrame) -> DfJsonSplitFormat:
+    df = df.fillna(value=None)
+
+    for col in df.select_dtypes(include=["datetime"]):
+        df[col] = df[col].apply(lambda x: x.timestamp() if x is not None else None)
+
     return {
         "columns": df.columns.to_list(),
         "index": df.index.to_list(),
-        "data": df.to_numpy().tolist(),
+        "data": df.fillna().to_numpy().tolist(),
     }
 
 
@@ -743,6 +748,7 @@ class Kernel:
     async def send_plot_data(
         self, plot_id: str, key: str, config: PlotConfig | None = None
     ) -> None:
+        print(f"{config == self.plot_configs.get(plot_id)=}")
         if config is not None and config == self.plot_configs.get(plot_id):
             return
 
