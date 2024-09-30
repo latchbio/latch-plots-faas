@@ -735,9 +735,8 @@ class Kernel:
     async def send_plot_data(
         self, plot_id: str, key: str, config: PlotConfig | None = None
     ) -> None:
-        print(f"{config == self.plot_configs.get(plot_id)=}")
-        if config is not None and config == self.plot_configs.get(plot_id):
-            return
+        # if config is not None and config == self.plot_configs.get(plot_id):
+        #     return
 
         self.plot_configs[plot_id] = config
 
@@ -768,20 +767,18 @@ class Kernel:
             return
 
         if isinstance(res, DataFrame):
-            schema = build_table_schema(res, version=False)
-
             msg = {
                 "type": "plot_data",
                 "plot_id": plot_id,
                 "key": key,
-                "dataframe_json": {"schema": schema},
+                "dataframe_json": {"schema": build_table_schema(res, version=False)},
             }
 
             df_size_mb = res.memory_usage(index=True, deep=True).sum() / 10**6
 
             if df_size_mb <= 10:
-                msg["dataframe_json"]["data"] = (
-                    json.loads(res.to_json(orient="split", date_format="iso")),
+                msg["dataframe_json"]["data"] = json.loads(
+                    res.to_json(orient="split", date_format="iso")
                 )
 
             elif self.duckdb_conn is not None and config is not None:
@@ -797,8 +794,8 @@ class Kernel:
                 # todo(rteqs): this is kinda dumb but we need a way to still plot non scatter plot without sending the whole dataframe
                 for trace in config.get("traces", []):
                     if trace["type"] != "scattergl" and trace["type"] != "scatter":
-                        msg["dataframe_json"]["data"] = (
-                            json.loads(res.to_json(orient="split", date_format="iso")),
+                        msg["dataframe_json"]["data"] = json.loads(
+                            res.to_json(orient="split", date_format="iso")
                         )
                         break
 
