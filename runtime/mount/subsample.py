@@ -273,6 +273,7 @@ def downsample(
             .project(
                 "* exclude(row_num, min_x, max_x, min_y, max_y, global_min_x, global_max_x, global_min_y, global_max_y)"
             )
+            .order(",".join(col for col in [facet, color_by] if col is not None))
         )
 
         # todo(rteqs): slow to join with very large number of points, but if you have that many groups on the x-axis, you probably aren't using error bars
