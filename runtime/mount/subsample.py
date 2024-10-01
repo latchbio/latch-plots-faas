@@ -276,6 +276,8 @@ def downsample(
         if y_is_categorical:
             excluded_columns.append("y_dense_rank")
 
+        exclude_str = ", ".join(excluded_columns)
+
         cell_size = 3
         max_occupancy = 2
 
@@ -308,7 +310,7 @@ def downsample(
             """
             )
             .filter(f"row_num <= {max_occupancy}")
-            .project(f"* exclude({excluded_columns})")
+            .project(f"* exclude({exclude_str})")
             .order(
                 ",".join(
                     col
