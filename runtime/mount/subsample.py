@@ -176,7 +176,7 @@ def downsample(
 
     categorical_columns = set(
         conn.query(
-            "select array_agg(column_name) from information_schema.columns where table_name=$table_name",
+            "select array_agg(column_name) from information_schema.columns where table_name=$table_name and data_type not in ['DOUBLE', 'BIGINT']",
             params={"table_name": table_name},
         ).fetchall()[0][0]
     )
@@ -185,8 +185,14 @@ def downsample(
         if trace["type"] != "scattergl" and trace["type"] != "scatter":
             continue
 
-        x_raw = x = quote(trace["x"])
-        y_raw = y = quote(trace["y"])
+        x_raw = trace["x"]
+        y_raw = trace["y"]
+
+        x_original = x = quote(trace["x"])
+        y_original = y = quote(trace["y"])
+
+        x_is_categorical = x_raw in categorical_columns
+        y_is_categorical = y_raw in categorical_columns
 
         color_by = trace.get("color_by")
         color_by = quote(color_by) if color_by is not None else None
@@ -202,9 +208,6 @@ def downsample(
             + (f", {facet}" if facet is not None else "")
             + (f", {color_by}" if color_by is not None else "")
         )
-
-        x_is_categorical = x in categorical_columns
-        y_is_categorical = y in categorical_columns
 
         cols = (
             distinct_cols
@@ -317,8 +320,8 @@ def downsample(
                     for col in [
                         facet,
                         color_by,
-                        x_raw if x_is_categorical else None,
-                        y_raw if y_is_categorical else None,
+                        x_original if x_is_categorical else None,
+                        y_original if y_is_categorical else None,
                     ]
                     if col is not None
                 )
