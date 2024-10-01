@@ -237,15 +237,14 @@ def downsample(
             if val is None:
                 agg_expr += f", {col}" if len(agg_expr) > 0 else col
 
-        # todo(rteqs): handle categorical axis
-        min_max = trace_data.aggregate(agg_expr).set_alias("min_max")
-        trace_data = trace_data.join(min_max, "1 = 1")
-
-        cell_size = 4
+        cell_size = 3
         max_occupancy = 2
 
+        # todo(rteqs): handle categorical axis
+        min_max = trace_data.aggregate(agg_expr).set_alias("min_max")
         trace_data = (
-            trace_data.filter(
+            trace_data.join(min_max, "1 = 1")
+            .filter(
                 f"""
                     (
                         min_x <= {x} and {x} <= max_x and
