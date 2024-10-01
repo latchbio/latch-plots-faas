@@ -174,12 +174,19 @@ def downsample(
 
     relations: list[DuckDBPyRelation] = []
 
+    categorical_columns = set(
+        conn.query(
+            "select array_agg(column_name) from information_schema.columns where table_name=$table_name",
+            params={"table_name": table_name},
+        ).fetchall()[0][0]
+    )
+
     for i, trace in enumerate(config["traces"]):
         if trace["type"] != "scattergl" and trace["type"] != "scatter":
             continue
 
-        x = quote(trace["x"])
-        y = quote(trace["y"])
+        x_raw = x = quote(trace["x"])
+        y_raw = y = quote(trace["y"])
 
         color_by = trace.get("color_by")
         color_by = quote(color_by) if color_by is not None else None
@@ -196,6 +203,9 @@ def downsample(
             + (f", {color_by}" if color_by is not None else "")
         )
 
+        x_is_categorical = x in categorical_columns
+        y_is_categorical = y in categorical_columns
+
         cols = (
             distinct_cols
             + (f", {min_x} as min_x" if min_x is not None else "")
@@ -209,9 +219,21 @@ def downsample(
                 if custom_data_str is not None
                 else ""
             )
+            + (
+                f", dense_rank() over (order by {x}) as x_dense_rank"
+                if x_is_categorical
+                else ""
+            )
+            + (
+                f", dense_rank() over (order by {y}) as y_dense_rank"
+                if y_is_categorical
+                else ""
+            )
         )
 
-        # note: can't do parameterized arguments for column and table names
+        x = "x_dense_rank" if x_is_categorical else x
+        y = "y_dense_rank" if y_is_categorical else y
+
         trace_data = conn.sql(
             f"""
             select
@@ -236,6 +258,23 @@ def downsample(
         ]:
             if val is None:
                 agg_expr += f", {col}" if len(agg_expr) > 0 else col
+
+        excluded_columns = [
+            "row_num",
+            "min_x",
+            "max_x",
+            "min_y",
+            "max_y",
+            "global_min_x",
+            "global_max_x",
+            "global_min_y",
+            "global_max_y",
+        ]
+
+        if x_is_categorical:
+            excluded_columns.append("x_dense_rank")
+        if y_is_categorical:
+            excluded_columns.append("y_dense_rank")
 
         cell_size = 3
         max_occupancy = 2
@@ -269,10 +308,19 @@ def downsample(
             """
             )
             .filter(f"row_num <= {max_occupancy}")
-            .project(
-                "* exclude(row_num, min_x, max_x, min_y, max_y, global_min_x, global_max_x, global_min_y, global_max_y)"
+            .project(f"* exclude({excluded_columns})")
+            .order(
+                ",".join(
+                    col
+                    for col in [
+                        facet,
+                        color_by,
+                        x_raw if x_is_categorical else None,
+                        y_raw if y_is_categorical else None,
+                    ]
+                    if col is not None
+                )
             )
-            .order(",".join(col for col in [facet, color_by] if col is not None))
         )
 
         # todo(rteqs): slow to join with very large number of points, but if you have that many groups on the x-axis, you probably aren't using error bars
