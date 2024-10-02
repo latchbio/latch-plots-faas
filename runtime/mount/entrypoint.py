@@ -254,7 +254,7 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                 """,
                 variables={
                     "id": msg["cell_id"],
-                    "state": orjson.dumps(msg["widget_state"].decode()),
+                    "state": orjson.dumps(msg["widget_state"]).decode(),
                 },
             )
 
