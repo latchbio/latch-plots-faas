@@ -1,5 +1,4 @@
 import asyncio
-import json
 import socket
 import struct
 from dataclasses import dataclass
@@ -47,4 +46,4 @@ class SocketIo:
                 l -= len(chunk)
                 data += chunk
 
-        return json.loads(data)
+        return orjson.loads(data)
