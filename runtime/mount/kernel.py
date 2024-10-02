@@ -449,9 +449,7 @@ def serialize_plotly_figure(x: BaseFigure):
 
     # note(maximsmol): plotly itself does a bunch of escaping to avoid XSS
     # when embedding directly into HTML. we never do that so we don't care
-    return pio_json.clean_to_json_compatible(
-        res, modules=modules, datetime_allowed=False
-    )
+    return pio_json.clean_to_json_compatible(res, modules=modules)
 
 
 @dataclass(kw_only=True)
@@ -809,7 +807,7 @@ class Kernel:
                 "dataframe_json": {
                     "schema": build_table_schema(res, version=False),
                     # todo(maximsmol): get rid of the json reload
-                    "data": json.loads(res.to_json(orient="split", date_format="iso")),
+                    "data": orjson.loads(res.to_json(orient="split", date_format="iso")),
                 },
             }
         )
@@ -876,9 +874,7 @@ class Kernel:
                     **(id_fields),
                     **(key_fields),
                     # todo(rteqs): get rid extra decode
-                    "plotly_json": orjson.dumps(serialize_plotly_figure(res)).decode(
-                        "utf-8"
-                    ),
+                    "plotly_json": orjson.dumps(serialize_plotly_figure(res)),
                 }
             )
             return
@@ -920,7 +916,7 @@ class Kernel:
                     **(key_fields),
                     "dataframe_json": {
                         "schema": build_table_schema(data, version=False),
-                        "data": json.loads(
+                        "data": orjson.loads(
                             data.to_json(orient="split", date_format="iso")
                         ),
                         # todo(maximsmol): this seems useless?
@@ -1029,8 +1025,8 @@ class Kernel:
 
             for state_raw in msg["widget_states"].values():
                 try:
-                    state: dict[str, WidgetState] = json.loads(state_raw)
-                except json.JSONDecodeError:
+                    state: dict[str, WidgetState] = orjson.loads(state_raw)
+                except orjson.JSONDecodeError:
                     continue
 
                 for k, v in state.items():
@@ -1192,7 +1188,7 @@ class Kernel:
                         continue
 
                     async with ctx.transaction:
-                        self.widget_signals[w_key](json.loads(payload), _ui_update=True)
+                        self.widget_signals[w_key](orjson.loads(payload), _ui_update=True)
                 except Exception:
                     traceback.print_exc()
                     continue
