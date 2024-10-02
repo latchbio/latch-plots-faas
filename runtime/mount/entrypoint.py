@@ -109,12 +109,14 @@ async def get_global_http_sess() -> aiohttp.ClientSession:  # noqa: RUF029
     return sess
 
 
-async def try_send_message(ctx: Context, msg: bytes) -> None:
+async def try_send_message(ctx: Context, msg: bytes | str) -> None:
     with contextlib.suppress(WebsocketConnectionClosedError):
+        if isinstance(msg, bytes):
+            msg = msg.decode("utf-8")
         await ctx.send_message(msg)
 
 
-async def broadcast_message(msg: bytes) -> None:
+async def broadcast_message(msg: bytes | str) -> None:
     tasks = [
         asyncio.create_task(try_send_message(ctx, msg)) for ctx in contexts.values()
     ]
