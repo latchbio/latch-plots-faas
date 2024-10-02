@@ -1,6 +1,5 @@
 import ast
 import asyncio
-import json
 import math
 import pprint
 import re
@@ -807,7 +806,9 @@ class Kernel:
                 "dataframe_json": {
                     "schema": build_table_schema(res, version=False),
                     # todo(maximsmol): get rid of the json reload
-                    "data": orjson.loads(res.to_json(orient="split", date_format="iso")),
+                    "data": orjson.loads(
+                        res.to_json(orient="split", date_format="iso")
+                    ),
                 },
             }
         )
@@ -873,8 +874,7 @@ class Kernel:
                     "type": "output_value",
                     **(id_fields),
                     **(key_fields),
-                    # todo(rteqs): get rid extra decode
-                    "plotly_json": orjson.dumps(serialize_plotly_figure(res)),
+                    "plotly_json": orjson.dumps(serialize_plotly_figure(res)).decode(),
                 }
             )
             return
@@ -1188,7 +1188,9 @@ class Kernel:
                         continue
 
                     async with ctx.transaction:
-                        self.widget_signals[w_key](orjson.loads(payload), _ui_update=True)
+                        self.widget_signals[w_key](
+                            orjson.loads(payload), _ui_update=True
+                        )
                 except Exception:
                     traceback.print_exc()
                     continue

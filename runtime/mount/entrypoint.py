@@ -112,7 +112,7 @@ async def get_global_http_sess() -> aiohttp.ClientSession:  # noqa: RUF029
 async def try_send_message(ctx: Context, msg: bytes | str) -> None:
     with contextlib.suppress(WebsocketConnectionClosedError):
         if isinstance(msg, bytes):
-            msg = msg.decode("utf-8")
+            msg = msg.decode()
         await ctx.send_message(msg)
 
 
@@ -215,7 +215,7 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
 
             exc = msg.get("exception")
             if exc is not None:
-                exc = orjson.dumps({"string": exc[-9000:]})
+                exc = orjson.dumps({"string": exc[-9000:]}).decode()
 
             await gql_query(
                 auth=auth,
@@ -254,7 +254,7 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                 """,
                 variables={
                     "id": msg["cell_id"],
-                    "state": orjson.dumps(msg["widget_state"]),
+                    "state": orjson.dumps(msg["widget_state"].decode()),
                 },
             )
 
@@ -276,7 +276,7 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                         }
                     }
                 """,
-                variables={"id": msg["cell_id"], "data": orjson.dumps(msg)},
+                variables={"id": msg["cell_id"], "data": orjson.dumps(msg).decode()},
             )
 
             msg = {"type": msg["type"], "cell_id": msg["cell_id"]}
@@ -293,7 +293,7 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                         }
                     }
                 """,
-                variables={"id": msg["viewer_id"], "data": orjson.dumps(msg)},
+                variables={"id": msg["viewer_id"], "data": orjson.dumps(msg).decode()},
             )
 
             msg = {"type": msg["type"], "viewer_id": msg["viewer_id"]}
@@ -310,12 +310,12 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                         }
                     }
                 """,
-                variables={"id": msg["plot_id"], "data": orjson.dumps(msg)},
+                variables={"id": msg["plot_id"], "data": orjson.dumps(msg).decode()},
             )
 
             msg = {"type": msg["type"], "plot_id": msg["plot_id"]}
 
-        await broadcast_message(orjson.dumps(msg).decode("utf-8"))
+        await broadcast_message(orjson.dumps(msg).decode())
 
 
 async def handle_kernel_io(stream: asyncio.StreamReader, *, name: str) -> None:
@@ -339,7 +339,7 @@ async def handle_kernel_io(stream: asyncio.StreamReader, *, name: str) -> None:
                     "stream": name,
                     "data": data.decode(errors="replace"),
                 }
-            ).decode("utf-8")
+            ).decode()
         )
 
 
