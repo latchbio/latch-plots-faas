@@ -140,7 +140,7 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
                 "cell_sequencers": cell_sequencers,
                 "cell_outputs": cell_last_run_outputs,
             }
-        )
+        ).decode("utf-8")
     )
 
     connection_idx += 1

@@ -1,6 +1,5 @@
 import asyncio
 import contextlib
-import json
 import os
 import socket
 import sys
@@ -316,7 +315,7 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
 
             msg = {"type": msg["type"], "plot_id": msg["plot_id"]}
 
-        await broadcast_message(json.dumps(msg))
+        await broadcast_message(orjson.dumps(msg).decode("utf-8"))
 
 
 async def handle_kernel_io(stream: asyncio.StreamReader, *, name: str) -> None:
@@ -333,14 +332,14 @@ async def handle_kernel_io(stream: asyncio.StreamReader, *, name: str) -> None:
         # hack in the kernel related to logs.
         await asyncio.sleep(0.1)
         await broadcast_message(
-            json.dumps(
+            orjson.dumps(
                 {
                     "type": "kernel_stdio",
                     "active_cell": active_cell,
                     "stream": name,
                     "data": data.decode(errors="replace"),
                 }
-            )
+            ).decode("utf-8")
         )
 
 
