@@ -1,4 +1,3 @@
-import json
 import re
 import secrets
 from contextlib import suppress
@@ -133,16 +132,15 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
 
     await ready_ev.wait()
     await ctx.send_message(
-        json.dumps(
+        orjson.dumps(
             {
                 "type": "ready",
                 "connection_idx": connection_idx,
                 "cell_status": cell_status,
                 "cell_sequencers": cell_sequencers,
                 "cell_outputs": cell_last_run_outputs,
-            },
-            allow_nan=False,
-        )
+            }
+        ).decode()
     )
 
     connection_idx += 1

@@ -1,6 +1,5 @@
 import ast
 import asyncio
-import json
 import math
 import pprint
 import re
@@ -17,7 +16,9 @@ from types import FrameType
 from typing import TYPE_CHECKING, Any, Literal, TypedDict, TypeVar
 
 import numpy as np
+import orjson
 import pandas as pd
+import plotly.io._json as pio_json
 from latch.registry.table import Table
 from latch_cli import tinyrequests
 from latch_cli.utils import get_auth_header
@@ -30,7 +31,6 @@ from numpy.typing import NDArray
 from pandas import DataFrame, MultiIndex, Series
 from pandas.io.json._table_schema import build_table_schema
 from plotly.basedatatypes import BaseFigure
-import plotly.io._json as pio_json
 from plotly_utils.precalc_box import precalc_box
 from plotly_utils.precalc_violin import precalc_violin
 
@@ -795,6 +795,9 @@ class Kernel:
             # Dask support
             res = res.compute()
 
+        if isinstance(res, Series):
+            res = pd.DataFrame(res)
+
         await self.send(
             {
                 "type": "plot_data",
@@ -803,7 +806,9 @@ class Kernel:
                 "dataframe_json": {
                     "schema": build_table_schema(res, version=False),
                     # todo(maximsmol): get rid of the json reload
-                    "data": json.loads(res.to_json(orient="split", date_format="iso")),
+                    "data": orjson.loads(
+                        res.to_json(orient="split", date_format="iso")
+                    ),
                 },
             }
         )
@@ -869,12 +874,15 @@ class Kernel:
                     "type": "output_value",
                     **(id_fields),
                     **(key_fields),
-                    "plotly_json": json.dumps(serialize_plotly_figure(res)),
+                    "plotly_json": orjson.dumps(serialize_plotly_figure(res)).decode(),
                 }
             )
             return
 
         if hasattr(res, "iloc"):
+            if isinstance(res, Series):
+                res = pd.DataFrame(res)
+
             pagination_settings = self.lookup_pagination_settings(
                 cell_id=cell_id,
                 viewer_id=viewer_id,
@@ -908,7 +916,7 @@ class Kernel:
                     **(key_fields),
                     "dataframe_json": {
                         "schema": build_table_schema(data, version=False),
-                        "data": json.loads(
+                        "data": orjson.loads(
                             data.to_json(orient="split", date_format="iso")
                         ),
                         # todo(maximsmol): this seems useless?
@@ -933,7 +941,7 @@ class Kernel:
         if hasattr(res, "__dataframe__"):
             # dataframe interchange object
             # https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.__dataframe__.html
-            # there is a lot to implement here so we it's not really supported right now
+            # there is a lot to implement here so it's not really supported right now
             # e.g. we need DLPack to properly do this:
             # https://dmlc.github.io/dlpack/latest/python_spec.html
             # tho pandas itself does not support DLPack yet
@@ -1017,8 +1025,8 @@ class Kernel:
 
             for state_raw in msg["widget_states"].values():
                 try:
-                    state: dict[str, WidgetState] = json.loads(state_raw)
-                except json.JSONDecodeError:
+                    state: dict[str, WidgetState] = orjson.loads(state_raw)
+                except orjson.JSONDecodeError:
                     continue
 
                 for k, v in state.items():
@@ -1180,7 +1188,9 @@ class Kernel:
                         continue
 
                     async with ctx.transaction:
-                        self.widget_signals[w_key](json.loads(payload), _ui_update=True)
+                        self.widget_signals[w_key](
+                            orjson.loads(payload), _ui_update=True
+                        )
                 except Exception:
                     traceback.print_exc()
                     continue

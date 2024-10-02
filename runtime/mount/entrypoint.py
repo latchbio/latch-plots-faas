@@ -1,6 +1,5 @@
 import asyncio
 import contextlib
-import json
 import os
 import socket
 import sys
@@ -11,6 +10,7 @@ from pathlib import Path
 from typing import Any, TypedDict, TypeVar
 
 import aiohttp
+import orjson
 from aiohttp import ClientSession
 from latch_asgi.framework.websocket import WebsocketConnectionClosedError
 from latch_data_validation.data_validation import validate
@@ -213,7 +213,7 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
 
             exc = msg.get("exception")
             if exc is not None:
-                exc = json.dumps({"string": exc[-9000:]}, allow_nan=False)
+                exc = orjson.dumps({"string": exc[-9000:]}).decode()
 
             await gql_query(
                 auth=auth,
@@ -252,7 +252,7 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                 """,
                 variables={
                     "id": msg["cell_id"],
-                    "state": json.dumps(msg["widget_state"], allow_nan=False),
+                    "state": orjson.dumps(msg["widget_state"]).decode(),
                 },
             )
 
@@ -274,10 +274,7 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                         }
                     }
                 """,
-                variables={
-                    "id": msg["cell_id"],
-                    "data": json.dumps(msg, allow_nan=False),
-                },
+                variables={"id": msg["cell_id"], "data": orjson.dumps(msg).decode()},
             )
 
             msg = {"type": msg["type"], "cell_id": msg["cell_id"]}
@@ -294,10 +291,7 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                         }
                     }
                 """,
-                variables={
-                    "id": msg["viewer_id"],
-                    "data": json.dumps(msg, allow_nan=False),
-                },
+                variables={"id": msg["viewer_id"], "data": orjson.dumps(msg).decode()},
             )
 
             msg = {"type": msg["type"], "viewer_id": msg["viewer_id"]}
@@ -314,15 +308,12 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                         }
                     }
                 """,
-                variables={
-                    "id": msg["plot_id"],
-                    "data": json.dumps(msg, allow_nan=False),
-                },
+                variables={"id": msg["plot_id"], "data": orjson.dumps(msg).decode()},
             )
 
             msg = {"type": msg["type"], "plot_id": msg["plot_id"]}
 
-        await broadcast_message(json.dumps(msg, allow_nan=False))
+        await broadcast_message(orjson.dumps(msg).decode())
 
 
 async def handle_kernel_io(stream: asyncio.StreamReader, *, name: str) -> None:
@@ -339,15 +330,14 @@ async def handle_kernel_io(stream: asyncio.StreamReader, *, name: str) -> None:
         # hack in the kernel related to logs.
         await asyncio.sleep(0.1)
         await broadcast_message(
-            json.dumps(
+            orjson.dumps(
                 {
                     "type": "kernel_stdio",
                     "active_cell": active_cell,
                     "stream": name,
                     "data": data.decode(errors="replace"),
-                },
-                allow_nan=False,
-            )
+                }
+            ).decode()
         )
 
 
