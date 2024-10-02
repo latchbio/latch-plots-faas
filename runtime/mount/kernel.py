@@ -17,7 +17,9 @@ from types import FrameType
 from typing import TYPE_CHECKING, Any, Literal, TypedDict, TypeVar
 
 import numpy as np
+import orjson
 import pandas as pd
+import plotly.io._json as pio_json
 from latch.registry.table import Table
 from latch_cli import tinyrequests
 from latch_cli.utils import get_auth_header
@@ -30,7 +32,6 @@ from numpy.typing import NDArray
 from pandas import DataFrame, MultiIndex, Series
 from pandas.io.json._table_schema import build_table_schema
 from plotly.basedatatypes import BaseFigure
-import plotly.io._json as pio_json
 from plotly_utils.precalc_box import precalc_box
 from plotly_utils.precalc_violin import precalc_violin
 
@@ -448,7 +449,9 @@ def serialize_plotly_figure(x: BaseFigure):
 
     # note(maximsmol): plotly itself does a bunch of escaping to avoid XSS
     # when embedding directly into HTML. we never do that so we don't care
-    return pio_json.clean_to_json_compatible(res, modules=modules)
+    return pio_json.clean_to_json_compatible(
+        res, modules=modules, datetime_allowed=False
+    )
 
 
 @dataclass(kw_only=True)
@@ -795,6 +798,9 @@ class Kernel:
             # Dask support
             res = res.compute()
 
+        if isinstance(res, Series):
+            res = pd.DataFrame(res)
+
         await self.send(
             {
                 "type": "plot_data",
@@ -869,12 +875,18 @@ class Kernel:
                     "type": "output_value",
                     **(id_fields),
                     **(key_fields),
-                    "plotly_json": json.dumps(serialize_plotly_figure(res)),
+                    # todo(rteqs): get rid extra decode
+                    "plotly_json": orjson.dumps(serialize_plotly_figure(res)).decode(
+                        "utf-8"
+                    ),
                 }
             )
             return
 
         if hasattr(res, "iloc"):
+            if isinstance(res, Series):
+                res = pd.DataFrame(res)
+
             pagination_settings = self.lookup_pagination_settings(
                 cell_id=cell_id,
                 viewer_id=viewer_id,
@@ -933,7 +945,7 @@ class Kernel:
         if hasattr(res, "__dataframe__"):
             # dataframe interchange object
             # https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.__dataframe__.html
-            # there is a lot to implement here so we it's not really supported right now
+            # there is a lot to implement here so it's not really supported right now
             # e.g. we need DLPack to properly do this:
             # https://dmlc.github.io/dlpack/latest/python_spec.html
             # tho pandas itself does not support DLPack yet
