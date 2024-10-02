@@ -1,7 +1,7 @@
 import asyncio
-import json
 import os
 
+import orjson
 from latch_asgi.context.websocket import Context, HandlerResult
 from latch_asgi.framework.websocket import WebsocketConnectionClosedError, receive_data
 from latch_o11y.o11y import trace_app_function_with_span
@@ -26,10 +26,6 @@ async def recv_lsp_msg(stdout: asyncio.StreamReader) -> bytes:
             break
 
     return await stdout.readexactly(content_length)
-
-
-def encode_utf8(data: dict[str, str]) -> bytes:
-    return json.dumps(data).encode("utf-8")
 
 
 @trace_app_function_with_span
@@ -84,10 +80,10 @@ async def lsp_proxy(s: Span, ctx: Context) -> HandlerResult:
             poll_msg_task.cancel()
             poll_err_task.cancel()
 
-    shutdown_msg = encode_utf8({"jsonrpc": "2.0", "method": "shutdown"})
+    shutdown_msg = orjson.dumps({"jsonrpc": "2.0", "method": "shutdown"})
     await send_lsp_msg(stdin, shutdown_msg)
 
-    exit_msg = encode_utf8({"jsonrpc": "2.0", "method": "exit"})
+    exit_msg = orjson.dumps({"jsonrpc": "2.0", "method": "exit"})
     await send_lsp_msg(stdin, exit_msg)
 
     proc.kill()

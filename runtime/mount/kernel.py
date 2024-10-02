@@ -1,6 +1,5 @@
 import ast
 import asyncio
-import json
 import math
 import pprint
 import re
@@ -17,7 +16,9 @@ from types import FrameType
 from typing import TYPE_CHECKING, Any, Literal, TypedDict, TypeVar
 
 import numpy as np
+import orjson
 import pandas as pd
+import plotly.io._json as pio_json
 from duckdb import DuckDBPyConnection
 from latch.registry.table import Table
 from lplots import _inject
@@ -27,11 +28,13 @@ from lplots.widgets._emit import WidgetState
 from pandas import DataFrame, MultiIndex, Series
 from pandas.io.json._table_schema import build_table_schema
 from plotly.basedatatypes import BaseFigure
+from plotly_utils.precalc_box import precalc_box
+from plotly_utils.precalc_violin import precalc_violin
 
 sys.path.append(str(Path(__file__).parent.absolute()))
 from socketio import SocketIo
-from subsample import PlotConfig, downsample_df, initialize_duckdb
-from utils import get_presigned_url
+from subsample import downsample_df, initialize_duckdb
+from utils import PlotConfig, get_presigned_url
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -415,6 +418,30 @@ class CategorizedCellOutputs:
     figures: list[str] = field(default_factory=list)
 
 
+def serialize_plotly_figure(x: BaseFigure):
+    res = x.to_dict()
+
+    for trace in res["data"]:
+        try:
+            if trace["type"] == "box":
+                precalc_box(trace)
+            elif trace["type"] == "violin":
+                precalc_violin(trace)
+        except:
+            traceback.print_exc()
+
+    modules = {
+        "sage_all": pio_json.get_module("sage.all", should_load=False),
+        "np": pio_json.get_module("numpy", should_load=False),
+        "pd": pio_json.get_module("pandas", should_load=False),
+        "image": pio_json.get_module("PIL.Image", should_load=False),
+    }
+
+    # note(maximsmol): plotly itself does a bunch of escaping to avoid XSS
+    # when embedding directly into HTML. we never do that so we don't care
+    return pio_json.clean_to_json_compatible(res, modules=modules)
+
+
 @dataclass(kw_only=True)
 class Kernel:
     conn: SocketIo
@@ -750,7 +777,7 @@ class Kernel:
                     "plot_id": plot_id,
                     "key": key,
                     # todo(maximsmol): get rid of the json reload
-                    "plotly_json": json.loads(res.to_json()),
+                    "plotly_json": serialize_plotly_figure(res),
                 }
             )
             return
@@ -766,6 +793,13 @@ class Kernel:
             )
             return
 
+        if hasattr(res, "compute"):
+            # Dask support
+            res = res.compute()
+
+        if isinstance(res, Series):
+            res = pd.DataFrame(res)
+
         if isinstance(res, DataFrame):
             msg = {
                 "type": "plot_data",
@@ -777,7 +811,7 @@ class Kernel:
             df_size_mb = res.memory_usage(index=True, deep=True).sum() / 10**6
 
             if df_size_mb <= 10:
-                msg["dataframe_json"]["data"] = json.loads(
+                msg["dataframe_json"]["data"] = orjson.loads(
                     res.to_json(orient="split", date_format="iso")
                 )
 
@@ -794,7 +828,7 @@ class Kernel:
                 # todo(rteqs): this is kinda dumb but we need a way to still plot non scatter plot without sending the whole dataframe
                 for trace in config.get("traces", []):
                     if trace["type"] != "scattergl" and trace["type"] != "scatter":
-                        msg["dataframe_json"]["data"] = json.loads(
+                        msg["dataframe_json"]["data"] = orjson.loads(
                             res.to_json(orient="split", date_format="iso")
                         )
                         break
@@ -863,13 +897,15 @@ class Kernel:
                     "type": "output_value",
                     **(id_fields),
                     **(key_fields),
-                    "plotly_json": res.to_json(),
+                    "plotly_json": orjson.dumps(serialize_plotly_figure(res)).decode(),
                 }
             )
             return
 
         if hasattr(res, "iloc"):
-            # todo(rteqs): handle series types. currently broken
+            if isinstance(res, Series):
+                res = pd.DataFrame(res)
+
             pagination_settings = self.lookup_pagination_settings(
                 cell_id=cell_id,
                 viewer_id=viewer_id,
@@ -903,7 +939,7 @@ class Kernel:
                     **(key_fields),
                     "dataframe_json": {
                         "schema": build_table_schema(data, version=False),
-                        "data": json.loads(
+                        "data": orjson.loads(
                             data.to_json(orient="split", date_format="iso")
                         ),
                         # todo(maximsmol): this seems useless?
@@ -928,7 +964,7 @@ class Kernel:
         if hasattr(res, "__dataframe__"):
             # dataframe interchange object
             # https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.__dataframe__.html
-            # there is a lot to implement here so we it's not really supported right now
+            # there is a lot to implement here so it's not really supported right now
             # e.g. we need DLPack to properly do this:
             # https://dmlc.github.io/dlpack/latest/python_spec.html
             # tho pandas itself does not support DLPack yet
@@ -1013,8 +1049,8 @@ class Kernel:
 
             for state_raw in msg["widget_states"].values():
                 try:
-                    state: dict[str, WidgetState] = json.loads(state_raw)
-                except json.JSONDecodeError:
+                    state: dict[str, WidgetState] = orjson.loads(state_raw)
+                except orjson.JSONDecodeError:
                     continue
 
                 for k, v in state.items():
@@ -1176,7 +1212,9 @@ class Kernel:
                         continue
 
                     async with ctx.transaction:
-                        self.widget_signals[w_key](json.loads(payload), _ui_update=True)
+                        self.widget_signals[w_key](
+                            orjson.loads(payload), _ui_update=True
+                        )
                 except Exception:
                     traceback.print_exc()
                     continue
