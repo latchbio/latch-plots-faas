@@ -2,7 +2,7 @@ import datetime
 import sys
 import traceback
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal, NotRequired, TypedDict
+from typing import TYPE_CHECKING, Literal, TypedDict
 
 from duckdb import ColumnExpression as Col
 from duckdb import ConstantExpression as Const
@@ -33,28 +33,6 @@ def initialize_duckdb() -> DuckDBPyConnection:
 # todo(rteqs): sanitize queries properly
 def quote(x: str) -> str:
     return f'"{x}"'
-
-
-class Trace(TypedDict):
-    type: str
-    x: str
-    y: str
-    color_by: NotRequired[str]
-    error_bar: NotRequired[str]
-    marker_size: NotRequired[str]
-
-
-class PlotConfig(TypedDict):
-    traces: list[Trace]
-    custom_data: NotRequired[list[str]]
-
-    facet: NotRequired[str]
-
-    xrange: NotRequired[tuple[float | int, float | int]]
-    yrange: NotRequired[tuple[float | int, float | int]]
-
-    height_px: NotRequired[float]
-    width_px: NotRequired[float]
 
 
 class DownsampleResult(TypedDict):

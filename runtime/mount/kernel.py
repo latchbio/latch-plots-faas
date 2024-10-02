@@ -995,6 +995,7 @@ class Kernel:
         if msg["type"] == "init":
             self.cell_output_selections = msg["cell_output_selections"]
             self.plot_data_selections = msg["plot_data_selections"]
+            self.plot_configs = msg["plot_configs"]
 
             viewer_cell_data = msg["viewer_cell_data"]
             for cell_id, data in viewer_cell_data.items():

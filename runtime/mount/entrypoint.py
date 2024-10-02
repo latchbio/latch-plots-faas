@@ -15,7 +15,7 @@ from latch_asgi.framework.websocket import WebsocketConnectionClosedError
 from latch_data_validation.data_validation import validate
 
 from .socketio import SocketIo
-from .utils import get_global_http_sess, gql_query
+from .utils import PlotConfig, get_global_http_sess, gql_query
 
 dir_p = Path(__file__).parent
 
@@ -84,6 +84,7 @@ class KernelState:
     cell_output_selections: dict[str, str]
     plot_data_selections: dict[str, str]
     viewer_cell_data: dict[str, ViewerCellData]
+    plot_configs: dict[str, PlotConfig]
 
 
 @dataclass(frozen=True)
@@ -373,6 +374,7 @@ async def start_kernel_proc() -> None:
             "cell_output_selections": k_state.cell_output_selections,
             "plot_data_selections": k_state.plot_data_selections,
             "viewer_cell_data": k_state.viewer_cell_data,
+            "plot_configs": k_state.plot_configs,
         }
     )
 

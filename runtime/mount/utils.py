@@ -1,6 +1,6 @@
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, NotRequired, TypedDict
 
 from aiohttp import ClientSession
 from latch_sdk_config.latch import config as latch_config
@@ -14,6 +14,28 @@ sdk_token = (latch_p / "token").read_text()
 auth_token_sdk = f"Latch-SDK-Token {sdk_token}"
 
 sess: ClientSession | None = None
+
+
+class Trace(TypedDict):
+    type: str
+    x: str
+    y: str
+    color_by: NotRequired[str | None]
+    error_bar: NotRequired[str | None]
+    marker_size: NotRequired[str | None]
+
+
+class PlotConfig(TypedDict):
+    traces: list[Trace]
+    custom_data: NotRequired[list[str]]
+
+    facet: NotRequired[str | None]
+
+    xrange: NotRequired[tuple[float | int, float | int]]
+    yrange: NotRequired[tuple[float | int, float | int]]
+
+    height_px: NotRequired[float]
+    width_px: NotRequired[float]
 
 
 def get_global_http_sess() -> ClientSession:
