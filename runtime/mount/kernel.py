@@ -480,6 +480,9 @@ class Kernel:
         str, defaultdict[str, PaginationSettings]
     ] = field(default_factory=pagination_settings_dict_factory)
 
+    running_task: asyncio.Task | None = None
+    exec_lock = asyncio.Lock()
+
     def __post_init__(self) -> None:
         self.k_globals["exit"] = cell_exit
         self.k_globals.clear()
@@ -1082,8 +1085,29 @@ class Kernel:
             return
 
         if msg["type"] == "run_cell":
-            await self.exec(cell_id=msg["cell_id"], code=msg["code"])
+            async with self.exec_lock:
+                self.running_task = asyncio.create_task(
+                    self.exec(cell_id=msg["cell_id"], code=msg["code"])
+                )
+                try:
+                    await self.running_task
+                except asyncio.CancelledError:
+                    ...
+                    # todo(rteqs): rollback globals without copying everytime we run?
+                finally:
+                    self.running_task = None
+
             return
+
+        if msg["type"] == "stop_cell":
+            if self.running_task is None:
+                return
+
+            self.running_task.cancel()
+
+            cell_id = msg["cell_id"]
+            self.cell_status[cell_id] = "ok"
+            await self.send({"type": "stop_cell", "cell_id": cell_id})
 
         if msg["type"] == "dispose_cell":
             cell_id = msg["cell_id"]
