@@ -1040,9 +1040,8 @@ class Kernel:
 
         await self.send({"type": "globals_summary", "summary": summary})
 
-    async def accept(self) -> None:
+    async def accept(self, msg: dict) -> None:
         # print("[kernel] accept")
-        msg = await self.conn.recv()
         # print("[kernel] <", msg)
 
         if msg["type"] == "init":
@@ -1289,12 +1288,16 @@ async def main() -> None:
     _inject.kernel = k
     await k.send({"type": "ready"})
 
-    while not shutdown_requested:
-        try:
-            await k.accept()
-        except Exception:
-            traceback.print_exc()
-            continue
+    async with asyncio.TaskGroup() as tg:
+        while not shutdown_requested:
+            try:
+                msg = await k.conn.recv()
+                task = tg.create_task(k.accept(msg))
+                if msg["type"] == "init":
+                    await task
+            except Exception:
+                traceback.print_exc()
+                continue
 
     print("Kernel shutting down...")
 
