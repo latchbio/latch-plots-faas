@@ -130,16 +130,16 @@ class TracedDict(dict[str, Signal[object]]):
 
     dataframes: Signal[set[str]]
 
-    generation_counter: defaultdict[str, int]
+    item_write_counter: defaultdict[str, int]
 
     def __init__(self) -> None:
         self.touched = set()
         self.removed = set()
 
         self.dataframes = Signal(set())
-        self.generation_counter = defaultdict(int)
+        self.item_write_counter = defaultdict(int)
 
-    def __getitem__(self, __key: str) -> object:  # type: ignore
+    def __getitem__(self, __key: str) -> object:
         return self.getitem_signal(__key).sample()
 
     def getitem_signal(self, __key: str) -> Signal[object]:
@@ -152,7 +152,7 @@ class TracedDict(dict[str, Signal[object]]):
 
     def __setitem__(self, __key: str, __value: object) -> None:
         self.touched.add(__key)
-        self.generation_counter[__key] += 1
+        self.item_write_counter[__key] += 1
 
         dfs = self.dataframes.sample()
         if hasattr(__value, "iloc") and __key not in dfs:
@@ -179,6 +179,7 @@ class TracedDict(dict[str, Signal[object]]):
     def __delitem__(self, __key: str) -> None:
         self.touched.add(__key)
         self.removed.add(__key)
+        self.item_write_counter.pop(__key)
 
         dfs = self.dataframes.sample()
         if __key in dfs:
@@ -190,6 +191,7 @@ class TracedDict(dict[str, Signal[object]]):
     def clear(self) -> None:
         self.touched.clear()
         self.removed.clear()
+        self.item_write_counter.clear()
 
     @property
     def available(self) -> set[str]:
@@ -407,7 +409,7 @@ def pagination_settings_dict_factory() -> (
 
 class DfJsonSplitFormat(TypedDict):
     columns: list[str]
-    index: list | None
+    index: list[Any] | None
     data: list[list[Any]]
 
 
@@ -472,7 +474,7 @@ class Kernel:
     ] = field(default_factory=pagination_settings_dict_factory)
 
     plot_configs: dict[str, PlotConfig | None] = field(default_factory=dict)
-    duckdb_conn: DuckDBPyConnection = field(default=initialize_duckdb())
+    duckdb: DuckDBPyConnection = field(default=initialize_duckdb())
 
     def __post_init__(self) -> None:
         self.k_globals["exit"] = cell_exit
@@ -768,7 +770,6 @@ class Kernel:
         self.plot_configs[plot_id] = config
 
         res = self.k_globals[key]
-        # todo(rteqs): handle Series data type
 
         if isinstance(res, BaseFigure):
             await self.send(
@@ -811,21 +812,21 @@ class Kernel:
             df_size_mb = res.memory_usage(index=True, deep=True).sum() / 10**6
 
             if df_size_mb <= 10:
+                # todo(maximsmol): get rid of the json reload
                 msg["dataframe_json"]["data"] = orjson.loads(
                     res.to_json(orient="split", date_format="iso")
                 )
 
-            elif self.duckdb_conn is not None and config is not None:
+            elif self.duckdb is not None and config is not None:
                 subsampled_data = await downsample_df(
-                    self.duckdb_conn,
+                    self.duckdb,
                     key,
                     res,
                     config,
-                    self.k_globals.generation_counter[key],
+                    self.k_globals.item_write_counter[key],
                 )
                 msg["dataframe_json"]["subsampled_data"] = subsampled_data
 
-                # todo(rteqs): this is kinda dumb but we need a way to still plot non scatter plot without sending the whole dataframe
                 for trace in config.get("traces", []):
                     if trace["type"] != "scattergl" and trace["type"] != "scatter":
                         msg["dataframe_json"]["data"] = orjson.loads(
@@ -833,7 +834,6 @@ class Kernel:
                         )
                         break
 
-            # todo(rteqs): need to handle an edge case whenever we restart the server, config will be none and this overwrites the existing subsampled plot to null
             await self.send(msg)
 
     def lookup_pagination_settings(

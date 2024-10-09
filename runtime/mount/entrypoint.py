@@ -10,7 +10,6 @@ from pathlib import Path
 from typing import TypedDict, TypeVar
 
 import orjson
-from duckdb import DuckDBPyConnection
 from latch_asgi.framework.websocket import WebsocketConnectionClosedError
 from latch_data_validation.data_validation import validate
 
@@ -95,9 +94,6 @@ class PlotsNotebookKernelState:
 @dataclass(frozen=True)
 class PlotsNotebookKernelStateResp:
     data: PlotsNotebookKernelState
-
-
-conn: DuckDBPyConnection | None = None
 
 
 async def try_send_message(ctx: Context, msg: str) -> None:

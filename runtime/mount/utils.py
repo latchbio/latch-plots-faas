@@ -3,9 +3,9 @@ from pathlib import Path
 from typing import Any, NotRequired, TypedDict
 
 from aiohttp import ClientSession
-from latch_sdk_config.latch import config as latch_config
 from yarl import URL
 
+# todo(rteqs): get rid of this
 sys.path.append(str(Path(__file__).parent.parent.absolute()))
 from config import config
 
@@ -47,7 +47,7 @@ def get_global_http_sess() -> ClientSession:
 
 
 async def get_presigned_url(path: str) -> str:
-    endpoint = latch_config.api.data.get_signed_url
+    endpoint = "/ldata/get-signed-url"
 
     headers = {"Authorization": auth_token_sdk}
     json_data = {"path": path}
