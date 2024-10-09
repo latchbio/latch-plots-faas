@@ -19,15 +19,12 @@ import numpy as np
 import orjson
 import pandas as pd
 import plotly.io._json as pio_json
+from duckdb import DuckDBPyConnection
 from latch.registry.table import Table
-from latch_cli import tinyrequests
-from latch_cli.utils import get_auth_header
-from latch_sdk_config.latch import config as latch_config
 from lplots import _inject
 from lplots.reactive import Node, Signal, ctx
 from lplots.utils.nothing import Nothing
 from lplots.widgets._emit import WidgetState
-from numpy.typing import NDArray
 from pandas import DataFrame, MultiIndex, Series
 from pandas.io.json._table_schema import build_table_schema
 from plotly.basedatatypes import BaseFigure
@@ -36,6 +33,11 @@ from plotly_utils.precalc_violin import precalc_violin
 
 sys.path.append(str(Path(__file__).parent.absolute()))
 from socketio import SocketIo
+from subsample import downsample_df, initialize_duckdb, quote_identifier
+from utils import PlotConfig, get_presigned_url
+
+if TYPE_CHECKING:
+    from numpy.typing import NDArray
 
 sys.path.pop()
 
@@ -128,11 +130,16 @@ class TracedDict(dict[str, Signal[object]]):
 
     dataframes: Signal[set[str]]
 
-    def __init__(self) -> None:
+    item_write_counter: defaultdict[str, int]
+    duckdb: DuckDBPyConnection
+
+    def __init__(self, duckdb: DuckDBPyConnection) -> None:
         self.touched = set()
         self.removed = set()
 
         self.dataframes = Signal(set())
+        self.item_write_counter = defaultdict(int)
+        self.duckdb = duckdb
 
     def __getitem__(self, __key: str) -> object:
         return self.getitem_signal(__key).sample()
@@ -147,6 +154,7 @@ class TracedDict(dict[str, Signal[object]]):
 
     def __setitem__(self, __key: str, __value: object) -> None:
         self.touched.add(__key)
+        self.item_write_counter[__key] += 1
 
         dfs = self.dataframes.sample()
         if hasattr(__value, "iloc") and __key not in dfs:
@@ -173,6 +181,18 @@ class TracedDict(dict[str, Signal[object]]):
     def __delitem__(self, __key: str) -> None:
         self.touched.add(__key)
         self.removed.add(__key)
+        if __key in self.item_write_counter:
+            del self.item_write_counter[__key]
+            table_name = f"in_memory_{quote_identifier(__key)}"
+            self.duckdb.execute(
+                f"""
+                delete from
+                    plots_faas_catalog
+                where
+                    name = {table_name}
+                """
+            )
+            self.duckdb.execute(f"drop table {table_name}")
 
         dfs = self.dataframes.sample()
         if __key in dfs:
@@ -184,6 +204,7 @@ class TracedDict(dict[str, Signal[object]]):
     def clear(self) -> None:
         self.touched.clear()
         self.removed.clear()
+        self.item_write_counter.clear()
 
     @property
     def available(self) -> set[str]:
@@ -393,31 +414,16 @@ def paginate(*, df: DataFrame, pagination_settings: PaginationSettings) -> DataF
     return data
 
 
-def get_presigned_url(path: str) -> str:
-    endpoint = latch_config.api.data.get_signed_url
-
-    res = tinyrequests.post(
-        endpoint, headers={"Authorization": get_auth_header()}, json={"path": path}
-    )
-
-    if res.status_code != 200:
-        err = res.json()["error"]
-        msg = f"failed to fetch presigned url(s) for path {path}"
-        if res.status_code == 400:
-            raise ValueError(f"{msg}: download request invalid: {err}")
-        if res.status_code == 401:
-            raise RuntimeError(f"authorization token invalid: {err}")
-        raise RuntimeError(f"{msg} with code {res.status_code}: {res.json()['error']}")
-
-    data = res.json()
-
-    return data["data"]["url"]
-
-
 def pagination_settings_dict_factory() -> (
     defaultdict[str, defaultdict[str, PaginationSettings]]
 ):
-    return defaultdict(lambda: defaultdict(lambda: PaginationSettings()))
+    return defaultdict(lambda: defaultdict(PaginationSettings))
+
+
+class DfJsonSplitFormat(TypedDict):
+    columns: list[str]
+    index: list[Any] | None
+    data: list[list[Any]]
 
 
 @dataclass
@@ -457,7 +463,7 @@ class Kernel:
 
     cell_seq = 0
     cell_rnodes: dict[str, Node] = field(default_factory=dict)
-    k_globals: TracedDict = field(default_factory=TracedDict)
+    k_globals: TracedDict = field(init=False)
     cell_status: dict[str, str] = field(default_factory=dict)
 
     active_cell: str | None = None
@@ -480,7 +486,11 @@ class Kernel:
         str, defaultdict[str, PaginationSettings]
     ] = field(default_factory=pagination_settings_dict_factory)
 
+    plot_configs: dict[str, PlotConfig | None] = field(default_factory=dict)
+    duckdb: DuckDBPyConnection = field(default=initialize_duckdb())
+
     def __post_init__(self) -> None:
+        self.k_globals = TracedDict(self.duckdb)
         self.k_globals["exit"] = cell_exit
         self.k_globals.clear()
 
@@ -576,7 +586,9 @@ class Kernel:
                 if key not in self.k_globals.touched and key not in touched_viewers:
                     continue
 
-                tg.create_task(self.send_plot_data(plot_id, key))
+                tg.create_task(
+                    self.send_plot_data(plot_id, key, self.plot_configs.get(plot_id))
+                )
 
             tg.create_task(self.send_globals_summary())
 
@@ -763,7 +775,14 @@ class Kernel:
         # print("[kernel] >", msg)
         await self.conn.send(msg)
 
-    async def send_plot_data(self, plot_id: str, key: str) -> None:
+    async def send_plot_data(
+        self, plot_id: str, key: str, config: PlotConfig | None = None
+    ) -> None:
+        if config is not None and config == self.plot_configs.get(plot_id):
+            return
+
+        self.plot_configs[plot_id] = config
+
         res = self.k_globals[key]
 
         if isinstance(res, BaseFigure):
@@ -789,8 +808,6 @@ class Kernel:
             )
             return
 
-        # todo(maximsmol): handle subsampling
-
         if hasattr(res, "compute"):
             # Dask support
             res = res.compute()
@@ -798,20 +815,40 @@ class Kernel:
         if isinstance(res, Series):
             res = pd.DataFrame(res)
 
-        await self.send(
-            {
+        if isinstance(res, DataFrame):
+            msg = {
                 "type": "plot_data",
                 "plot_id": plot_id,
                 "key": key,
-                "dataframe_json": {
-                    "schema": build_table_schema(res, version=False),
-                    # todo(maximsmol): get rid of the json reload
-                    "data": orjson.loads(
-                        res.to_json(orient="split", date_format="iso")
-                    ),
-                },
+                "dataframe_json": {"schema": build_table_schema(res, version=False)},
             }
-        )
+
+            df_size_mb = res.memory_usage(index=True, deep=True).sum() / 10**6
+
+            if df_size_mb <= 10:
+                # todo(maximsmol): get rid of the json reload
+                msg["dataframe_json"]["data"] = orjson.loads(
+                    res.to_json(orient="split", date_format="iso")
+                )
+
+            elif self.duckdb is not None and config is not None:
+                subsampled_data = await downsample_df(
+                    self.duckdb,
+                    key,
+                    res,
+                    config,
+                    self.k_globals.item_write_counter[key],
+                )
+                msg["dataframe_json"]["subsampled_data"] = subsampled_data
+
+                for trace in config.get("traces", []):
+                    if trace["type"] != "scattergl" and trace["type"] != "scatter":
+                        msg["dataframe_json"]["data"] = orjson.loads(
+                            res.to_json(orient="split", date_format="iso")
+                        )
+                        break
+
+            await self.send(msg)
 
     def lookup_pagination_settings(
         self,
@@ -1008,6 +1045,7 @@ class Kernel:
         if msg["type"] == "init":
             self.cell_output_selections = msg["cell_output_selections"]
             self.plot_data_selections = msg["plot_data_selections"]
+            self.plot_configs = msg["plot_configs"]
 
             viewer_cell_data = msg["viewer_cell_data"]
             for cell_id, data in viewer_cell_data.items():
@@ -1045,7 +1083,7 @@ class Kernel:
                     df: DataFrame | None = None
                     if key_type == "ldata_node_id":
                         path_str = f"latch://{data_id}.node"
-                        presigned_url = get_presigned_url(path_str)
+                        presigned_url = await get_presigned_url(path_str)
 
                         if data_id not in self.ldata_dataframes:
                             self.ldata_dataframes[data_id] = pd.read_csv(presigned_url)
@@ -1099,7 +1137,7 @@ class Kernel:
         if msg["type"] == "get_plot_data":
             self.plot_data_selections[msg["plot_id"]] = msg["key"]
 
-            await self.send_plot_data(msg["plot_id"], msg["key"])
+            await self.send_plot_data(msg["plot_id"], msg["key"], msg.get("config"))
 
         if msg["type"] == "get_global":
             pagination_settings = {
@@ -1135,7 +1173,7 @@ class Kernel:
                     path_str = f"latch://{ldata_node_id}.node"
 
                     if ldata_node_id not in self.ldata_dataframes:
-                        presigned_url = get_presigned_url(path_str)
+                        presigned_url = await get_presigned_url(path_str)
                         self.ldata_dataframes[ldata_node_id] = pd.read_csv(
                             presigned_url
                         )

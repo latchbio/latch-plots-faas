@@ -7,17 +7,14 @@ import traceback
 from asyncio.subprocess import Process
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, TypedDict, TypeVar
+from typing import TypedDict, TypeVar
 
-import aiohttp
 import orjson
-from aiohttp import ClientSession
 from latch_asgi.framework.websocket import WebsocketConnectionClosedError
 from latch_data_validation.data_validation import validate
-from yarl import URL
 
-from ..config import config
 from .socketio import SocketIo
+from .utils import PlotConfig, get_global_http_sess, gql_query
 
 dir_p = Path(__file__).parent
 
@@ -86,6 +83,7 @@ class KernelState:
     cell_output_selections: dict[str, str]
     plot_data_selections: dict[str, str]
     viewer_cell_data: dict[str, ViewerCellData]
+    plot_configs: dict[str, PlotConfig]
 
 
 @dataclass(frozen=True)
@@ -96,17 +94,6 @@ class PlotsNotebookKernelState:
 @dataclass(frozen=True)
 class PlotsNotebookKernelStateResp:
     data: PlotsNotebookKernelState
-
-
-sess: aiohttp.ClientSession | None = None
-
-
-async def get_global_http_sess() -> aiohttp.ClientSession:  # noqa: RUF029
-    global sess
-    if sess is None:
-        sess = ClientSession()
-
-    return sess
 
 
 async def try_send_message(ctx: Context, msg: str) -> None:
@@ -121,26 +108,7 @@ async def broadcast_message(msg: str) -> None:
     await asyncio.gather(*tasks)
 
 
-async def gql_query(query: str, variables: dict[str, Any], auth: str) -> Any:
-    sess = await get_global_http_sess()
-    async with sess.post(
-        URL(f"https://vacuole.{config.domain}") / "graphql",
-        headers={
-            "Content-Type": "application/json",
-            "User-Agent": "LatchPlotsFaas/0.2.0",
-            "Authorization": auth,
-        },
-        json={"query": query, "variables": variables},
-    ) as resp:
-        resp.raise_for_status()
-
-        res = await resp.json()
-        if "errors" in res:
-            raise RuntimeError(f"graphql error: {res}")
-        return res
-
-
-async def add_pod_event(*, auth: str, event_type: str):
+async def add_pod_event(*, auth: str, event_type: str) -> None:
     try:
         await gql_query(
             auth=auth,
@@ -384,6 +352,7 @@ async def start_kernel_proc() -> None:
 
     await add_pod_event(auth=auth_token_sdk, event_type="runtime_ready")
     await ready_ev.wait()
+    # todo(rteqs): need to init plot configs
     await conn_k.send(
         {
             "type": "init",
@@ -391,6 +360,7 @@ async def start_kernel_proc() -> None:
             "cell_output_selections": k_state.cell_output_selections,
             "plot_data_selections": k_state.plot_data_selections,
             "viewer_cell_data": k_state.viewer_cell_data,
+            "plot_configs": k_state.plot_configs,
         }
     )
 
@@ -421,5 +391,5 @@ async def shutdown() -> None:
         sock.close()
 
     with contextlib.suppress(Exception):
-        sess = await get_global_http_sess()
+        sess = get_global_http_sess()
         await sess.close()
