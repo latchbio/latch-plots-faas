@@ -33,7 +33,7 @@ from plotly_utils.precalc_violin import precalc_violin
 
 sys.path.append(str(Path(__file__).parent.absolute()))
 from socketio import SocketIo
-from subsample import downsample_df, initialize_duckdb
+from subsample import downsample_df, initialize_duckdb, quote_identifier
 from utils import PlotConfig, get_presigned_url
 
 if TYPE_CHECKING:
@@ -131,13 +131,15 @@ class TracedDict(dict[str, Signal[object]]):
     dataframes: Signal[set[str]]
 
     item_write_counter: defaultdict[str, int]
+    duckdb: DuckDBPyConnection
 
-    def __init__(self) -> None:
+    def __init__(self, duckdb: DuckDBPyConnection) -> None:
         self.touched = set()
         self.removed = set()
 
         self.dataframes = Signal(set())
         self.item_write_counter = defaultdict(int)
+        self.duckdb = duckdb
 
     def __getitem__(self, __key: str) -> object:
         return self.getitem_signal(__key).sample()
@@ -179,7 +181,18 @@ class TracedDict(dict[str, Signal[object]]):
     def __delitem__(self, __key: str) -> None:
         self.touched.add(__key)
         self.removed.add(__key)
-        self.item_write_counter.pop(__key)
+        if __key in self.item_write_counter:
+            del self.item_write_counter[__key]
+            table_name = f"in_memory_{quote_identifier(__key)}"
+            self.duckdb.execute(
+                f"""
+                delete from
+                    plots_faas_catalog
+                where
+                    name = {table_name}
+                """
+            )
+            self.duckdb.execute(f"drop table {table_name}")
 
         dfs = self.dataframes.sample()
         if __key in dfs:
@@ -450,7 +463,7 @@ class Kernel:
 
     cell_seq = 0
     cell_rnodes: dict[str, Node] = field(default_factory=dict)
-    k_globals: TracedDict = field(default_factory=TracedDict)
+    k_globals: TracedDict = field(init=False)
     cell_status: dict[str, str] = field(default_factory=dict)
 
     active_cell: str | None = None
@@ -477,6 +490,7 @@ class Kernel:
     duckdb: DuckDBPyConnection = field(default=initialize_duckdb())
 
     def __post_init__(self) -> None:
+        self.k_globals = TracedDict(self.duckdb)
         self.k_globals["exit"] = cell_exit
         self.k_globals.clear()
 
