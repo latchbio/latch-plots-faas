@@ -294,8 +294,8 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
             await broadcast_message(orjson.dumps(msg).decode())
 
         except Exception:
-            traceback.print_exc()
-            # todo(rteqs): send to frontend
+            err_msg = {"type": "error", "data": traceback.format_exc()}
+            await broadcast_message(orjson.dumps(err_msg).decode())
 
 
 async def handle_kernel_io(stream: asyncio.StreamReader, *, name: str) -> None:
@@ -351,18 +351,26 @@ async def start_kernel_proc() -> None:
         ]
     )
 
-    resp = await gql_query(
-        auth=auth_token_sdk,
-        query="""
-            query plotsNotebookKernelState($pod_id: BigInt!) {
-                plotsNotebookKernelState(argPodId: $pod_id)
-            }
-        """,
-        variables={"pod_id": pod_id},
-    )
+    k_state: KernelState | None = None
+    try:
+        resp = await gql_query(
+            auth=auth_token_sdk,
+            query="""
+                query plotsNotebookKernelState($pod_id: BigInt!) {
+                    plotsNotebookKernelState(argPodId: $pod_id)
+                }
+            """,
+            variables={"pod_id": pod_id},
+        )
 
-    data = validate(resp, PlotsNotebookKernelStateResp)
-    k_state = data.data.plotsNotebookKernelState
+        data = validate(resp, PlotsNotebookKernelStateResp)
+        k_state = data.data.plotsNotebookKernelState
+    except Exception:
+        err_msg = {"type": "error", "data": traceback.format_exc()}
+        await broadcast_message(orjson.dumps(err_msg).decode())
+
+    if k_state is None:
+        return
 
     await add_pod_event(auth=auth_token_sdk, event_type="runtime_ready")
     await ready_ev.wait()
