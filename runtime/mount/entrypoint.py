@@ -136,152 +136,166 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
         msg = await conn_k.recv()
         print(">", msg)
 
-        if msg["type"] == "ready":
-            ready_ev.set()
-            await add_pod_event(auth=auth, event_type="kernel_ready")
-            continue
+        try:
+            if msg["type"] == "ready":
+                ready_ev.set()
+                await add_pod_event(auth=auth, event_type="kernel_ready")
+                continue
 
-        if msg["type"] == "debug_state":
-            msg["sess_hash"] = pod_session_id
+            if msg["type"] == "debug_state":
+                msg["sess_hash"] = pod_session_id
 
-        elif msg["type"] == "start_cell":
-            cell_id = msg["cell_id"]
-            active_cell = cell_id
-            cell_sequencers[cell_id] = msg["run_sequencer"]
-            cell_status[cell_id] = "running"
+            elif msg["type"] == "start_cell":
+                cell_id = msg["cell_id"]
+                active_cell = cell_id
+                cell_sequencers[cell_id] = msg["run_sequencer"]
+                cell_status[cell_id] = "running"
 
-            await gql_query(
-                auth=auth,
-                query="""
-                    mutation ClearCellMetadata($id: BigInt!) {
-                        updatePlotTransformInfo(
-                            input: { id: $id, patch: { logs: "", exception: null } }
-                        ) {
-                            clientMutationId
+                await gql_query(
+                    auth=auth,
+                    query="""
+                        mutation ClearCellMetadata($id: BigInt!) {
+                            updatePlotTransformInfo(
+                                input: { id: $id, patch: { logs: "", exception: null } }
+                            ) {
+                                clientMutationId
+                            }
                         }
-                    }
-                """,
-                variables={"id": msg["cell_id"]},
-            )
+                    """,
+                    variables={"id": msg["cell_id"]},
+                )
 
-            msg = {
-                "type": msg["type"],
-                "cell_id": msg["cell_id"],
-                "run_sequencer": msg["run_sequencer"],
-            }
+                msg = {
+                    "type": msg["type"],
+                    "cell_id": msg["cell_id"],
+                    "run_sequencer": msg["run_sequencer"],
+                }
 
-        elif msg["type"] == "cell_result":
-            cell_id = msg["cell_id"]
-            cell_status[cell_id] = "ran" if "exception" not in msg else "error"
-            cell_last_run_outputs[cell_id] = {
-                "outputs": msg["outputs"],
-                "dataframe_outputs": msg["dataframe_outputs"],
-                "figure_outputs": msg["figure_outputs"],
-            }
+            elif msg["type"] == "cell_result":
+                cell_id = msg["cell_id"]
+                cell_status[cell_id] = "ran" if "exception" not in msg else "error"
+                cell_last_run_outputs[cell_id] = {
+                    "outputs": msg["outputs"],
+                    "dataframe_outputs": msg["dataframe_outputs"],
+                    "figure_outputs": msg["figure_outputs"],
+                }
 
-            exc = msg.get("exception")
-            if exc is not None:
-                exc = orjson.dumps({"string": exc[-9000:]}).decode()
+                exc = msg.get("exception")
+                if exc is not None:
+                    exc = orjson.dumps({"string": exc[-9000:]}).decode()
 
-            await gql_query(
-                auth=auth,
-                query="""
-                    mutation UpdateCellResult($id: BigInt!, $exception: String) {
-                        updatePlotTransformInfo(
-                            input: { id: $id, patch: { exception: $exception } }
-                        ) {
-                            clientMutationId
+                await gql_query(
+                    auth=auth,
+                    query="""
+                        mutation UpdateCellResult($id: BigInt!, $exception: String) {
+                            updatePlotTransformInfo(
+                                input: { id: $id, patch: { exception: $exception } }
+                            ) {
+                                clientMutationId
+                            }
                         }
-                    }
-                """,
-                variables={"id": msg["cell_id"], "exception": exc},
-            )
+                    """,
+                    variables={"id": msg["cell_id"], "exception": exc},
+                )
 
-            msg = {
-                "type": msg["type"],
-                "cell_id": msg["cell_id"],
-                "has_exception": exc is not None,
-                "outputs": msg.get("outputs"),
-                "dataframe_outputs": msg.get("dataframe_outputs"),
-                "figure_outputs": msg.get("figure_outputs"),
-            }
+                msg = {
+                    "type": msg["type"],
+                    "cell_id": msg["cell_id"],
+                    "has_exception": exc is not None,
+                    "outputs": msg.get("outputs"),
+                    "dataframe_outputs": msg.get("dataframe_outputs"),
+                    "figure_outputs": msg.get("figure_outputs"),
+                }
 
-        elif msg["type"] == "cell_widgets":
-            await gql_query(
-                auth=auth,
-                query="""
-                    mutation UpdateCellWidgets($id: BigInt!, $state: String!) {
-                        updatePlotTransformInfo(
-                            input: { id: $id, patch: { widgetState: $state } }
-                        ) {
-                            clientMutationId
+            elif msg["type"] == "cell_widgets":
+                await gql_query(
+                    auth=auth,
+                    query="""
+                        mutation UpdateCellWidgets($id: BigInt!, $state: String!) {
+                            updatePlotTransformInfo(
+                                input: { id: $id, patch: { widgetState: $state } }
+                            ) {
+                                clientMutationId
+                            }
                         }
-                    }
-                """,
-                variables={
-                    "id": msg["cell_id"],
-                    "state": orjson.dumps(msg["widget_state"]).decode(),
-                },
-            )
+                    """,
+                    variables={
+                        "id": msg["cell_id"],
+                        "state": orjson.dumps(msg["widget_state"]).decode(),
+                    },
+                )
 
-            msg = {
-                "type": msg["type"],
-                "cell_id": msg["cell_id"],
-                "updated_widgets": msg["updated_widgets"],
-            }
+                msg = {
+                    "type": msg["type"],
+                    "cell_id": msg["cell_id"],
+                    "updated_widgets": msg["updated_widgets"],
+                }
 
-        elif msg["type"] == "output_value" and "cell_id" in msg:
-            await gql_query(
-                auth=auth,
-                query="""
-                    mutation UpdateCellOutputValue($id: BigInt!, $data: String!) {
-                        updatePlotTransformInfo(
-                            input: { id: $id, patch: { cellViewerData: $data } }
-                        ) {
-                            clientMutationId
+            elif msg["type"] == "output_value" and "cell_id" in msg:
+                await gql_query(
+                    auth=auth,
+                    query="""
+                        mutation UpdateCellOutputValue($id: BigInt!, $data: String!) {
+                            updatePlotTransformInfo(
+                                input: { id: $id, patch: { cellViewerData: $data } }
+                            ) {
+                                clientMutationId
+                            }
                         }
-                    }
-                """,
-                variables={"id": msg["cell_id"], "data": orjson.dumps(msg).decode()},
-            )
+                    """,
+                    variables={
+                        "id": msg["cell_id"],
+                        "data": orjson.dumps(msg).decode(),
+                    },
+                )
 
-            msg = {"type": msg["type"], "cell_id": msg["cell_id"]}
+                msg = {"type": msg["type"], "cell_id": msg["cell_id"]}
 
-        elif msg["type"] == "output_value" and "viewer_id" in msg:
-            await gql_query(
-                auth=auth,
-                query="""
-                    mutation UpdatePlotCellValueViewer($id: BigInt!, $data: String!) {
-                        updatePlotCellValueViewer(
-                            input: { id: $id, patch: { cellViewerData: $data } }
-                        ) {
-                            clientMutationId
+            elif msg["type"] == "output_value" and "viewer_id" in msg:
+                await gql_query(
+                    auth=auth,
+                    query="""
+                        mutation UpdatePlotCellValueViewer($id: BigInt!, $data: String!) {
+                            updatePlotCellValueViewer(
+                                input: { id: $id, patch: { cellViewerData: $data } }
+                            ) {
+                                clientMutationId
+                            }
                         }
-                    }
-                """,
-                variables={"id": msg["viewer_id"], "data": orjson.dumps(msg).decode()},
-            )
+                    """,
+                    variables={
+                        "id": msg["viewer_id"],
+                        "data": orjson.dumps(msg).decode(),
+                    },
+                )
 
-            msg = {"type": msg["type"], "viewer_id": msg["viewer_id"]}
+                msg = {"type": msg["type"], "viewer_id": msg["viewer_id"]}
 
-        elif msg["type"] == "plot_data":
-            await gql_query(
-                auth=auth,
-                query="""
-                    mutation UpdatePlotInfo($id: BigInt!, $data: String!) {
-                        updatePlotInfo(
-                            input: { id: $id, patch: { transformData: $data } }
-                        ) {
-                            clientMutationId
+            elif msg["type"] == "plot_data":
+                await gql_query(
+                    auth=auth,
+                    query="""
+                        mutation UpdatePlotInfo($id: BigInt!, $data: String!) {
+                            updatePlotInfo(
+                                input: { id: $id, patch: { transformData: $data } }
+                            ) {
+                                clientMutationId
+                            }
                         }
-                    }
-                """,
-                variables={"id": msg["plot_id"], "data": orjson.dumps(msg).decode()},
-            )
+                    """,
+                    variables={
+                        "id": msg["plot_id"],
+                        "data": orjson.dumps(msg).decode(),
+                    },
+                )
 
-            msg = {"type": msg["type"], "plot_id": msg["plot_id"]}
+                msg = {"type": msg["type"], "plot_id": msg["plot_id"]}
 
-        await broadcast_message(orjson.dumps(msg).decode())
+            await broadcast_message(orjson.dumps(msg).decode())
+
+        except Exception:
+            traceback.print_exc()
+            # todo(rteqs): send to frontend
 
 
 async def handle_kernel_io(stream: asyncio.StreamReader, *, name: str) -> None:
