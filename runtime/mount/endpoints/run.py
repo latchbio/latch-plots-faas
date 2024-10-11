@@ -148,6 +148,7 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
     try:
         while True:
             msg = await receive_json(ctx.receive)
+            await ctx.send_message(f"ack {msg}")
 
             if msg["type"] == "dispose_cell":
                 cell_id = msg["cell_id"]
