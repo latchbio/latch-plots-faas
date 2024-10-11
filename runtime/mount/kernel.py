@@ -749,6 +749,10 @@ class Kernel:
 
                     self.cell_status[cell_id] = "ok"
                     await self.send_cell_result(cell_id)
+
+                except asyncio.CancelledError:
+                    raise
+
                 except Exception:
                     self.cell_status[cell_id] = "error"
                     await self.send_cell_result(cell_id)
@@ -760,6 +764,9 @@ class Kernel:
 
         except asyncio.CancelledError:
             print("cancelled")
+            self.cell_status[cell_id] = "error"
+            # tood(rteqs): rollback globals
+            await self.send_cell_result(cell_id)
 
         except Exception:
             self.cell_status[cell_id] = "error"
