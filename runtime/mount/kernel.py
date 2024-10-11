@@ -768,6 +768,8 @@ class Kernel:
         finally:
             self.exec_lock.release()
 
+        print("done exec")
+
     def cancel_running_task(self, signum: int, frame: FrameType | None) -> None:
         print(f"{self.running_task=} {self.active_cell=}")
         if self.running_task is None or self.active_cell is None:
@@ -775,6 +777,7 @@ class Kernel:
 
         status = self.running_task.cancel()
         print(status)
+        self.cell_status[self.active_cell] = "error"
 
     async def send_cell_result(self, cell_id: str) -> None:
         outputs = sorted(self.k_globals.available)
@@ -1297,6 +1300,7 @@ async def main() -> None:
         try:
             msg = await k.conn.recv()
             await k.accept(msg)
+            print("done msg loop")
         except Exception:
             traceback.print_exc()
             continue
