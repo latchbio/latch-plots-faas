@@ -754,6 +754,7 @@ class Kernel:
                             if asyncio.iscoroutine(res):
                                 res = await res
 
+                            self.running_future = None
                     except FutureCancelledError as e:
                         raise asyncio.CancelledError from e
 
@@ -799,9 +800,11 @@ class Kernel:
         status = self.running_task.cancel()
         print(status)
 
+        print(f"{self.running_future is None=}")
         if self.running_future is None:
             return
         self.running_future.cancel()
+        self.running_future = None
 
     async def send_cell_result(self, cell_id: str) -> None:
         outputs = sorted(self.k_globals.available)
