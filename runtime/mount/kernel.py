@@ -1133,13 +1133,13 @@ class Kernel:
 
         if msg["type"] == "run_cell":
             async with self.exec_lock:
-                self.running_task = asyncio.create_task(
-                    self.exec(cell_id=msg["cell_id"], code=msg["code"])
-                )
                 try:
+                    self.running_task = asyncio.create_task(
+                        self.exec(cell_id=msg["cell_id"], code=msg["code"])
+                    )
                     await self.running_task
                 except asyncio.CancelledError:
-                    ...
+                    print("canceled task ")
                     # todo(rteqs): rollback globals without copying everytime we run?
                 finally:
                     self.running_task = None
