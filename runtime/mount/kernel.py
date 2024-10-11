@@ -756,6 +756,10 @@ class Kernel:
 
             await self.set_active_cell(cell_id)
             await ctx.run(x, _cell_id=cell_id)
+
+        except asyncio.CancelledError:
+            raise
+
         except Exception:
             self.cell_status[cell_id] = "error"
             await self.send_cell_result(cell_id)
