@@ -157,6 +157,7 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
                 cell_sequencers.pop(cell_id, None)
 
             if msg["type"] == "stop_cell" and k_proc.proc is not None:
+                await ctx.send_message(f"stopping cell {msg['cell_id']}")
                 k_proc.proc.send_signal(signal=signal.SIGTRAP)
 
             await conn_k.send(msg)

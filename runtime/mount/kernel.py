@@ -761,6 +761,7 @@ class Kernel:
             await self.send_cell_result(cell_id)
 
     def cancel_running_task(self, signum: int, frame: FrameType | None) -> None:
+        print(f"{self.running_task=} {self.active_cell=}")
         if self.running_task is None or self.active_cell is None:
             return
 
