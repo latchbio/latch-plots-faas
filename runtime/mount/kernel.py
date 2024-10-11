@@ -498,7 +498,7 @@ class Kernel:
         self.k_globals["exit"] = cell_exit
         self.k_globals.clear()
 
-        signal.signal(signal.SIGTRAP, self.cancel_running_task)
+        signal.signal(signal.SIGINT, self.cancel_running_task)
 
     def debug_state(self) -> dict[str, object]:
         return {
@@ -769,7 +769,8 @@ class Kernel:
         if self.running_task is None or self.active_cell is None:
             return
 
-        self.running_task.cancel()
+        status = self.running_task.cancel()
+        print(status)
 
     async def send_cell_result(self, cell_id: str) -> None:
         outputs = sorted(self.k_globals.available)

@@ -158,7 +158,7 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
 
             if msg["type"] == "stop_cell" and k_proc.proc is not None:
                 await ctx.send_message(f"stopping cell {msg['cell_id']}")
-                k_proc.proc.send_signal(signal=signal.SIGTRAP)
+                k_proc.proc.send_signal(signal=signal.SIGINT)
 
             await conn_k.send(msg)
     except WebsocketConnectionClosedError:
