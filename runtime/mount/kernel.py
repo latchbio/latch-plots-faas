@@ -698,7 +698,6 @@ class Kernel:
         try:
             assert ctx.cur_comp is None
             assert not ctx.in_tx
-            await self.exec_lock.acquire()
 
             self.cell_status[cell_id] = "running"
 
@@ -757,9 +756,6 @@ class Kernel:
         except Exception:
             self.cell_status[cell_id] = "error"
             await self.send_cell_result(cell_id)
-        finally:
-            self.exec_lock.release()
-            self.running_task = None
 
     async def send_cell_result(self, cell_id: str) -> None:
         outputs = sorted(self.k_globals.available)
@@ -1126,9 +1122,18 @@ class Kernel:
             return
 
         if msg["type"] == "run_cell":
-            self.running_task = asyncio.create_task(
-                self.exec(cell_id=msg["cell_id"], code=msg["code"])
-            )
+            async with self.exec_lock:
+                self.running_task = asyncio.create_task(
+                    self.exec(cell_id=msg["cell_id"], code=msg["code"])
+                )
+                try:
+                    await self.running_task
+                except asyncio.CancelledError:
+                    ...
+                    # todo(rteqs): rollback globals without copying everytime we run?
+                finally:
+                    self.running_task = None
+
             return
 
         if msg["type"] == "stop_cell":
