@@ -1,5 +1,6 @@
 import re
 import secrets
+import signal
 from contextlib import suppress
 from dataclasses import dataclass
 
@@ -154,6 +155,9 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
                 cell_status.pop(cell_id, None)
                 cell_last_run_outputs.pop(cell_id, None)
                 cell_sequencers.pop(cell_id, None)
+
+            if msg["type"] == "stop_cell" and k_proc.proc is not None:
+                k_proc.proc.send_signal(signal=signal.SIGTRAP)
 
             await conn_k.send(msg)
     except WebsocketConnectionClosedError:

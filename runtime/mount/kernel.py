@@ -490,12 +490,15 @@ class Kernel:
     duckdb: DuckDBPyConnection = field(default=initialize_duckdb())
 
     running_task: asyncio.Task | None = None
+    running_cell: str | None = None
     exec_lock = asyncio.Lock()
 
     def __post_init__(self) -> None:
         self.k_globals = TracedDict(self.duckdb)
         self.k_globals["exit"] = cell_exit
         self.k_globals.clear()
+
+        signal.signal(signal.SIGTRAP, self.cancel_running_task)
 
     def debug_state(self) -> dict[str, object]:
         return {
@@ -756,6 +759,12 @@ class Kernel:
         except Exception:
             self.cell_status[cell_id] = "error"
             await self.send_cell_result(cell_id)
+
+    def cancel_running_task(self, signum: int, frame: FrameType | None) -> None:
+        if self.running_task is None or self.active_cell is None:
+            return
+
+        self.running_task.cancel()
 
     async def send_cell_result(self, cell_id: str) -> None:
         outputs = sorted(self.k_globals.available)
@@ -1137,11 +1146,6 @@ class Kernel:
             return
 
         if msg["type"] == "stop_cell":
-            if self.running_task is None:
-                return
-
-            self.running_task.cancel()
-
             cell_id = msg["cell_id"]
             self.cell_status[cell_id] = "ok"
             await self.send({"type": "stop_cell", "cell_id": cell_id})
