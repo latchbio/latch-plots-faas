@@ -701,6 +701,7 @@ class Kernel:
         try:
             assert ctx.cur_comp is None
             assert not ctx.in_tx
+            await self.exec_lock.acquire()
 
             self.cell_status[cell_id] = "running"
 
@@ -758,11 +759,14 @@ class Kernel:
             await ctx.run(x, _cell_id=cell_id)
 
         except asyncio.CancelledError:
-            raise
+            print("cancelled")
 
         except Exception:
             self.cell_status[cell_id] = "error"
             await self.send_cell_result(cell_id)
+
+        finally:
+            self.exec_lock.release()
 
     def cancel_running_task(self, signum: int, frame: FrameType | None) -> None:
         print(f"{self.running_task=} {self.active_cell=}")
@@ -1137,18 +1141,9 @@ class Kernel:
             return
 
         if msg["type"] == "run_cell":
-            async with self.exec_lock:
-                try:
-                    self.running_task = asyncio.create_task(
-                        self.exec(cell_id=msg["cell_id"], code=msg["code"])
-                    )
-                    await self.running_task
-                except asyncio.CancelledError:
-                    print("canceled task ")
-                    # todo(rteqs): rollback globals without copying everytime we run?
-                finally:
-                    self.running_task = None
-
+            self.running_task = asyncio.create_task(
+                self.exec(cell_id=msg["cell_id"], code=msg["code"])
+            )
             return
 
         if msg["type"] == "stop_cell":
