@@ -513,7 +513,7 @@ class Kernel:
             "active_cell": self.active_cell,
             "widget_signals": {k: repr(v) for k, v in self.widget_signals.items()},
             "nodes_with_widgets": {
-                k: v.debug_state() for k, v in self.nodes_with_widgets.items()
+                str(k): v.debug_state() for k, v in self.nodes_with_widgets.items()
             },
             "cell_output_selections": self.cell_output_selections,
             "viewer_cell_selections": self.viewer_cell_selections,
@@ -746,6 +746,8 @@ class Kernel:
                             res = await res
                     except ExitException:
                         ...
+                    except asyncio.CancelledError:
+                        raise
 
                     self.cell_status[cell_id] = "ok"
                     await self.send_cell_result(cell_id)
@@ -1152,8 +1154,7 @@ class Kernel:
         if msg["type"] == "run_cell":
             try:
                 self.running_task = asyncio.create_task(
-                    asyncio.sleep(60)
-                    # self.exec(cell_id=msg["cell_id"], code=msg["code"])
+                    self.exec(cell_id=msg["cell_id"], code=msg["code"])
                 )
                 await self.running_task
             except asyncio.CancelledError:
