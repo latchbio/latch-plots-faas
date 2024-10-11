@@ -492,6 +492,7 @@ class Kernel:
 
     running_task: asyncio.Task | None = None
     exec_lock = asyncio.Lock()
+    sigint_received = False
 
     def __post_init__(self) -> None:
         self.k_globals = TracedDict(self.duckdb)
@@ -749,6 +750,9 @@ class Kernel:
 
                             while not future.done():
                                 # todo(rteqs): figure out how to not sleep here. idk
+                                if self.sigint_received:
+                                    self.sigint_received = False
+                                    raise asyncio.CancelledError
                                 await asyncio.sleep(0.1)
 
                             res = future.result()
@@ -761,6 +765,7 @@ class Kernel:
                     await self.send_cell_result(cell_id)
 
                 except asyncio.CancelledError:
+                    print("cancelled")
                     raise
 
                 except Exception:
@@ -793,6 +798,7 @@ class Kernel:
             return
 
         status = self.running_task.cancel()
+        self.sigint_received = True
         print(status)
 
     async def send_cell_result(self, cell_id: str) -> None:
