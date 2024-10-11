@@ -779,12 +779,11 @@ class Kernel:
 
     def cancel_running_task(self, signum: int, frame: FrameType | None) -> None:
         print(f"{self.running_task=} {self.active_cell=}")
-        if self.running_task is None or self.active_cell is None:
+        if self.running_task is None:
             return
 
         status = self.running_task.cancel()
         print(status)
-        self.cell_status[self.active_cell] = "error"
 
     async def send_cell_result(self, cell_id: str) -> None:
         outputs = sorted(self.k_globals.available)
@@ -1151,9 +1150,16 @@ class Kernel:
             return
 
         if msg["type"] == "run_cell":
-            self.running_task = asyncio.create_task(
-                self.exec(cell_id=msg["cell_id"], code=msg["code"])
-            )
+            try:
+                self.running_task = asyncio.create_task(
+                    asyncio.sleep(60)
+                    # self.exec(cell_id=msg["cell_id"], code=msg["code"])
+                )
+                await self.running_task
+            except asyncio.CancelledError:
+                print("cancelled")
+            except Exception:
+                traceback.print_exc()
             return
 
         if msg["type"] == "stop_cell":
