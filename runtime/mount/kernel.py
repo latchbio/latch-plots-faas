@@ -1298,16 +1298,13 @@ async def main() -> None:
     _inject.kernel = k
     await k.send({"type": "ready"})
 
-    async with asyncio.TaskGroup() as tg:
-        while not shutdown_requested:
-            try:
-                msg = await k.conn.recv()
-                task = tg.create_task(k.accept(msg))
-                if msg["type"] == "init":
-                    await task
-            except Exception:
-                traceback.print_exc()
-                continue
+    while not shutdown_requested:
+        try:
+            msg = await k.conn.recv()
+            await k.accept(msg)
+        except Exception:
+            traceback.print_exc()
+            continue
 
     print("Kernel shutting down...")
 
