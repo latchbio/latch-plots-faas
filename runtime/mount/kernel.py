@@ -490,7 +490,6 @@ class Kernel:
     duckdb: DuckDBPyConnection = field(default=initialize_duckdb())
 
     running_task: asyncio.Task | None = None
-    running_cell: str | None = None
     exec_lock = asyncio.Lock()
 
     def __post_init__(self) -> None:
@@ -498,7 +497,8 @@ class Kernel:
         self.k_globals["exit"] = cell_exit
         self.k_globals.clear()
 
-        signal.signal(signal.SIGINT, self.cancel_running_task)
+        loop = asyncio.get_running_loop()
+        loop.add_signal_handler(signal.SIGINT, self.cancel_running_task)
 
     def debug_state(self) -> dict[str, object]:
         return {
@@ -777,7 +777,7 @@ class Kernel:
 
         print("done exec")
 
-    def cancel_running_task(self, signum: int, frame: FrameType | None) -> None:
+    def cancel_running_task(self) -> None:
         print(f"{self.running_task=} {self.active_cell=}")
         if self.running_task is None:
             return
