@@ -8,6 +8,7 @@ import socket
 import sys
 import traceback
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass, field
 from io import TextIOWrapper
 from pathlib import Path
@@ -733,21 +734,28 @@ class Kernel:
                     self.k_globals.clear()
 
                     try:
-                        res = eval(  # noqa: S307
-                            compile(
+                        loop = asyncio.get_running_loop()
+                        with ThreadPoolExecutor() as executor:
+                            compiled_code = compile(
                                 parsed,
                                 filename=filename,
                                 mode="exec",
                                 flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT,
-                            ),
-                            self.k_globals,
-                        )
-                        if asyncio.iscoroutine(res):
-                            res = await res
+                            )
+
+                            future = loop.run_in_executor(
+                                executor, eval, compiled_code, self.k_globals
+                            )
+
+                            while not future.done():
+                                # todo(rteqs): figure out how to not sleep here. idk
+                                await asyncio.sleep(0.1)
+
+                            res = future.result()
+                            if asyncio.iscoroutine(res):
+                                res = await res
                     except ExitException:
                         ...
-                    except asyncio.CancelledError:
-                        raise
 
                     self.cell_status[cell_id] = "ok"
                     await self.send_cell_result(cell_id)
