@@ -8,6 +8,7 @@ import socket
 import sys
 import traceback
 from collections import defaultdict
+from concurrent.futures import CancelledError as FutureCancelledError
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass, field
 from io import TextIOWrapper
@@ -491,6 +492,7 @@ class Kernel:
     duckdb: DuckDBPyConnection = field(default=initialize_duckdb())
 
     running_task: asyncio.Task | None = None
+    running_future: asyncio.Future | None = None
     exec_lock = asyncio.Lock()
     sigint_received = False
 
@@ -744,20 +746,17 @@ class Kernel:
                                 flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT,
                             )
 
-                            future = loop.run_in_executor(
+                            self.running_future = loop.run_in_executor(
                                 executor, eval, compiled_code, self.k_globals
                             )
 
-                            while not future.done():
-                                # todo(rteqs): figure out how to not sleep here. idk
-                                if self.sigint_received:
-                                    self.sigint_received = False
-                                    raise asyncio.CancelledError
-                                await asyncio.sleep(0.1)
-
-                            res = future.result()
+                            res = self.running_future.result()
                             if asyncio.iscoroutine(res):
                                 res = await res
+
+                    except FutureCancelledError as e:
+                        raise asyncio.CancelledError from e
+
                     except ExitException:
                         ...
 
@@ -798,8 +797,11 @@ class Kernel:
             return
 
         status = self.running_task.cancel()
-        self.sigint_received = True
         print(status)
+
+        if self.running_future is None:
+            return
+        self.running_future.cancel()
 
     async def send_cell_result(self, cell_id: str) -> None:
         outputs = sorted(self.k_globals.available)
