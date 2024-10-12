@@ -745,10 +745,8 @@ class Kernel:
                         )
                         if asyncio.iscoroutine(res):
                             res = await res
-
                     except ExitException:
                         ...
-
                     except InterruptException:
                         raise
 
@@ -1051,8 +1049,9 @@ class Kernel:
 
         await self.send({"type": "globals_summary", "summary": summary})
 
-    async def accept(self, msg: dict) -> None:
+    async def accept(self) -> None:
         # print("[kernel] accept")
+        msg = await self.conn.recv()
         # print("[kernel] <", msg)
 
         if msg["type"] == "init":
@@ -1134,6 +1133,7 @@ class Kernel:
 
         if msg["type"] == "run_cell":
             await self.exec(cell_id=msg["cell_id"], code=msg["code"])
+            return
 
         if msg["type"] == "dispose_cell":
             cell_id = msg["cell_id"]
@@ -1277,14 +1277,12 @@ async def main() -> None:
     _inject.kernel = k
     await k.send({"type": "ready"})
 
-    async with asyncio.TaskGroup() as tg:
-        while not shutdown_requested:
-            try:
-                msg = await k.conn.recv()
-                tg.create_task(k.accept(msg))
-            except Exception:
-                traceback.print_exc()
-                continue
+    while not shutdown_requested:
+        try:
+            await k.accept()
+        except Exception:
+            traceback.print_exc()
+            continue
 
     print("Kernel shutting down...")
 
