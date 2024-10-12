@@ -748,6 +748,7 @@ class Kernel:
                     except ExitException:
                         ...
                     except InterruptException:
+                        # todo(rteqs): better tracebacks for interrupted cells
                         raise
 
                     self.cell_status[cell_id] = "ok"
