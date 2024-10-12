@@ -734,7 +734,6 @@ class Kernel:
                     self.k_globals.clear()
 
                     try:
-                        # signal.signal(signal.SIGINT, lambda singum, frame: cell_exit())
                         res = eval(  # noqa: S307
                             compile(
                                 parsed,
@@ -752,9 +751,6 @@ class Kernel:
 
                     except InterruptException:
                         raise
-
-                    # finally:
-                    # signal.signal(signal.SIGINT, signal.SIG_DFL)
 
                     self.cell_status[cell_id] = "ok"
                     await self.send_cell_result(cell_id)
