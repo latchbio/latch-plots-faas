@@ -8,8 +8,6 @@ import socket
 import sys
 import traceback
 from collections import defaultdict
-from concurrent.futures import CancelledError as FutureCancelledError
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass, field
 from io import TextIOWrapper
 from pathlib import Path
@@ -491,18 +489,10 @@ class Kernel:
     plot_configs: dict[str, PlotConfig | None] = field(default_factory=dict)
     duckdb: DuckDBPyConnection = field(default=initialize_duckdb())
 
-    running_task: asyncio.Task | None = None
-    running_future: asyncio.Future | None = None
-    exec_lock = asyncio.Lock()
-    sigint_received = False
-
     def __post_init__(self) -> None:
         self.k_globals = TracedDict(self.duckdb)
         self.k_globals["exit"] = cell_exit
         self.k_globals.clear()
-
-        loop = asyncio.get_running_loop()
-        loop.add_signal_handler(signal.SIGINT, self.cancel_running_task)
 
     def debug_state(self) -> dict[str, object]:
         return {
@@ -705,7 +695,6 @@ class Kernel:
         try:
             assert ctx.cur_comp is None
             assert not ctx.in_tx
-            await self.exec_lock.acquire()
 
             self.cell_status[cell_id] = "running"
 
@@ -737,36 +726,26 @@ class Kernel:
                     self.k_globals.clear()
 
                     try:
-                        loop = asyncio.get_running_loop()
-                        with ThreadPoolExecutor() as executor:
-                            compiled_code = compile(
+                        signal.signal(signal.SIGINT, lambda singum, frame: cell_exit())
+                        res = eval(  # noqa: S307
+                            compile(
                                 parsed,
                                 filename=filename,
                                 mode="exec",
                                 flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT,
-                            )
-
-                            self.running_future = loop.run_in_executor(
-                                executor, eval, compiled_code, self.k_globals
-                            )
-
-                            res = self.running_future.result()
-                            if asyncio.iscoroutine(res):
-                                res = await res
-
-                            self.running_future = None
-                    except FutureCancelledError as e:
-                        raise asyncio.CancelledError from e
+                            ),
+                            self.k_globals,
+                        )
+                        if asyncio.iscoroutine(res):
+                            res = await res
 
                     except ExitException:
                         ...
+                    finally:
+                        signal.signal(signal.SIGINT, signal.SIG_DFL)
 
                     self.cell_status[cell_id] = "ok"
                     await self.send_cell_result(cell_id)
-
-                except asyncio.CancelledError:
-                    print("cancelled")
-                    raise
 
                 except Exception:
                     self.cell_status[cell_id] = "error"
@@ -787,24 +766,19 @@ class Kernel:
             self.cell_status[cell_id] = "error"
             await self.send_cell_result(cell_id)
 
-        finally:
-            self.exec_lock.release()
+    # def cancel_running_task(self) -> None:
+    #     print(f"{self.running_task=} {self.active_cell=}")
+    #     if self.running_task is None:
+    #         return
 
-        print("done exec")
+    #     status = self.running_task.cancel()
+    #     print(status)
 
-    def cancel_running_task(self) -> None:
-        print(f"{self.running_task=} {self.active_cell=}")
-        if self.running_task is None:
-            return
-
-        status = self.running_task.cancel()
-        print(status)
-
-        print(f"{self.running_future is None=}")
-        if self.running_future is None:
-            return
-        self.running_future.cancel()
-        self.running_future = None
+    #     print(f"{self.running_future is None=}")
+    #     if self.running_future is None:
+    #         return
+    #     self.running_future.cancel()
+    #     self.running_future = None
 
     async def send_cell_result(self, cell_id: str) -> None:
         outputs = sorted(self.k_globals.available)
@@ -1171,16 +1145,7 @@ class Kernel:
             return
 
         if msg["type"] == "run_cell":
-            try:
-                self.running_task = asyncio.create_task(
-                    self.exec(cell_id=msg["cell_id"], code=msg["code"])
-                )
-                await self.running_task
-            except asyncio.CancelledError:
-                print("cancelled")
-            except Exception:
-                traceback.print_exc()
-            return
+            await self.exec(cell_id=msg["cell_id"], code=msg["code"])
 
         if msg["type"] == "stop_cell":
             cell_id = msg["cell_id"]
@@ -1329,14 +1294,14 @@ async def main() -> None:
     _inject.kernel = k
     await k.send({"type": "ready"})
 
-    while not shutdown_requested:
-        try:
-            msg = await k.conn.recv()
-            await k.accept(msg)
-            print("done msg loop")
-        except Exception:
-            traceback.print_exc()
-            continue
+    async with asyncio.TaskGroup() as tg:
+        while not shutdown_requested:
+            try:
+                msg = await k.conn.recv()
+                tg.create_task(k.accept(msg))
+            except Exception:
+                traceback.print_exc()
+                continue
 
     print("Kernel shutting down...")
 
