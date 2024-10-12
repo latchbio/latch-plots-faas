@@ -756,29 +756,9 @@ class Kernel:
             await self.set_active_cell(cell_id)
             await ctx.run(x, _cell_id=cell_id)
 
-        except asyncio.CancelledError:
-            print("cancelled")
-            self.cell_status[cell_id] = "error"
-            # tood(rteqs): rollback globals
-            await self.send_cell_result(cell_id)
-
         except Exception:
             self.cell_status[cell_id] = "error"
             await self.send_cell_result(cell_id)
-
-    # def cancel_running_task(self) -> None:
-    #     print(f"{self.running_task=} {self.active_cell=}")
-    #     if self.running_task is None:
-    #         return
-
-    #     status = self.running_task.cancel()
-    #     print(status)
-
-    #     print(f"{self.running_future is None=}")
-    #     if self.running_future is None:
-    #         return
-    #     self.running_future.cancel()
-    #     self.running_future = None
 
     async def send_cell_result(self, cell_id: str) -> None:
         outputs = sorted(self.k_globals.available)
@@ -1146,11 +1126,6 @@ class Kernel:
 
         if msg["type"] == "run_cell":
             await self.exec(cell_id=msg["cell_id"], code=msg["code"])
-
-        if msg["type"] == "stop_cell":
-            cell_id = msg["cell_id"]
-            self.cell_status[cell_id] = "ok"
-            await self.send({"type": "stop_cell", "cell_id": cell_id})
 
         if msg["type"] == "dispose_cell":
             cell_id = msg["cell_id"]
