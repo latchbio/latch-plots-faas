@@ -494,6 +494,7 @@ class Kernel:
     running_task: asyncio.Task | None = None
     running_future: asyncio.Future | None = None
     exec_lock = asyncio.Lock()
+    sigint_received = False
 
     def __post_init__(self) -> None:
         self.k_globals = TracedDict(self.duckdb)
@@ -501,8 +502,7 @@ class Kernel:
         self.k_globals.clear()
 
         loop = asyncio.get_running_loop()
-        signal.signal(signal.SIGINT, self.cancel_running_task)
-        # loop.add_signal_handler(signal.SIGINT, self.cancel_running_task)
+        loop.add_signal_handler(signal.SIGINT, self.cancel_running_task)
 
     def debug_state(self) -> dict[str, object]:
         return {
@@ -750,8 +750,6 @@ class Kernel:
                                 executor, eval, compiled_code, self.k_globals
                             )
 
-                            await self.running_future
-
                             res = self.running_future.result()
                             if asyncio.iscoroutine(res):
                                 res = await res
@@ -794,7 +792,7 @@ class Kernel:
 
         print("done exec")
 
-    def cancel_running_task(self, signum: int, frame: FrameType | None) -> None:
+    def cancel_running_task(self) -> None:
         print(f"{self.running_task=} {self.active_cell=}")
         if self.running_task is None:
             return
