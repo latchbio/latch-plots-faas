@@ -221,6 +221,10 @@ def cell_exit(code: int = 0) -> None:
     raise ExitException
 
 
+def cell_interrupt(code: int = 0) -> None:
+    raise KeyboardInterrupt
+
+
 leading_digits_and_dash = re.compile(r"^\d+-")
 
 
