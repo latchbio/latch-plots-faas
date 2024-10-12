@@ -214,11 +214,18 @@ class TracedDict(dict[str, Signal[object]]):
 class ExitException(Exception): ...
 
 
+class InterruptException(Exception): ...
+
+
 KeyType = Literal["key", "ldata_node_id", "registry_table_id", "url"]
 
 
 def cell_exit(code: int = 0) -> None:
     raise ExitException
+
+
+def cell_interrupt() -> None:
+    raise InterruptException
 
 
 leading_digits_and_dash = re.compile(r"^\d+-")
@@ -493,6 +500,7 @@ class Kernel:
         self.k_globals = TracedDict(self.duckdb)
         self.k_globals["exit"] = cell_exit
         self.k_globals.clear()
+        signal.signal(signal.SIGINT, lambda singum, frame: cell_interrupt())
 
     def debug_state(self) -> dict[str, object]:
         return {
@@ -726,7 +734,7 @@ class Kernel:
                     self.k_globals.clear()
 
                     try:
-                        signal.signal(signal.SIGINT, lambda singum, frame: cell_exit())
+                        # signal.signal(signal.SIGINT, lambda singum, frame: cell_exit())
                         res = eval(  # noqa: S307
                             compile(
                                 parsed,
@@ -741,8 +749,12 @@ class Kernel:
 
                     except ExitException:
                         ...
-                    finally:
-                        signal.signal(signal.SIGINT, signal.SIG_DFL)
+
+                    except InterruptException:
+                        raise
+
+                    # finally:
+                    # signal.signal(signal.SIGINT, signal.SIG_DFL)
 
                     self.cell_status[cell_id] = "ok"
                     await self.send_cell_result(cell_id)
