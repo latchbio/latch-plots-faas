@@ -493,7 +493,6 @@ class Kernel:
         self.k_globals = TracedDict(self.duckdb)
         self.k_globals["exit"] = cell_exit
         self.k_globals.clear()
-        signal.signal(signal.SIGINT, lambda singum, frame: cell_interrupt())
 
     def debug_state(self) -> dict[str, object]:
         return {
