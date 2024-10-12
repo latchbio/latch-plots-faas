@@ -214,18 +214,11 @@ class TracedDict(dict[str, Signal[object]]):
 class ExitException(Exception): ...
 
 
-class InterruptException(Exception): ...
-
-
 KeyType = Literal["key", "ldata_node_id", "registry_table_id", "url"]
 
 
 def cell_exit(code: int = 0) -> None:
     raise ExitException
-
-
-def cell_interrupt() -> None:
-    raise InterruptException
 
 
 leading_digits_and_dash = re.compile(r"^\d+-")
@@ -747,7 +740,7 @@ class Kernel:
                             res = await res
                     except ExitException:
                         ...
-                    except InterruptException:
+                    except KeyboardInterrupt:
                         # todo(rteqs): better tracebacks for interrupted cells
                         raise
 
