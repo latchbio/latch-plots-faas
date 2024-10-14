@@ -744,15 +744,15 @@ class Kernel:
                     except ExitException:
                         ...
 
-                    except KeyboardInterrupt:
-                        # todo(rteqs): better tracebacks for interrupted cells
-                        self.cell_status[cell_id] = "error"
-                        await self.send_cell_result(cell_id)
-
                     self.cell_status[cell_id] = "ok"
                     await self.send_cell_result(cell_id)
 
                 except Exception:
+                    self.cell_status[cell_id] = "error"
+                    await self.send_cell_result(cell_id)
+
+                except KeyboardInterrupt:
+                    # todo(rteqs): better tracebacks for interrupted cells
                     self.cell_status[cell_id] = "error"
                     await self.send_cell_result(cell_id)
 
