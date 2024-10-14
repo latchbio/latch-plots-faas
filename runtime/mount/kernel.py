@@ -214,11 +214,18 @@ class TracedDict(dict[str, Signal[object]]):
 class ExitException(Exception): ...
 
 
+class CellInterruptException(Exception): ...
+
+
 KeyType = Literal["key", "ldata_node_id", "registry_table_id", "url"]
 
 
 def cell_exit(code: int = 0) -> None:
     raise ExitException
+
+
+def cell_interrupt(code: int = 0) -> None:
+    raise CellInterruptException
 
 
 leading_digits_and_dash = re.compile(r"^\d+-")
@@ -493,6 +500,8 @@ class Kernel:
         self.k_globals = TracedDict(self.duckdb)
         self.k_globals["exit"] = cell_exit
         self.k_globals.clear()
+        # todo(rteqs): figure out why we can't just catch KeyboardInterrupt without crashing the kernel
+        signal.signal(signal.SIGUSR1, lambda signum, frame: cell_interrupt())
 
     def debug_state(self) -> dict[str, object]:
         return {
@@ -507,7 +516,7 @@ class Kernel:
             "active_cell": self.active_cell,
             "widget_signals": {k: repr(v) for k, v in self.widget_signals.items()},
             "nodes_with_widgets": {
-                k: v.debug_state() for k, v in self.nodes_with_widgets.items()
+                str(k): v.debug_state() for k, v in self.nodes_with_widgets.items()
             },
             "cell_output_selections": self.cell_output_selections,
             "viewer_cell_selections": self.viewer_cell_selections,
@@ -742,6 +751,7 @@ class Kernel:
 
                     self.cell_status[cell_id] = "ok"
                     await self.send_cell_result(cell_id)
+
                 except Exception:
                     self.cell_status[cell_id] = "error"
                     await self.send_cell_result(cell_id)
@@ -750,6 +760,7 @@ class Kernel:
 
             await self.set_active_cell(cell_id)
             await ctx.run(x, _cell_id=cell_id)
+
         except Exception:
             self.cell_status[cell_id] = "error"
             await self.send_cell_result(cell_id)
