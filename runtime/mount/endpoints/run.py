@@ -154,14 +154,14 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
                 cell_id = msg["cell_id"]
 
                 if cell_status[cell_id] == "running" and k_proc.proc is not None:
-                    k_proc.proc.send_signal(signal=signal.SIGINT)
+                    k_proc.proc.send_signal(signal=signal.SIGUSR1)
 
                 cell_status.pop(cell_id, None)
                 cell_last_run_outputs.pop(cell_id, None)
                 cell_sequencers.pop(cell_id, None)
 
             if msg["type"] == "stop_cell" and k_proc.proc is not None:
-                k_proc.proc.send_signal(signal=signal.SIGINT)
+                k_proc.proc.send_signal(signal=signal.SIGUSR1)
                 continue
 
             await conn_k.send(msg)
