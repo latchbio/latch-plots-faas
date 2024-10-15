@@ -564,12 +564,12 @@ class Kernel:
             touched_viewers = {
                 f"df_{viewer_id}"
                 for viewer_id, sources in self.viewer_pagination_settings.items()
-                if any(key in self.k_globals.touched for key in sources.keys())
+                if any(key in self.k_globals.touched for key in sources)
             }
             touched_viewers |= {
                 f"df_{viewer_id}"
                 for viewer_id, sources in self.viewer_pagination_settings.items()
-                if any(key in touched_viewers for key in sources.keys())
+                if any(key in touched_viewers for key in sources)
             }
 
             for viewer_id, (key, key_type) in self.viewer_cell_selections.items():
