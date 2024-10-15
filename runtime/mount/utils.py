@@ -48,7 +48,7 @@ def get_global_http_sess() -> ClientSession:
 
 
 async def get_presigned_url(path: str) -> str:
-    endpoint = "/ldata/get-signed-url"
+    endpoint = "ldata/get-signed-url"
 
     headers = {"Authorization": auth_token_sdk}
     json_data = {"path": path}
