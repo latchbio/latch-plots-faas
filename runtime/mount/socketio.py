@@ -29,7 +29,7 @@ class SocketIo:
             await self.loop.sock_sendall(self.sock, data)
 
     async def send(self, data: object) -> None:
-        await self.send_bytes(orjson.dumps(data))
+        await self.send_bytes(orjson.dumps(data, option=orjson.OPT_SERIALIZE_NUMPY))
 
     async def recv(self) -> Any:
         async with self.rlock:

@@ -245,7 +245,9 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                     """,
                     variables={
                         "id": msg["cell_id"],
-                        "data": orjson.dumps(msg).decode(),
+                        "data": orjson.dumps(
+                            msg, option=orjson.OPT_SERIALIZE_NUMPY
+                        ).decode(),
                     },
                 )
 
@@ -265,7 +267,9 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                     """,
                     variables={
                         "id": msg["viewer_id"],
-                        "data": orjson.dumps(msg).decode(),
+                        "data": orjson.dumps(
+                            msg, option=orjson.OPT_SERIALIZE_NUMPY
+                        ).decode(),
                     },
                 )
 
@@ -285,7 +289,9 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                     """,
                     variables={
                         "id": msg["plot_id"],
-                        "data": orjson.dumps(msg).decode(),
+                        "data": orjson.dumps(
+                            msg, option=orjson.OPT_SERIALIZE_NUMPY
+                        ).decode(),
                     },
                 )
 

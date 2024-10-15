@@ -922,7 +922,9 @@ class Kernel:
                     "type": "output_value",
                     **(id_fields),
                     **(key_fields),
-                    "plotly_json": orjson.dumps(serialize_plotly_figure(res)).decode(),
+                    "plotly_json": orjson.dumps(
+                        serialize_plotly_figure(res), option=orjson.OPT_SERIALIZE_NUMPY
+                    ).decode(),
                 }
             )
             return
