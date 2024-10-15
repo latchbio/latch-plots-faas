@@ -134,9 +134,9 @@ class Node:
             if self.parent is not None
             else None,
             "children": {
-                k: v.debug_state(no_parent=True) for k, v in self.children.items()
+                str(k): v.debug_state(no_parent=True) for k, v in self.children.items()
             },
-            "signals": {k: repr(v) for k, v in self.signals.items()},
+            "signals": {str(k): repr(v) for k, v in self.signals.items()},
             "cell_id": self.cell_id,
             "name": self.name,
             "widget_states": self.widget_states,
@@ -174,8 +174,7 @@ class RCtx:
             try:
                 if inspect.iscoroutinefunction(f):
                     return await f()
-                else:
-                    return f()
+                return f()
             finally:
                 self.cur_comp = self.cur_comp.parent
 
