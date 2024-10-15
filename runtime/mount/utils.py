@@ -12,6 +12,7 @@ from config import config
 latch_p = Path("/root/.latch")
 sdk_token = (latch_p / "token").read_text()
 auth_token_sdk = f"Latch-SDK-Token {sdk_token}"
+nucleus_url = (latch_p / "nucleus-url").read_text()
 
 sess: ClientSession | None = None
 
@@ -54,7 +55,9 @@ async def get_presigned_url(path: str) -> str:
 
     sess = get_global_http_sess()
 
-    async with sess.post(endpoint, headers=headers, json=json_data) as response:
+    async with sess.post(
+        URL(nucleus_url) / endpoint, headers=headers, json=json_data
+    ) as response:
         res = await response.json()
 
         if response.status != 200:
