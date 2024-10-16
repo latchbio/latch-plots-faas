@@ -260,7 +260,7 @@ def filter_dataframe(
         level = int(col.split("_")[-1])
         col_vals = df.index.get_level_values(level).to_series()
     elif col in df.index.names:
-        col_vals = df.index.get_level_values(col).to_series()
+        col_vals = df.index.get_level_values(col).to_series().reset_index(drop=True)
     else:
         if col not in df:
             return df
@@ -371,7 +371,7 @@ def filter_and_sort(
         elif is_multi_index_col(col) and isinstance(df.index, MultiIndex):
             df = df.sort_index(level=int(col.split("_")[-1]), ascending=is_asc)
         elif col in df.index.names:
-            df = df.sort_index(level=col, ascending=False)
+            df = df.sort_index(level=col, ascending=is_asc)
         elif col in df:
             df = df.sort_values(by=col, ascending=is_asc)
 
