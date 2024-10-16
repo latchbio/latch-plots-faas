@@ -25,7 +25,7 @@ from lplots import _inject
 from lplots.reactive import Node, Signal, ctx
 from lplots.utils.nothing import Nothing
 from lplots.widgets._emit import WidgetState
-from pandas import DataFrame, MultiIndex, Series
+from pandas import DataFrame, Index, MultiIndex, Series
 from pandas.io.json._table_schema import build_table_schema
 from plotly.basedatatypes import BaseFigure
 from plotly_utils.precalc_box import precalc_box
@@ -253,14 +253,14 @@ def filter_dataframe(
     filter_type = filter.get("type")
     filter_value = filter.get("value")
 
-    col_vals: Series[Any] | None = None
+    col_vals: Series[Any] | Index[Any] | None = None
     if col == "index":
-        col_vals = df.index.to_series()
+        col_vals = df.index
     elif is_multi_index_col(col) and isinstance(df.index, MultiIndex):
         level = int(col.split("_")[-1])
-        col_vals = df.index.get_level_values(level).to_series()
+        col_vals = df.index.get_level_values(level)
     elif col in df.index.names:
-        col_vals = df.index.get_level_values(col).to_series().reset_index(drop=True)
+        col_vals = df.index.get_level_values(col)
     else:
         if col not in df:
             return df
@@ -268,7 +268,7 @@ def filter_dataframe(
         col_vals = df[col]
 
     if opcode == "empty":
-        return df[col_vals.notna() & col_vals.ne("")]
+        return df[col_vals.notna() & (col_vals != "")]
 
     if filter_value is None:
         return df
