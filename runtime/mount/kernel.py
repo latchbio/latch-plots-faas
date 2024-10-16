@@ -231,7 +231,7 @@ def cell_interrupt(code: int = 0) -> None:
 leading_digits_and_dash = re.compile(r"^\d+-")
 
 
-def remove_leading_digist_and_dash(col_raw: str) -> str:
+def remove_leading_digits_and_dash(col_raw: str) -> str:
     return re.sub(leading_digits_and_dash, "", col_raw)
 
 
@@ -259,14 +259,13 @@ def filter_dataframe(
     elif is_multi_index_col(col) and isinstance(df.index, MultiIndex):
         level = int(col.split("_")[-1])
         col_vals = df.index.get_level_values(level).to_series()
+    elif col in df.index.names:
+        col_vals = df.index.get_level_values(col).to_series()
     else:
         if col not in df:
             return df
 
         col_vals = df[col]
-
-    if col_vals is None:
-        return df
 
     if opcode == "empty":
         return df[col_vals.notna() & col_vals.ne("")]
@@ -351,7 +350,7 @@ def filter_and_sort(
     if row_filters is not None:
         for rf in row_filters:
             col_raw = rf.get("columnId")
-            col = remove_leading_digist_and_dash(col_raw)
+            col = remove_leading_digits_and_dash(col_raw)
             op = rf.get("operator")
             value = rf.get("value")
             df = filter_dataframe(df, col, op, value)
@@ -365,12 +364,14 @@ def filter_and_sort(
         col_raw = sort_settings.get("columnId")
 
         is_asc = direction == "asc"
-        col = remove_leading_digist_and_dash(col_raw)
+        col = remove_leading_digits_and_dash(col_raw)
 
         if col == "index":
             df = df.sort_index(ascending=is_asc)
         elif is_multi_index_col(col) and isinstance(df.index, MultiIndex):
             df = df.sort_index(level=int(col.split("_")[-1]), ascending=is_asc)
+        elif col in df.index.names:
+            df = df.sort_index(level=col, ascending=False)
         elif col in df:
             df = df.sort_values(by=col, ascending=is_asc)
 
@@ -387,6 +388,8 @@ def filter_and_sort(
                 elif is_multi_index_col(col) and isinstance(df.index, MultiIndex):
                     level = int(col.split("_")[-1])
                     sub_mask &= df.index.get_level_values(level).isin(sel)
+                elif col in df.index.names:
+                    sub_mask &= df.index.get_level_values(col).isin(sel)
                 else:
                     sub_mask &= filter_dataframe_by_selections(df, col, sel)
             mask |= sub_mask
