@@ -273,7 +273,7 @@ def filter_dataframe(
     if filter_value is None:
         return df
 
-    mask: Series | NDArray | None = None
+    mask: Series[bool] | NDArray[np.bool] | None = None
 
     if opcode == "=":
         if np.issubdtype(col_vals.dtype.type, np.floating):
@@ -327,7 +327,7 @@ def filter_dataframe(
 
 def filter_dataframe_by_selections(
     df: DataFrame, col: str, selections: list
-) -> "DataFrame | Series | NDArray":
+) -> "DataFrame | Series[bool] | NDArray[np.bool]":
     if col not in df:
         return np.ones(len(df), dtype=bool)
 
@@ -443,7 +443,7 @@ class CategorizedCellOutputs:
     figures: list[str] = field(default_factory=list)
 
 
-def serialize_plotly_figure(x: BaseFigure):
+def serialize_plotly_figure(x: BaseFigure) -> object:
     res = x.to_dict()
 
     for trace in res["data"]:
@@ -452,7 +452,7 @@ def serialize_plotly_figure(x: BaseFigure):
                 precalc_box(trace)
             elif trace["type"] == "violin":
                 precalc_violin(trace)
-        except:
+        except Exception:
             traceback.print_exc()
 
     modules = {
