@@ -25,7 +25,7 @@ from lplots import _inject
 from lplots.reactive import Node, Signal, ctx
 from lplots.utils.nothing import Nothing
 from lplots.widgets._emit import WidgetState
-from pandas import DataFrame, MultiIndex, Series
+from pandas import DataFrame, Index, MultiIndex, Series
 from pandas.io.json._table_schema import build_table_schema
 from plotly.basedatatypes import BaseFigure
 from plotly_utils.precalc_box import precalc_box
@@ -231,7 +231,7 @@ def cell_interrupt(code: int = 0) -> None:
 leading_digits_and_dash = re.compile(r"^\d+-")
 
 
-def remove_leading_digist_and_dash(col_raw: str) -> str:
+def remove_leading_digits_and_dash(col_raw: str) -> str:
     return re.sub(leading_digits_and_dash, "", col_raw)
 
 
@@ -253,28 +253,27 @@ def filter_dataframe(
     filter_type = filter.get("type")
     filter_value = filter.get("value")
 
-    col_vals: Series[Any] | None = None
+    col_vals: Series[Any] | Index[Any] | None = None
     if col == "index":
-        col_vals = df.index.to_series()
+        col_vals = df.index
     elif is_multi_index_col(col) and isinstance(df.index, MultiIndex):
         level = int(col.split("_")[-1])
-        col_vals = df.index.get_level_values(level).to_series()
+        col_vals = df.index.get_level_values(level)
+    elif col in df.index.names:
+        col_vals = df.index.get_level_values(col)
     else:
         if col not in df:
             return df
 
         col_vals = df[col]
 
-    if col_vals is None:
-        return df
-
     if opcode == "empty":
-        return df[col_vals.notna() & col_vals.ne("")]
+        return df[col_vals.notna() & (col_vals != "")]
 
     if filter_value is None:
         return df
 
-    mask: Series | NDArray | None = None
+    mask: Series[bool] | NDArray[np.bool] | None = None
 
     if opcode == "=":
         if np.issubdtype(col_vals.dtype.type, np.floating):
@@ -328,7 +327,7 @@ def filter_dataframe(
 
 def filter_dataframe_by_selections(
     df: DataFrame, col: str, selections: list
-) -> "DataFrame | Series | NDArray":
+) -> "DataFrame | Series[bool] | NDArray[np.bool]":
     if col not in df:
         return np.ones(len(df), dtype=bool)
 
@@ -351,7 +350,7 @@ def filter_and_sort(
     if row_filters is not None:
         for rf in row_filters:
             col_raw = rf.get("columnId")
-            col = remove_leading_digist_and_dash(col_raw)
+            col = remove_leading_digits_and_dash(col_raw)
             op = rf.get("operator")
             value = rf.get("value")
             df = filter_dataframe(df, col, op, value)
@@ -365,12 +364,14 @@ def filter_and_sort(
         col_raw = sort_settings.get("columnId")
 
         is_asc = direction == "asc"
-        col = remove_leading_digist_and_dash(col_raw)
+        col = remove_leading_digits_and_dash(col_raw)
 
         if col == "index":
             df = df.sort_index(ascending=is_asc)
         elif is_multi_index_col(col) and isinstance(df.index, MultiIndex):
             df = df.sort_index(level=int(col.split("_")[-1]), ascending=is_asc)
+        elif col in df.index.names:
+            df = df.sort_index(level=col, ascending=is_asc)
         elif col in df:
             df = df.sort_values(by=col, ascending=is_asc)
 
@@ -387,6 +388,8 @@ def filter_and_sort(
                 elif is_multi_index_col(col) and isinstance(df.index, MultiIndex):
                     level = int(col.split("_")[-1])
                     sub_mask &= df.index.get_level_values(level).isin(sel)
+                elif col in df.index.names:
+                    sub_mask &= df.index.get_level_values(col).isin(sel)
                 else:
                     sub_mask &= filter_dataframe_by_selections(df, col, sel)
             mask |= sub_mask
@@ -440,7 +443,7 @@ class CategorizedCellOutputs:
     figures: list[str] = field(default_factory=list)
 
 
-def serialize_plotly_figure(x: BaseFigure):
+def serialize_plotly_figure(x: BaseFigure) -> object:
     res = x.to_dict()
 
     for trace in res["data"]:
@@ -449,7 +452,7 @@ def serialize_plotly_figure(x: BaseFigure):
                 precalc_box(trace)
             elif trace["type"] == "violin":
                 precalc_violin(trace)
-        except:
+        except Exception:
             traceback.print_exc()
 
     modules = {
