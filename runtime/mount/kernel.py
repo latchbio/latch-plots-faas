@@ -1102,7 +1102,9 @@ class Kernel:
                         presigned_url = await get_presigned_url(path_str)
 
                         if data_id not in self.ldata_dataframes:
-                            self.ldata_dataframes[data_id] = pd.read_csv(presigned_url)
+                            self.ldata_dataframes[data_id] = pd.read_csv(
+                                presigned_url, sep=None, engine="python"
+                            )
 
                         df = self.ldata_dataframes[data_id]
 
@@ -1117,7 +1119,9 @@ class Kernel:
 
                     elif key_type == "url":
                         if data_id not in self.url_dataframes:
-                            self.url_dataframes[data_id] = pd.read_csv(data_id)
+                            self.url_dataframes[data_id] = pd.read_csv(
+                                data_id, sep=None, engine="python"
+                            )
 
                         df = self.url_dataframes[data_id]
 
@@ -1184,14 +1188,13 @@ class Kernel:
                     key_fields = {"key": msg["key"]}
 
                 elif "ldata_node_id" in msg:
-                    # todo(rteqs): handle tsv
                     ldata_node_id = msg["ldata_node_id"]
                     path_str = f"latch://{ldata_node_id}.node"
 
                     if ldata_node_id not in self.ldata_dataframes:
                         presigned_url = await get_presigned_url(path_str)
                         self.ldata_dataframes[ldata_node_id] = pd.read_csv(
-                            presigned_url
+                            presigned_url, sep=None, engine="python"
                         )
 
                     key_fields = {"ldata_node_id": ldata_node_id}
@@ -1209,7 +1212,9 @@ class Kernel:
                 elif "url" in msg:
                     url = msg["url"]
                     if url not in self.url_dataframes:
-                        self.url_dataframes[url] = pd.read_csv(url)
+                        self.url_dataframes[url] = pd.read_csv(
+                            url, sep=None, engine="python"
+                        )
 
                     key_fields = {"url": url}
 
