@@ -2,8 +2,7 @@ import asyncio
 from dataclasses import dataclass
 from io import BufferedWriter, RawIOBase, TextIOWrapper, UnsupportedOperation
 from typing import TYPE_CHECKING
-
-from socketio import SocketIo
+from socketio_thread import SocketIoThread
 
 if TYPE_CHECKING:
     from _typeshed import ReadableBuffer
@@ -12,7 +11,7 @@ if TYPE_CHECKING:
 
 @dataclass(kw_only=True)
 class SocketWriter(RawIOBase):
-    conn: SocketIo
+    conn: SocketIoThread
     kernel: "Kernel"
     name: str
     loop: asyncio.AbstractEventLoop
@@ -32,19 +31,18 @@ class SocketWriter(RawIOBase):
         return True
 
     def write(self, __b: "ReadableBuffer") -> int | None:
-        async def f():
-            await self.conn.send(
-                {
-                    "type": "kernel_stdio",
-                    "active_cell": self.kernel.active_cell,
-                    "stream": self.name,
-                    # todo(maximsmol): this is a bit silly because we are going to have
-                    # a TextIOWrapper above that just encoded this for us
-                    "data": bytes(__b).decode(errors="replace"),
-                }
-            )
-
-        self.loop.run_until_complete(f())
+        b = bytes(__b)
+        self.conn.send_fut(
+            {
+                "type": "kernel_stdio",
+                "active_cell": self.kernel.active_cell,
+                "stream": self.name,
+                # todo(maximsmol): this is a bit silly because we are going to have
+                # a TextIOWrapper above that just encoded this for us
+                "data": b.decode(errors="replace"),
+            }
+        ).result()
+        return len(b)
 
 
 def text_socket_writer(x: SocketWriter) -> TextIOWrapper:

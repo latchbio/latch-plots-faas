@@ -30,10 +30,10 @@ from pandas.io.json._table_schema import build_table_schema
 from plotly.basedatatypes import BaseFigure
 from plotly_utils.precalc_box import precalc_box
 from plotly_utils.precalc_violin import precalc_violin
+from .socketio_thread import SocketIoThread
 from stdio_over_socket import SocketWriter, text_socket_writer
 
 sys.path.append(str(Path(__file__).parent.absolute()))
-from socketio import SocketIo
 from subsample import downsample_df, initialize_duckdb, quote_identifier
 from utils import PlotConfig, get_presigned_url
 
@@ -470,7 +470,7 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
 
 @dataclass(kw_only=True)
 class Kernel:
-    conn: SocketIo
+    conn: SocketIoThread
 
     cell_seq = 0
     cell_rnodes: dict[str, Node] = field(default_factory=dict)
@@ -1283,7 +1283,10 @@ async def main() -> None:
     sock = socket.socket(family=socket.AF_UNIX, fileno=int(sys.argv[-1]))
     sock.setblocking(False)
 
-    k = Kernel(conn=await SocketIo.from_socket(sock))
+    socket_io_thread = SocketIoThread(socket=sock)
+    socket_io_thread.run()
+
+    k = Kernel(conn=socket_io_thread)
     _inject.kernel = k
 
     old_stdout = sys.stdout
