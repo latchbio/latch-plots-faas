@@ -27,7 +27,7 @@ class Select:
     def value(self) -> str | int | float | bool | datetime | None:
         res = self._signal()
 
-        if res is None or not isinstance(res, str) or res not in self._state["options"]:
+        if res is None or res not in self._state["options"]:
             res = self._state.get("default")
             if res is None:
                 return None
