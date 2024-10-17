@@ -30,10 +30,9 @@ from pandas.io.json._table_schema import build_table_schema
 from plotly.basedatatypes import BaseFigure
 from plotly_utils.precalc_box import precalc_box
 from plotly_utils.precalc_violin import precalc_violin
-from socketio_thread import SocketIoThread
-from stdio_over_socket import SocketWriter, text_socket_writer
 
 sys.path.append(str(Path(__file__).parent.absolute()))
+from socketio import SocketIo
 from subsample import downsample_df, initialize_duckdb, quote_identifier
 from utils import PlotConfig, get_presigned_url
 
@@ -470,7 +469,7 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
 
 @dataclass(kw_only=True)
 class Kernel:
-    conn: SocketIoThread
+    conn: SocketIo
 
     cell_seq = 0
     cell_rnodes: dict[str, Node] = field(default_factory=dict)
@@ -1282,42 +1281,18 @@ async def main() -> None:
     sock = socket.socket(family=socket.AF_UNIX, fileno=int(sys.argv[-1]))
     sock.setblocking(False)
 
-    # note(maximsmol): DO NOT LET THESE GET GARBAGE COLLECTED
-    # the interpreter will crash if that happens apparently
-    old_stdout = sys.stdout
-    old_stderr = sys.stderr
+    k = Kernel(conn=await SocketIo.from_socket(sock))
+    _inject.kernel = k
+    await k.send({"type": "ready"})
 
-    socket_io_thread = SocketIoThread(socket=sock)
-    socket_io_thread.start()
-    try:
-        socket_io_thread.initialized.wait()
+    while not shutdown_requested:
+        try:
+            await k.accept()
+        except Exception:
+            traceback.print_exc()
+            continue
 
-        k = Kernel(conn=socket_io_thread)
-        _inject.kernel = k
-
-        sys.stdout = text_socket_writer(
-            SocketWriter(conn=k.conn, kernel=k, name="stdout", loop=loop)
-        )
-        sys.stderr = text_socket_writer(
-            SocketWriter(conn=k.conn, kernel=k, name="stderr", loop=loop)
-        )
-
-        await k.send({"type": "ready"})
-
-        while not shutdown_requested:
-            try:
-                await k.accept()
-            except Exception:
-                traceback.print_exc()
-                continue
-
-        print("Kernel shutting down...")
-    finally:
-        socket_io_thread.shutdown.set()
-        socket_io_thread.join()
-
-        sys.stdout = old_stdout
-        sys.stderr = old_stderr
+    print("Kernel shutting down...")
 
 
 asyncio.run(main())

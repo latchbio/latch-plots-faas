@@ -124,14 +124,7 @@ async def add_pod_event(*, auth: str, event_type: str) -> None:
             """,
             variables={"eventType": event_type, "podSessionId": pod_session_id},
         )
-    except Exception as e:
-        if (
-            'duplicate key value violates unique constraint "pod_session_events_unique_sess_id_event_type"'
-            in str(e)
-        ):
-            # todo(maximsmol): fix this properly
-            pass
-
+    except Exception:
         traceback.print_exc()
 
 
@@ -311,6 +304,31 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
             await broadcast_message(orjson.dumps(err_msg).decode())
 
 
+async def handle_kernel_io(stream: asyncio.StreamReader, *, name: str) -> None:
+    await ready_ev.wait()
+    print(f"Strating kernel {name} listener")
+    while True:
+        data = await stream.read(4096)
+        print(f"[kernel] ({stream}): {data}")
+        if len(data) == 0:
+            break
+
+        # todo(rteqs): message are getting sent out of order. kernel stdio is sent then start_cell
+        # which clears the initial output / logs. We need to fully rework logging, as we have another
+        # hack in the kernel related to logs.
+        await asyncio.sleep(0.1)
+        await broadcast_message(
+            orjson.dumps(
+                {
+                    "type": "kernel_stdio",
+                    "active_cell": active_cell,
+                    "stream": name,
+                    "data": data.decode(errors="replace"),
+                }
+            ).decode()
+        )
+
+
 async def start_kernel_proc() -> None:
     await add_pod_event(auth=auth_token_sdk, event_type="runtime_starting")
     conn_k = k_proc.conn_k = await SocketIo.from_socket(sock)
@@ -325,7 +343,18 @@ async def start_kernel_proc() -> None:
         str(sock_k_fd),
         pass_fds=[sock_k_fd],
         stdin=asyncio.subprocess.DEVNULL,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
         preexec_fn=lambda: os.nice(1),
+    )
+    assert proc.stdout is not None
+    assert proc.stderr is not None
+
+    async_tasks.extend(
+        [
+            asyncio.create_task(handle_kernel_io(proc.stdout, name="stdout")),
+            asyncio.create_task(handle_kernel_io(proc.stderr, name="stderr")),
+        ]
     )
 
     k_state: KernelState | None = None
