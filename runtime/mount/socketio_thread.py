@@ -1,5 +1,4 @@
 import asyncio
-from dataclasses import dataclass, field
 from socket import socket
 from threading import Thread
 import concurrent.futures as cf
@@ -11,13 +10,15 @@ from socketio import SocketIo
 T = TypeVar("T")
 
 
-@dataclass(kw_only=True)
 class SocketIoThread(Thread):
-    socket: socket
-
     loop: asyncio.AbstractEventLoop | None = None
     conn: SocketIo | None = None
-    shutdown: asyncio.Event = field(default_factory=asyncio.Event)
+
+    def __init__(self, *, socket: socket) -> None:
+        super().__init__()
+
+        self.socket = socket
+        self.shutdown = asyncio.Event()
 
     def run(self) -> None:
         async def f():
