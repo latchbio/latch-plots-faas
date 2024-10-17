@@ -30,7 +30,7 @@ from pandas.io.json._table_schema import build_table_schema
 from plotly.basedatatypes import BaseFigure
 from plotly_utils.precalc_box import precalc_box
 from plotly_utils.precalc_violin import precalc_violin
-from .stdio_over_socket import SocketWriter, text_socket_writer
+from stdio_over_socket import SocketWriter, text_socket_writer
 
 sys.path.append(str(Path(__file__).parent.absolute()))
 from socketio import SocketIo
@@ -1285,6 +1285,9 @@ async def main() -> None:
 
     k = Kernel(conn=await SocketIo.from_socket(sock))
     _inject.kernel = k
+
+    old_stdout = sys.stdout
+    old_stderr = sys.stderr
 
     sys.stdout = text_socket_writer(
         SocketWriter(conn=k.conn, kernel=k, name="stdout", loop=loop)
