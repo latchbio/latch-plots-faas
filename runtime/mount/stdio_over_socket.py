@@ -1,4 +1,3 @@
-from _typeshed import ReadableBuffer
 import asyncio
 from dataclasses import dataclass
 from io import BufferedWriter, RawIOBase, TextIOWrapper, UnsupportedOperation
@@ -7,6 +6,7 @@ from typing import TYPE_CHECKING
 from socketio import SocketIo
 
 if TYPE_CHECKING:
+    from _typeshed import ReadableBuffer
     from kernel import Kernel
 
 
@@ -31,7 +31,7 @@ class SocketWriter(RawIOBase):
     def writable(self) -> bool:
         return True
 
-    def write(self, __b: ReadableBuffer) -> int | None:
+    def write(self, __b: "ReadableBuffer") -> int | None:
         buf = __b.__buffer__(0).tobytes()
 
         async def f():
