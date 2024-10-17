@@ -318,12 +318,8 @@ async def start_kernel_proc() -> None:
         str(sock_k_fd),
         pass_fds=[sock_k_fd],
         stdin=asyncio.subprocess.DEVNULL,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
         preexec_fn=lambda: os.nice(1),
     )
-    assert proc.stdout is not None
-    assert proc.stderr is not None
 
     k_state: KernelState | None = None
     try:
