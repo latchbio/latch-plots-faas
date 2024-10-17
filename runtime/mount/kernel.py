@@ -535,6 +535,7 @@ class Kernel:
             "ldata_dataframes": list(self.ldata_dataframes.keys()),
             "registry_dataframes": list(self.registry_dataframes.keys()),
             "url_dataframes": list(self.url_dataframes.keys()),
+            "plot_configs": self.plot_configs,
         }
 
     async def set_active_cell(self, cell_id: str) -> None:
