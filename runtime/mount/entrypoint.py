@@ -124,7 +124,14 @@ async def add_pod_event(*, auth: str, event_type: str) -> None:
             """,
             variables={"eventType": event_type, "podSessionId": pod_session_id},
         )
-    except Exception:
+    except Exception as e:
+        if (
+            'duplicate key value violates unique constraint "pod_session_events_unique_sess_id_event_type"'
+            in str(e)
+        ):
+            # todo(maximsmol): fix this properly
+            pass
+
         traceback.print_exc()
 
 
@@ -344,6 +351,7 @@ async def start_kernel_proc() -> None:
 
     await add_pod_event(auth=auth_token_sdk, event_type="runtime_ready")
     await ready_ev.wait()
+    print("Ready")
     await conn_k.send(
         {
             "type": "init",
