@@ -1,5 +1,6 @@
 from collections.abc import Iterable
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Literal, NotRequired
 
 from ..reactive import Signal
@@ -10,8 +11,8 @@ from .shared import FormInputAppearance
 class MultiSelectState(_emit.WidgetState[Literal["multi_select"], str]):
     label: str
     readonly: bool
-    options: list[str]
-    default: NotRequired[list[str] | None]
+    options: list[str | int | float | bool | datetime]
+    default: NotRequired[list[str | int | float | bool | datetime] | None]
     appearance: NotRequired[FormInputAppearance | None]
     required: bool
 
@@ -20,16 +21,12 @@ class MultiSelectState(_emit.WidgetState[Literal["multi_select"], str]):
 class MultiSelect:
     _key: str
     _state: MultiSelectState
-    _signal: Signal[list[str]]
+    _signal: Signal[list[str | int | float | bool | datetime]]
 
     @property
-    def value(self) -> list[str] | None:
+    def value(self) -> list[str | int | float | bool | datetime] | None:
         res = self._signal()
-        if (
-            res is None
-            or not isinstance(res, list)
-            or not all(isinstance(x, str) for x in res)
-        ):
+        if res is None or not isinstance(res, list):
             res = self._state.get("default")
             if res is None:
                 return None
@@ -43,8 +40,8 @@ def w_multi_select(
     label: str,
     readonly: bool = False,
     appearance: FormInputAppearance | None = None,
-    options: Iterable[str],
-    default: list[str] | None = None,
+    options: Iterable[str | int | float | bool | datetime],
+    default: Iterable[str | int | float | bool | datetime] | None = None,
     required: bool = False,
 ) -> MultiSelect:
     key = _state.use_state_key(key=key)
@@ -56,7 +53,7 @@ def w_multi_select(
             "label": label,
             "readonly": readonly,
             "options": list(options),
-            "default": default,
+            "default": list(default) if default is not None else None,
             "appearance": appearance,
             "required": required,
         },
