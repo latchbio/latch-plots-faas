@@ -599,9 +599,7 @@ class Kernel:
                 if key not in self.k_globals.touched and key not in touched_viewers:
                     continue
 
-                tg.create_task(
-                    self.send_plot_data(plot_id, key, self.plot_configs.get(plot_id))
-                )
+                tg.create_task(self.send_plot_data(plot_id, key))
 
             tg.create_task(self.send_globals_summary())
 
