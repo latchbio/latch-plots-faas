@@ -1285,30 +1285,35 @@ async def main() -> None:
 
     socket_io_thread = SocketIoThread(socket=sock)
     socket_io_thread.start()
+    try:
+        socket_io_thread.initialized.wait()
 
-    k = Kernel(conn=socket_io_thread)
-    _inject.kernel = k
+        k = Kernel(conn=socket_io_thread)
+        _inject.kernel = k
 
-    old_stdout = sys.stdout
-    old_stderr = sys.stderr
+        old_stdout = sys.stdout
+        old_stderr = sys.stderr
 
-    # sys.stdout = text_socket_writer(
-    #     SocketWriter(conn=k.conn, kernel=k, name="stdout", loop=loop)
-    # )
-    # sys.stderr = text_socket_writer(
-    #     SocketWriter(conn=k.conn, kernel=k, name="stderr", loop=loop)
-    # )
+        # sys.stdout = text_socket_writer(
+        #     SocketWriter(conn=k.conn, kernel=k, name="stdout", loop=loop)
+        # )
+        # sys.stderr = text_socket_writer(
+        #     SocketWriter(conn=k.conn, kernel=k, name="stderr", loop=loop)
+        # )
 
-    await k.send({"type": "ready"})
+        await k.send({"type": "ready"})
 
-    while not shutdown_requested:
-        try:
-            await k.accept()
-        except Exception:
-            traceback.print_exc()
-            continue
+        while not shutdown_requested:
+            try:
+                await k.accept()
+            except Exception:
+                traceback.print_exc()
+                continue
 
-    print("Kernel shutting down...")
+        print("Kernel shutting down...")
+    finally:
+        socket_io_thread.shutdown.set()
+        socket_io_thread.join()
 
 
 asyncio.run(main())

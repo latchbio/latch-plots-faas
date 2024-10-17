@@ -2,6 +2,7 @@ import asyncio
 from socket import socket
 from threading import Thread
 import concurrent.futures as cf
+import threading
 from typing import Any, TypeVar
 from collections.abc import Coroutine
 
@@ -19,11 +20,14 @@ class SocketIoThread(Thread):
 
         self.socket = socket
         self.shutdown = asyncio.Event()
+        self.initialized = threading.Event()
 
     def run(self) -> None:
         async def f():
             self.loop = asyncio.get_running_loop()
             self.conn = await SocketIo.from_socket(self.socket)
+
+            self.initialized.set()
             await self.shutdown.wait()
 
         asyncio.run(f())
