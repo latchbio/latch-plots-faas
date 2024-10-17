@@ -1284,7 +1284,7 @@ async def main() -> None:
     sock.setblocking(False)
 
     socket_io_thread = SocketIoThread(socket=sock)
-    socket_io_thread.run()
+    socket_io_thread.start()
 
     k = Kernel(conn=socket_io_thread)
     _inject.kernel = k
