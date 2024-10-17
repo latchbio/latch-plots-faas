@@ -535,6 +535,7 @@ class Kernel:
             "ldata_dataframes": list(self.ldata_dataframes.keys()),
             "registry_dataframes": list(self.registry_dataframes.keys()),
             "url_dataframes": list(self.url_dataframes.keys()),
+            "plot_configs": self.plot_configs,
         }
 
     async def set_active_cell(self, cell_id: str) -> None:
@@ -598,9 +599,7 @@ class Kernel:
                 if key not in self.k_globals.touched and key not in touched_viewers:
                     continue
 
-                tg.create_task(
-                    self.send_plot_data(plot_id, key, self.plot_configs.get(plot_id))
-                )
+                tg.create_task(self.send_plot_data(plot_id, key))
 
             tg.create_task(self.send_globals_summary())
 
