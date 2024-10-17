@@ -32,8 +32,6 @@ class SocketWriter(RawIOBase):
         return True
 
     def write(self, __b: "ReadableBuffer") -> int | None:
-        buf = __b.__buffer__(0).tobytes()
-
         async def f():
             await self.conn.send(
                 {
@@ -42,7 +40,7 @@ class SocketWriter(RawIOBase):
                     "stream": self.name,
                     # todo(maximsmol): this is a bit silly because we are going to have
                     # a TextIOWrapper above that just encoded this for us
-                    "data": buf.decode(errors="replace"),
+                    "data": bytes(__b).decode(errors="replace"),
                 }
             )
 
