@@ -1320,4 +1320,9 @@ async def main() -> None:
         sys.stderr = old_stderr
 
 
-asyncio.run(main())
+if __name__ == "__main__":
+    import multiprocessing
+
+    multiprocessing.set_start_method("forkserver")
+
+    asyncio.run(main())

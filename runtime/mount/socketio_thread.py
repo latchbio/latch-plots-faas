@@ -16,7 +16,7 @@ class SocketIoThread(Thread):
     conn: SocketIo | None = None
 
     def __init__(self, *, socket: socket) -> None:
-        super().__init__()
+        super().__init__(name="socket_io")
 
         self.socket = socket
         self.shutdown = asyncio.Event()
