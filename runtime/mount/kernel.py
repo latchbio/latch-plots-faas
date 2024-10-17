@@ -1294,12 +1294,12 @@ async def main() -> None:
         old_stdout = sys.stdout
         old_stderr = sys.stderr
 
-        # sys.stdout = text_socket_writer(
-        #     SocketWriter(conn=k.conn, kernel=k, name="stdout", loop=loop)
-        # )
-        # sys.stderr = text_socket_writer(
-        #     SocketWriter(conn=k.conn, kernel=k, name="stderr", loop=loop)
-        # )
+        sys.stdout = text_socket_writer(
+            SocketWriter(conn=k.conn, kernel=k, name="stdout", loop=loop)
+        )
+        sys.stderr = text_socket_writer(
+            SocketWriter(conn=k.conn, kernel=k, name="stderr", loop=loop)
+        )
 
         await k.send({"type": "ready"})
 
