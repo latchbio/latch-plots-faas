@@ -1283,6 +1283,11 @@ async def main() -> None:
     sock = socket.socket(family=socket.AF_UNIX, fileno=int(sys.argv[-1]))
     sock.setblocking(False)
 
+    # note(maximsmol): DO NOT LET THESE GET GARBAGE COLLECTED
+    # the interpreter will crash if that happens apparently
+    old_stdout = sys.stdout
+    old_stderr = sys.stderr
+
     socket_io_thread = SocketIoThread(socket=sock)
     socket_io_thread.start()
     try:
@@ -1290,9 +1295,6 @@ async def main() -> None:
 
         k = Kernel(conn=socket_io_thread)
         _inject.kernel = k
-
-        old_stdout = sys.stdout
-        old_stderr = sys.stderr
 
         sys.stdout = text_socket_writer(
             SocketWriter(conn=k.conn, kernel=k, name="stdout", loop=loop)
@@ -1314,6 +1316,9 @@ async def main() -> None:
     finally:
         socket_io_thread.shutdown.set()
         socket_io_thread.join()
+
+        sys.stdout = old_stdout
+        sys.stderr = old_stderr
 
 
 asyncio.run(main())
