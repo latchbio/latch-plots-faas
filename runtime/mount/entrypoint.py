@@ -319,7 +319,7 @@ async def start_kernel_proc() -> None:
     )
 
     print("Starting kernel subprocess")
-    proc = k_proc.proc = await asyncio.create_subprocess_exec(
+    k_proc.proc = await asyncio.create_subprocess_exec(
         sys.executable,
         (dir_p / "kernel.py"),
         str(sock_k_fd),
@@ -345,6 +345,7 @@ async def start_kernel_proc() -> None:
     except Exception:
         err_msg = {"type": "error", "data": traceback.format_exc()}
         await broadcast_message(orjson.dumps(err_msg).decode())
+        traceback.print_exc()
 
     if k_state is None:
         return
