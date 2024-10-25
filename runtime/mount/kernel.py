@@ -149,8 +149,7 @@ class TracedDict(dict[str, Signal[object]]):
         return self.getitem_signal(__key).sample()
 
     def getitem_signal(self, __key: str) -> Signal[object]:
-        res = super().__getitem__(__key)
-        return res
+        return super().__getitem__(__key)
 
     def get_signal(self, __key: str) -> Signal[object] | None:
         if __key not in self:
@@ -211,8 +210,6 @@ class TracedDict(dict[str, Signal[object]]):
         return super().__delitem__(__key)
 
     def clear(self) -> None:
-        print("[kernel] clear")
-
         self.touched.clear()
         self.removed.clear()
         self.item_write_counter.clear()
