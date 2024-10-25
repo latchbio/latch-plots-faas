@@ -143,17 +143,26 @@ class TracedDict(dict[str, Signal[object]]):
         self.duckdb = duckdb
 
     def __getitem__(self, __key: str) -> object:
+        print("[kernel] __getitem__", __key)
+
         return self.getitem_signal(__key).sample()
 
     def getitem_signal(self, __key: str) -> Signal[object]:
+        print("[kernel] getitem_signal", __key)
+
         return super().__getitem__(__key)
 
     def get_signal(self, __key: str) -> Signal[object] | None:
+        print("[kernel] get_signal", __key)
+
         if __key not in self:
             return None
+
         return self.getitem_signal(__key)
 
     def __setitem__(self, __key: str, __value: object) -> None:
+        print("[kernel] __setitem___", __key, __value)
+
         self.touched.add(__key)
         self.item_write_counter[__key] += 1
 
@@ -180,6 +189,8 @@ class TracedDict(dict[str, Signal[object]]):
         return super().__setitem__(__key, Signal(__value))
 
     def __delitem__(self, __key: str) -> None:
+        print("[kernel] __delitem__", __key)
+
         self.touched.add(__key)
         self.removed.add(__key)
         if __key in self.item_write_counter:
@@ -203,6 +214,8 @@ class TracedDict(dict[str, Signal[object]]):
         return super().__delitem__(__key)
 
     def clear(self) -> None:
+        print("[kernel] clear")
+
         self.touched.clear()
         self.removed.clear()
         self.item_write_counter.clear()
