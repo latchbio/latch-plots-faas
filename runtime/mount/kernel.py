@@ -143,6 +143,9 @@ class TracedDict(dict[str, Signal[object]]):
         self.duckdb = duckdb
 
     def __getitem__(self, __key: str) -> object:
+        if __key == "__builtins__":
+            return super().__getitem__("__builtins__")
+
         return self.getitem_signal(__key).sample()
 
     def getitem_signal(self, __key: str) -> Signal[object]:
@@ -151,11 +154,15 @@ class TracedDict(dict[str, Signal[object]]):
     def get_signal(self, __key: str) -> Signal[object] | None:
         if __key not in self:
             return None
+
         return self.getitem_signal(__key)
 
     def __setitem__(self, __key: str, __value: object) -> None:
         self.touched.add(__key)
         self.item_write_counter[__key] += 1
+
+        if __key == "__builtins__":
+            return super().__setitem__(__key, __value)
 
         dfs = self.dataframes.sample()
         if hasattr(__value, "iloc") and __key not in dfs:
