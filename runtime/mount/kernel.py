@@ -145,6 +145,9 @@ class TracedDict(dict[str, Signal[object]]):
     def __getitem__(self, __key: str) -> object:
         print("[kernel] __getitem__", __key)
 
+        if __key == "__builtins__":
+            return super().__getitem__("__builtins__")
+
         return self.getitem_signal(__key).sample()
 
     def getitem_signal(self, __key: str) -> Signal[object]:
@@ -160,6 +163,9 @@ class TracedDict(dict[str, Signal[object]]):
 
     def __setitem__(self, __key: str, __value: object) -> None:
         print("[kernel] __setitem___", __key, type(__value), __value)
+
+        if __key == "__builtins__":
+            return super().__setitem__(__key, __value)
 
         self.touched.add(__key)
         self.item_write_counter[__key] += 1
