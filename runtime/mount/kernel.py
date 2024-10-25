@@ -148,20 +148,18 @@ class TracedDict(dict[str, Signal[object]]):
         return self.getitem_signal(__key).sample()
 
     def getitem_signal(self, __key: str) -> Signal[object]:
-        print("[kernel] getitem_signal", __key)
-
-        return super().__getitem__(__key)
+        res = super().__getitem__(__key)
+        print("[kernel] getitem_signal", __key, type(res), res)
+        return res
 
     def get_signal(self, __key: str) -> Signal[object] | None:
-        print("[kernel] get_signal", __key)
-
         if __key not in self:
             return None
 
         return self.getitem_signal(__key)
 
     def __setitem__(self, __key: str, __value: object) -> None:
-        print("[kernel] __setitem___", __key, __value)
+        print("[kernel] __setitem___", __key, type(__value), __value)
 
         self.touched.add(__key)
         self.item_write_counter[__key] += 1
