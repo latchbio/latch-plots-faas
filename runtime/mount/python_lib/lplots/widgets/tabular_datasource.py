@@ -56,6 +56,7 @@ class TabularDatasourcePicker:
     @property
     def value(self) -> Any | None:
         res = self._signal()
+        print(res)
         if res is None:
             return None
 
