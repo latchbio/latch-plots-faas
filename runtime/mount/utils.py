@@ -6,7 +6,6 @@ from typing import Any, NotRequired, TypedDict
 
 from aiohttp import ClientSession
 from latch.types.file import LatchFile
-from matplotlib.axes._axes import Axes
 from matplotlib.figure import Figure, SubFigure
 from yarl import URL
 
@@ -113,7 +112,7 @@ def orjson_encoder(obj: Any) -> Any:
     if isinstance(obj, Figure):
         return plot_to_webp_string(obj)
 
-    if isinstance(obj, Axes):  # seaborn
+    if hasattr(obj, "figure") and isinstance(obj.figure, Figure):
         fig = obj.figure
         if fig is None:
             return None
