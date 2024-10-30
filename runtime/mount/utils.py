@@ -102,7 +102,10 @@ def plot_to_webp_string(
 ) -> str:
     buf = io.BytesIO()
     fig.canvas.print_figure(
-        buf, format="webp", pil_kwargs={"quality": quality, "lossless": lossless}
+        buf,
+        format="webp",
+        dpi="figure",
+        pil_kwargs={"quality": quality, "lossless": lossless},
     )
     fig_b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
     return f"data:image/webp;base64,{fig_b64}"
