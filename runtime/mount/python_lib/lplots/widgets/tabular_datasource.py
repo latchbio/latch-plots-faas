@@ -1,8 +1,8 @@
-from collections.abc import Iterable
 from dataclasses import dataclass
-from enum import Enum
-from typing import Any, Literal, NotRequired, Union
+from typing import Any, Literal, NotRequired, TypedDict
 
+import latch_data_validation
+import latch_data_validation.data_validation
 import pandas as pd
 from latch.ldata.path import LPath
 from latch.registry.table import Table
@@ -10,26 +10,22 @@ from latch.registry.table import Table
 from .. import _inject
 from ..reactive import Signal
 from . import _emit, _state
-from .select import Select, w_select
 from .shared import FormInputAppearance
 
 DataSourceType = Literal["ldata", "dataframe", "registry"]
 
 
-@dataclass
-class LDataDataSource:
+class LDataDataSource(TypedDict):
     path: str
     type: Literal["ldata"]
 
 
-@dataclass
-class DataFrameDataSource:
+class DataFrameDataSource(TypedDict):
     df_id: str
     type: Literal["dataframe"]
 
 
-@dataclass
-class RegistryDataSource:
+class RegistryDataSource(TypedDict):
     table_id: str
     type: Literal["registry"]
 
@@ -57,13 +53,14 @@ class TabularDatasourcePicker:
     def value(self) -> Any | None:
         res = self._signal()
 
-        if res is None or not isinstance(res, DataSourceValue):
+        if res is None or not isinstance(res, dict):
             res = self._state.get("default")
-            if res is None: 
+            if res is None:
                 return None
-
-        if res.type == "ldata":
-            path = res.path
+        
+        res_type = res.get("type")
+        if res_type == "ldata":
+            path = res.get('path')
             if (
                 path is None
                 or not isinstance(path, str)
@@ -81,8 +78,8 @@ class TabularDatasourcePicker:
             else:
                 return None
 
-        if res.type == "dataframe":
-            df_id = res.df_id
+        if res_type == "dataframe":
+            df_id = res.get('df_id')
             if df_id is None:
                 return None
 
@@ -92,8 +89,8 @@ class TabularDatasourcePicker:
 
             return g()
 
-        if res.type == "registry":
-            table_id = res.table_id
+        if res_type == "registry":
+            table_id = res.get('table_id')
             if table_id is None:
                 return None
 
