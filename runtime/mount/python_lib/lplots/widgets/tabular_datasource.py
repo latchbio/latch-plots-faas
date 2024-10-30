@@ -58,7 +58,8 @@ class TabularDatasourcePicker:
         res = self._signal()
         if res is None:
             return None
-        elif res.type == "ldata":
+
+        if res.type == "ldata":
             path = res.path
             if (
                 path is None
@@ -76,7 +77,8 @@ class TabularDatasourcePicker:
                 return pd.read_csv(lpath.download(), sep="\t")
             else:
                 return None
-        elif res.type == "dataframe":
+
+        if res.type == "dataframe":
             df_id = res.df_id
             if df_id is None:
                 return None
@@ -86,7 +88,8 @@ class TabularDatasourcePicker:
                 return None
 
             return g()
-        elif res.type == "registry":
+
+        if res.type == "registry":
             table_id = res.table_id
             if table_id is None:
                 return None
