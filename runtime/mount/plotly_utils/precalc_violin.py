@@ -1,5 +1,6 @@
 from math import ceil, pi, sqrt
 from typing import Any
+
 import numpy as np
 
 from .precalc_box import precalc_box
@@ -66,7 +67,10 @@ def precalc_violin(trace: Any):
             if q4 - q0 != 0:
                 # todo(maximsmol): double check that the ddof is correct
                 # pretty sure this is what plotly uses
-                ssd = np.std(data, mean=mean, ddof=1)
+
+                # todo(rteqs): add back mean when numpy fixes 1.26.4
+                # ssd = np.std(data, mean=mean, ddof=1)
+                ssd = np.std(data, ddof=1)
 
                 silverman = 1.059 * min(ssd, iqr / 1.349) * pow(l, -0.2)
                 bandwidth = max(silverman, (q4 - q0) / 100)
