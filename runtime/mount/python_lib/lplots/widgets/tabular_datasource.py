@@ -57,7 +57,7 @@ class TabularDatasourcePicker:
     def value(self) -> Any | None:
         res = self._signal()
 
-        if res is None and not isinstance(res, DataSourceValue):
+        if res is None or not isinstance(res, DataSourceValue):
             res = self._state.get("default")
             if res is None: 
                 return None
