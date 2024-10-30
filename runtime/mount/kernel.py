@@ -25,6 +25,8 @@ from lplots import _inject
 from lplots.reactive import Node, Signal, ctx
 from lplots.utils.nothing import Nothing
 from lplots.widgets._emit import WidgetState
+from matplotlib.axes._axes import Axes
+from matplotlib.figure import Figure
 from pandas import DataFrame, Index, MultiIndex, Series
 from pandas.io.json._table_schema import build_table_schema
 from plotly.basedatatypes import BaseFigure
@@ -1022,6 +1024,11 @@ class Kernel:
                 }
             )
             return
+
+        if isinstance(res, Figure | Axes):
+            await self.send(
+                {"type": "output_value", **(id_fields), **(key_fields), "webp": res}
+            )
 
         data = pprint.pformat(res)
         await self.send(

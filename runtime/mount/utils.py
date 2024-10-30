@@ -1,3 +1,4 @@
+import base64
 import io
 import sys
 from pathlib import Path
@@ -99,12 +100,13 @@ async def gql_query(query: str, variables: dict[str, Any], auth: str) -> Any:
 
 def plot_to_webp_string(
     fig: Figure | SubFigure, quality: int = 80, lossless: bool = False
-) -> bytes:
+) -> str:
     buf = io.BytesIO()
     fig.canvas.print_figure(
         buf, format="webp", pil_kwargs={"quality": quality, "lossless": lossless}
     )
-    return buf.getvalue()
+    fig_b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+    return f"data:image/webp;base64,{fig_b64}"
 
 
 def orjson_encoder(obj: Any) -> Any:
