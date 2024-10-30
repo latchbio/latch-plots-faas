@@ -1025,7 +1025,7 @@ class Kernel:
             return
 
         if isinstance(res, Figure) or (
-            hasattr(res, "figure") and isinstance(res, Figure)
+            hasattr(res, "figure") and isinstance(res.figure, Figure)
         ):
             await self.send(
                 {"type": "output_value", **(id_fields), **(key_fields), "webp": res}
