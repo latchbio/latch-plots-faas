@@ -7,9 +7,8 @@ import pandas as pd
 from latch.ldata.path import LPath
 from latch.registry.table import Table
 
-from runtime.mount.lplots.reactive import Signal
-
 from .. import _inject
+from ..reactive import Signal
 from . import _emit, _state
 from .select import Select, w_select
 from .shared import FormInputAppearance
