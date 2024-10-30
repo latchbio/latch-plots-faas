@@ -1,10 +1,10 @@
 import asyncio
-from socket import socket
-from threading import Thread
 import concurrent.futures as cf
 import threading
-from typing import Any, TypeVar
 from collections.abc import Coroutine
+from socket import socket
+from threading import Thread
+from typing import Any, TypeVar
 
 from socketio import SocketIo
 

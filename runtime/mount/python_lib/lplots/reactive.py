@@ -44,7 +44,7 @@ class Node:
     cell_id: str | None = None
     name: str | None = None
 
-    widget_states: dict[str, WidgetState] = field(default_factory=dict)
+    widget_states: OrderedDict[str, WidgetState] = field(default_factory=OrderedDict)
     widget_state_idx = 0
 
     def __post_init__(self) -> None:

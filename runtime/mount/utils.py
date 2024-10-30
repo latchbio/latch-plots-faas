@@ -1,8 +1,12 @@
+import io
 import sys
 from pathlib import Path
 from typing import Any, NotRequired, TypedDict
 
 from aiohttp import ClientSession
+from latch.types.file import LatchFile
+from matplotlib.axes._axes import Axes
+from matplotlib.figure import Figure, SubFigure
 from yarl import URL
 
 # todo(rteqs): get rid of this
@@ -91,3 +95,29 @@ async def gql_query(query: str, variables: dict[str, Any], auth: str) -> Any:
         if "errors" in res:
             raise RuntimeError(f"graphql error: {res}")
         return res
+
+
+def plot_to_webp_string(
+    fig: Figure | SubFigure, quality: int = 80, lossless: bool = False
+) -> bytes:
+    buf = io.BytesIO()
+    fig.canvas.print_figure(
+        buf, format="webp", pil_kwargs={"quality": quality, "lossless": lossless}
+    )
+    return buf.getvalue()
+
+
+def orjson_encoder(obj: Any) -> Any:
+    if isinstance(obj, Figure):
+        return plot_to_webp_string(obj)
+
+    if isinstance(obj, Axes):  # seaborn
+        fig = obj.figure
+        if fig is None:
+            return None
+        return plot_to_webp_string(fig)
+
+    if isinstance(obj, LatchFile):
+        return obj.remote_path
+
+    raise TypeError(f"Type {type(obj)} not serializable")
