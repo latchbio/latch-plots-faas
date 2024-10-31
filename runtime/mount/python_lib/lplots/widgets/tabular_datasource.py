@@ -16,7 +16,7 @@ DataSourceType = Literal["ldata", "dataframe", "registry"]
 
 
 class LDataDataSource(TypedDict):
-    path: str
+    node_id: str
     type: Literal["ldata"]
 
 
@@ -57,29 +57,25 @@ class TabularDatasourcePicker:
             res = self._state.get("default")
             if res is None:
                 return None
-        
+
         res_type = res.get("type")
         if res_type == "ldata":
-            path = res.get('path')
-            if (
-                path is None
-                or not isinstance(path, str)
-                or not path.startswith("latch://")
-            ):
+            node_id = res.get("node_id")
+            if node_id is None or not isinstance(node_id, str):
                 return None
-            lpath = LPath(path)
+            lpath = LPath(f"latch://{node_id}.node")
 
-            if path.endswith(".csv"):
+            if lpath.name().endswith(".csv"):
                 return pd.read_csv(lpath.download())
-            elif path.endswith(".xlsx"):
+            elif lpath.name().endswith(".xlsx"):
                 return pd.read_excel(lpath.download())
-            elif path.endswith(".tsv"):
+            elif lpath.name().endswith(".tsv"):
                 return pd.read_csv(lpath.download(), sep="\t")
             else:
                 return None
 
         if res_type == "dataframe":
-            df_id = res.get('df_id')
+            df_id = res.get("df_id")
             if df_id is None:
                 return None
 
@@ -90,7 +86,7 @@ class TabularDatasourcePicker:
             return g()
 
         if res_type == "registry":
-            table_id = res.get('table_id')
+            table_id = res.get("table_id")
             if table_id is None:
                 return None
 
