@@ -981,7 +981,7 @@ class Kernel:
                             data.to_dict(orient="split"),
                             option=orjson.OPT_SERIALIZE_NUMPY,
                             default=orjson_encoder,
-                        ),
+                        ).decode(),
                         # todo(maximsmol): this seems useless?
                         "num_pages": num_pages,
                         "page_idx": page_idx,
