@@ -1,10 +1,12 @@
 import base64
 import io
 import sys
+from enum import Enum
 from pathlib import Path
 from typing import Any, NotRequired, TypedDict
 
 from aiohttp import ClientSession
+from latch.types.directory import LatchDir
 from latch.types.file import LatchFile
 from matplotlib.figure import Figure, SubFigure
 from yarl import URL
@@ -122,7 +124,10 @@ def orjson_encoder(obj: Any) -> Any:
             return None
         return plot_to_webp_string(fig)
 
-    if isinstance(obj, LatchFile):
+    if isinstance(obj, LatchFile | LatchDir):
         return obj.remote_path
+
+    if isinstance(obj, Enum):
+        return obj.name
 
     raise TypeError(f"Type {type(obj)} not serializable")
