@@ -128,6 +128,6 @@ def orjson_encoder(obj: Any) -> Any:
         return obj.remote_path
 
     if isinstance(obj, Enum):
-        return obj.value
+        return obj.name
 
     raise TypeError(f"Type {type(obj)} not serializable")
