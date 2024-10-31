@@ -19,7 +19,7 @@ class LDataDataSource(TypedDict):
 
 
 class DataFrameDataSource(TypedDict):
-    df_id: str
+    key: str
     type: Literal["dataframe"]
 
 
@@ -63,7 +63,7 @@ class TabularDatasourcePicker:
             if node_id is None or not isinstance(node_id, str):
                 return None
             lpath = LPath(f"latch://{node_id}.node")
-            
+
             name = lpath.name()
             if name is None:
                 return None
@@ -78,7 +78,7 @@ class TabularDatasourcePicker:
                 return None
 
         if res_type == "dataframe":
-            df_id = res.get("df_id")
+            df_id = res.get("key")
             if df_id is None:
                 return None
 
