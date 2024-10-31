@@ -98,7 +98,7 @@ async def gql_query(query: str, variables: dict[str, Any], auth: str) -> Any:
 
 
 def plot_to_webp_string(
-    fig: Figure | SubFigure, quality: int = 100, lossless: bool = True
+    fig: Figure | SubFigure, quality: int = 80, lossless: bool = False
 ) -> str:
     buf = io.BytesIO()
     fig.canvas.print_figure(
