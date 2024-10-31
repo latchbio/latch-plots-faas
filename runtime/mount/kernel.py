@@ -36,7 +36,7 @@ from stdio_over_socket import SocketWriter, text_socket_writer
 
 sys.path.append(str(Path(__file__).parent.absolute()))
 from subsample import downsample_df, initialize_duckdb, quote_identifier
-from utils import PlotConfig, get_presigned_url
+from utils import PlotConfig, get_presigned_url, orjson_encoder
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -977,8 +977,10 @@ class Kernel:
                     **(key_fields),
                     "dataframe_json": {
                         "schema": build_table_schema(data, version=False),
-                        "data": orjson.loads(
-                            data.to_json(orient="split", date_format="iso")
+                        "data": orjson.dumps(
+                            data.to_dict(orient="split"),
+                            option=orjson.OPT_SERIALIZE_NUMPY,
+                            default=orjson_encoder,
                         ),
                         # todo(maximsmol): this seems useless?
                         "num_pages": num_pages,
