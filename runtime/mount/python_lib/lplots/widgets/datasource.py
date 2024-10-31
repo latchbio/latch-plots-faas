@@ -1,8 +1,6 @@
 from dataclasses import dataclass
 from typing import Any, Literal, NotRequired, TypedDict
 
-import latch_data_validation
-import latch_data_validation.data_validation
 import pandas as pd
 from latch.ldata.path import LPath
 from latch.registry.table import Table
@@ -50,11 +48,12 @@ class TabularDatasourcePicker:
     _signal: Signal[DataSourceValue]
 
     @property
-    def value(self) -> Any | None:
+    def value(self) -> Any:
         res = self._signal()
 
         if res is None or not isinstance(res, dict):
             res = self._state.get("default")
+            # todo(manske): validate default
             if res is None:
                 return None
 
@@ -64,12 +63,16 @@ class TabularDatasourcePicker:
             if node_id is None or not isinstance(node_id, str):
                 return None
             lpath = LPath(f"latch://{node_id}.node")
+            
+            name = lpath.name()
+            if name is None:
+                return None
 
-            if lpath.name().endswith(".csv"):
+            if name.endswith(".csv"):
                 return pd.read_csv(lpath.download())
-            elif lpath.name().endswith(".xlsx"):
+            elif name.endswith(".xlsx"):
                 return pd.read_excel(lpath.download())
-            elif lpath.name().endswith(".tsv"):
+            elif name.endswith(".tsv"):
                 return pd.read_csv(lpath.download(), sep="\t")
             else:
                 return None
@@ -93,7 +96,7 @@ class TabularDatasourcePicker:
             return Table(id=table_id).get_dataframe()
 
 
-def w_tabular_datasource_picker(
+def w_datasource_picker(
     *,
     key: str | None = None,
     label: str,
