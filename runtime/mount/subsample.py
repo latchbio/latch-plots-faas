@@ -296,19 +296,21 @@ def downsample(
             )
             .filter(f"row_num <= {max_occupancy}")
             .project(f"* exclude({exclude_str})")
-            .order(
-                ",".join(
-                    col
-                    for col in [
-                        facet,
-                        color_by,
-                        x_original if x_is_categorical else None,
-                        y_original if y_is_categorical else None,
-                    ]
-                    if col is not None
-                )
-            )
         )
+
+        order_by = ",".join(
+            col
+            for col in [
+                facet,
+                color_by,
+                x_original if x_is_categorical else None,
+                y_original if y_is_categorical else None,
+            ]
+            if col is not None
+        )
+
+        if len(order_by) > 0:
+            trace_data = trace_data.order(order_by)
 
         # todo(rteqs): slow to join with very large number of points, but if you have that many groups on the x-axis, you probably aren't using error bars
         if error_bar == "sem":
