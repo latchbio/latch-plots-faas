@@ -461,6 +461,8 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
                 precalc_box(trace)
             elif trace["type"] == "violin":
                 precalc_violin(trace)
+            elif trace["type"] == "scatter":
+                trace["type"] = "scattergl"
         except Exception:
             traceback.print_exc()
 
