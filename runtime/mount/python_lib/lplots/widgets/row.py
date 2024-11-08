@@ -3,11 +3,13 @@ from typing import Literal
 from . import _emit, _state
 from .checkbox import CheckboxWidget
 from .dataframe import DataframePicker
+from .datasource import TabularDatasourcePicker
 from .ldata import LDataPicker
 from .multiselect import MultiSelect
 from .radio import RadioGroups
 from .registry import RegistryTablePicker
 from .select import Select
+from .text import TextInputWidget
 
 AllowedWidgets = (
     CheckboxWidget
@@ -15,9 +17,12 @@ AllowedWidgets = (
     | Select
     | RadioGroups
     | MultiSelect
+    | DataframePicker
+    | TextInputWidget
     | CheckboxWidget
     | DataframePicker
     | RegistryTablePicker
+    | TabularDatasourcePicker
 )
 
 
