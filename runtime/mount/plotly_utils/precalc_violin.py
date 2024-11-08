@@ -1,5 +1,6 @@
 from math import ceil, pi, sqrt
 from typing import Any
+
 import numpy as np
 
 from .precalc_box import precalc_box

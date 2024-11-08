@@ -25,6 +25,7 @@ from lplots import _inject
 from lplots.reactive import Node, Signal, ctx
 from lplots.utils.nothing import Nothing
 from lplots.widgets._emit import WidgetState
+from matplotlib.figure import Figure
 from pandas import DataFrame, Index, MultiIndex, Series
 from pandas.io.json._table_schema import build_table_schema
 from plotly.basedatatypes import BaseFigure
@@ -460,6 +461,8 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
                 precalc_box(trace)
             elif trace["type"] == "violin":
                 precalc_violin(trace)
+            elif trace["type"] == "scatter":
+                trace["type"] = "scattergl"
         except Exception:
             traceback.print_exc()
 
@@ -976,9 +979,7 @@ class Kernel:
                     **(key_fields),
                     "dataframe_json": {
                         "schema": build_table_schema(data, version=False),
-                        "data": orjson.loads(
-                            data.to_json(orient="split", date_format="iso")
-                        ),
+                        "data": data.to_dict(orient="split"),
                         # todo(maximsmol): this seems useless?
                         "num_pages": num_pages,
                         "page_idx": page_idx,
@@ -1020,6 +1021,14 @@ class Kernel:
                         "num_rows": data.num_rows(),
                     },
                 }
+            )
+            return
+
+        if isinstance(res, Figure) or (
+            hasattr(res, "figure") and isinstance(res.figure, Figure)
+        ):
+            await self.send(
+                {"type": "output_value", **(id_fields), **(key_fields), "webp": res}
             )
             return
 

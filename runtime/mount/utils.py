@@ -1,8 +1,14 @@
+import base64
+import io
 import sys
+from enum import Enum
 from pathlib import Path
 from typing import Any, NotRequired, TypedDict
 
 from aiohttp import ClientSession
+from latch.types.directory import LatchDir
+from latch.types.file import LatchFile
+from matplotlib.figure import Figure, SubFigure
 from yarl import URL
 
 # todo(rteqs): get rid of this
@@ -91,3 +97,37 @@ async def gql_query(query: str, variables: dict[str, Any], auth: str) -> Any:
         if "errors" in res:
             raise RuntimeError(f"graphql error: {res}")
         return res
+
+
+def plot_to_webp_string(
+    fig: Figure | SubFigure, quality: int = 80, lossless: bool = False
+) -> str:
+    buf = io.BytesIO()
+    fig.canvas.print_figure(
+        buf,
+        format="webp",
+        dpi=300,
+        bbox_inches="tight",
+        pil_kwargs={"quality": quality, "lossless": lossless},
+    )
+    fig_b64 = base64.b64encode(buf.getvalue()).decode("utf-8")
+    return f"data:image/webp;base64,{fig_b64}"
+
+
+def orjson_encoder(obj: Any) -> Any:
+    if isinstance(obj, Figure):
+        return plot_to_webp_string(obj)
+
+    if hasattr(obj, "figure") and isinstance(obj.figure, Figure):
+        fig = obj.figure
+        if fig is None:
+            return None
+        return plot_to_webp_string(fig)
+
+    if isinstance(obj, LatchFile | LatchDir):
+        return obj.remote_path
+
+    if isinstance(obj, Enum):
+        return obj.name
+
+    raise TypeError(f"Type {type(obj)} not serializable")

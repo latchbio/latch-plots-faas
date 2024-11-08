@@ -153,7 +153,7 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
             if msg["type"] == "dispose_cell":
                 cell_id = msg["cell_id"]
 
-                if cell_status[cell_id] == "running" and k_proc.proc is not None:
+                if cell_status.get(cell_id) == "running" and k_proc.proc is not None:
                     k_proc.proc.send_signal(signal=signal.SIGUSR1)
 
                 cell_status.pop(cell_id, None)

@@ -1,10 +1,15 @@
 import asyncio
 import socket
 import struct
+import sys
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Self
 
 import orjson
+
+sys.path.append(str(Path(__file__).parent.absolute()))
+from utils import orjson_encoder
 
 
 @dataclass(kw_only=True)
@@ -29,7 +34,11 @@ class SocketIo:
             await self.loop.sock_sendall(self.sock, data)
 
     async def send(self, data: object) -> None:
-        await self.send_bytes(orjson.dumps(data, option=orjson.OPT_SERIALIZE_NUMPY))
+        await self.send_bytes(
+            orjson.dumps(
+                data, option=orjson.OPT_SERIALIZE_NUMPY, default=orjson_encoder
+            )
+        )
 
     async def recv(self) -> Any:
         async with self.rlock:
