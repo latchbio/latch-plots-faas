@@ -17,6 +17,7 @@ AllowedWidgets = (
     | Select
     | RadioGroups
     | MultiSelect
+    | DataframePicker
     | TextInputWidget
     | CheckboxWidget
     | DataframePicker
