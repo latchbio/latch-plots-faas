@@ -515,7 +515,13 @@ class Kernel:
         self.k_globals["exit"] = cell_exit
         self.k_globals.clear()
         # todo(rteqs): figure out why we can't just catch KeyboardInterrupt without crashing the kernel
-        signal.signal(signal.SIGUSR1, lambda signum, frame: cell_interrupt())
+        signal.signal(
+            signal.SIGUSR1,
+            lambda signum, frame: cell_interrupt()
+            if self.active_cell is not None
+            and self.cell_status[self.active_cell] == "running"
+            else None,
+        )
 
     def debug_state(self) -> dict[str, object]:
         return {
