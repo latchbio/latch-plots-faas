@@ -72,6 +72,7 @@ def w_text_output(
     key: str | None = None,
     content: str,
     appearance: TextOutputAppearance | None = None,
+    stream: bool = False,
 ) -> None:
     key = _state.use_state_key(key=key)
 
@@ -80,4 +81,4 @@ def w_text_output(
         "content": content,
         "appearance": appearance,
     }
-    _emit.emit_widget(key, w)
+    _emit.emit_widget(key, w, stream)

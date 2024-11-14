@@ -687,11 +687,23 @@ class Kernel:
 
         return self.widget_signals[key]
 
-    def emit_widget(self, key: str, data: WidgetState) -> None:
+    def emit_widget(self, key: str, data: WidgetState, stream: bool = False) -> None:
         assert ctx.cur_comp is not None
 
         ctx.cur_comp.widget_states[key] = data
         self.nodes_with_widgets[id(ctx.cur_comp)] = ctx.cur_comp
+
+        if not stream or loop is None:
+            return
+
+        sigs = ctx.updated_signals
+        if len(sigs) == 0:
+            return
+
+        for s in sigs.values():
+            s._apply_updates()
+
+        loop.run_until_complete(self.on_tick_finished(ctx.signals_update_from_code))
 
     def on_dispose(self, node: Node) -> None:
         if id(node) not in self.nodes_with_widgets:
