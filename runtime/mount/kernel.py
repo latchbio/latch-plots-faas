@@ -6,6 +6,7 @@ import re
 import signal
 import socket
 import sys
+import threading
 import traceback
 from collections import defaultdict
 from dataclasses import asdict, dataclass, field
@@ -687,9 +688,7 @@ class Kernel:
 
         return self.widget_signals[key]
 
-    def emit_widget(
-        self, key: str, data: WidgetState, stream: bool = False
-    ) -> None:
+    def emit_widget(self, key: str, data: WidgetState, stream: bool = False) -> None:
         assert ctx.cur_comp is not None
 
         ctx.cur_comp.widget_states[key] = data
@@ -705,9 +704,12 @@ class Kernel:
         for s in sigs.values():
             s._apply_updates()
 
-        # todo(rteqs): gotta cancel if this exists
-        fut = asyncio.run_coroutine_threadsafe(self.on_tick_finished(ctx.signals_update_from_code), loop)
-        fut.result(timeout=None)
+        threading.Thread(
+            target=lambda: asyncio.run(
+                self.on_tick_finished(ctx.signals_update_from_code)
+            ),
+            daemon=True,
+        ).start()
 
     def on_dispose(self, node: Node) -> None:
         if id(node) not in self.nodes_with_widgets:
