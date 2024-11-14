@@ -687,7 +687,7 @@ class Kernel:
 
         return self.widget_signals[key]
 
-    async def emit_widget(
+    def emit_widget(
         self, key: str, data: WidgetState, stream: bool = False
     ) -> None:
         assert ctx.cur_comp is not None
@@ -705,7 +705,9 @@ class Kernel:
         for s in sigs.values():
             s._apply_updates()
 
-        await self.on_tick_finished(ctx.signals_update_from_code)
+        # todo(rteqs): gotta cancel if this exists
+        fut = asyncio.run_coroutine_threadsafe(self.on_tick_finished(ctx.signals_update_from_code), loop)
+        fut.result(timeout=None)
 
     def on_dispose(self, node: Node) -> None:
         if id(node) not in self.nodes_with_widgets:

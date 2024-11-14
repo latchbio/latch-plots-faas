@@ -14,5 +14,5 @@ class WidgetState(TypedDict, Generic[WidgetType, WidgetValue]):
     value: NotRequired["Signal[WidgetValue]"]
 
 
-async def emit_widget(key: str, data: WidgetState, stream: bool = False):
-    await _inject.kernel.emit_widget(key, data, stream)
+def emit_widget(key: str, data: WidgetState, stream: bool = False):
+    _inject.kernel.emit_widget(key, data, stream)
