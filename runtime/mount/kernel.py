@@ -35,7 +35,6 @@ from socketio_thread import SocketIoThread
 from stdio_over_socket import SocketWriter, text_socket_writer
 
 sys.path.append(str(Path(__file__).parent.absolute()))
-import contextlib
 
 from subsample import downsample_df, initialize_duckdb, quote_identifier
 from utils import PlotConfig, get_presigned_url
@@ -512,8 +511,6 @@ class Kernel:
     plot_configs: dict[str, PlotConfig | None] = field(default_factory=dict)
     duckdb: DuckDBPyConnection = field(default=initialize_duckdb())
 
-    update_widget_task: asyncio.Task | None = None
-
     def __post_init__(self) -> None:
         self.k_globals = TracedDict(self.duckdb)
         self.k_globals["exit"] = cell_exit
@@ -628,10 +625,6 @@ class Kernel:
         # todo(maximsmol): this can be optimizied
         # 1. we can just update nodes that actually re-ran last tick instead of everything
         # 2. we can pre-compute nww_by_cell
-
-        if self.update_widget_task is not None and not self.update_widget_task.done():
-            self.update_widget_task.cancel()
-
         nww_by_cell = {
             cell_id: [
                 x for x in self.nodes_with_widgets.values() if x.cell_id == cell_id
@@ -694,7 +687,9 @@ class Kernel:
 
         return self.widget_signals[key]
 
-    def emit_widget(self, key: str, data: WidgetState, stream: bool = False) -> None:
+    async def emit_widget(
+        self, key: str, data: WidgetState, stream: bool = False
+    ) -> None:
         assert ctx.cur_comp is not None
 
         ctx.cur_comp.widget_states[key] = data
@@ -703,9 +698,6 @@ class Kernel:
         if not stream or loop is None:
             return
 
-        if self.update_widget_task is not None and not self.update_widget_task.done():
-            self.update_widget_task.cancel()
-
         sigs = ctx.updated_signals
         if len(sigs) == 0:
             return
@@ -713,11 +705,7 @@ class Kernel:
         for s in sigs.values():
             s._apply_updates()
 
-        with contextlib.suppress(asyncio.CancelledError):
-            task = asyncio.create_task(
-                self.on_tick_finished(ctx.signals_update_from_code)
-            )
-            self.update_widget_task = task
+        await self.on_tick_finished(ctx.signals_update_from_code)
 
     def on_dispose(self, node: Node) -> None:
         if id(node) not in self.nodes_with_widgets:

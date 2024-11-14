@@ -67,7 +67,7 @@ class TextOutputWidgetState(_emit.WidgetState[Literal["text_output"], None]):
     appearance: NotRequired[TextOutputAppearance | None]
 
 
-def w_text_output(
+async def w_text_output(
     *,
     key: str | None = None,
     content: str,
@@ -81,4 +81,4 @@ def w_text_output(
         "content": content,
         "appearance": appearance,
     }
-    _emit.emit_widget(key, w, stream)
+    await _emit.emit_widget(key, w, stream)
