@@ -36,7 +36,6 @@ from stdio_over_socket import SocketWriter, text_socket_writer
 from widget_update_thread import WidgetUpdateThread
 
 sys.path.append(str(Path(__file__).parent.absolute()))
-
 from subsample import downsample_df, initialize_duckdb, quote_identifier
 from utils import PlotConfig, get_presigned_url
 
@@ -627,6 +626,7 @@ class Kernel:
         # todo(maximsmol): this can be optimizied
         # 1. we can just update nodes that actually re-ran last tick instead of everything
         # 2. we can pre-compute nww_by_cell
+
         nww_by_cell = {
             cell_id: [
                 x for x in self.nodes_with_widgets.values() if x.cell_id == cell_id
