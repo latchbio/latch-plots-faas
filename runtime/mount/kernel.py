@@ -33,7 +33,6 @@ from plotly_utils.precalc_box import precalc_box
 from plotly_utils.precalc_violin import precalc_violin
 from socketio_thread import SocketIoThread
 from stdio_over_socket import SocketWriter, text_socket_writer
-from widget_update_thread import WidgetUpdateThread
 
 sys.path.append(str(Path(__file__).parent.absolute()))
 from subsample import downsample_df, initialize_duckdb, quote_identifier
@@ -482,7 +481,6 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
 @dataclass(kw_only=True)
 class Kernel:
     conn: SocketIoThread
-    widget_update_thread: WidgetUpdateThread
 
     cell_seq = 0
     cell_rnodes: dict[str, Node] = field(default_factory=dict)
@@ -695,13 +693,11 @@ class Kernel:
         ctx.cur_comp.widget_states[key] = data
         self.nodes_with_widgets[id(ctx.cur_comp)] = ctx.cur_comp
 
-    def submit_widget_states(self) -> None:
+    def submit_widget_state(self) -> None:
         for s in ctx.updated_signals.values():
             s._apply_updates()
 
-        self.widget_update_thread.send(
-            self.on_tick_finished(ctx.signals_update_from_code)
-        )
+        self.conn.call_fut(self.on_tick_finished(ctx.signals_update_from_code)).result()
 
     def on_dispose(self, node: Node) -> None:
         if id(node) not in self.nodes_with_widgets:
@@ -1321,13 +1317,10 @@ async def main() -> None:
 
     socket_io_thread = SocketIoThread(socket=sock)
     socket_io_thread.start()
-
-    widget_update_thread = WidgetUpdateThread()
-    widget_update_thread.start()
     try:
         socket_io_thread.initialized.wait()
 
-        k = Kernel(conn=socket_io_thread, widget_update_thread=widget_update_thread)
+        k = Kernel(conn=socket_io_thread)
         _inject.kernel = k
 
         sys.stdout = text_socket_writer(
@@ -1350,9 +1343,6 @@ async def main() -> None:
     finally:
         socket_io_thread.shutdown.set()
         socket_io_thread.join()
-
-        widget_update_thread.shutdown.set()
-        widget_update_thread.join()
 
         sys.stdout = old_stdout
         sys.stderr = old_stderr

@@ -32,7 +32,7 @@ class SocketIoThread(Thread):
 
         asyncio.run(f())
 
-    def _call(self, coro: Coroutine[None, None, T]) -> cf.Future[T]:
+    def call_fut(self, coro: Coroutine[None, None, T]) -> cf.Future[T]:
         assert self.loop is not None
 
         return asyncio.run_coroutine_threadsafe(coro, self.loop)
@@ -40,7 +40,7 @@ class SocketIoThread(Thread):
     def send_fut(self, data: object) -> cf.Future[None]:
         assert self.conn is not None
 
-        return self._call(self.conn.send(data))
+        return self.call_fut(self.conn.send(data))
 
     async def send(self, data: object) -> None:
         await asyncio.wrap_future(self.send_fut(data))
@@ -48,7 +48,7 @@ class SocketIoThread(Thread):
     def recv_fut(self) -> cf.Future[Any]:
         assert self.conn is not None
 
-        return self._call(self.conn.recv())
+        return self.call_fut(self.conn.recv())
 
     async def recv(self) -> Any:
         return await asyncio.wrap_future(self.recv_fut())
