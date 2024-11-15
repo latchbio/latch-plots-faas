@@ -698,9 +698,9 @@ class Kernel:
         if not stream:
             return
 
-        self.submit_widget_updates()
+        self.submit_widget_states()
 
-    def submit_widget_updates(self) -> None:
+    def submit_widget_states(self) -> None:
         for s in ctx.updated_signals.values():
             s._apply_updates()
 
