@@ -41,7 +41,6 @@ def w_ldata_picker(
     appearance: FormInputAppearance | None = None,
     default: str | None = None,
     required: bool = False,
-    stream: bool = False,
 ) -> LDataPicker:
     key = _state.use_state_key(key=key)
 
@@ -57,6 +56,6 @@ def w_ldata_picker(
         },
         _signal=_state.use_value_signal(key=key),
     )
-    _emit.emit_widget(key, res._state, stream)
+    _emit.emit_widget(key, res._state)
 
     return res

@@ -35,7 +35,6 @@ def w_dataframe_picker(
     readonly: bool = False,
     appearance: FormInputAppearance | None = None,
     required: bool = False,
-    stream: bool = False,
 ) -> DataframePicker:
     key = _state.use_state_key(key=key)
 
@@ -48,6 +47,6 @@ def w_dataframe_picker(
         options=sorted(dfs),
         required=required,
     )
-    _emit.emit_widget(key, res._state, stream)
+    _emit.emit_widget(key, res._state)
 
     return DataframePicker(_select=res)

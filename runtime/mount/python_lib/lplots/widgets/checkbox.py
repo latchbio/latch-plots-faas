@@ -40,7 +40,6 @@ def w_checkbox(
     default: bool = False,
     readonly: bool = False,
     appearance: CheckboxInputAppearance | None = None,
-    stream: bool = False,
 ) -> CheckboxWidget:
     key = _state.use_state_key(key=key)
 
@@ -55,6 +54,6 @@ def w_checkbox(
         },
         _signal=_state.use_value_signal(key=key),
     )
-    _emit.emit_widget(key, res._state, stream)
+    _emit.emit_widget(key, res._state)
 
     return res

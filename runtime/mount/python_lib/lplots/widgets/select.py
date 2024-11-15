@@ -44,7 +44,6 @@ def w_select(
     default: str | int | float | bool | datetime | None = None,
     appearance: FormInputAppearance | None = None,
     required: bool = False,
-    stream: bool = False,
 ) -> Select:
     key = _state.use_state_key(key=key)
 
@@ -61,6 +60,6 @@ def w_select(
         },
         _signal=_state.use_value_signal(key=key),
     )
-    _emit.emit_widget(key, res._state, stream)
+    _emit.emit_widget(key, res._state)
 
     return res

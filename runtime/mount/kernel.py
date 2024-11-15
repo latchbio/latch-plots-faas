@@ -689,16 +689,11 @@ class Kernel:
 
         return self.widget_signals[key]
 
-    def emit_widget(self, key: str, data: WidgetState, stream: bool = False) -> None:
+    def emit_widget(self, key: str, data: WidgetState) -> None:
         assert ctx.cur_comp is not None
 
         ctx.cur_comp.widget_states[key] = data
         self.nodes_with_widgets[id(ctx.cur_comp)] = ctx.cur_comp
-
-        if not stream:
-            return
-
-        self.submit_widget_states()
 
     def submit_widget_states(self) -> None:
         for s in ctx.updated_signals.values():
