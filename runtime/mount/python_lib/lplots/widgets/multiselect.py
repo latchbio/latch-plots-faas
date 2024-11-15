@@ -43,6 +43,7 @@ def w_multi_select(
     options: Iterable[str | int | float | bool | datetime],
     default: Iterable[str | int | float | bool | datetime] | None = None,
     required: bool = False,
+    stream: bool = False,
 ) -> MultiSelect:
     key = _state.use_state_key(key=key)
 
@@ -59,6 +60,6 @@ def w_multi_select(
         },
         _signal=_state.use_value_signal(key=key),
     )
-    _emit.emit_widget(key, res._state)
+    _emit.emit_widget(key, res._state, stream)
 
     return res

@@ -6,12 +6,12 @@ import re
 import signal
 import socket
 import sys
-import threading
 import traceback
 from collections import defaultdict
 from dataclasses import asdict, dataclass, field
 from io import TextIOWrapper
 from pathlib import Path
+from threading import Lock, Thread
 from traceback import format_exc
 from types import FrameType
 from typing import TYPE_CHECKING, Any, Literal, TypedDict, TypeVar
@@ -512,6 +512,8 @@ class Kernel:
     plot_configs: dict[str, PlotConfig | None] = field(default_factory=dict)
     duckdb: DuckDBPyConnection = field(default=initialize_duckdb())
 
+    tick_finish_lock: Lock = field(default_factory=Lock)
+
     def __post_init__(self) -> None:
         self.k_globals = TracedDict(self.duckdb)
         self.k_globals["exit"] = cell_exit
@@ -626,6 +628,8 @@ class Kernel:
         # todo(maximsmol): this can be optimizied
         # 1. we can just update nodes that actually re-ran last tick instead of everything
         # 2. we can pre-compute nww_by_cell
+        self.tick_finish_lock.acquire()
+
         nww_by_cell = {
             cell_id: [
                 x for x in self.nodes_with_widgets.values() if x.cell_id == cell_id
@@ -673,6 +677,8 @@ class Kernel:
                 }
             )
 
+            self.tick_finish_lock.release()
+
         # fixme(rteqs): cleanup signals in some other way. the below does not work because widget signals
         # are restored on `init` but there are no corresponding `rnodes`
         # for x in unused_signals:
@@ -704,7 +710,7 @@ class Kernel:
         for s in sigs.values():
             s._apply_updates()
 
-        threading.Thread(
+        Thread(
             target=lambda: asyncio.run(
                 self.on_tick_finished(ctx.signals_update_from_code)
             ),

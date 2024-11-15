@@ -39,6 +39,7 @@ def w_text_input(
     readonly: bool = False,
     default: str | None = None,
     appearance: FormInputAppearance | None = None,
+    stream: bool = True,
 ) -> TextInputWidget:
     key = _state.use_state_key(key=key)
 
@@ -53,7 +54,7 @@ def w_text_input(
         },
         _signal=_state.use_value_signal(key=key),
     )
-    _emit.emit_widget(key, res._state)
+    _emit.emit_widget(key, res._state, stream)
 
     return res
 

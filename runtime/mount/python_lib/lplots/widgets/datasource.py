@@ -70,12 +70,11 @@ class TabularDatasourcePicker:
 
             if name.endswith(".csv"):
                 return pd.read_csv(lpath.download())
-            elif name.endswith(".xlsx"):
+            if name.endswith(".xlsx"):
                 return pd.read_excel(lpath.download())
-            elif name.endswith(".tsv"):
+            if name.endswith(".tsv"):
                 return pd.read_csv(lpath.download(), sep="\t")
-            else:
-                return None
+            return None
 
         if res_type == "dataframe":
             df_id = res.get("key")
@@ -104,6 +103,7 @@ def w_datasource_picker(
     default: DataSourceValue | None = None,
     appearance: FormInputAppearance | None = None,
     required: bool = False,
+    stream: bool = False,
 ) -> TabularDatasourcePicker:
     key = _state.use_state_key(key=key)
 
@@ -119,6 +119,6 @@ def w_datasource_picker(
         },
         _signal=_state.use_value_signal(key=key),
     )
-    _emit.emit_widget(key, res._state)
+    _emit.emit_widget(key, res._state, stream)
 
     return res

@@ -31,15 +31,10 @@ class RowWidgetState(_emit.WidgetState[Literal["row"], None]):
 
 
 def w_row(
-    *,
-    key: str | None = None,
-    items: set[AllowedWidgets],
+    *, key: str | None = None, items: set[AllowedWidgets], stream: bool = False
 ) -> None:
     key = _state.use_state_key(key=key)
 
-    w: RowWidgetState = {
-        "type": "row",
-        "items": [i._key for i in items],
-    }
+    w: RowWidgetState = {"type": "row", "items": [i._key for i in items]}
 
-    _emit.emit_widget(key, w)
+    _emit.emit_widget(key, w, stream)
