@@ -693,6 +693,12 @@ class Kernel:
         ctx.cur_comp.widget_states[key] = data
         self.nodes_with_widgets[id(ctx.cur_comp)] = ctx.cur_comp
 
+    def submit_widget_state(self) -> None:
+        for s in ctx.updated_signals.values():
+            s._apply_updates()
+
+        self.conn.call_fut(self.on_tick_finished(ctx.signals_update_from_code)).result()
+
     def on_dispose(self, node: Node) -> None:
         if id(node) not in self.nodes_with_widgets:
             return
