@@ -124,7 +124,10 @@ async def get_staleness_info(
 def downsample(
     conn: DuckDBPyConnection, table_name: str, config: PlotConfig
 ) -> list[DuckDBPyRelation]:
-    custom_data = [quote_identifier(col) for col in config.get("custom_data", [])]
+    custom_data = [
+        f"cast({quote_identifier(col)} as varchar)"
+        for col in config.get("custom_data", [])
+    ]
     custom_data_str = ", ".join(custom_data) if len(custom_data) > 0 else None
 
     facet = config.get("facet")
