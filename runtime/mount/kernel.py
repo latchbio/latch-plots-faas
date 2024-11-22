@@ -18,11 +18,13 @@ from typing import TYPE_CHECKING, Any, Literal, TypedDict, TypeVar
 import numpy as np
 import orjson
 import pandas as pd
+import plotly.io as pio
 import plotly.io._json as pio_json
 from duckdb import DuckDBPyConnection
 from latch.registry.table import Table
 from lplots import _inject
 from lplots.reactive import Node, Signal, ctx
+from lplots.themes import graphpad_inspired_theme
 from lplots.utils.nothing import Nothing
 from lplots.widgets._emit import WidgetState
 from matplotlib.figure import Figure
@@ -514,6 +516,8 @@ class Kernel:
         self.k_globals = TracedDict(self.duckdb)
         self.k_globals["exit"] = cell_exit
         self.k_globals.clear()
+        pio.templates["graphpad_inspired_theme"] = graphpad_inspired_theme()
+
         # todo(rteqs): figure out why we can't just catch KeyboardInterrupt without crashing the kernel
         signal.signal(
             signal.SIGUSR1,
