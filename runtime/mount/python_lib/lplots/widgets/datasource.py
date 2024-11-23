@@ -126,7 +126,7 @@ class TabularDatasourcePicker:
                 return get_registry_df(key)
 
             if key_type == "url":
-                return _inject.kernel.url_dataframe.get(key)
+                return _inject.kernel.url_dataframes.get(key)
 
         if res_type == "registry":
             table_id = res.get("table_id")
