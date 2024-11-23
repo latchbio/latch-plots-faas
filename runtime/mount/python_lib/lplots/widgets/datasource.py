@@ -10,7 +10,7 @@ from ..reactive import Signal
 from . import _emit, _state
 from .shared import FormInputAppearance
 
-DataSourceType = Literal["ldata", "dataframe", "registry"]
+DataSourceType = Literal["ldata", "dataframe", "viewer", "registry"]
 
 
 class LDataDataSource(TypedDict):
@@ -28,7 +28,14 @@ class RegistryDataSource(TypedDict):
     type: Literal["registry"]
 
 
-DataSourceValue = LDataDataSource | DataFrameDataSource | RegistryDataSource
+class ValueViewerDataSource(TypedDict):
+    viewer_id: str
+    type: Literal["viewer"]
+
+
+DataSourceValue = (
+    LDataDataSource | DataFrameDataSource | RegistryDataSource | ValueViewerDataSource
+)
 
 
 class DataSourceSelectState(
@@ -41,6 +48,43 @@ class DataSourceSelectState(
     required: bool
 
 
+def get_ldata_df(node_id: Any) -> pd.DataFrame | None:
+    if node_id is None or not isinstance(node_id, str):
+        return None
+
+    lpath = LPath(f"latch://{node_id}.node")
+
+    name = lpath.name()
+    if name is None:
+        return None
+
+    if name.endswith(".csv"):
+        return pd.read_csv(lpath.download())
+    if name.endswith(".xlsx"):
+        return pd.read_excel(lpath.download())
+    if name.endswith(".tsv"):
+        return pd.read_csv(lpath.download(), sep="\t")
+    return None
+
+
+def get_kernel_df(df_id: Any) -> pd.DataFrame | None:
+    if df_id is None:
+        return None
+
+    g = _inject.kernel.k_globals.get_signal(df_id)
+    if g is None:
+        return None
+
+    return g()
+
+
+def get_registry_df(table_id: Any) -> pd.DataFrame | None:
+    if table_id is None:
+        return None
+
+    return Table(id=table_id).get_dataframe()
+
+
 @dataclass(frozen=True, kw_only=True)
 class TabularDatasourcePicker:
     _key: str
@@ -48,7 +92,7 @@ class TabularDatasourcePicker:
     _signal: Signal[DataSourceValue]
 
     @property
-    def value(self) -> Any:
+    def value(self) -> pd.DataFrame | None:
         res = self._signal()
 
         if res is None or not isinstance(res, dict):
@@ -60,39 +104,35 @@ class TabularDatasourcePicker:
         res_type = res.get("type")
         if res_type == "ldata":
             node_id = res.get("node_id")
-            if node_id is None or not isinstance(node_id, str):
-                return None
-            lpath = LPath(f"latch://{node_id}.node")
-
-            name = lpath.name()
-            if name is None:
-                return None
-
-            if name.endswith(".csv"):
-                return pd.read_csv(lpath.download())
-            if name.endswith(".xlsx"):
-                return pd.read_excel(lpath.download())
-            if name.endswith(".tsv"):
-                return pd.read_csv(lpath.download(), sep="\t")
-            return None
+            return get_ldata_df(node_id)
 
         if res_type == "dataframe":
             df_id = res.get("key")
-            if df_id is None:
+            return get_kernel_df(df_id)
+
+        if res_type == "viewer":
+            viewer_id = res.get("viewer_id")
+            if viewer_id is None:
                 return None
 
-            g = _inject.kernel.k_globals.get_signal(df_id)
-            if g is None:
-                return None
+            key, key_type = _inject.kernel.viewer_cell_selections.get(viewer_id)
+            if key_type == "ldata_node_id":
+                return get_ldata_df(key)
 
-            return g()
+            if key_type == "key":
+                return get_kernel_df(key)
+
+            if key_type == "registry_tabe_id":
+                return get_registry_df(key)
+
+            if key_type == "url":
+                return _inject.kernel.url_dataframes.get(key)
 
         if res_type == "registry":
             table_id = res.get("table_id")
-            if table_id is None:
-                return None
+            return get_registry_df(table_id)
 
-            return Table(id=table_id).get_dataframe()
+        return None
 
 
 def w_datasource_picker(
