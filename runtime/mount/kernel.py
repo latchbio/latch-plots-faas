@@ -452,6 +452,7 @@ class CategorizedCellOutputs:
     all: list[str] = field(default_factory=list)
     dfs: list[str] = field(default_factory=list)
     figures: list[str] = field(default_factory=list)
+    static_figures: list[str] = field(default_factory=list)
 
 
 def serialize_plotly_figure(x: BaseFigure) -> object:
@@ -721,9 +722,15 @@ class Kernel:
             if isinstance(val, BaseFigure):
                 res.figures.append(x)
 
+            elif isinstance(val, Figure) or (
+                hasattr(val, "figure") and isinstance(val.figure, Figure)
+            ):
+                res.static_figures.append(x)
+
         res.all.sort()
         res.dfs.sort()
         res.figures.sort()
+        res.static_figures.sort()
 
         return res
 
@@ -804,6 +811,7 @@ class Kernel:
             "outputs": outputs.all,
             "dataframe_outputs": outputs.dfs,
             "figure_outputs": outputs.figures,
+            "static_figure_outputs": outputs.static_figures,
         }
         if sys.exception() is not None:
             msg["exception"] = format_exc()
