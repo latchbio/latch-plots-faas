@@ -37,6 +37,7 @@ class CellOutputs(TypedDict):
     outputs: list[str]
     dataframe_outputs: list[str]
     figure_outputs: list[str]
+    static_figure_outputs: list[str]
 
 
 cell_status: dict[str, str] = {}
@@ -185,6 +186,7 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                     "outputs": msg["outputs"],
                     "dataframe_outputs": msg["dataframe_outputs"],
                     "figure_outputs": msg["figure_outputs"],
+                    "static_figure_outputs": msg["static_figure_outputs"],
                 }
 
                 exc = msg.get("exception")
@@ -212,6 +214,7 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                     "outputs": msg.get("outputs"),
                     "dataframe_outputs": msg.get("dataframe_outputs"),
                     "figure_outputs": msg.get("figure_outputs"),
+                    "static_figure_outputs": msg.get("static_figure_outputs"),
                 }
 
             elif msg["type"] == "cell_widgets":

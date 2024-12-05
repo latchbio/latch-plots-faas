@@ -722,7 +722,7 @@ class Kernel:
             if isinstance(val, BaseFigure):
                 res.figures.append(x)
 
-            elif isinstance(val, Figure) or (
+            if isinstance(val, Figure) or (
                 hasattr(val, "figure") and isinstance(val.figure, Figure)
             ):
                 res.static_figures.append(x)
