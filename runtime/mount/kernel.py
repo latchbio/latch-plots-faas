@@ -37,7 +37,7 @@ from socketio_thread import SocketIoThread
 from stdio_over_socket import SocketWriter, text_socket_writer
 
 sys.path.append(str(Path(__file__).parent.absolute()))
-from subsample import downsample_df, initialize_duckdb, quote_identifier
+from subsample import downsample_df, initialize_duckdb
 from utils import PlotConfig, get_presigned_url
 
 if TYPE_CHECKING:
@@ -194,17 +194,6 @@ class TracedDict(dict[str, Signal[object] | object]):
         self.removed.add(__key)
         if __key in self.item_write_counter:
             del self.item_write_counter[__key]
-
-            table_name = quote_identifier(f"in_memory_{__key}")
-            self.duckdb.execute(
-                f"""
-                delete from
-                    plots_faas_catalog
-                where
-                    name = {table_name}
-                """
-            )
-            self.duckdb.execute(f"drop table if exists {table_name}")
 
         dfs = self.dataframes.sample()
         if __key in dfs:
