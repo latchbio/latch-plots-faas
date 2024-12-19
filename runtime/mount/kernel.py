@@ -792,6 +792,8 @@ class Kernel:
             await self.send_cell_result(cell_id)
 
     async def send_cell_result(self, cell_id: str) -> None:
+        await self.send_global_updates()
+
         outputs = sorted(self.k_globals.available)
         outputs = self._cell_outputs()
 
@@ -807,7 +809,6 @@ class Kernel:
             msg["exception"] = format_exc()
 
         await self.send(msg)
-        await self.send_global_updates()
 
     async def send(self, msg: object) -> None:
         # print("[kernel] >", msg)
