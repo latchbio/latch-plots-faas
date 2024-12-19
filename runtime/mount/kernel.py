@@ -37,7 +37,7 @@ from socketio_thread import SocketIoThread
 from stdio_over_socket import SocketWriter, text_socket_writer
 
 sys.path.append(str(Path(__file__).parent.absolute()))
-from subsample import downsample_df, initialize_duckdb, quote_identifier
+from subsample import downsample_df, initialize_duckdb
 from utils import PlotConfig, get_presigned_url
 
 if TYPE_CHECKING:
@@ -128,7 +128,7 @@ class PaginationSettings:
     selections: DataframeSelections | None = None
 
 
-class TracedDict(dict[str, Signal[object]]):
+class TracedDict(dict[str, Signal[object] | object]):
     touched: set[str]
     removed: set[str]
 
@@ -194,16 +194,6 @@ class TracedDict(dict[str, Signal[object]]):
         self.removed.add(__key)
         if __key in self.item_write_counter:
             del self.item_write_counter[__key]
-            table_name = f"in_memory_{quote_identifier(__key)}"
-            self.duckdb.execute(
-                f"""
-                delete from
-                    plots_faas_catalog
-                where
-                    name = {table_name}
-                """
-            )
-            self.duckdb.execute(f"drop table {table_name}")
 
         dfs = self.dataframes.sample()
         if __key in dfs:
@@ -580,7 +570,7 @@ class Kernel:
     async def send_global_updates(self) -> None:
         async with asyncio.TaskGroup() as tg:
             for cell_id, key in self.cell_output_selections.items():
-                if key not in self.k_globals.touched:
+                if key not in self.k_globals.available:
                     continue
 
                 tg.create_task(self.send_output_value(key, cell_id=cell_id))
@@ -590,7 +580,7 @@ class Kernel:
             touched_viewers = {
                 f"df_{viewer_id}"
                 for viewer_id, sources in self.viewer_pagination_settings.items()
-                if any(key in self.k_globals.touched for key in sources)
+                if any(key in self.k_globals.available for key in sources)
             }
             touched_viewers |= {
                 f"df_{viewer_id}"
@@ -599,7 +589,7 @@ class Kernel:
             }
 
             for viewer_id, (key, key_type) in self.viewer_cell_selections.items():
-                if key not in self.k_globals.touched and key not in touched_viewers:
+                if key not in self.k_globals.available and key not in touched_viewers:
                     continue
 
                 if key_type == "key":
@@ -618,7 +608,7 @@ class Kernel:
                     tg.create_task(self.send_output_value(url=key, viewer_id=viewer_id))
 
             for plot_id, key in self.plot_data_selections.items():
-                if key not in self.k_globals.touched and key not in touched_viewers:
+                if key not in self.k_globals.available and key not in touched_viewers:
                     continue
 
                 tg.create_task(self.send_plot_data(plot_id, key))

@@ -34,8 +34,8 @@ def initialize_duckdb() -> DuckDBPyConnection:
 
 # todo(rteqs): replace with psycopg quote. this would require base image update to install psycopg
 def quote_identifier(x: str) -> str:
-    assert '"' not in x
-    return f'"{x}"'
+    assert "'" not in x
+    return f"'{x}'"
 
 
 class DownsampleResult(TypedDict):
