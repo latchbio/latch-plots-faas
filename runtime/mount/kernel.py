@@ -195,7 +195,7 @@ class TracedDict(dict[str, Signal[object] | object]):
         if __key in self.item_write_counter:
             del self.item_write_counter[__key]
 
-            table_name = f"in_memory_{quote_identifier(__key)}"
+            table_name = quote_identifier(f"in_memory_{__key}")
             self.duckdb.execute(
                 f"""
                 delete from
