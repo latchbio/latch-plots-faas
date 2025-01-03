@@ -1087,9 +1087,8 @@ class Kernel:
 
     async def upload_ldata(self, dst: str, viewer_id: str) -> tuple[bool, str | None]:
         key = f"df_{viewer_id}"
-        df = self.k_globals.get(key)
+        df = self.k_globals[key]
 
-        print(key, dst, viewer_id)
         if df is None or not isinstance(df, pd.DataFrame):
             return False, "viewer does not exists or variable is not a pandas DataFrame"
 
