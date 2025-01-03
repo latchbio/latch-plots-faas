@@ -1085,8 +1085,7 @@ class Kernel:
 
         await self.send({"type": "globals_summary", "summary": summary})
 
-    async def upload_ldata(self, dst: str, viewer_id: str) -> tuple[bool, str | None]:
-        key = f"df_{viewer_id}"
+    async def upload_ldata(self, dst: str, key: str) -> tuple[bool, str | None]:
         df = self.k_globals[key]
 
         if df is None or not isinstance(df, pd.DataFrame):
@@ -1313,9 +1312,9 @@ class Kernel:
 
         if msg["type"] == "upload_ldata":
             dst = msg.get("dst")
-            viewer_id = msg.get("viewer_id")
+            key = msg.get("key")
 
-            success, reason = await self.upload_ldata(dst, viewer_id)
+            success, reason = await self.upload_ldata(dst, key)
 
             await self.send(
                 {"type": "upload_ldata", "success": success, "reason": reason}
