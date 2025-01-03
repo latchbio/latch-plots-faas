@@ -21,6 +21,7 @@ import pandas as pd
 import plotly.io as pio
 import plotly.io._json as pio_json
 from duckdb import DuckDBPyConnection
+from latch.ldata.path import LPath
 from latch.registry.table import Table
 from lplots import _inject
 from lplots.reactive import Node, Signal, ctx
@@ -1084,6 +1085,22 @@ class Kernel:
 
         await self.send({"type": "globals_summary", "summary": summary})
 
+    async def upload_ldata(self, dst: str, viewer_id: str) -> tuple[bool, str | None]:
+        key = f"df_{viewer_id}"
+        df = self.k_globals.get(key)
+
+        if df is None or not isinstance(df, pd.DataFrame):
+            return False, "viewer does not exists or variable is not a pandas DataFrame"
+
+        local_path = Path(f"./tmp/{key}.csv")
+        df.to_csv(local_path)
+
+        if not local_path.exists():
+            return False, "unalbe to save dataframe to csv"
+
+        LPath(dst).upload_from(local_path)
+        return True, None
+
     async def accept(self) -> None:
         # print("[kernel] accept")
         msg = await self.conn.recv()
@@ -1289,6 +1306,17 @@ class Kernel:
 
         if msg["type"] == "globals_summary":
             await self.send_globals_summary()
+            return
+
+        if msg["type"] == "upload_ldata":
+            dst = msg.get("dst")
+            viewer_id = msg.get("viewer_id")
+
+            success, reason = await self.upload_ldata(dst, viewer_id)
+
+            await self.send(
+                {"type": "upload_ldata", "sucess": success, "reason": reason}
+            )
             return
 
 
