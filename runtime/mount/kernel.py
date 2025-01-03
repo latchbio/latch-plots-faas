@@ -1092,7 +1092,7 @@ class Kernel:
         if df is None or not isinstance(df, pd.DataFrame):
             return False, "viewer does not exists or variable is not a pandas DataFrame"
 
-        local_path = Path(f"./tmp/{key}.csv")
+        local_path = Path(f"./{key}.csv")
         df.to_csv(local_path)
 
         if not local_path.exists():
