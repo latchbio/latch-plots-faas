@@ -1092,11 +1092,14 @@ class Kernel:
         if df is None or not isinstance(df, pd.DataFrame):
             return False, "viewer does not exists or variable is not a pandas DataFrame"
 
-        local_path = Path(f"./{key}.csv")
+        tmp_dir = Path.home() / ".latch" / "plots"
+        tmp_dir.mkdir(parents=True, exist_ok=True)
+
+        local_path = tmp_dir / f"./{key}.csv"
         df.to_csv(local_path)
 
         if not local_path.exists():
-            return False, "unalbe to save dataframe to csv"
+            return False, "unable to save dataframe to csv"
 
         LPath(dst).upload_from(local_path)
         return True, None
