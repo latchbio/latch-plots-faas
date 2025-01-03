@@ -1315,7 +1315,7 @@ class Kernel:
             success, reason = await self.upload_ldata(dst, viewer_id)
 
             await self.send(
-                {"type": "upload_ldata", "sucess": success, "reason": reason}
+                {"type": "upload_ldata", "success": success, "reason": reason}
             )
             return
 
