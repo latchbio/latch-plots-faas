@@ -1085,17 +1085,25 @@ class Kernel:
 
         await self.send({"type": "globals_summary", "summary": summary})
 
-    async def upload_ldata(self, dst: str, key: str) -> tuple[bool, str | None]:
+    async def upload_ldata(
+        self, dst: str, key: str, viewer_id: str | None, cell_id: str | None
+    ) -> tuple[bool, str | None]:
         df = self.k_globals[key]
+
+        pagination_settings = self.lookup_pagination_settings(
+            cell_id=cell_id, viewer_id=viewer_id, source_key=key
+        )
 
         if df is None or not isinstance(df, pd.DataFrame):
             return False, "viewer does not exists or variable is not a pandas DataFrame"
+
+        res = filter_and_sort(df=df, pagination_settings=pagination_settings)
 
         tmp_dir = Path.home() / ".latch" / "plots"
         tmp_dir.mkdir(parents=True, exist_ok=True)
 
         local_path = tmp_dir / f"./{key}.csv"
-        df.to_csv(local_path)
+        res.to_csv(local_path)
 
         if not local_path.exists():
             return False, "unable to save dataframe to csv"
@@ -1313,8 +1321,10 @@ class Kernel:
         if msg["type"] == "upload_ldata":
             dst = msg.get("dst")
             key = msg.get("key")
+            viewer_id = msg.get("viewer_id")
+            cell_id = msg.get("cell_id")
 
-            success, reason = await self.upload_ldata(dst, key)
+            success, reason = await self.upload_ldata(dst, key, viewer_id, cell_id)
 
             await self.send(
                 {"type": "upload_ldata", "success": success, "reason": reason}
