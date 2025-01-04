@@ -1086,7 +1086,12 @@ class Kernel:
         await self.send({"type": "globals_summary", "summary": summary})
 
     async def upload_ldata(
-        self, dst: str, key: str, viewer_id: str | None, cell_id: str | None
+        self,
+        dst: str,
+        key: str,
+        viewer_id: str | None,
+        cell_id: str | None,
+        filename: str | None,
     ) -> tuple[bool, str | None]:
         df = self.k_globals[key]
 
@@ -1102,8 +1107,9 @@ class Kernel:
         tmp_dir = Path.home() / ".latch" / "plots"
         tmp_dir.mkdir(parents=True, exist_ok=True)
 
-        local_path = tmp_dir / f"./{key}.csv"
-        res.to_csv(local_path)
+        name = filename if filename is not None else key
+        local_path = tmp_dir / f"./{name}.csv"
+        res.to_csv(local_path, index=False)
 
         if not local_path.exists():
             return False, "unable to save dataframe to csv"
@@ -1323,8 +1329,11 @@ class Kernel:
             key = msg.get("key")
             viewer_id = msg.get("viewer_id")
             cell_id = msg.get("cell_id")
+            filename = msg.get("filename")
 
-            success, reason = await self.upload_ldata(dst, key, viewer_id, cell_id)
+            success, reason = await self.upload_ldata(
+                dst, key, viewer_id, cell_id, filename
+            )
 
             await self.send(
                 {"type": "upload_ldata", "success": success, "reason": reason}
