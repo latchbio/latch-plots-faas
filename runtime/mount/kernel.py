@@ -21,6 +21,7 @@ import pandas as pd
 import plotly.io as pio
 import plotly.io._json as pio_json
 from duckdb import DuckDBPyConnection
+from latch.ldata.path import LPath
 from latch.registry.table import Table
 from lplots import _inject
 from lplots.reactive import Node, Signal, ctx
@@ -1084,6 +1085,42 @@ class Kernel:
 
         await self.send({"type": "globals_summary", "summary": summary})
 
+    async def upload_ldata(
+        self,
+        *,
+        dst: str,
+        key: str,
+        viewer_id: str | None,
+        cell_id: str | None,
+        filename: str | None,
+    ) -> None:
+        # todo(rteqs): figure out how to get value without going through reactive context
+        df = self.k_globals[key]
+
+        pagination_settings = self.lookup_pagination_settings(
+            cell_id=cell_id, viewer_id=viewer_id, source_key=key
+        )
+
+        if df is None or not isinstance(df, pd.DataFrame):
+            raise ValueError(
+                "viewer does not exists or variable is not a pandas DataFrame"
+            )
+
+        res = filter_and_sort(df=df, pagination_settings=pagination_settings)
+
+        tmp_dir = Path.home() / ".latch" / "plots"
+        tmp_dir.mkdir(parents=True, exist_ok=True)
+
+        name = filename if filename is not None else key
+        local_path = tmp_dir / f"./{name}.csv"
+        res.to_csv(local_path, index=False)
+
+        if not local_path.exists():
+            raise RuntimeError("unable to save dataframe to csv")
+
+        # todo(rteqs): stream directly to LData without temp file
+        LPath(dst).upload_from(local_path)
+
     async def accept(self) -> None:
         # print("[kernel] accept")
         msg = await self.conn.recv()
@@ -1289,6 +1326,18 @@ class Kernel:
 
         if msg["type"] == "globals_summary":
             await self.send_globals_summary()
+            return
+
+        if msg["type"] == "upload_ldata":
+            await self.upload_ldata(
+                dst=msg["dst"],
+                key=msg["key"],
+                viewer_id=msg.get("viewer_id"),
+                cell_id=msg.get("cell_id"),
+                filename=msg.get("filename"),
+            )
+
+            await self.send({"type": "upload_ldata"})
             return
 
 
