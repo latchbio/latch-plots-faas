@@ -1087,12 +1087,14 @@ class Kernel:
 
     async def upload_ldata(
         self,
+        *,
         dst: str,
         key: str,
         viewer_id: str | None,
         cell_id: str | None,
         filename: str | None,
-    ) -> tuple[bool, str | None]:
+    ) -> None:
+        # todo(rteqs): figure out how to get value without going through reactive context
         df = self.k_globals[key]
 
         pagination_settings = self.lookup_pagination_settings(
@@ -1100,7 +1102,9 @@ class Kernel:
         )
 
         if df is None or not isinstance(df, pd.DataFrame):
-            return False, "viewer does not exists or variable is not a pandas DataFrame"
+            raise ValueError(
+                "viewer does not exists or variable is not a pandas DataFrame"
+            )
 
         res = filter_and_sort(df=df, pagination_settings=pagination_settings)
 
@@ -1112,10 +1116,10 @@ class Kernel:
         res.to_csv(local_path, index=False)
 
         if not local_path.exists():
-            return False, "unable to save dataframe to csv"
+            raise RuntimeError("unable to save dataframe to csv")
 
+        # todo(rteqs): stream directly to LData without temp file
         LPath(dst).upload_from(local_path)
-        return True, None
 
     async def accept(self) -> None:
         # print("[kernel] accept")
@@ -1325,19 +1329,15 @@ class Kernel:
             return
 
         if msg["type"] == "upload_ldata":
-            dst = msg.get("dst")
-            key = msg.get("key")
-            viewer_id = msg.get("viewer_id")
-            cell_id = msg.get("cell_id")
-            filename = msg.get("filename")
-
-            success, reason = await self.upload_ldata(
-                dst, key, viewer_id, cell_id, filename
+            await self.upload_ldata(
+                dst=msg["dst"],
+                key=msg["key"],
+                viewer_id=msg.get("viewer_id"),
+                cell_id=msg.get("cell_id"),
+                filename=msg.get("filename"),
             )
 
-            await self.send(
-                {"type": "upload_ldata", "success": success, "reason": reason}
-            )
+            await self.send({"type": "upload_ldata"})
             return
 
 
