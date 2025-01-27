@@ -1113,7 +1113,7 @@ class Kernel:
 
         name = filename if filename is not None else key
         local_path = tmp_dir / f"./{name}.csv"
-        res.to_csv(local_path, index=False)
+        res.to_csv(local_path, index=True)
 
         if not local_path.exists():
             raise RuntimeError("unable to save dataframe to csv")
