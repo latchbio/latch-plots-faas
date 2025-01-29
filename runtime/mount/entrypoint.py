@@ -38,6 +38,7 @@ class CellOutputs(TypedDict):
     dataframe_outputs: list[str]
     figure_outputs: list[str]
     static_figure_outputs: list[str]
+    signal_outputs: list[str]
 
 
 cell_status: dict[str, str] = {}
@@ -187,6 +188,7 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                     "dataframe_outputs": msg["dataframe_outputs"],
                     "figure_outputs": msg["figure_outputs"],
                     "static_figure_outputs": msg["static_figure_outputs"],
+                    "signal_outputs": msg["signal_outputs"],
                 }
 
                 exc = msg.get("exception")

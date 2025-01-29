@@ -22,15 +22,16 @@ import plotly.io as pio
 import plotly.io._json as pio_json
 from duckdb import DuckDBPyConnection
 from latch.registry.table import Table
+from matplotlib.figure import Figure
+from pandas import DataFrame, Index, MultiIndex, Series
+from pandas.io.json._table_schema import build_table_schema
+from plotly.basedatatypes import BaseFigure
+
 from lplots import _inject
 from lplots.reactive import Node, Signal, ctx
 from lplots.themes import graphpad_inspired_theme
 from lplots.utils.nothing import Nothing
 from lplots.widgets._emit import WidgetState
-from matplotlib.figure import Figure
-from pandas import DataFrame, Index, MultiIndex, Series
-from pandas.io.json._table_schema import build_table_schema
-from plotly.basedatatypes import BaseFigure
 from plotly_utils.precalc_box import precalc_box
 from plotly_utils.precalc_violin import precalc_violin
 from socketio_thread import SocketIoThread
@@ -212,10 +213,12 @@ class TracedDict(dict[str, Signal[object] | object]):
         return self.touched - self.removed
 
 
-class ExitException(Exception): ...
+class ExitException(Exception):
+    ...
 
 
-class CellInterruptException(Exception): ...
+class CellInterruptException(Exception):
+    ...
 
 
 KeyType = Literal["key", "ldata_node_id", "registry_table_id", "url"]
@@ -442,6 +445,7 @@ class CategorizedCellOutputs:
     all: list[str] = field(default_factory=list)
     dfs: list[str] = field(default_factory=list)
     figures: list[str] = field(default_factory=list)
+    signals: list[str] = field(default_factory=list)
     static_figures: list[str] = field(default_factory=list)
 
 
@@ -493,9 +497,9 @@ class Kernel:
     registry_dataframes: dict[str, DataFrame] = field(default_factory=dict)
     url_dataframes: dict[str, DataFrame] = field(default_factory=dict)
 
-    cell_pagination_settings: defaultdict[str, defaultdict[str, PaginationSettings]] = (
-        field(default_factory=pagination_settings_dict_factory)
-    )
+    cell_pagination_settings: defaultdict[
+        str, defaultdict[str, PaginationSettings]
+    ] = field(default_factory=pagination_settings_dict_factory)
     viewer_pagination_settings: defaultdict[
         str, defaultdict[str, PaginationSettings]
     ] = field(default_factory=pagination_settings_dict_factory)
@@ -627,8 +631,11 @@ class Kernel:
             for cell_id in self.cell_rnodes
         }
 
-        updated_widgets: set[str] = set()
+        signals_by_cell = {
+            cell_id: cell.signals for cell_id, cell in self.cell_rnodes.items()
+        }
 
+        updated_widgets: set[str] = set()
         unused_signals: set[str] = set(self.widget_signals.keys())
         for cell_id in self.cell_rnodes:
             res: dict[str, WidgetState] = {}
@@ -712,6 +719,9 @@ class Kernel:
             if isinstance(val, BaseFigure):
                 res.figures.append(x)
 
+            if isinstance(val, Signal):
+                res.signals.append(x)
+
             if isinstance(val, Figure) or (
                 hasattr(val, "figure") and isinstance(val.figure, Figure)
             ):
@@ -720,6 +730,7 @@ class Kernel:
         res.all.sort()
         res.dfs.sort()
         res.figures.sort()
+        res.signals.sort()
         res.static_figures.sort()
 
         return res
