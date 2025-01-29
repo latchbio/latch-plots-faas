@@ -815,6 +815,7 @@ class Kernel:
             "dataframe_outputs": outputs.dfs,
             "figure_outputs": outputs.figures,
             "static_figure_outputs": outputs.static_figures,
+            "signal_outputs": outputs.signals,
         }
         if sys.exception() is not None:
             msg["exception"] = format_exc()
