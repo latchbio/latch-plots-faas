@@ -217,6 +217,7 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                     "dataframe_outputs": msg.get("dataframe_outputs"),
                     "figure_outputs": msg.get("figure_outputs"),
                     "static_figure_outputs": msg.get("static_figure_outputs"),
+                    "signal_outputs": msg.get("signal_outputs"),
                 }
 
             elif msg["type"] == "cell_widgets":
