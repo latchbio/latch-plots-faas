@@ -486,6 +486,7 @@ class Kernel:
 
     active_cell: str | None = None
 
+    cell_signals: dict[str, Signal[Any]] = field(default_factory=dict)
     widget_signals: dict[str, Signal[Any]] = field(default_factory=dict)
     nodes_with_widgets: dict[int, Node] = field(default_factory=dict)
 
@@ -533,6 +534,7 @@ class Kernel:
             },
             "cell_status": self.cell_status,
             "active_cell": self.active_cell,
+            "cell_signals": {k: repr(v) for k, v in self.cell_signals.items()},
             "widget_signals": {k: repr(v) for k, v in self.widget_signals.items()},
             "nodes_with_widgets": {
                 str(k): v.debug_state() for k, v in self.nodes_with_widgets.items()
@@ -629,10 +631,6 @@ class Kernel:
                 x for x in self.nodes_with_widgets.values() if x.cell_id == cell_id
             ]
             for cell_id in self.cell_rnodes
-        }
-
-        signals_by_cell = {
-            cell_id: cell.signals for cell_id, cell in self.cell_rnodes.items()
         }
 
         updated_widgets: set[str] = set()

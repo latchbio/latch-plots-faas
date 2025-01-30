@@ -286,13 +286,16 @@ class Signal(Generic[T]):
         return self._value
 
     @overload
-    def __call__(self, /) -> T: ...
+    def __call__(self, /) -> T:
+        ...
 
     @overload
-    def __call__(self, /, upd: T, *, _ui_update: bool = False) -> None: ...
+    def __call__(self, /, upd: T, *, _ui_update: bool = False) -> None:
+        ...
 
     @overload
-    def __call__(self, /, upd: Updater[T], *, _ui_update: bool = False) -> None: ...
+    def __call__(self, /, upd: Updater[T], *, _ui_update: bool = False) -> None:
+        ...
 
     def __call__(
         self, /, upd: T | Updater[T] | Nothing = Nothing.x, *, _ui_update: bool = False
@@ -310,6 +313,8 @@ class Signal(Generic[T]):
 
             self._listeners[id(ctx.cur_comp)] = ctx.cur_comp
             ctx.cur_comp.signals[id(self)] = self
+            if ctx.cur_comp.cell_id is not None:
+                _inject.kernel.cell_signals[ctx.cur_comp.cell_id] = self
 
             # print(f"[@] {self} has listeners: {self._listeners}")
             return self._value
