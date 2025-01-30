@@ -534,7 +534,9 @@ class Kernel:
             },
             "cell_status": self.cell_status,
             "active_cell": self.active_cell,
-            "signal_listeners": {k: repr(v) for k, v in self.signal_listeners.items()},
+            "signal_listeners": {
+                str(k): repr(v) for k, v in self.signal_listeners.items()
+            },
             "widget_signals": {k: repr(v) for k, v in self.widget_signals.items()},
             "nodes_with_widgets": {
                 str(k): v.debug_state() for k, v in self.nodes_with_widgets.items()
