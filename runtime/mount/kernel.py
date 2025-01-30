@@ -13,7 +13,7 @@ from io import TextIOWrapper
 from pathlib import Path
 from traceback import format_exc
 from types import FrameType
-from typing import TYPE_CHECKING, Any, Literal, TypedDict, TypeVar
+from typing import TYPE_CHECKING, Any, List, Literal, TypedDict, TypeVar
 
 import numpy as np
 import orjson
@@ -486,7 +486,7 @@ class Kernel:
 
     active_cell: str | None = None
 
-    signal_listeners: dict[str, Node] = field(default_factory=dict)
+    signal_listeners: dict[str, List[Node]] = field(default_factory=dict)
     widget_signals: dict[str, Signal[Any]] = field(default_factory=dict)
     nodes_with_widgets: dict[int, Node] = field(default_factory=dict)
 
@@ -1056,6 +1056,19 @@ class Kernel:
         ):
             await self.send(
                 {"type": "output_value", **(id_fields), **(key_fields), "webp": res}
+            )
+            return
+
+        if isinstance(res, Signal):
+            listener_ids = [
+                x.cell_id for x in self.signal_listeners.get(str(id(res)), [])
+            ]
+            await self.send(
+                {
+                    "type": "output_value",
+                    "signal_id": str(id(res)),
+                    "listeners": listener_ids,
+                }
             )
             return
 

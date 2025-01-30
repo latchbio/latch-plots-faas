@@ -315,9 +315,9 @@ class Signal(Generic[T]):
 
             listeners = _inject.kernel.signal_listeners
             if id(self) not in listeners:
-                listeners[id(self)] = [ctx.cur_comp]
+                listeners[str(id(self))] = [ctx.cur_comp]
             else:
-                listeners[id(self)].append(ctx.cur_comp)
+                listeners[str(id(self))].append(ctx.cur_comp)
             ctx.cur_comp.signals[id(self)] = self
 
             # print(f"[@] {self} has listeners: {self._listeners}")
