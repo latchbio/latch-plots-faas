@@ -535,7 +535,8 @@ class Kernel:
             "cell_status": self.cell_status,
             "active_cell": self.active_cell,
             "signal_listeners": {
-                str(k): v.debug_state() for k, v in self.signal_listeners.items()
+                str(k): [x.debug_state() for x in v]
+                for k, v in self.signal_listeners.items()
             },
             "widget_signals": {k: repr(v) for k, v in self.widget_signals.items()},
             "nodes_with_widgets": {
@@ -1068,6 +1069,8 @@ class Kernel:
                     "type": "output_value",
                     "signal_id": str(id(res)),
                     "listeners": listener_ids,
+                    **(id_fields),
+                    **(key_fields),
                 }
             )
             return
