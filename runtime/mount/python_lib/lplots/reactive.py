@@ -302,6 +302,7 @@ class Signal(Generic[T]):
     ) -> T | None:
         assert ctx.in_tx
         comp = ctx.cur_comp
+        # For pyright. `comp` always set in tx.
         assert comp is not None
 
         global_listeners = _inject.kernel.signal_listeners
@@ -310,7 +311,7 @@ class Signal(Generic[T]):
         if sid not in global_listeners:
             global_listeners[sid] = [comp]
         else:
-            if comp not in global_listeners[sid]:
+            if comp.cell_id not in [x.cell_id for x in global_listeners[sid]]:
                 global_listeners[sid].append(comp)
 
         if upd is Nothing.x:
