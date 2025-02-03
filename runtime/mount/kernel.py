@@ -1069,6 +1069,7 @@ class Kernel:
                     "type": "output_value",
                     "signal_id": str(id(res)),
                     "listeners": listener_ids,
+                    "value": res.sample(),
                     **(id_fields),
                     **(key_fields),
                 }
