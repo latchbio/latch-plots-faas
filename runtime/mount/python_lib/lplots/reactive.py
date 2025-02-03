@@ -301,26 +301,21 @@ class Signal(Generic[T]):
         self, /, upd: T | Updater[T] | Nothing = Nothing.x, *, _ui_update: bool = False
     ) -> T | None:
         assert ctx.in_tx
+        comp = ctx.cur_comp
+        assert comp is not None
 
-        # print(f"[@] {self}({upd}, _ui_update={_ui_update}): {self._listeners}")
+        global_listeners = _inject.kernel.signal_listeners
+        sid = str(id(self))
+
+        if sid not in global_listeners:
+            global_listeners[sid] = [comp]
+        else:
+            if comp not in global_listeners[sid]:
+                global_listeners[sid].append(comp)
 
         if upd is Nothing.x:
-            assert ctx.cur_comp is not None
-
-            print(
-                # f"[@] {self} added listener {ctx.cur_comp.f.__name__} @ {id(ctx.cur_comp)}"
-            )
-
-            self._listeners[id(ctx.cur_comp)] = ctx.cur_comp
-
-            listeners = _inject.kernel.signal_listeners
-            if id(self) not in listeners:
-                listeners[str(id(self))] = [ctx.cur_comp]
-            else:
-                listeners[str(id(self))].append(ctx.cur_comp)
-            ctx.cur_comp.signals[id(self)] = self
-
-            # print(f"[@] {self} has listeners: {self._listeners}")
+            self._listeners[id(comp)] = comp
+            comp.signals[id(self)] = self
             return self._value
 
         self._updates.append(upd)
