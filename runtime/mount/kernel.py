@@ -1064,7 +1064,7 @@ class Kernel:
             listener_ids = [
                 x.cell_id for x in self.signal_listeners.get(str(id(res)), [])
             ]
-            if cell_id is not None:
+            if cell_id is not None and cell_id in listener_ids:
                 listener_ids.remove(cell_id)
             await self.send(
                 {
