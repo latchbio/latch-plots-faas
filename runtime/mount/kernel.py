@@ -143,7 +143,7 @@ class TracedDict(dict[str, Signal[object] | object]):
         self.touched = set()
         self.removed = set()
 
-        self.dataframes = Signal(set())
+        self.dataframes = Signal(set(), store_key="global/dataframes")
         self.item_write_counter = defaultdict(int)
         self.duckdb = duckdb
 
@@ -685,7 +685,7 @@ class Kernel:
         key = f"{ctx.cur_comp.name_path()}/{key}"
 
         if key not in self.widget_signals:
-            self.widget_signals[key] = Signal(Nothing.x, name=key)
+            self.widget_signals[key] = Signal(Nothing.x, name=key, store_key=key)
 
         return self.widget_signals[key]
 
