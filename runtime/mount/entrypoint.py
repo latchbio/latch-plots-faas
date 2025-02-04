@@ -372,10 +372,11 @@ async def start_kernel_proc() -> None:
             "plot_data_selections": k_state.plot_data_selections,
             "viewer_cell_data": k_state.viewer_cell_data,
             "plot_configs": k_state.plot_configs,
-            "signal_listeners": {},
-            "listener_stub_code": {},
+            "signal_listeners": {"24407/0": ['24413', '24414'],
+            "24407/1": ['24413', '24414']},
+            "listener_stub_code": {'24413': 'p = x() * y()', '24414':
+                                   'x(5)\ny(10)'}
         }
-    )
 
 
 async def stop_kernel_proc() -> None:
