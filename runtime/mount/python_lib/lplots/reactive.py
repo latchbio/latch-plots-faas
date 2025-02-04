@@ -242,9 +242,12 @@ class RCtx:
                         await _inject.kernel.set_active_cell(n.cell_id)
 
                     if n.stub is True:
-                        n.f = await _inject.kernel.build_computation(
+                        comp = await _inject.kernel.build_computation(
                             n.cell_id, n.stub_code
                         )
+                        if comp is None:
+                            continue
+                        n.f = comp
 
                     try:
                         await self.run(n.f, _cell_id=n.cell_id)
@@ -304,6 +307,8 @@ class Signal(Generic[T]):
                 f"{ctx.cur_comp.name_path()}/{ctx.cur_comp.signal_state_idx}"
             )
             ctx.cur_comp.signal_state_idx += 1
+        else:
+            self.store_key = store_key
 
         self._listeners = {}
 
@@ -334,10 +339,10 @@ class Signal(Generic[T]):
         key = self.store_key
 
         if key not in global_listeners:
-            global_listeners[key] = [comp]
+            global_listeners[key] = [comp.cell_id]
         else:
-            if comp.cell_id not in [x.cell_id for x in global_listeners[key]]:
-                global_listeners[key].append(comp)
+            if comp.cell_id not in global_listeners.get(key, []):
+                global_listeners[key].append(comp.cell_id)
 
         if upd is Nothing.x:
             self._listeners[id(comp)] = comp
