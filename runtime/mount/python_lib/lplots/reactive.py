@@ -30,11 +30,17 @@ def graphviz() -> None:
         f.write("}\n")
 
 
+def stub_noop():
+    pass
+
+
 @dataclass(kw_only=True)
 class Node:
     f: Computation[Any]
     stale: bool = False
     disposed: bool = False
+    stub: bool = False
+    stub_code: str | None = None
 
     parent: Self | None
     children: dict[int, Self] = field(default_factory=dict)
@@ -46,6 +52,7 @@ class Node:
 
     widget_states: dict[str, WidgetState] = field(default_factory=dict)
     widget_state_idx = 0
+    signal_state_idx = 0
 
     def __post_init__(self) -> None:
         live_nodes[id(self)] = self
@@ -141,6 +148,7 @@ class Node:
             "name": self.name,
             "widget_states": self.widget_states,
             "widget_state_idx": self.widget_state_idx,
+            "signal_state_idx": self.signal_state_idx,
         }
 
     def graphviz(self, f: TextIO) -> None:
@@ -233,6 +241,11 @@ class RCtx:
                     if n.cell_id is not None:
                         await _inject.kernel.set_active_cell(n.cell_id)
 
+                    if n.stub is True:
+                        n.f = await _inject.kernel.build_computation(
+                            n.cell_id, n.stub_code
+                        )
+
                     try:
                         await self.run(n.f, _cell_id=n.cell_id)
                     except Exception:
@@ -268,11 +281,14 @@ class Updater(Generic[T]):
 class Signal(Generic[T]):
     _value: T
     _name: str
+    store_key: str
 
     _updates: list[T | Updater[T]]
     _listeners: dict[int, Node]
 
-    def __init__(self, initial: T, *, name: str | None = None) -> None:
+    def __init__(
+        self, initial: T, *, name: str | None = None, store_key: str | None = None
+    ) -> None:
         if name is None:
             name = f"Signal@{id(self)}"
 
@@ -280,6 +296,15 @@ class Signal(Generic[T]):
         self._name = name
 
         self._updates = []
+        # Update listeners here
+
+        if store_key is None:
+            assert ctx.cur_comp is not None
+            self.store_key = (
+                f"{ctx.cur_comp.name_path()}/{ctx.cur_comp.signal_state_idx}"
+            )
+            ctx.cur_comp.signal_state_idx += 1
+
         self._listeners = {}
 
     def sample(self) -> T:
@@ -306,13 +331,13 @@ class Signal(Generic[T]):
         assert comp is not None
 
         global_listeners = _inject.kernel.signal_listeners
-        sid = str(id(self))
+        key = self.store_key
 
-        if sid not in global_listeners:
-            global_listeners[sid] = [comp]
+        if key not in global_listeners:
+            global_listeners[key] = [comp]
         else:
-            if comp.cell_id not in [x.cell_id for x in global_listeners[sid]]:
-                global_listeners[sid].append(comp)
+            if comp.cell_id not in [x.cell_id for x in global_listeners[key]]:
+                global_listeners[key].append(comp)
 
         if upd is Nothing.x:
             self._listeners[id(comp)] = comp

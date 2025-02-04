@@ -8,6 +8,7 @@ import socket
 import sys
 import traceback
 from collections import defaultdict
+from collections.abc import Awaitable
 from dataclasses import asdict, dataclass, field
 from io import TextIOWrapper
 from pathlib import Path
@@ -28,7 +29,7 @@ from pandas.io.json._table_schema import build_table_schema
 from plotly.basedatatypes import BaseFigure
 
 from lplots import _inject
-from lplots.reactive import Node, Signal, ctx
+from lplots.reactive import Computation, Node, Signal, ctx, stub_noop
 from lplots.themes import graphpad_inspired_theme
 from lplots.utils.nothing import Nothing
 from lplots.widgets._emit import WidgetState
@@ -486,7 +487,8 @@ class Kernel:
 
     active_cell: str | None = None
 
-    signal_listeners: dict[str, List[Node]] = field(default_factory=dict)
+    # Signal.store_key : [ Node.cell_id ]
+    signal_listeners: dict[str, List[str]] = field(default_factory=dict)
     widget_signals: dict[str, Signal[Any]] = field(default_factory=dict)
     nodes_with_widgets: dict[int, Node] = field(default_factory=dict)
 
@@ -534,10 +536,7 @@ class Kernel:
             },
             "cell_status": self.cell_status,
             "active_cell": self.active_cell,
-            "signal_listeners": {
-                str(k): [x.debug_state() for x in v]
-                for k, v in self.signal_listeners.items()
-            },
+            "signal_listeners": self.signal_listeners,
             "widget_signals": {k: repr(v) for k, v in self.widget_signals.items()},
             "nodes_with_widgets": {
                 str(k): v.debug_state() for k, v in self.nodes_with_widgets.items()
@@ -736,9 +735,60 @@ class Kernel:
 
         return res
 
-    async def exec(self, *, cell_id: str, code: str) -> None:
+    async def build_computation(
+        self, cell_id: str, code: str
+    ) -> Computation[Awaitable[Any]] | None:
         filename = f"<cell {cell_id}>"
 
+        # https://stackoverflow.com/questions/33908794/get-value-of-last-expression-in-exec-call
+        parsed = compile(
+            source=code,
+            filename=filename,
+            mode="exec",
+            flags=ast.PyCF_ONLY_AST | ast.PyCF_ALLOW_TOP_LEVEL_AWAIT,
+        )
+
+        stmts = list(ast.iter_child_nodes(parsed))
+        if len(stmts) == 0:
+            self.cell_status[cell_id] = "ok"
+            self.k_globals.clear()
+            await self.send_cell_result(cell_id)
+            return
+
+        async def x() -> None:
+            try:
+                assert ctx.cur_comp is not None
+
+                self.cell_rnodes[cell_id] = ctx.cur_comp
+                self.k_globals.clear()
+
+                try:
+                    res = eval(  # noqa: S307
+                        compile(
+                            parsed,
+                            filename=filename,
+                            mode="exec",
+                            flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT,
+                        ),
+                        self.k_globals,
+                    )
+                    if asyncio.iscoroutine(res):
+                        res = await res
+                except ExitException:
+                    ...
+
+                self.cell_status[cell_id] = "ok"
+                await self.send_cell_result(cell_id)
+
+            except Exception:
+                self.cell_status[cell_id] = "error"
+                await self.send_cell_result(cell_id)
+
+        x.__name__ = filename
+
+        return x
+
+    async def exec(self, *, cell_id: str, code: str) -> None:
         try:
             assert ctx.cur_comp is None
             assert not ctx.in_tx
@@ -750,51 +800,9 @@ class Kernel:
                 comp.dispose()
                 del self.cell_rnodes[cell_id]
 
-            # https://stackoverflow.com/questions/33908794/get-value-of-last-expression-in-exec-call
-            parsed = compile(
-                source=code,
-                filename=filename,
-                mode="exec",
-                flags=ast.PyCF_ONLY_AST | ast.PyCF_ALLOW_TOP_LEVEL_AWAIT,
-            )
-
-            stmts = list(ast.iter_child_nodes(parsed))
-            if len(stmts) == 0:
-                self.cell_status[cell_id] = "ok"
-                self.k_globals.clear()
-                await self.send_cell_result(cell_id)
+            x = await self.build_computation(cell_id, code)
+            if x is None:
                 return
-
-            async def x() -> None:
-                try:
-                    assert ctx.cur_comp is not None
-
-                    self.cell_rnodes[cell_id] = ctx.cur_comp
-                    self.k_globals.clear()
-
-                    try:
-                        res = eval(  # noqa: S307
-                            compile(
-                                parsed,
-                                filename=filename,
-                                mode="exec",
-                                flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT,
-                            ),
-                            self.k_globals,
-                        )
-                        if asyncio.iscoroutine(res):
-                            res = await res
-                    except ExitException:
-                        ...
-
-                    self.cell_status[cell_id] = "ok"
-                    await self.send_cell_result(cell_id)
-
-                except Exception:
-                    self.cell_status[cell_id] = "error"
-                    await self.send_cell_result(cell_id)
-
-            x.__name__ = filename
 
             await self.set_active_cell(cell_id)
             await ctx.run(x, _cell_id=cell_id)
@@ -1124,6 +1132,23 @@ class Kernel:
             self.cell_output_selections = msg["cell_output_selections"]
             self.plot_data_selections = msg["plot_data_selections"]
             self.plot_configs = msg["plot_configs"]
+            self.signal_listeners = msg["signal_listeners"]
+
+            # cell_id : code
+
+            stub_node_code: dict[str, str] = msg["listener_stub_code"]
+
+            for listeners in self.signal_listeners.values():
+                for l_cell_id in listeners:
+                    if l_cell_id not in self.cell_rnodes:
+                        stub_node = Node(
+                            f=stub_noop,
+                            parent=None,
+                            stub=True,
+                            stub_code=stub_node_code.get(l_cell_id, ""),
+                            cell_id=l_cell_id,
+                        )
+                        self.cell_rnodes[l_cell_id] = stub_node
 
             viewer_cell_data = msg["viewer_cell_data"]
             for cell_id, data in viewer_cell_data.items():

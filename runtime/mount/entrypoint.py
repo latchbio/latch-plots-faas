@@ -372,6 +372,8 @@ async def start_kernel_proc() -> None:
             "plot_data_selections": k_state.plot_data_selections,
             "viewer_cell_data": k_state.viewer_cell_data,
             "plot_configs": k_state.plot_configs,
+            "signal_listeners": {},
+            "listener_stub_code": {},
         }
     )
 
