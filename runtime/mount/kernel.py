@@ -189,7 +189,7 @@ class TracedDict(dict[str, Signal[object] | object]):
             sig._apply_updates()
             return None
 
-        return super().__setitem__(__key, Signal(__value))
+        return super().__setitem__(__key, Signal(__value, store_key=f"global/{__key}"))
 
     def __delitem__(self, __key: str) -> None:
         self.touched.add(__key)
