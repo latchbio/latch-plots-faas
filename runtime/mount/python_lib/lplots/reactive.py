@@ -311,11 +311,12 @@ class Signal(Generic[T]):
             self.store_key = store_key
 
         self._listeners = {}
-        if self.store_key in _inject.kernel.signal_listeners:
-            for lid in _inject.kernel.signal_listeners:
-                comp = _inject.kernel.cell_rnodes.get(lid, None)
-                assert comp is not None
-                self._listeners[id(comp)] = comp
+        if _inject.kernel is not None:
+            if self.store_key in _inject.kernel.signal_listeners:
+                for lid in _inject.kernel.signal_listeners.get(self.store_key, []):
+                    comp = _inject.kernel.cell_rnodes.get(lid, None)
+                    assert comp is not None
+                    self._listeners[id(comp)] = comp
 
     def sample(self) -> T:
         return self._value
