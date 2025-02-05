@@ -368,8 +368,8 @@ async def start_kernel_proc() -> None:
         resp = await gql_query(
             auth=auth_token_sdk,
             query="""
-                query tmpPlotsNotebookKernelState($pod_id: BigInt!) {
-                    plotsNotebookKernelState(argPodId: $pod_id)
+                query plotsNotebookKernelState($pod_id: BigInt!) {
+                    tmpPlotsNotebookKernelState(argPodId: $pod_id)
                 }
             """,
             variables={"pod_id": pod_id},
