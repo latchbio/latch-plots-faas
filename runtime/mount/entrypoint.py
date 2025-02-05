@@ -1,5 +1,6 @@
 import asyncio
 import contextlib
+import datetime
 import os
 import socket
 import sys
@@ -113,28 +114,39 @@ async def broadcast_message(msg: str) -> None:
 
 async def add_pod_event(*, auth: str, event_type: str) -> None:
     try:
+        current_timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
         await gql_query(
             auth=auth,
             query="""
-                mutation AddSessionEvent($eventType: String!, $podSessionId: BigInt!) {
-                    createPodSessionEvent(
-                        input: {podSessionEvent: {podSessionId: $podSessionId, eventType: $eventType}}
-                    ) {
-                        clientMutationId
+                mutation AddOrUpdatePodSessionEvent(
+                  $eventType: String!,
+                  $podSessionId: BigInt!,
+                  $timestamp: timestamptz!
+                ) {
+                  createPodSessionEvent(
+                    input: {
+                      podSessionEvent: {
+                        pod_session_id: $podSessionId,
+                        event_type: $eventType,
+                        timestamp: $timestamp
+                      },
+                      on_conflict: {
+                        constraint: pod_session_events_pod_session_id_event_type_key,
+                        update_columns: [timestamp]
+                      }
                     }
+                  ) {
+                    clientMutationId
+                  }
                 }
-
             """,
-            variables={"eventType": event_type, "podSessionId": pod_session_id},
+            variables={
+                "eventType": event_type,
+                "podSessionId": pod_session_id,
+                "timestamp": current_timestamp,
+            },
         )
     except Exception as e:
-        if (
-            'duplicate key value violates unique constraint "pod_session_events_unique_sess_id_event_type"'
-            in str(e)
-        ):
-            # todo(maximsmol): fix this properly
-            pass
-
         traceback.print_exc()
 
 
