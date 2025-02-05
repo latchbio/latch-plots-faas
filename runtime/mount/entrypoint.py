@@ -118,20 +118,16 @@ async def add_pod_event(*, auth: str, event_type: str) -> None:
         await gql_query(
             auth=auth,
             query="""
-                mutation AddOrUpdatePodSessionEvent(
-                  $eventType: String!,
-                  $podSessionId: BigInt!
+                mutation UpsertPodSessionEvent(
+                  $argPodSessionId: BigInt!,
+                  $argEventType: String!,
+                  $argTimestamp: Datetime!
                 ) {
-                  createPodSessionEvent(
+                  upsertPodSessionEventCustom(
                     input: {
-                      podSessionEvent: {
-                        podSessionId: $podSessionId,
-                        eventType: $eventType,
-                      },
-                      onConflict: {
-                        constraint: "pod_session_events_unique_sess_id_event_type",
-                        updateColumns: []
-                      }
+                      argPodSessionId: $argPodSessionId,
+                      argEventType: $argEventType,
+                      argTimestamp: $argTimestamp
                     }
                   ) {
                     clientMutationId
@@ -139,8 +135,9 @@ async def add_pod_event(*, auth: str, event_type: str) -> None:
                 }
             """,
             variables={
-                "eventType": event_type,
-                "podSessionId": pod_session_id,
+                "argPodSessionId": pod_session_id,
+                "argEventType": event_type,
+                "argTimestamp": current_timestamp,
             },
         )
     except Exception:
