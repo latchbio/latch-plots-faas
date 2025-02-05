@@ -373,10 +373,14 @@ async def start_kernel_proc() -> None:
             "viewer_cell_data": k_state.viewer_cell_data,
             "plot_configs": k_state.plot_configs,
             "signal_listeners": {
-                "24407/0": ["24413", "24414"],
-                "24407/1": ["24413", "24414"],
+                "24407/0": ["24413", "24414", "24407", "24497"],
+                "24407/1": ["24413", "24414", "24407"],
             },
-            "listener_stub_code": {"24413": "p = x() * y()", "24414": "x(5)\ny(10)"},
+            "stub_node_code": {
+                "24413": "p = x() * y()",
+                "24414": "x(5)\ny(10)",
+                "24497": "q = x() * 10",
+            },
         }
     )
 

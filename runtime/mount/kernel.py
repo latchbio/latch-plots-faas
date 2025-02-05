@@ -489,6 +489,9 @@ class Kernel:
 
     # Signal.store_key : [ Node.cell_id ]
     signal_listeners: dict[str, List[str]] = field(default_factory=dict)
+    # Node.cell_id : code
+    stub_node_code: dict[str, List[str]] = field(default_factory=dict)
+
     widget_signals: dict[str, Signal[Any]] = field(default_factory=dict)
     nodes_with_widgets: dict[int, Node] = field(default_factory=dict)
 
@@ -537,6 +540,7 @@ class Kernel:
             "cell_status": self.cell_status,
             "active_cell": self.active_cell,
             "signal_listeners": self.signal_listeners,
+            "stub_node_code": self.stub_node_code,
             "widget_signals": {k: repr(v) for k, v in self.widget_signals.items()},
             "nodes_with_widgets": {
                 str(k): v.debug_state() for k, v in self.nodes_with_widgets.items()
@@ -1133,10 +1137,7 @@ class Kernel:
             self.plot_data_selections = msg["plot_data_selections"]
             self.plot_configs = msg["plot_configs"]
             self.signal_listeners = msg["signal_listeners"]
-
-            # cell_id : code
-
-            stub_node_code: dict[str, str] = msg["listener_stub_code"]
+            self.stub_node_code = msg["stub_node_code"]
 
             for listeners in self.signal_listeners.values():
                 for l_cell_id in listeners:
@@ -1145,7 +1146,7 @@ class Kernel:
                             f=stub_noop,
                             parent=None,
                             stub=True,
-                            stub_code=stub_node_code.get(l_cell_id, ""),
+                            stub_code=self.stub_node_code.get(l_cell_id, ""),
                             cell_id=l_cell_id,
                         )
                         self.cell_rnodes[l_cell_id] = stub_node
