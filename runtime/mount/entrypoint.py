@@ -120,19 +120,17 @@ async def add_pod_event(*, auth: str, event_type: str) -> None:
             query="""
                 mutation AddOrUpdatePodSessionEvent(
                   $eventType: String!,
-                  $podSessionId: BigInt!,
-                  $timestamp: timestamptz!
+                  $podSessionId: BigInt!
                 ) {
                   createPodSessionEvent(
                     input: {
                       podSessionEvent: {
                         podSessionId: $podSessionId,
                         eventType: $eventType,
-                        timestamp: $timestamp
                       },
                       onConflict: {
                         constraint: "pod_session_events_unique_sess_id_event_type",
-                        updateColumns: [TIMESTAMP]
+                        updateColumns: []
                       }
                     }
                   ) {
@@ -143,7 +141,6 @@ async def add_pod_event(*, auth: str, event_type: str) -> None:
             variables={
                 "eventType": event_type,
                 "podSessionId": pod_session_id,
-                "timestamp": current_timestamp,
             },
         )
     except Exception:
