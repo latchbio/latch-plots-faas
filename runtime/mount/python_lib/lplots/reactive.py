@@ -134,6 +134,8 @@ class Node:
             "repr": repr(self),
             "f": {"qualname": self.f.__qualname__, "name": self.f.__name__},
             "stale": self.stale,
+            "stub": self.stub,
+            "stub_code": self.stub_code,
             "disposed": self.disposed,
             "parent": "omitted"
             if no_parent
