@@ -131,7 +131,7 @@ async def add_pod_event(*, auth: str, event_type: str) -> None:
                         timestamp: $timestamp
                       },
                       on_conflict: {
-                        constraint: pod_session_events_pod_session_id_event_type_key,
+                        constraint: pod_session_events_unique_sess_id_event_type,
                         update_columns: [timestamp]
                       }
                     }
