@@ -86,7 +86,7 @@ class KernelState:
     plot_data_selections: dict[str, str]
     viewer_cell_data: dict[str, ViewerCellData]
     plot_configs: dict[str, PlotConfig]
-    plot_notebook_id: str
+    plot_notebook_id: int
 
 
 @dataclass(frozen=True)
