@@ -1074,7 +1074,7 @@ class Kernel:
             return
 
         if isinstance(res, Signal):
-            listener_ids = self.signal_listeners.get(res.store_key, [])
+            listener_ids = [x.cell_id for x in res._listeners.values()]
             if cell_id is not None and cell_id in listener_ids:
                 listener_ids.remove(cell_id)
             await self.send(
