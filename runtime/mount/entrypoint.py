@@ -126,13 +126,13 @@ async def add_pod_event(*, auth: str, event_type: str) -> None:
                   createPodSessionEvent(
                     input: {
                       podSessionEvent: {
-                        pod_session_id: $podSessionId,
-                        event_type: $eventType,
+                        podSessionId: $podSessionId,
+                        eventType: $eventType,
                         timestamp: $timestamp
                       },
-                      on_conflict: {
-                        constraint: pod_session_events_unique_sess_id_event_type,
-                        update_columns: [timestamp]
+                      onConflict: {
+                        constraint: "pod_session_events_unique_sess_id_event_type",
+                        updateColumns: [TIMESTAMP]
                       }
                     }
                   ) {
@@ -146,7 +146,7 @@ async def add_pod_event(*, auth: str, event_type: str) -> None:
                 "timestamp": current_timestamp,
             },
         )
-    except Exception as e:
+    except Exception:
         traceback.print_exc()
 
 
