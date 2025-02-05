@@ -641,7 +641,7 @@ class Kernel:
 
         updated_widgets: set[str] = set()
         unused_signals: set[str] = set(self.widget_signals.keys())
-        for cell_id in self.cell_rnodes:
+        for cell_id, node in self.cell_rnodes.items():
             res: dict[str, WidgetState] = {}
 
             for n in nww_by_cell[cell_id]:
@@ -663,7 +663,8 @@ class Kernel:
                         continue
 
                     res[abs_k]["value"] = val
-            if self.cell_status[cell_id] == "error":
+
+            if not node.stub and self.cell_status[cell_id] == "error":
                 # skip errored cells to avoid clobbering widget state
                 # must be here so that we update unused_signals properly
                 # todo(maximsmol): optimize
