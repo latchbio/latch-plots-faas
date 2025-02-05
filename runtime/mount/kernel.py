@@ -480,6 +480,8 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
 class Kernel:
     conn: SocketIoThread
 
+    plot_notebook_id: str
+
     cell_seq = 0
     cell_rnodes: dict[str, Node] = field(default_factory=dict)
     k_globals: TracedDict = field(init=False)
@@ -487,10 +489,10 @@ class Kernel:
 
     active_cell: str | None = None
 
-    # Signal.store_key : [ Node.cell_id ]
-    signal_listeners: dict[str, List[str]] = field(default_factory=dict)
     # Node.cell_id : code
-    stub_node_code: dict[str, List[str]] = field(default_factory=dict)
+    # stub_node_code: dict[str, List[str]] = field(default_factory=dict)
+
+    signals: dict[str, Signal[Any]] = field(default_factory=dict)
 
     widget_signals: dict[str, Signal[Any]] = field(default_factory=dict)
     nodes_with_widgets: dict[int, Node] = field(default_factory=dict)
@@ -539,8 +541,7 @@ class Kernel:
             },
             "cell_status": self.cell_status,
             "active_cell": self.active_cell,
-            "signal_listeners": self.signal_listeners,
-            "stub_node_code": self.stub_node_code,
+            "signals": {k: v.node_dependencies() for k, v in self.signals.items()},
             "widget_signals": {k: repr(v) for k, v in self.widget_signals.items()},
             "nodes_with_widgets": {
                 str(k): v.debug_state() for k, v in self.nodes_with_widgets.items()
@@ -560,6 +561,7 @@ class Kernel:
             "registry_dataframes": list(self.registry_dataframes.keys()),
             "url_dataframes": list(self.url_dataframes.keys()),
             "plot_configs": self.plot_configs,
+            "plot_notebooK_id": self.plot_notebook_id,
         }
 
     async def set_active_cell(self, cell_id: str) -> None:
@@ -640,7 +642,6 @@ class Kernel:
         }
 
         updated_widgets: set[str] = set()
-        unused_signals: set[str] = set(self.widget_signals.keys())
         for cell_id, node in self.cell_rnodes.items():
             res: dict[str, WidgetState] = {}
 
@@ -652,7 +653,6 @@ class Kernel:
 
                     if abs_k not in self.widget_signals:
                         continue
-                    unused_signals.remove(abs_k)
 
                     sig = self.widget_signals[abs_k]
                     if id(sig) in updated_signals:
@@ -678,6 +678,20 @@ class Kernel:
                     "updated_widgets": list(updated_widgets),
                 }
             )
+
+        # todo(kenny): consolidate with above + implement described
+        # optimizations
+        signal_state = {}
+        for key, sig in self.signals.items():
+            signal_state[key] = sig.node_dependencies()
+
+        await self.send(
+            {
+                "type": "notebook_signals",
+                "plot_notebook_id": self.plot_notebook_id,
+                "signal_state": signal_state,
+            }
+        )
 
         # fixme(rteqs): cleanup signals in some other way. the below does not work because widget signals
         # are restored on `init` but there are no corresponding `rnodes`
@@ -829,7 +843,6 @@ class Kernel:
             "dataframe_outputs": outputs.dfs,
             "figure_outputs": outputs.figures,
             "static_figure_outputs": outputs.static_figures,
-            "signal_outputs": outputs.signals,
         }
         if sys.exception() is not None:
             msg["exception"] = format_exc()
@@ -1135,20 +1148,20 @@ class Kernel:
             self.cell_output_selections = msg["cell_output_selections"]
             self.plot_data_selections = msg["plot_data_selections"]
             self.plot_configs = msg["plot_configs"]
-            self.signal_listeners = msg["signal_listeners"]
-            self.stub_node_code = msg["stub_node_code"]
+            self.plot_notebook_id = msg["plot_notebook_id"]
 
-            for listeners in self.signal_listeners.values():
-                for l_cell_id in listeners:
-                    if l_cell_id not in self.cell_rnodes:
-                        stub_node = Node(
-                            f=stub_noop,
-                            parent=None,
-                            stub=True,
-                            stub_code=self.stub_node_code.get(l_cell_id, ""),
-                            cell_id=l_cell_id,
-                        )
-                        self.cell_rnodes[l_cell_id] = stub_node
+            # create stub nodes that will be wired in signal init
+            # for listeners in self.signal_listeners.values():
+            #     for l_cell_id in listeners:
+            #         if l_cell_id not in self.cell_rnodes:
+            #             stub_node = Node(
+            #                 f=stub_noop,
+            #                 parent=None,
+            #                 stub=True,
+            #                 stub_code=self.stub_node_code.get(l_cell_id, ""),
+            #                 cell_id=l_cell_id,
+            #             )
+            #             self.cell_rnodes[l_cell_id] = stub_node
 
             viewer_cell_data = msg["viewer_cell_data"]
             for cell_id, data in viewer_cell_data.items():

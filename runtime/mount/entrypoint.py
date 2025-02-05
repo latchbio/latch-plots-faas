@@ -86,6 +86,7 @@ class KernelState:
     plot_data_selections: dict[str, str]
     viewer_cell_data: dict[str, ViewerCellData]
     plot_configs: dict[str, PlotConfig]
+    plot_notebook_id: str
 
 
 @dataclass(frozen=True)
@@ -244,6 +245,28 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                     "updated_widgets": msg["updated_widgets"],
                 }
 
+            elif msg["type"] == "notebook_signals":
+                await gql_query(
+                    auth=auth,
+                    query="""
+                        mutation UpdateNotebookSignals($id: BigInt!, $state: String!) {
+                            updatePlotNotebookInfo(
+                                input: { id: $id, patch: { signalDependencies: $state } }
+                            ) {
+                                clientMutationId
+                            }
+                        }
+                    """,
+                    variables={
+                        "id": msg["plot_notebook_id"],
+                        "state": orjson.dumps(msg["signal_dependencies"]).decode(),
+                    },
+                )
+
+                msg = {
+                    "type": msg["type"],
+                }
+
             elif msg["type"] == "output_value" and "cell_id" in msg:
                 await gql_query(
                     auth=auth,
@@ -345,7 +368,7 @@ async def start_kernel_proc() -> None:
         resp = await gql_query(
             auth=auth_token_sdk,
             query="""
-                query plotsNotebookKernelState($pod_id: BigInt!) {
+                query tmpPlotsNotebookKernelState($pod_id: BigInt!) {
                     plotsNotebookKernelState(argPodId: $pod_id)
                 }
             """,
@@ -372,15 +395,7 @@ async def start_kernel_proc() -> None:
             "plot_data_selections": k_state.plot_data_selections,
             "viewer_cell_data": k_state.viewer_cell_data,
             "plot_configs": k_state.plot_configs,
-            "signal_listeners": {
-                "24407/0": ["24413", "24414", "24407", "24497"],
-                "24407/1": ["24413", "24414", "24407"],
-            },
-            "stub_node_code": {
-                "24413": "p = x() * y()",
-                "24414": "x(5)\ny(10)",
-                "24497": "q = x() * 10",
-            },
+            "plot_notebook_id": k_state.plot_notebook_id,
         }
     )
 

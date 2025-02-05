@@ -290,6 +290,7 @@ class Signal(Generic[T]):
 
     _updates: list[T | Updater[T]]
     _listeners: dict[int, Node]
+    _writers: dict[int, Node]
 
     def __init__(
         self, initial: T, *, name: str | None = None, store_key: str | None = None
@@ -301,7 +302,6 @@ class Signal(Generic[T]):
         self._name = name
 
         self._updates = []
-        # Update listeners here
 
         if store_key is None:
             assert ctx.cur_comp is not None
@@ -313,12 +313,28 @@ class Signal(Generic[T]):
             self.store_key = store_key
 
         self._listeners = {}
-        if _inject.kernel is not None:
-            if self.store_key in _inject.kernel.signal_listeners:
-                for lid in _inject.kernel.signal_listeners.get(self.store_key, []):
-                    comp = _inject.kernel.cell_rnodes.get(lid, None)
-                    assert comp is not None
-                    self._listeners[id(comp)] = comp
+        self._writers = {}
+
+        _inject.kernel.signals[self.store_key] = self
+
+        # write listeners and writers by retrieving from rnodes
+
+        # if _inject.kernel is not None:
+        #     if self.store_key in _inject.kernel.signal_listeners:
+        #         for lid in _inject.kernel.signal_listeners.get(self.store_key, []):
+        #             comp = _inject.kernel.cell_rnodes.get(lid, None)
+        #             assert comp is not None
+        #             self._listeners[id(comp)] = comp
+
+    def node_dependencies(self) -> dict[str, list[str]]:
+        return {
+            "listeners": [
+                x.cell_id for x in self._listeners.values() if x.cell_id is not None
+            ],
+            "writers": [
+                x.cell_id for x in self._writers.values() if x.cell_id is not None
+            ],
+        }
 
     def sample(self) -> T:
         return self._value
@@ -343,14 +359,7 @@ class Signal(Generic[T]):
         # For pyright. `comp` always set in tx.
         assert comp is not None
 
-        global_listeners = _inject.kernel.signal_listeners
         key = self.store_key
-
-        if key not in global_listeners:
-            global_listeners[key] = [comp.cell_id]
-        else:
-            if comp.cell_id not in global_listeners.get(key, []):
-                global_listeners[key].append(comp.cell_id)
 
         if upd is Nothing.x:
             self._listeners[id(comp)] = comp
@@ -358,6 +367,7 @@ class Signal(Generic[T]):
             return self._value
 
         self._updates.append(upd)
+        self._writers[id(comp)] = comp
         ctx.updated_signals[id(self)] = self
         if not _ui_update:
             ctx.signals_update_from_code[id(self)] = self
