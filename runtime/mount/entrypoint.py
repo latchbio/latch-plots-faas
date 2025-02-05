@@ -375,6 +375,11 @@ async def start_kernel_proc() -> None:
             variables={"pod_id": pod_id},
         )
 
+        if "data" in resp and "tmpPlotsNotebookKernelState" in resp["data"]:
+            # Rename the field
+            resp["data"]["plotsNotebookKernelState"] = resp["data"].pop(
+                "tmpPlotsNotebookKernelState"
+            )
         data = validate(resp, PlotsNotebookKernelStateResp)
         k_state = data.data.plotsNotebookKernelState
     except Exception:
