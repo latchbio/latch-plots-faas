@@ -640,7 +640,6 @@ class Kernel:
         }
 
         updated_widgets: set[str] = set()
-        unused_signals: set[str] = set(self.widget_signals.keys())
         for cell_id in self.cell_rnodes:
             res: dict[str, WidgetState] = {}
 
@@ -652,7 +651,6 @@ class Kernel:
 
                     if abs_k not in self.widget_signals:
                         continue
-                    unused_signals.remove(abs_k)
 
                     sig = self.widget_signals[abs_k]
                     if id(sig) in updated_signals:
@@ -681,17 +679,17 @@ class Kernel:
 
         # todo(kenny): consolidate with above + implement described
         # optimizations
-        # signal_state = {}
-        # for key, sig in self.signals.items():
-        #     signal_state[key] = sig.node_dependencies()
+        signal_state = {}
+        for key, sig in self.signals.items():
+            signal_state[key] = sig.node_dependencies()
 
-        # await self.send(
-        #     {
-        #         "type": "notebook_signals",
-        #         "plot_notebook_id": self.plot_notebook_id,
-        #         "signal_state": signal_state,
-        #     }
-        # )
+        await self.send(
+            {
+                "type": "notebook_signals",
+                "plot_notebook_id": self.plot_notebook_id,
+                "signal_state": signal_state,
+            }
+        )
 
         # fixme(rteqs): cleanup signals in some other way. the below does not work because widget signals
         # are restored on `init` but there are no corresponding `rnodes`

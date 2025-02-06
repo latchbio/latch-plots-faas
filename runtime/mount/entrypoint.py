@@ -195,7 +195,6 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                     "dataframe_outputs": msg["dataframe_outputs"],
                     "figure_outputs": msg["figure_outputs"],
                     "static_figure_outputs": msg["static_figure_outputs"],
-                    "signal_outputs": msg["signal_outputs"],
                 }
 
                 exc = msg.get("exception")
