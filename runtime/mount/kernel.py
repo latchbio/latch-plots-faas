@@ -687,7 +687,7 @@ class Kernel:
             {
                 "type": "notebook_signals",
                 "plot_notebook_id": self.plot_notebook_id,
-                "signal_state": signal_state,
+                "signal_dependencies": signal_state,
             }
         )
 
