@@ -315,8 +315,6 @@ class Signal(Generic[T]):
         self._listeners = {}
         self._writers = {}
 
-        _inject.kernel.signals[self.store_key] = self
-
         # write listeners and writers by retrieving from rnodes
 
         # if _inject.kernel is not None:
@@ -356,10 +354,12 @@ class Signal(Generic[T]):
     ) -> T | None:
         assert ctx.in_tx
         comp = ctx.cur_comp
-        # For pyright. `comp` always set in tx.
         assert comp is not None
 
         key = self.store_key
+
+        if key not in _inject.kernel.signals:
+            _inject.kernel.signals[key] = self
 
         if upd is Nothing.x:
             self._listeners[id(comp)] = comp

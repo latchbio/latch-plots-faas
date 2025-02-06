@@ -480,8 +480,6 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
 class Kernel:
     conn: SocketIoThread
 
-    plot_notebook_id: str
-
     cell_seq = 0
     cell_rnodes: dict[str, Node] = field(default_factory=dict)
     k_globals: TracedDict = field(init=False)
@@ -642,7 +640,8 @@ class Kernel:
         }
 
         updated_widgets: set[str] = set()
-        for cell_id, node in self.cell_rnodes.items():
+        unused_signals: set[str] = set(self.widget_signals.keys())
+        for cell_id in self.cell_rnodes:
             res: dict[str, WidgetState] = {}
 
             for n in nww_by_cell[cell_id]:
@@ -653,6 +652,7 @@ class Kernel:
 
                     if abs_k not in self.widget_signals:
                         continue
+                    unused_signals.remove(abs_k)
 
                     sig = self.widget_signals[abs_k]
                     if id(sig) in updated_signals:
@@ -664,7 +664,7 @@ class Kernel:
 
                     res[abs_k]["value"] = val
 
-            if not node.stub and self.cell_status[cell_id] == "error":
+            if self.cell_status[cell_id] == "error":
                 # skip errored cells to avoid clobbering widget state
                 # must be here so that we update unused_signals properly
                 # todo(maximsmol): optimize
@@ -681,17 +681,17 @@ class Kernel:
 
         # todo(kenny): consolidate with above + implement described
         # optimizations
-        signal_state = {}
-        for key, sig in self.signals.items():
-            signal_state[key] = sig.node_dependencies()
+        # signal_state = {}
+        # for key, sig in self.signals.items():
+        #     signal_state[key] = sig.node_dependencies()
 
-        await self.send(
-            {
-                "type": "notebook_signals",
-                "plot_notebook_id": self.plot_notebook_id,
-                "signal_state": signal_state,
-            }
-        )
+        # await self.send(
+        #     {
+        #         "type": "notebook_signals",
+        #         "plot_notebook_id": self.plot_notebook_id,
+        #         "signal_state": signal_state,
+        #     }
+        # )
 
         # fixme(rteqs): cleanup signals in some other way. the below does not work because widget signals
         # are restored on `init` but there are no corresponding `rnodes`
