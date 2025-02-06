@@ -679,9 +679,9 @@ class Kernel:
 
         # todo(kenny): consolidate with above + implement described
         # optimizations
-        signal_data = {}
+        signal_data = []
         for key, sig in self.signals.items():
-            signal_data = {**sig.node_dependencies(), "store_key": key}
+            signal_data.append({**sig.node_dependencies(), "store_key": key})
 
         await self.send(
             {
