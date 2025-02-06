@@ -679,15 +679,15 @@ class Kernel:
 
         # todo(kenny): consolidate with above + implement described
         # optimizations
-        signal_state = {}
+        signal_data = {}
         for key, sig in self.signals.items():
-            signal_state[key] = sig.node_dependencies()
+            signal_data = {**sig.node_dependencies(), "store_key": key}
 
         await self.send(
             {
                 "type": "notebook_signals",
                 "plot_notebook_id": self.plot_notebook_id,
-                "signal_dependencies": signal_state,
+                "signal_dependencies": {"dependencies": signal_data},
             }
         )
 
