@@ -545,12 +545,12 @@ class Kernel:
         )
 
     def debug_state(self) -> dict[str, object]:
-        # snapshot = {}
-        # for key, val in self.k_globals.items():
-        #     if isinstance(val, (int, float, str, bool, type(None))):
-        #         snapshot[key] = val
-        #     else:
-        #         snapshot[key] = safe_pickle(val)
+        snapshot = {}
+        for key, val in self.k_globals.items():
+            if isinstance(val, (int, float, str, bool, type(None))):
+                snapshot[key] = val
+            else:
+                snapshot[key] = safe_pickle(val)
 
         return {
             "cell_seq": self.cell_seq,
@@ -585,6 +585,7 @@ class Kernel:
             "plot_notebook_id": self.plot_notebook_id,
             "signal_dependencies_snapshot": self.signal_dependencies_snapshot,
             "stub_node_code": self.stub_node_code,
+            "snapshot": snapshot,
         }
 
     async def set_active_cell(self, cell_id: str) -> None:
