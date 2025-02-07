@@ -489,8 +489,7 @@ def safe_pickle(val):
         return base64.b64encode(pickled).decode("utf-8")
     except Exception as e:
         error_message = f"Pickle failed: {e}"
-        return {"__pickled_error__": error_message}
-        # return {"__pickled_error__": error_message, "repr": repr(val)}
+        return {"__pickled_error__": error_message, "repr": repr(val)}
 
 
 @dataclass(kw_only=True)
