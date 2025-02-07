@@ -389,17 +389,12 @@ async def start_kernel_proc() -> None:
             auth=auth_token_sdk,
             query="""
                 query plotsNotebookKernelState($pod_id: BigInt!) {
-                    tmpPlotsNotebookKernelState(argPodId: $pod_id)
+                    plotsNotebookKernelState(argPodId: $pod_id)
                 }
             """,
             variables={"pod_id": pod_id},
         )
 
-        if "data" in resp and "tmpPlotsNotebookKernelState" in resp["data"]:
-            # Rename the field
-            resp["data"]["plotsNotebookKernelState"] = resp["data"].pop(
-                "tmpPlotsNotebookKernelState"
-            )
         data = validate(resp, PlotsNotebookKernelStateResp)
         k_state = data.data.plotsNotebookKernelState
     except Exception:
