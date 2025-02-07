@@ -119,6 +119,7 @@ class Node:
 
             for s in cur.signals.values():
                 del s._listeners[id(cur)]
+                del s._writers[id(cur)]
             cur.signals = {}
 
             del live_nodes[id(cur)]
