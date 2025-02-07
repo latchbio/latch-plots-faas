@@ -204,15 +204,29 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                 await gql_query(
                     auth=auth,
                     query="""
-                        mutation UpdateCellResult($id: BigInt!, $exception: String) {
-                            updatePlotTransformInfo(
-                                input: { id: $id, patch: { exception: $exception } }
-                            ) {
-                                clientMutationId
+                        mutation UpdateCellResult(
+                          $id: BigInt!,
+                          $exception: String,
+                          $source_code: String
+                        ) {
+                          updatePlotTransformInfo(
+                            input: {
+                              id: $id,
+                              patch: {
+                                exception: $exception,
+                                source_code: $source_code
+                              }
                             }
+                          ) {
+                            clientMutationId
+                          }
                         }
                     """,
-                    variables={"id": msg["cell_id"], "exception": exc},
+                    variables={
+                        "id": msg["cell_id"],
+                        "exception": exc,
+                        "source_code": msg["source_code"],
+                    },
                 )
 
                 msg = {
