@@ -488,8 +488,9 @@ def safe_pickle(val):
         pickled = pickle.dumps(val)
         return base64.b64encode(pickled).decode("utf-8")
     except Exception as e:
-        print(f"Warning: Failed to pickle {val}: {e}")
-        return "unserializable"
+        error_message = f"Pickle failed: {e}"
+        return {"__pickled_error__": error_message}
+        # return {"__pickled_error__": error_message, "repr": repr(val)}
 
 
 @dataclass(kw_only=True)
@@ -550,12 +551,8 @@ class Kernel:
             if isinstance(val, (int, float, str, bool, type(None))):
                 snapshot[key] = val
             else:
-                try:
-                    snapshot[key] = safe_pickle(val)
-                except Exception as e:
-                    print(f"Warning: Failed to serialize {key}: {e}")
-                    snapshot[key] = f"ERROR serializing: {e}"
-                    continue
+                snapshot[key] = safe_pickle(val)
+
         return {
             "cell_seq": self.cell_seq,
             "cell_rnodes": {k: v.debug_state() for k, v in self.cell_rnodes.items()},
