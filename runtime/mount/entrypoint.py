@@ -207,14 +207,14 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                         mutation UpdateCellResult(
                           $id: BigInt!,
                           $exception: String,
-                          $source_code: String
+                          $sourceCode: String
                         ) {
                           updatePlotTransformInfo(
                             input: {
                               id: $id,
                               patch: {
                                 exception: $exception,
-                                source_code: $source_code
+                                sourceCode: $source_code
                               }
                             }
                           ) {
