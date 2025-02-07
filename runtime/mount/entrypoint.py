@@ -225,7 +225,7 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                     variables={
                         "id": msg["cell_id"],
                         "exception": exc,
-                        "source_code": msg["source_code"],
+                        "sourceCode": msg["source_code"],
                     },
                 )
 
