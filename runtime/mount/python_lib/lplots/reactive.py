@@ -117,9 +117,12 @@ class Node:
             # this is because the topmost node needs to remove itself from a potential parent
             # which is not itself being disposed
 
-            for s in cur.signals.values():
-                del s._listeners[id(cur)]
-                del s._writers[id(cur)]
+            for s in _inject.kernel.signals.values():
+                if id(cur) in s._listeners:
+                    del s._listeners[id(cur)]
+                if id(cur) in s._writers:
+                    del s._writers[id(cur)]
+
             cur.signals = {}
 
             del live_nodes[id(cur)]
