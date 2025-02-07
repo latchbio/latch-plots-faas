@@ -1173,23 +1173,21 @@ class Kernel:
                 for x in msg["signal_dependencies"]
             }
 
-            # We only need stubs for listeners for executing dependent nodes,
-            # but we need writers to display complete reactive graph on
-            # console.
-            stub_nodes = {
-                l_id: Node(
-                    f=stub_noop,
-                    parent=None,
-                    stub=True,
-                    stub_code=self.stub_node_code.get(l_id, ""),
-                    cell_id=l_id,
-                    name=f"stub/{l_id}",
-                )
-                for depen in self.signal_dependencies_snapshot.values()
-                for l_id in depen["listeners"] + depen["writers"]
-                if l_id not in self.cell_rnodes
-            }
-            self.cell_rnodes.update(stub_nodes)
+            # TODO: (kenny) - will wire this back up when I understand bug.
+            # stub_nodes = {
+            #     l_id: Node(
+            #         f=stub_noop,
+            #         parent=None,
+            #         stub=True,
+            #         stub_code=self.stub_node_code.get(l_id, ""),
+            #         cell_id=l_id,
+            #         name=f"stub/{l_id}",
+            #     )
+            #     for depen in self.signal_dependencies_snapshot.values()
+            #     for l_id in depen["listeners"] + depen["writers"]
+            #     if l_id not in self.cell_rnodes
+            # }
+            # self.cell_rnodes.update(stub_nodes)
 
             viewer_cell_data = msg["viewer_cell_data"]
             for cell_id, data in viewer_cell_data.items():

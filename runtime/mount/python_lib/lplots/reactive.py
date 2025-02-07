@@ -357,23 +357,24 @@ class Signal(Generic[T]):
         assert comp is not None
         assert _inject.kernel is not None
 
+        # TODO (kenny) - will wire this back up when I understand bug
         # See comment in __init__
-        if not self._restored_from_snapshot:
-            if self.store_key in _inject.kernel.signal_dependencies_snapshot:
-                depens = _inject.kernel.signal_dependencies_snapshot.get(
-                    self.store_key, {"listeners": [], "writers": []}
-                )
-                for lid in depens["listeners"]:
-                    comp = _inject.kernel.cell_rnodes.get(lid, None)
-                    assert comp is not None
-                    self._listeners[id(comp)] = comp
+        # if not self._restored_from_snapshot:
+        #     if self.store_key in _inject.kernel.signal_dependencies_snapshot:
+        #         depens = _inject.kernel.signal_dependencies_snapshot.get(
+        #             self.store_key, {"listeners": [], "writers": []}
+        #         )
+        #         for lid in depens["listeners"]:
+        #             comp = _inject.kernel.cell_rnodes.get(lid, None)
+        #             assert comp is not None
+        #             self._listeners[id(comp)] = comp
 
-                for wid in depens["writers"]:
-                    comp = _inject.kernel.cell_rnodes.get(wid, None)
-                    assert comp is not None
-                    self._writers[id(comp)] = comp
+        #         for wid in depens["writers"]:
+        #             comp = _inject.kernel.cell_rnodes.get(wid, None)
+        #             assert comp is not None
+        #             self._writers[id(comp)] = comp
 
-            self._restored_from_snapshot = True
+        #     self._restored_from_snapshot = True
 
         key = self.store_key
 
