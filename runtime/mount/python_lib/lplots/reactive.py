@@ -67,10 +67,6 @@ class Node:
             self.name = self.f.__name__
 
         if self.name in live_node_names:
-            for node in live_nodes.values():
-                if node.name == self.name and node.stub:
-                    node.dispose()
-                    del _inject.kernel.cell_rnodes[self.name]
             raise ValueError(f"reactive node name is not unique: {self.name!r}")
 
         live_node_names.add(self.name)
