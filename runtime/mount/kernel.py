@@ -565,6 +565,8 @@ class Kernel:
             "url_dataframes": list(self.url_dataframes.keys()),
             "plot_configs": self.plot_configs,
             "plot_notebooK_id": self.plot_notebook_id,
+            "signal_dependencies": self.signal_dependencies,
+            "stub_node_code": self.stub_node_code,
         }
 
     async def set_active_cell(self, cell_id: str) -> None:
