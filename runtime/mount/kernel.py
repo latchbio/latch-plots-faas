@@ -1,6 +1,7 @@
 import ast
 import asyncio
 import math
+import pickle
 import pprint
 import re
 import signal
@@ -534,6 +535,17 @@ class Kernel:
         )
 
     def debug_state(self) -> dict[str, object]:
+        snapshot = {}
+        for key, val in self.k_globals.items():
+            if isinstance(val, (int, float, str, bool, type(None))):
+                snapshot[key] = val
+            else:
+                try:
+                    snapshot[key] = pickle.dumps(val)
+                except Exception as e:
+                    print(f"Warning: Failed to serialize {key}: {e}")
+                    snapshot[key] = f"ERROR serializing: {e}"
+                    continue
         return {
             "cell_seq": self.cell_seq,
             "cell_rnodes": {k: v.debug_state() for k, v in self.cell_rnodes.items()},
@@ -567,6 +579,7 @@ class Kernel:
             "plot_notebooK_id": self.plot_notebook_id,
             "signal_dependencies_snapshot": self.signal_dependencies_snapshot,
             "stub_node_code": self.stub_node_code,
+            "global_snapshot": snapshot,
         }
 
     async def set_active_cell(self, cell_id: str) -> None:
