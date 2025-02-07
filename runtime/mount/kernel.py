@@ -736,9 +736,6 @@ class Kernel:
             if isinstance(val, BaseFigure):
                 res.figures.append(x)
 
-            if isinstance(val, Signal):
-                res.signals.append(x)
-
             if isinstance(val, Figure) or (
                 hasattr(val, "figure") and isinstance(val.figure, Figure)
             ):
@@ -747,7 +744,6 @@ class Kernel:
         res.all.sort()
         res.dfs.sort()
         res.figures.sort()
-        res.signals.sort()
         res.static_figures.sort()
 
         return res
@@ -769,7 +765,7 @@ class Kernel:
         if len(stmts) == 0:
             self.cell_status[cell_id] = "ok"
             self.k_globals.clear()
-            await self.send_cell_result(cell_id)
+            await self.send_cell_result(cell_id, code)
             return
 
         async def x() -> None:
@@ -795,11 +791,11 @@ class Kernel:
                     ...
 
                 self.cell_status[cell_id] = "ok"
-                await self.send_cell_result(cell_id)
+                await self.send_cell_result(cell_id, code)
 
             except Exception:
                 self.cell_status[cell_id] = "error"
-                await self.send_cell_result(cell_id)
+                await self.send_cell_result(cell_id, code)
 
         x.__name__ = filename
 
@@ -826,9 +822,9 @@ class Kernel:
 
         except Exception:
             self.cell_status[cell_id] = "error"
-            await self.send_cell_result(cell_id)
+            await self.send_cell_result(cell_id, code)
 
-    async def send_cell_result(self, cell_id: str) -> None:
+    async def send_cell_result(self, cell_id: str, code: str) -> None:
         await self.send_global_updates()
 
         outputs = sorted(self.k_globals.available)
@@ -841,6 +837,7 @@ class Kernel:
             "dataframe_outputs": outputs.dfs,
             "figure_outputs": outputs.figures,
             "static_figure_outputs": outputs.static_figures,
+            "source_code": code,
         }
         if sys.exception() is not None:
             msg["exception"] = format_exc()
