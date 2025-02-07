@@ -548,9 +548,9 @@ class Kernel:
         snapshot = {}
         for key, val in self.k_globals.items():
             if isinstance(val, (int, float, str, bool, type(None))):
-                snapshot[key] = key
-            # else:
-            #     snapshot[key] = safe_pickle(val)
+                snapshot[key] = val
+            else:
+                snapshot[key] = safe_pickle(val)
 
         return {
             "cell_seq": self.cell_seq,
@@ -585,7 +585,6 @@ class Kernel:
             "plot_notebooK_id": self.plot_notebook_id,
             "signal_dependencies_snapshot": self.signal_dependencies_snapshot,
             "stub_node_code": self.stub_node_code,
-            "global_snapshot": snapshot,
         }
 
     async def set_active_cell(self, cell_id: str) -> None:
