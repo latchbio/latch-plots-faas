@@ -582,7 +582,7 @@ class Kernel:
             "registry_dataframes": list(self.registry_dataframes.keys()),
             "url_dataframes": list(self.url_dataframes.keys()),
             "plot_configs": self.plot_configs,
-            "plot_notebooK_id": self.plot_notebook_id,
+            "plot_notebook_id": self.plot_notebook_id,
             "signal_dependencies_snapshot": self.signal_dependencies_snapshot,
             "stub_node_code": self.stub_node_code,
         }
