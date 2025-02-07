@@ -359,8 +359,8 @@ class Signal(Generic[T]):
 
         # See comment in __init__
         if not self._restored_from_snapshot:
-            if self.store_key in _inject.kernel.signal_dependencies:
-                depens = _inject.kernel.signal_dependencies.get(
+            if self.store_key in _inject.kernel.signal_dependencies_snapshot:
+                depens = _inject.kernel.signal_dependencies_snapshot.get(
                     self.store_key, {"listeners": [], "writers": []}
                 )
                 for lid in depens["listeners"]:
