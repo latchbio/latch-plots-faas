@@ -80,6 +80,12 @@ class ViewerCellData(TypedDict):
     pagination_settings: PaginationSettingsData
 
 
+class SignalDependencyData(TypedDict):
+    store_key: str
+    writers: list[str]
+    listeners: list[str]
+
+
 @dataclass(frozen=True)
 class KernelState:
     widget_states: dict[str, str]
@@ -88,6 +94,8 @@ class KernelState:
     viewer_cell_data: dict[str, ViewerCellData]
     plot_configs: dict[str, PlotConfig]
     plot_notebook_id: int
+    signal_dependencies: list[SignalDependencyData]
+    stub_node_code: dict[str, str]
 
 
 @dataclass(frozen=True)
@@ -420,6 +428,8 @@ async def start_kernel_proc() -> None:
             "viewer_cell_data": k_state.viewer_cell_data,
             "plot_configs": k_state.plot_configs,
             "plot_notebook_id": k_state.plot_notebook_id,
+            "signal_dependencies": k_state.signal_dependencies,
+            "stub_node_code": k_state.stub_node_code,
         }
     )
 

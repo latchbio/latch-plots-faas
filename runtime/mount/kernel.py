@@ -117,6 +117,11 @@ class Filter(TypedDict):
     operator: FilterOperator
 
 
+class SignalDependency(TypedDict):
+    writers: list[str]
+    readers: list[str]
+
+
 ColSelections = tuple[str, list[str | int | float]]
 DataframeSelections = list[tuple[ColSelections, ColSelections]]
 
@@ -1140,19 +1145,26 @@ class Kernel:
             self.plot_data_selections = msg["plot_data_selections"]
             self.plot_configs = msg["plot_configs"]
             self.plot_notebook_id = msg["plot_notebook_id"]
+            self.stub_node_code = msg["stub_node_code"]
+            self.signal_dependencies = {
+                x["store_key"]: {"writers": x["writers"], "listeners": x["listeners"]}
+                for x in msg["signal_dependencies"]
+            }
 
-            # create stub nodes that will be wired in signal init
-            # for listeners in self.signal_listeners.values():
-            #     for l_cell_id in listeners:
-            #         if l_cell_id not in self.cell_rnodes:
-            #             stub_node = Node(
-            #                 f=stub_noop,
-            #                 parent=None,
-            #                 stub=True,
-            #                 stub_code=self.stub_node_code.get(l_cell_id, ""),
-            #                 cell_id=l_cell_id,
-            #             )
-            #             self.cell_rnodes[l_cell_id] = stub_node
+            # We only need stubs for listeners, but as UX for writers improves
+            # (eg. reactivity graphs with code preview), we might want to plumb
+            # those as well.
+            for depen in self.signal_dependencies.values():
+                for l_id in depen["listeners"]:
+                    if l_id not in self.cell_rnodes:
+                        stub_node = Node(
+                            f=stub_noop,
+                            parent=None,
+                            stub=True,
+                            stub_code=self.stub_node_code.get(l_id, ""),
+                            cell_id=l_id,
+                        )
+                        self.cell_rnodes[l_id] = stub_node
 
             viewer_cell_data = msg["viewer_cell_data"]
             for cell_id, data in viewer_cell_data.items():
