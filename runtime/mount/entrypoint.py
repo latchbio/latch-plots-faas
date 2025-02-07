@@ -39,7 +39,7 @@ class CellOutputs(TypedDict):
     dataframe_outputs: list[str]
     figure_outputs: list[str]
     static_figure_outputs: list[str]
-    signal_outputs: list[str]
+    source_code: str
 
 
 cell_status: dict[str, str] = {}
