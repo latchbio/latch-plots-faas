@@ -549,8 +549,8 @@ class Kernel:
         for key, val in self.k_globals.items():
             if isinstance(val, (int, float, str, bool, type(None))):
                 snapshot[key] = val
-            else:
-                snapshot[key] = safe_pickle(val)
+            # else:
+            #     snapshot[key] = safe_pickle(val)
 
         return {
             "cell_seq": self.cell_seq,
