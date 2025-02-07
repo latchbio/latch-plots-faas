@@ -667,7 +667,8 @@ class Kernel:
 
                     res[abs_k]["value"] = val
 
-            if self.cell_status[cell_id] == "error":
+            comp = self.cell_rnodes[cell_id]
+            if not comp.stub and self.cell_status[cell_id] == "error":
                 # skip errored cells to avoid clobbering widget state
                 # must be here so that we update unused_signals properly
                 # todo(maximsmol): optimize
