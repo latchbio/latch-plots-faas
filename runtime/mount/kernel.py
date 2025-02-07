@@ -1,5 +1,6 @@
 import ast
 import asyncio
+import base64
 import math
 import pickle
 import pprint
@@ -482,6 +483,15 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
     return pio_json.clean_to_json_compatible(res, modules=modules)
 
 
+def safe_pickle(val):
+    try:
+        pickled = pickle.dumps(val)
+        return base64.b64encode(pickled).decode("utf-8")
+    except Exception as e:
+        print(f"Warning: Failed to pickle {val}: {e}")
+        return "unserializable"
+
+
 @dataclass(kw_only=True)
 class Kernel:
     conn: SocketIoThread
@@ -541,7 +551,7 @@ class Kernel:
                 snapshot[key] = val
             else:
                 try:
-                    snapshot[key] = pickle.dumps(val)
+                    snapshot[key] = safe_pickle(val)
                 except Exception as e:
                     print(f"Warning: Failed to serialize {key}: {e}")
                     snapshot[key] = f"ERROR serializing: {e}"
