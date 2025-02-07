@@ -122,31 +122,24 @@ async def broadcast_message(msg: str) -> None:
 
 async def add_pod_event(*, auth: str, event_type: str) -> None:
     try:
-        current_timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
         await gql_query(
             auth=auth,
             query="""
                 mutation UpsertPodSessionEvent(
                   $argPodSessionId: BigInt!,
-                  $argEventType: String!,
-                  $argTimestamp: Datetime!
+                  $argEventType: String!
                 ) {
                   upsertPodSessionEventCustom(
                     input: {
                       argPodSessionId: $argPodSessionId,
-                      argEventType: $argEventType,
-                      argTimestamp: $argTimestamp
+                      argEventType: $argEventType
                     }
                   ) {
                     clientMutationId
                   }
                 }
             """,
-            variables={
-                "argPodSessionId": pod_session_id,
-                "argEventType": event_type,
-                "argTimestamp": current_timestamp,
-            },
+            variables={"argPodSessionId": pod_session_id, "argEventType": event_type},
         )
     except Exception:
         traceback.print_exc()
