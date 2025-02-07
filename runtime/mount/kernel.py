@@ -1182,6 +1182,7 @@ class Kernel:
                     stub=True,
                     stub_code=self.stub_node_code.get(l_id, ""),
                     cell_id=l_id,
+                    name=f"stub/{l_id}",
                 )
                 for depen in self.signal_dependencies_snapshot.values()
                 for l_id in depen["listeners"] + depen["writers"]
