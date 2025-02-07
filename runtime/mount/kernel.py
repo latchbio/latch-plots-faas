@@ -548,7 +548,7 @@ class Kernel:
         snapshot = {}
         for key, val in self.k_globals.items():
             if isinstance(val, (int, float, str, bool, type(None))):
-                snapshot[key] = val
+                snapshot[key] = key
             # else:
             #     snapshot[key] = safe_pickle(val)
 
