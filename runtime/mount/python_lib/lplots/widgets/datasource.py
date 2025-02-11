@@ -39,7 +39,7 @@ DataSourceValue = (
 
 
 class DataSourceSelectState(
-    _emit.WidgetState[Literal["tabular_datasource_select"], DataSourceValue]
+    _emit.WidgetState[Literal[""], DataSourceValue]
 ):
     label: str
     readonly: bool
