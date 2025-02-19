@@ -23,15 +23,16 @@ import plotly.io._json as pio_json
 from duckdb import DuckDBPyConnection
 from latch.ldata.path import LPath
 from latch.registry.table import Table
+from matplotlib.figure import Figure
+from pandas import DataFrame, Index, MultiIndex, Series
+from pandas.io.json._table_schema import build_table_schema
+from plotly.basedatatypes import BaseFigure
+
 from lplots import _inject
 from lplots.reactive import Node, Signal, ctx
 from lplots.themes import graphpad_inspired_theme
 from lplots.utils.nothing import Nothing
 from lplots.widgets._emit import WidgetState
-from matplotlib.figure import Figure
-from pandas import DataFrame, Index, MultiIndex, Series
-from pandas.io.json._table_schema import build_table_schema
-from plotly.basedatatypes import BaseFigure
 from plotly_utils.precalc_box import precalc_box
 from plotly_utils.precalc_violin import precalc_violin
 from socketio_thread import SocketIoThread
@@ -213,10 +214,12 @@ class TracedDict(dict[str, Signal[object] | object]):
         return self.touched - self.removed
 
 
-class ExitException(Exception): ...
+class ExitException(Exception):
+    ...
 
 
-class CellInterruptException(Exception): ...
+class CellInterruptException(Exception):
+    ...
 
 
 KeyType = Literal["key", "ldata_node_id", "registry_table_id", "url"]
@@ -494,9 +497,9 @@ class Kernel:
     registry_dataframes: dict[str, DataFrame] = field(default_factory=dict)
     url_dataframes: dict[str, DataFrame] = field(default_factory=dict)
 
-    cell_pagination_settings: defaultdict[str, defaultdict[str, PaginationSettings]] = (
-        field(default_factory=pagination_settings_dict_factory)
-    )
+    cell_pagination_settings: defaultdict[
+        str, defaultdict[str, PaginationSettings]
+    ] = field(default_factory=pagination_settings_dict_factory)
     viewer_pagination_settings: defaultdict[
         str, defaultdict[str, PaginationSettings]
     ] = field(default_factory=pagination_settings_dict_factory)
