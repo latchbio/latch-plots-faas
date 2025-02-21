@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Literal, Tuple, TypedDict
+from typing import Any, Literal, TypedDict
 
 from ..reactive import Signal
 from ..utils.nothing import Nothing
@@ -27,7 +27,7 @@ def _iso_string_to_datetime(iso_string: str) -> datetime:
     )
 
 
-def parse_iso_strings(data: Any) -> None | Tuple[datetime, datetime]:
+def parse_iso_strings(data: Any) -> tuple[datetime, datetime] | None:
     if not isinstance(data, dict):
         return
 
@@ -62,6 +62,7 @@ class ButtonWidget:
         parsed = parse_iso_strings(res)
         if parsed is None:
             return False
+
         clicked, last_clicked = parsed
 
         if self._last_clicked_ref is None:
