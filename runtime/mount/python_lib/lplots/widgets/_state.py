@@ -2,6 +2,7 @@ from typing import Any
 
 from .. import _inject
 from ..reactive import Signal, ctx
+from ._emit import WidgetState
 
 
 def use_state_key(key: str | None = None) -> str:
