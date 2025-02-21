@@ -18,8 +18,11 @@ class ButtonWidgetState(_emit.WidgetState[Literal["button"], str]):
     default: ButtonWidgetSignalValue
 
 
+datetime_format_string = "%Y-%m-%dT%H:%M:%S.%fZ"
+
+
 def _iso_string_to_datetime(iso_string: str) -> datetime:
-    return datetime.strptime(iso_string, "%Y-%m-%dT%H:%M:%S.%fZ").replace(
+    return datetime.strptime(iso_string, datetime_format_string).replace(
         tzinfo=timezone.utc
     )
 
@@ -81,7 +84,7 @@ def w_button(
     key = _state.use_state_key(key=key)
 
     if default is None:
-        now = str(datetime.now(timezone.utc))
+        now = str(datetime.now(timezone.utc).strftime(datetime_format_string))
         default = {"clicked": now, "last_clicked": now}
 
     res = ButtonWidget(
