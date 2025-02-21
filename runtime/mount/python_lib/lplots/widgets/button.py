@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
-from typing import Any, Literal, TypedDict
+from datetime import datetime, timezone
+from typing import Any, Literal, Tuple, TypedDict
 
 from ..reactive import Signal
 from ..utils.nothing import Nothing
@@ -7,8 +8,8 @@ from . import _emit, _state
 
 
 class ButtonWidgetSignalValue(TypedDict):
-    clicked: int
-    last_clicked: int
+    clicked: str
+    last_clicked: str
 
 
 class ButtonWidgetState(_emit.WidgetState[Literal["button"], str]):
@@ -17,21 +18,27 @@ class ButtonWidgetState(_emit.WidgetState[Literal["button"], str]):
     default: ButtonWidgetSignalValue
 
 
-def _is_value_widget_signal(data: Any) -> bool:
+def _iso_string_to_datetime(iso_string: str) -> datetime:
+    return datetime.strptime(iso_string, "%Y-%m-%dT%H:%M:%S.%fZ").replace(
+        tzinfo=timezone.utc
+    )
+
+
+def parse_iso_strings(data: Any) -> None | Tuple[datetime, datetime]:
     if not isinstance(data, dict):
-        return False
+        return
 
     required_keys = ButtonWidgetSignalValue.__annotations__.keys()
 
     if not all(key in data for key in required_keys):
-        return False
+        return
 
-    if not isinstance(data["clicked"], int):
-        return False
-    if not isinstance(data["last_clicked"], int):
-        return False
-
-    return True
+    try:
+        clicked = _iso_string_to_datetime(data["clicked"])
+        last_clicked = _iso_string_to_datetime(data["last_clicked"])
+        return (clicked, last_clicked)
+    except ValueError:
+        return
 
 
 @dataclass(kw_only=True)
@@ -40,7 +47,7 @@ class ButtonWidget:
     _state: ButtonWidgetState
     _signal: Signal[ButtonWidgetSignalValue]
 
-    _last_clicked_ref: None | int = field(default=None, repr=False)
+    _last_clicked_ref: None | datetime = field(default=None, repr=False)
 
     @property
     def value(self) -> bool:
@@ -49,15 +56,16 @@ class ButtonWidget:
         if res is Nothing.x:
             return False
 
-        if not _is_value_widget_signal(res):
+        parsed = parse_iso_strings(res)
+        if parsed is None:
             return False
+        clicked, last_clicked = parsed
 
         if self._last_clicked_ref is None:
-            self._last_clicked_ref = res["last_clicked"]
+            self._last_clicked_ref = last_clicked
 
-        v = res["clicked"]
-        if v > self._last_clicked_ref:
-            res["last_clicked"] = v
+        if clicked > self._last_clicked_ref:
+            res["last_clicked"] = str(clicked)
             return True
 
         return False
@@ -67,13 +75,14 @@ def w_button(
     *,
     key: str | None = None,
     label: str,
-    default: ButtonWidgetSignalValue = {
-        "clicked": 0,
-        "last_clicked": 0,
-    },
+    default: None | ButtonWidgetSignalValue = None,
     readonly: bool = False,
 ) -> ButtonWidget:
     key = _state.use_state_key(key=key)
+
+    if default is None:
+        now = str(datetime.now(timezone.utc))
+        default = {"clicked": now, "last_clicked": now}
 
     res = ButtonWidget(
         _key=key,
