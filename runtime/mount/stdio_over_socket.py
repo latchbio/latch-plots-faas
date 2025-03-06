@@ -2,6 +2,7 @@ import asyncio
 from dataclasses import dataclass
 from io import BufferedWriter, RawIOBase, TextIOWrapper, UnsupportedOperation
 from typing import TYPE_CHECKING
+
 from socketio_thread import SocketIoThread
 
 if TYPE_CHECKING:
