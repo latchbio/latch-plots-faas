@@ -333,7 +333,7 @@ async def start_kernel_proc() -> None:
         (dir_p / "kernel.py"),
         str(sock_k_fd),
         pass_fds=[sock_k_fd],
-        stdin=asyncio.subprocess.PIPE,
+        stdin=asyncio.subprocess.DEVNULL,
         preexec_fn=lambda: os.nice(1),
     )
 
