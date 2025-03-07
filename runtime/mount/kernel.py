@@ -227,7 +227,7 @@ def cell_exit(code: int = 0) -> None:
 
 
 def cell_interrupt(code: int = 0) -> None:
-    raise CellInterruptException
+    raise KeyboardInterrupt
 
 
 leading_digits_and_dash = re.compile(r"^\d+-")
@@ -509,7 +509,7 @@ class Kernel:
 
         # todo(rteqs): figure out why we can't just catch KeyboardInterrupt without crashing the kernel
         signal.signal(
-            signal.SIGUSR1,
+            signal.SIGINT,
             lambda signum, frame: cell_interrupt()
             if self.active_cell is not None
             and self.cell_status[self.active_cell] == "running"
