@@ -1,6 +1,5 @@
 import re
 import secrets
-import signal
 from contextlib import suppress
 from dataclasses import dataclass
 
@@ -129,6 +128,10 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
 
     conn_k = k_proc.conn_k
     assert conn_k is not None
+
+    stdin_k = k_proc.proc.stdin
+    assert stdin_k is not None
+
     contexts[sess_hash] = ctx
 
     await ready_ev.wait()
@@ -154,14 +157,14 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
                 cell_id = msg["cell_id"]
 
                 if cell_status.get(cell_id) == "running" and k_proc.proc is not None:
-                    k_proc.proc.send_signal(signal=signal.SIGINT)
+                    stdin_k.write(b"\x03")
 
                 cell_status.pop(cell_id, None)
                 cell_last_run_outputs.pop(cell_id, None)
                 cell_sequencers.pop(cell_id, None)
 
             if msg["type"] == "stop_cell" and k_proc.proc is not None:
-                k_proc.proc.send_signal(signal=signal.SIGINT)
+                stdin_k.write(b"\x03")
                 continue
 
             await conn_k.send(msg)
