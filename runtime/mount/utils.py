@@ -8,6 +8,7 @@ from typing import Any, NotRequired, TypedDict
 from aiohttp import ClientSession
 from latch.types.directory import LatchDir
 from latch.types.file import LatchFile
+from lplots.utils.nothing import _Nothing
 from matplotlib.figure import Figure, SubFigure
 from yarl import URL
 
@@ -129,5 +130,8 @@ def orjson_encoder(obj: Any) -> Any:
 
     if isinstance(obj, Enum):
         return obj.name
+
+    if isinstance(obj, _Nothing):
+        return "Nothing"
 
     raise TypeError(f"Type {type(obj)} not serializable")

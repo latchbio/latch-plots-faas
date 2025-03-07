@@ -17,9 +17,7 @@ class Singleton:
         return cls._instance
 
 
-class _Nothing(Singleton):
-    def __repr__(self) -> str:
-        return "Nothing"
+class _Nothing(Singleton): ...
 
 
 class Nothing(Enum):
