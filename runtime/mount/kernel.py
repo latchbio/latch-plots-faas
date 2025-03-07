@@ -216,6 +216,9 @@ class TracedDict(dict[str, Signal[object] | object]):
 class ExitException(Exception): ...
 
 
+class CellInterruptException(Exception): ...
+
+
 KeyType = Literal["key", "ldata_node_id", "registry_table_id", "url"]
 
 
@@ -1381,6 +1384,8 @@ async def main() -> None:
         while not shutdown_requested:
             try:
                 await k.accept()
+            except KeyboardInterrupt:
+                print("Keyboard interrupt")
             except Exception:
                 traceback.print_exc()
                 continue
