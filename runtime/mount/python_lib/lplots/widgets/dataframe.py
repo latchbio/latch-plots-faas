@@ -33,7 +33,6 @@ class DataframePicker:
         assert isinstance(key, str)
         return self._value(key)
 
-    @property
     def sample(self) -> Any | None:
         key = self._select.sample
         assert isinstance(key, str)

@@ -36,7 +36,6 @@ class RadioGroups:
         res = self._signal()
         return self._value(res)
 
-    @property
     def sample(self) -> str | None:
         res = self._signal.sample()
         return self._value(res)

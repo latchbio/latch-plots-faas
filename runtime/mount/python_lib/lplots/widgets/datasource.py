@@ -138,7 +138,6 @@ class TabularDatasourcePicker:
         val = self._signal()
         return self._value(val)
 
-    @property
     def sample(self) -> pd.DataFrame | None:
         val = self._signal.sample()
         return self._value(val)

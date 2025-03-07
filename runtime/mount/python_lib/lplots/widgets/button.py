@@ -21,10 +21,6 @@ class ButtonWidgetState(_emit.WidgetState[Literal["button"], str]):
 datetime_format_string = "%Y-%m-%dT%H:%M:%S.%fZ"
 
 
-def _iso_string_to_datetime(iso_string: str) -> datetime:
-    return datetime.strptime(iso_string, datetime_format_string).replace(tzinfo=UTC)
-
-
 def parse_iso_strings(data: Any) -> tuple[datetime, datetime] | None:
     if not isinstance(data, dict):
         return None
@@ -35,8 +31,8 @@ def parse_iso_strings(data: Any) -> tuple[datetime, datetime] | None:
         return None
 
     try:
-        clicked = _iso_string_to_datetime(data["clicked"])
-        last_clicked = _iso_string_to_datetime(data["last_clicked"])
+        clicked = datetime.fromisoformat(data["clicked"])
+        last_clicked = datetime.fromisoformat(data["last_clicked"])
         return (clicked, last_clicked)
     except ValueError:
         return None
@@ -50,11 +46,14 @@ class ButtonWidget:
 
     _last_clicked_ref: None | datetime = field(default=None, repr=False)
 
-    def _value(self, val: ButtonWidgetSignalValue | Nothing) -> bool:
-        if val is Nothing.x:
+    @property
+    def value(self) -> bool:
+        res = self._signal()
+
+        if res is Nothing.x:
             return False
 
-        parsed = parse_iso_strings(val)
+        parsed = parse_iso_strings(res)
         if parsed is None:
             return False
 
@@ -64,20 +63,10 @@ class ButtonWidget:
             self._last_clicked_ref = last_clicked
 
         if clicked > self._last_clicked_ref:
-            val["last_clicked"] = str(clicked)
+            res["last_clicked"] = str(clicked)
             return True
 
         return False
-
-    @property
-    def value(self) -> bool:
-        val = self._signal()
-        return self._value(val)
-
-    @property
-    def sample(self) -> bool:
-        res = self._signal.sample()
-        return self._value(res)
 
 
 def w_button(
