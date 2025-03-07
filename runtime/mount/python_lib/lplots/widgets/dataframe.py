@@ -13,11 +13,11 @@ class DataframePicker:
 
     @property
     def key(self) -> str | None:
-        return self._select.value
+        res = self._select.value
+        assert isinstance(res, str)
+        return res
 
-    @property
-    def value(self) -> Any | None:
-        key = self._select.value
+    def _value(self, key: str | None) -> Any | None:
         if key is None:
             return None
 
@@ -26,6 +26,18 @@ class DataframePicker:
             return None
 
         return g()
+
+    @property
+    def value(self) -> Any | None:
+        key = self._select.value
+        assert isinstance(key, str)
+        return self._value(key)
+
+    @property
+    def sample(self) -> Any | None:
+        key = self._select.sample
+        assert isinstance(key, str)
+        return self._value(key)
 
 
 def w_dataframe_picker(

@@ -1,4 +1,4 @@
-from typing import Literal, TypedDict
+from typing import TypedDict
 
 
 class FormInputAppearance(TypedDict, total=False):

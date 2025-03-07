@@ -216,9 +216,6 @@ class TracedDict(dict[str, Signal[object] | object]):
 class ExitException(Exception): ...
 
 
-class CellInterruptException(Exception): ...
-
-
 KeyType = Literal["key", "ldata_node_id", "registry_table_id", "url"]
 
 
