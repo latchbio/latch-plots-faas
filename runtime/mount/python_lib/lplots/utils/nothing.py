@@ -18,7 +18,8 @@ class Singleton:
 
 
 class _Nothing(Singleton):
-    ...
+    def __repr__(self) -> str:
+        return "Nothing"
 
 
 class Nothing(Enum):

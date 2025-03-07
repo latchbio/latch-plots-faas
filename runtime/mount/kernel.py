@@ -507,7 +507,6 @@ class Kernel:
         self.k_globals.clear()
         pio.templates["graphpad_inspired_theme"] = graphpad_inspired_theme()
 
-        # todo(rteqs): figure out why we can't just catch KeyboardInterrupt without crashing the kernel
         signal.signal(
             signal.SIGINT,
             lambda signum, frame: cell_interrupt()
@@ -785,7 +784,7 @@ class Kernel:
             await self.set_active_cell(cell_id)
             await ctx.run(x, _cell_id=cell_id)
 
-        except (Exception, KeyboardInterrupt):
+        except (KeyboardInterrupt, Exception):
             self.cell_status[cell_id] = "error"
             await self.send_cell_result(cell_id)
 
@@ -1384,8 +1383,6 @@ async def main() -> None:
         while not shutdown_requested:
             try:
                 await k.accept()
-            except KeyboardInterrupt:
-                print("Keyboard interrupt")
             except Exception:
                 traceback.print_exc()
                 continue
