@@ -22,15 +22,22 @@ class LDataPicker:
     _state: LDataPickerState
     _signal: Signal[str]
 
+    def _value(self, val: str | None) -> LPath | None:
+        if val is None or not val.startswith("latch://"):
+            val = self._state.get("default")
+            if val is None:
+                return None
+
+        return LPath(val)
+
     @property
     def value(self) -> LPath | None:
         res = self._signal()
-        if res is None or not isinstance(res, str) or not res.startswith("latch://"):
-            res = self._state.get("default")
-            if res is None:
-                return None
+        return self._value(res)
 
-        return LPath(res)
+    def sample(self) -> LPath | None:
+        res = self._signal.sample()
+        return self._value(res)
 
 
 def w_ldata_picker(

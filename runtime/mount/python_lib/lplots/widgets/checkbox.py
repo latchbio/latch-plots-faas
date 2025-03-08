@@ -24,13 +24,20 @@ class CheckboxWidget:
     _state: CheckboxWidgetState
     _signal: Signal[bool]
 
+    def _value(self, val: bool | Nothing) -> bool:
+        if val is Nothing.x:
+            return self._state["default"]
+
+        return val
+
     @property
     def value(self) -> bool:
         res = self._signal()
-        if res is Nothing.x or not isinstance(res, bool):
-            res = self._state["default"]
+        return self._value(res)
 
-        return res
+    def sample(self) -> bool:
+        res = self._signal.sample()
+        return self._value(res)
 
 
 def w_checkbox(

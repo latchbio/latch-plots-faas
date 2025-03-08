@@ -20,16 +20,22 @@ class TextInputWidget:
     _state: TextInputWidgetState
     _signal: Signal[str]
 
+    def _value(self, val: str | Nothing | None) -> str:
+        if val is Nothing.x or not isinstance(val, str):
+            val = self._state.get("default")
+            if val is None:
+                return ""
+
+        return val
+
     @property
     def value(self) -> str:
         res = self._signal()
-        if res is Nothing.x or not isinstance(res, str):
-            res = self._state.get("default")
+        return self._value(res)
 
-            if res is None:
-                res = ""
-
-        return res
+    def sample(self) -> str:
+        res = self._signal.sample()
+        return self._value(res)
 
 
 def w_text_input(

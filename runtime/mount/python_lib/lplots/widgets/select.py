@@ -3,6 +3,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal, NotRequired
 
+from lplots.utils.nothing import Nothing
+
 from ..reactive import Signal
 from . import _emit, _state
 from .shared import FormInputAppearance
@@ -23,16 +25,24 @@ class Select:
     _state: SelectState
     _signal: Signal[str | int | float | bool | datetime]
 
+    def _value(
+        self, val: str | int | float | bool | datetime | Nothing | None
+    ) -> str | int | float | bool | datetime | None:
+        if val is None or val not in self._state["options"]:
+            val = self._state.get("default")
+            if val is None:
+                return None
+
+        return val
+
     @property
     def value(self) -> str | int | float | bool | datetime | None:
         res = self._signal()
+        return self._value(res)
 
-        if res is None or res not in self._state["options"]:
-            res = self._state.get("default")
-            if res is None:
-                return None
-
-        return res
+    def sample(self) -> str | int | float | bool | datetime | None:
+        res = self._signal.sample()
+        return self._value(res)
 
 
 def w_select(

@@ -22,15 +22,22 @@ class RegistryTablePicker:
     _state: RegistryTablePickerState
     _signal: Signal[str]
 
+    def _value(self, val: str | None) -> str | None:
+        if val is None:
+            val = self._state.get("default")
+            if val is None:
+                return None
+
+        return val
+
     @property
     def value(self) -> str | None:
         res = self._signal()
-        if res is None or not isinstance(res, str):
-            res = self._state.get("default")
-            if res is None:
-                return None
+        return self._value(res)
 
-        return res
+    def sample(self) -> str | None:
+        res = self._signal.sample()
+        return self._value(res)
 
 
 def w_registry_table_picker(

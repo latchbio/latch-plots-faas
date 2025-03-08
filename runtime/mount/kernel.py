@@ -23,16 +23,15 @@ import plotly.io._json as pio_json
 from duckdb import DuckDBPyConnection
 from latch.ldata.path import LPath
 from latch.registry.table import Table
-from matplotlib.figure import Figure
-from pandas import DataFrame, Index, MultiIndex, Series
-from pandas.io.json._table_schema import build_table_schema
-from plotly.basedatatypes import BaseFigure
-
 from lplots import _inject
 from lplots.reactive import Node, Signal, ctx
 from lplots.themes import graphpad_inspired_theme
 from lplots.utils.nothing import Nothing
 from lplots.widgets._emit import WidgetState
+from matplotlib.figure import Figure
+from pandas import DataFrame, Index, MultiIndex, Series
+from pandas.io.json._table_schema import build_table_schema
+from plotly.basedatatypes import BaseFigure
 from plotly_utils.precalc_box import precalc_box
 from plotly_utils.precalc_violin import precalc_violin
 from socketio_thread import SocketIoThread
@@ -214,12 +213,7 @@ class TracedDict(dict[str, Signal[object] | object]):
         return self.touched - self.removed
 
 
-class ExitException(Exception):
-    ...
-
-
-class CellInterruptException(Exception):
-    ...
+class ExitException(Exception): ...
 
 
 KeyType = Literal["key", "ldata_node_id", "registry_table_id", "url"]
@@ -230,7 +224,7 @@ def cell_exit(code: int = 0) -> None:
 
 
 def cell_interrupt(code: int = 0) -> None:
-    raise CellInterruptException
+    raise KeyboardInterrupt
 
 
 leading_digits_and_dash = re.compile(r"^\d+-")
@@ -274,9 +268,6 @@ def filter_dataframe(
 
     if opcode == "empty":
         return df[col_vals.notna() & (col_vals != "")]
-
-    if filter_value is None:
-        return df
 
     mask: Series[bool] | NDArray[np.bool] | None = None
 
@@ -497,9 +488,9 @@ class Kernel:
     registry_dataframes: dict[str, DataFrame] = field(default_factory=dict)
     url_dataframes: dict[str, DataFrame] = field(default_factory=dict)
 
-    cell_pagination_settings: defaultdict[
-        str, defaultdict[str, PaginationSettings]
-    ] = field(default_factory=pagination_settings_dict_factory)
+    cell_pagination_settings: defaultdict[str, defaultdict[str, PaginationSettings]] = (
+        field(default_factory=pagination_settings_dict_factory)
+    )
     viewer_pagination_settings: defaultdict[
         str, defaultdict[str, PaginationSettings]
     ] = field(default_factory=pagination_settings_dict_factory)
@@ -513,9 +504,8 @@ class Kernel:
         self.k_globals.clear()
         pio.templates["graphpad_inspired_theme"] = graphpad_inspired_theme()
 
-        # todo(rteqs): figure out why we can't just catch KeyboardInterrupt without crashing the kernel
         signal.signal(
-            signal.SIGUSR1,
+            signal.SIGINT,
             lambda signum, frame: cell_interrupt()
             if self.active_cell is not None
             and self.cell_status[self.active_cell] == "running"
@@ -782,7 +772,7 @@ class Kernel:
                     self.cell_status[cell_id] = "ok"
                     await self.send_cell_result(cell_id)
 
-                except Exception:
+                except (KeyboardInterrupt, Exception):
                     self.cell_status[cell_id] = "error"
                     await self.send_cell_result(cell_id)
 
@@ -791,7 +781,7 @@ class Kernel:
             await self.set_active_cell(cell_id)
             await ctx.run(x, _cell_id=cell_id)
 
-        except Exception:
+        except (KeyboardInterrupt, Exception):
             self.cell_status[cell_id] = "error"
             await self.send_cell_result(cell_id)
 
