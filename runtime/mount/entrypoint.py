@@ -58,6 +58,7 @@ class UserProfile(TypedDict):
 
 
 user_profiles: dict[str, UserProfile] = {}
+session_owner: str | int | None = None
 
 latch_p = Path("/root/.latch")
 sdk_token = (latch_p / "token").read_text()
@@ -415,6 +416,19 @@ async def shutdown() -> None:
         await sess.close()
 
 
+def set_next_session_owner() -> None:
+    global session_owner
+
+    for _, auth0_sub, connection_idx in contexts.values():
+        if session_owner in {auth0_sub, connection_idx}:
+            return
+
+    session_owner = min(
+        auth0_sub if auth0_sub is not None else connection_idx
+        for _, auth0_sub, connection_idx in contexts.values()
+    )
+
+
 # todo(rteqs): optimize so we don't have to iterate over all contexts
 async def update_users() -> None:
     seen = set()
@@ -425,10 +439,22 @@ async def update_users() -> None:
 
         seen.add(auth0_sub)
         user = user_profiles.get(auth0_sub) if auth0_sub is not None else None
+        is_session_owner = session_owner in {auth0_sub, connection_idx}
 
         if user is None:
-            users.append({"name": f"Anonymous {connection_idx}"})
+            users.append(
+                {
+                    "name": f"Anonymous {connection_idx}",
+                    "session_owner": is_session_owner,
+                }
+            )
         else:
-            users.append({"picture": user["picture"], "name": user["name"]})
+            users.append(
+                {
+                    "picture": user["picture"],
+                    "name": user["name"],
+                    "session_owner": is_session_owner,
+                }
+            )
 
     await broadcast_message(orjson.dumps({"type": "users", "users": users}).decode())
