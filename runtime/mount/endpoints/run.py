@@ -26,6 +26,7 @@ from ..entrypoint import (
     pod_id,
     pod_session_id,
     ready_ev,
+    update_users,
 )
 from ..utils import gql_query
 
@@ -98,6 +99,7 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
     )
 
     auth_header_regex_match = auth_header_regex.match(auth_msg.token)
+    auth0_sub: str | None = None
     if auth_header_regex_match is not None:
         oauth_token = auth_header_regex_match.group("oauth_token")
         session_token = auth_header_regex_match.group("session_token")
@@ -105,6 +107,7 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
         if oauth_token is not None:
             # todo(rteqs): expose functionality in latch_asgi
             auth_data = jwt.decode(oauth_token, options={"verify_signature": False})
+            auth0_sub = auth_data.get("sub")
             s.set_attribute("auth0_sub", auth_data.get("sub"))
             s.set_attribute("name", auth_data.get("name"))
         elif session_token is not None:
@@ -129,7 +132,7 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
 
     conn_k = k_proc.conn_k
     assert conn_k is not None
-    contexts[sess_hash] = ctx
+    contexts[sess_hash] = (ctx, auth0_sub, connection_idx)
 
     await ready_ev.wait()
     await ctx.send_message(
@@ -143,6 +146,7 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
             }
         ).decode()
     )
+    await update_users()
 
     connection_idx += 1
 
@@ -169,5 +173,6 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
         ...
     finally:
         del contexts[sess_hash]
+        await update_users()
 
     return "Ok"
