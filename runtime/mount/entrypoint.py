@@ -405,6 +405,7 @@ async def shutdown() -> None:
         await sess.close()
 
 
+# todo(rteqs): optimize
 async def update_users() -> None:
     seen = set()
     users = []
