@@ -115,7 +115,8 @@ async def try_send_message(ctx: Context, msg: str) -> None:
 
 async def broadcast_message(msg: str) -> None:
     tasks = [
-        asyncio.create_task(try_send_message(ctx, msg)) for ctx in contexts.values()
+        asyncio.create_task(try_send_message(ctx, msg))
+        for ctx, _, _ in contexts.values()
     ]
     await asyncio.gather(*tasks)
 
