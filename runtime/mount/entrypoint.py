@@ -426,7 +426,7 @@ async def update_users() -> None:
         user = user_profiles.get(auth0_sub) if auth0_sub is not None else None
 
         if user is None:
-            users.append({"picture": None, "name": f"Anonymous {connection_idx}"})
+            users.append({"name": f"Anonymous {connection_idx}"})
         else:
             users.append({"picture": user["picture"], "name": user["name"]})
 
