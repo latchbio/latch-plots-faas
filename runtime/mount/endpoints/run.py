@@ -27,6 +27,7 @@ from ..entrypoint import (
     pod_session_id,
     ready_ev,
     update_users,
+    user_profiles,
 )
 from ..utils import gql_query
 
@@ -110,6 +111,12 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
             auth0_sub = auth_data.get("sub")
             s.set_attribute("auth0_sub", auth_data.get("sub"))
             s.set_attribute("name", auth_data.get("name"))
+            if auth0_sub is not None and auth0_sub not in user_profiles:
+                user_profiles[auth0_sub] = {
+                    "picture": auth_data.get("picture"),
+                    "name": auth_data.get("name"),
+                }
+
         elif session_token is not None:
             s.set_attribute("session_token", session_token)
 
