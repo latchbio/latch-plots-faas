@@ -46,7 +46,9 @@ cell_last_run_outputs: dict[str, CellOutputs] = {}
 
 async_tasks: list[asyncio.Task] = []
 
-contexts: dict[str, Context] = {}
+contexts: dict[
+    str, tuple[Context, str | None, int]
+] = {}  # session_hash -> (context, auth0_sub, connection_idx)
 
 latch_p = Path("/root/.latch")
 sdk_token = (latch_p / "token").read_text()
@@ -401,3 +403,15 @@ async def shutdown() -> None:
     with contextlib.suppress(Exception):
         sess = get_global_http_sess()
         await sess.close()
+
+
+async def update_users() -> None:
+    seen = set()
+    users = []
+    for _, auth0_sub, connection_idx in contexts.values():
+        if auth0_sub in seen:
+            continue
+
+        seen.add(auth0_sub)
+        users.append({"auth0_sub": auth0_sub, "connection_idx": connection_idx})
+    await broadcast_message(orjson.dumps({"type": "users", "users": users}).decode())
