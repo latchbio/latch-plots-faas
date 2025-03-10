@@ -26,6 +26,8 @@ from ..entrypoint import (
     pod_id,
     pod_session_id,
     ready_ev,
+    session_owner,  # noqa: F401
+    set_next_session_owner,
     update_users,
     user_profiles,
 )
@@ -80,7 +82,7 @@ auth_header_regex = re.compile(
 
 @trace_app_function_with_span
 async def run(s: Span, ctx: Context) -> HandlerResult:
-    global connection_idx
+    global connection_idx, session_owner
 
     sess_hash = secrets.token_hex(32)
     await ctx.accept_connection()
@@ -141,6 +143,9 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
     assert conn_k is not None
     contexts[sess_hash] = (ctx, auth0_sub, connection_idx)
 
+    if len(contexts) == 1:
+        session_owner = auth0_sub if auth0_sub is not None else connection_idx
+
     await ready_ev.wait()
     await ctx.send_message(
         orjson.dumps(
@@ -175,11 +180,18 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
                 k_proc.proc.send_signal(signal=signal.SIGINT)
                 continue
 
+            if msg["type"] == "run_cell" and session_owner in {
+                connection_idx,
+                auth0_sub,
+            }:
+                continue
+
             await conn_k.send(msg)
     except WebsocketConnectionClosedError:
         ...
     finally:
         del contexts[sess_hash]
+        set_next_session_owner()
         await update_users()
 
     return "Ok"
