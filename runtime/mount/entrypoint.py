@@ -46,9 +46,18 @@ cell_last_run_outputs: dict[str, CellOutputs] = {}
 
 async_tasks: list[asyncio.Task] = []
 
+
 contexts: dict[
     str, tuple[Context, str | None, int]
 ] = {}  # session_hash -> (context, auth0_sub, connection_idx)
+
+
+class UserProfile(TypedDict):
+    picture: str
+    name: str
+
+
+user_profiles: dict[str, UserProfile] = {}
 
 latch_p = Path("/root/.latch")
 sdk_token = (latch_p / "token").read_text()
@@ -405,7 +414,7 @@ async def shutdown() -> None:
         await sess.close()
 
 
-# todo(rteqs): optimize
+# todo(rteqs): optimize so we don't have to iterate over all contexts
 async def update_users() -> None:
     seen = set()
     users = []
@@ -414,5 +423,11 @@ async def update_users() -> None:
             continue
 
         seen.add(auth0_sub)
-        users.append({"auth0_sub": auth0_sub, "connection_idx": connection_idx})
+        user = user_profiles.get(auth0_sub) if auth0_sub is not None else None
+
+        if user is None:
+            users.append({"picture": None, "name": f"Anonymous {connection_idx}"})
+        else:
+            users.append({"picture": user["picture"], "name": user["name"]})
+
     await broadcast_message(orjson.dumps({"type": "users", "users": users}).decode())
