@@ -87,5 +87,11 @@ class PlotsContextManager:
 
     async def broadcast_users(self) -> None:
         await self.broadcast_message(
-            orjson.dumps({"type": "users", "users": list(self.unique_users)}).decode()
+            orjson.dumps(
+                {
+                    "type": "users",
+                    "users": list(self.unique_users),
+                    "session_owner": self.session_owner,
+                }
+            ).decode()
         )
