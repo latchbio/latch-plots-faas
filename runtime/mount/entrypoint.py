@@ -445,7 +445,8 @@ async def update_users() -> None:
             users.append(
                 {
                     "name": f"Anonymous {connection_idx}",
-                    "session_owner": is_session_owner,
+                    "is_session_owner": is_session_owner,
+                    "session_owner": session_owner,
                 }
             )
         else:
@@ -453,7 +454,8 @@ async def update_users() -> None:
                 {
                     "picture": user["picture"],
                     "name": user["name"],
-                    "session_owner": is_session_owner,
+                    "is_session_owner": is_session_owner,
+                    "session_owner": session_owner,
                 }
             )
 
