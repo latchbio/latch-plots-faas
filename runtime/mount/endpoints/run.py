@@ -148,6 +148,7 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
 
     await ready_ev.wait()
 
+    await update_user_list()
     await ctx.send_message(
         orjson.dumps(
             {
@@ -156,7 +157,6 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
                 "cell_status": cell_status,
                 "cell_sequencers": cell_sequencers,
                 "cell_outputs": cell_last_run_outputs,
-                "users": await update_user_list(),
             }
         ).decode()
     )
@@ -190,7 +190,6 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
     finally:
         del contexts[sess_hash]
         set_next_session_owner()
-        users = await update_user_list()
-        await broadcast_message(orjson.dumps({"type": "users", "users": users}).decode())
+        await update_user_list()
 
     return "Ok"
