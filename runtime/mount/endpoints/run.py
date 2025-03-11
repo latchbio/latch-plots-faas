@@ -26,7 +26,7 @@ from ..entrypoint import (
     pod_id,
     pod_session_id,
     ready_ev,
-    session_owner,  # noqa: F401
+    session_owner,
     set_next_session_owner,
     update_users,
     user_profiles,
@@ -82,7 +82,7 @@ auth_header_regex = re.compile(
 
 @trace_app_function_with_span
 async def run(s: Span, ctx: Context) -> HandlerResult:
-    global connection_idx, session_owner
+    global connection_idx
 
     sess_hash = secrets.token_hex(32)
     await ctx.accept_connection()
@@ -142,9 +142,8 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
     conn_k = k_proc.conn_k
     assert conn_k is not None
     contexts[sess_hash] = (ctx, auth0_sub, connection_idx)
-
     if len(contexts) == 1:
-        session_owner = auth0_sub if auth0_sub is not None else connection_idx
+        set_next_session_owner()
 
     await ready_ev.wait()
     await ctx.send_message(
