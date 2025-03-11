@@ -21,15 +21,11 @@ from ..entrypoint import (
     cell_last_run_outputs,
     cell_sequencers,
     cell_status,
-    contexts,
-    get_session_owner,
     k_proc,
+    plots_ctx_manager,
     pod_id,
     pod_session_id,
     ready_ev,
-    set_next_session_owner,
-    update_user_list,
-    user_profiles,
 )
 from ..utils import gql_query
 
@@ -103,6 +99,9 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
 
     auth_header_regex_match = auth_header_regex.match(auth_msg.token)
     auth0_sub: str | None = None
+    picture_url: str | None = None
+    name: str | None = None
+
     if auth_header_regex_match is not None:
         oauth_token = auth_header_regex_match.group("oauth_token")
         session_token = auth_header_regex_match.group("session_token")
@@ -111,13 +110,12 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
             # todo(rteqs): expose functionality in latch_asgi
             auth_data = jwt.decode(oauth_token, options={"verify_signature": False})
             auth0_sub = auth_data.get("sub")
-            s.set_attribute("auth0_sub", auth_data.get("sub"))
-            s.set_attribute("name", auth_data.get("name"))
-            if auth0_sub is not None and auth0_sub not in user_profiles:
-                user_profiles[auth0_sub] = {
-                    "picture": auth_data.get("picture"),
-                    "name": auth_data.get("name"),
-                }
+            picture_url = auth_data.get("picture")
+            name = auth_data.get("name")
+
+            if auth0_sub is not None and name is not None:
+                s.set_attribute("auth0_sub", auth0_sub)
+                s.set_attribute("name", name)
 
         elif session_token is not None:
             s.set_attribute("session_token", session_token)
@@ -141,13 +139,12 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
 
     conn_k = k_proc.conn_k
     assert conn_k is not None
-    contexts[sess_hash] = (ctx, auth0_sub, connection_idx)
-    if len(contexts) == 1:
-        set_next_session_owner()
+    await plots_ctx_manager.add_context(
+        sess_hash, ctx, connection_idx, auth0_sub, picture_url, name
+    )
 
     await ready_ev.wait()
 
-    await update_user_list()
     await ctx.send_message(
         orjson.dumps(
             {
@@ -165,6 +162,8 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
     try:
         while True:
             msg = await receive_json(ctx.receive)
+            session_owner = plots_ctx_manager.session_owner
+            is_session_owner = session_owner in {auth0_sub, connection_idx}
 
             if msg["type"] == "dispose_cell":
                 cell_id = msg["cell_id"]
@@ -180,17 +179,14 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
                 k_proc.proc.send_signal(signal=signal.SIGINT)
                 continue
 
-            session_owner = get_session_owner()
-            if msg["type"] == "run_cell" and session_owner not in {auth0_sub, connection_idx}:
-                await ctx.send_message(orjson.dumps({
-                    "type": "error",
-                    "data": {
-                        "message": "user is not session owner",
-                        "session_owner": session_owner,
-                        "auth0_sub": auth0_sub,
-                            "connection_idx": connection_idx,
+            if msg["type"] == "run_cell" and not is_session_owner:
+                await ctx.send_message(
+                    orjson.dumps(
+                        {
+                            "type": "error",
+                            "data": {"message": "user is not session owner"},
                         }
-                    }).decode()
+                    ).decode()
                 )
                 continue
 
@@ -198,8 +194,6 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
     except WebsocketConnectionClosedError:
         ...
     finally:
-        del contexts[sess_hash]
-        set_next_session_owner()
-        await update_user_list()
+        await plots_ctx_manager.delete_context(sess_hash)
 
     return "Ok"
