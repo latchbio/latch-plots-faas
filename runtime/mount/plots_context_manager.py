@@ -10,8 +10,7 @@ from latch_asgi.framework.websocket import WebsocketConnectionClosedError
 
 @dataclass(frozen=True, kw_only=True)
 class UserProfile:
-    auth0_sub: str | None
-    connection_idx: int
+    key: str | int | None
     name: str
     picture_url: str | None
 
@@ -46,12 +45,7 @@ class PlotsContextManager:
         assert user_key is not None
 
         name = name if name is not None else f"Anonymous {connection_idx}"
-        user = UserProfile(
-            auth0_sub=auth0_sub,
-            connection_idx=connection_idx,
-            picture_url=picture_url,
-            name=name,
-        )
+        user = UserProfile(key=user_key, picture_url=picture_url, name=name)
 
         self.contexts[sess_hash] = (context, user)
         self.unique_users.add(user)
@@ -69,12 +63,11 @@ class PlotsContextManager:
         _, user = self.contexts[session_hash]
         del self.contexts[session_hash]
 
-        user_key = user.auth0_sub if user.auth0_sub is not None else user.connection_idx
-        self.session_count_by_user[user_key] -= 1
+        self.session_count_by_user[user.key] -= 1
 
-        if self.session_count_by_user[user_key] == 0 and self.session_owner == user_key:
+        if self.session_count_by_user[user.key] == 0 and self.session_owner == user.key:
             self.unique_users.remove(user)
-            self.session_owner = next(iter(self.contexts.values()))[1].auth0_sub
+            self.session_owner = next(iter(self.contexts.values()))[1].key
 
         await self.broadcast_users()
 
