@@ -423,10 +423,11 @@ def set_next_session_owner() -> None:
         if session_owner in {auth0_sub, connection_idx}:
             return
 
-    session_owner = min(
-        auth0_sub if auth0_sub is not None else connection_idx
-        for _, auth0_sub, connection_idx in contexts.values()
+    _, auth0_sub, connection_idx = min(
+        contexts.values(), key=lambda x: x[2]
     )
+
+    session_owner = auth0_sub if auth0_sub is not None else connection_idx
 
 
 # todo(rteqs): optimize so we don't have to iterate over all contexts
