@@ -18,7 +18,6 @@ from latch_o11y.o11y import trace_app_function_with_span
 from opentelemetry.trace import Span
 
 from ..entrypoint import (
-    broadcast_message,
     cell_last_run_outputs,
     cell_sequencers,
     cell_status,
@@ -83,7 +82,7 @@ auth_header_regex = re.compile(
 
 @trace_app_function_with_span
 async def run(s: Span, ctx: Context) -> HandlerResult:
-    global connection_idx
+    global connection_idx, session_owner
 
     sess_hash = secrets.token_hex(32)
     await ctx.accept_connection()
