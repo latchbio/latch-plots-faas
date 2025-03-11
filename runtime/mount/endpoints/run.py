@@ -30,6 +30,7 @@ from ..entrypoint import (
     set_next_session_owner,
     update_user_list,
     user_profiles,
+    session_owner,
 )
 from ..utils import gql_query
 
@@ -178,6 +179,9 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
 
             if msg["type"] == "stop_cell" and k_proc.proc is not None:
                 k_proc.proc.send_signal(signal=signal.SIGINT)
+                continue
+
+            if msg["type"] == "run_cell" and session_owner not in {auth0_sub, connection_idx}:
                 continue
 
             await conn_k.send(msg)
