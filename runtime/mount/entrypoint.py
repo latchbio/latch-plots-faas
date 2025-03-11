@@ -430,7 +430,7 @@ def set_next_session_owner() -> None:
 
 
 # todo(rteqs): optimize so we don't have to iterate over all contexts
-async def update_users() -> None:
+async def update_user_list() -> list[dict[str, str | bool | int]]:
     seen = set()
     users = []
     for _, auth0_sub, connection_idx in contexts.values():
@@ -460,4 +460,5 @@ async def update_users() -> None:
                 }
             )
 
-    await broadcast_message(orjson.dumps({"type": "users", "users": users}).decode())
+    return users
+    # await broadcast_message(orjson.dumps({"type": "users", "users": users}).decode())

@@ -18,6 +18,7 @@ from latch_o11y.o11y import trace_app_function_with_span
 from opentelemetry.trace import Span
 
 from ..entrypoint import (
+    broadcast_message,
     cell_last_run_outputs,
     cell_sequencers,
     cell_status,
@@ -26,8 +27,8 @@ from ..entrypoint import (
     pod_id,
     pod_session_id,
     ready_ev,
-    session_owner,
     set_next_session_owner,
+    update_user_list,
     update_users,
     user_profiles,
 )
@@ -146,6 +147,7 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
         set_next_session_owner()
 
     await ready_ev.wait()
+
     await ctx.send_message(
         orjson.dumps(
             {
@@ -154,10 +156,10 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
                 "cell_status": cell_status,
                 "cell_sequencers": cell_sequencers,
                 "cell_outputs": cell_last_run_outputs,
+                "users": await update_user_list(),
             }
         ).decode()
     )
-    await update_users()
 
     connection_idx += 1
 
@@ -179,18 +181,13 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
                 k_proc.proc.send_signal(signal=signal.SIGINT)
                 continue
 
-            if msg["type"] == "run_cell" and session_owner not in {
-                connection_idx,
-                auth0_sub,
-            }:
-                continue
-
             await conn_k.send(msg)
     except WebsocketConnectionClosedError:
         ...
     finally:
         del contexts[sess_hash]
         set_next_session_owner()
-        await update_users()
+        users = await update_user_list()
+        await broadcast_message(orjson.dumps({"type": "users", "users": users}).decode())
 
     return "Ok"
