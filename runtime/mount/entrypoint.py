@@ -419,6 +419,9 @@ async def shutdown() -> None:
 def set_next_session_owner() -> None:
     global session_owner
 
+    if len(contexts) == 0:
+        return
+
     for _, auth0_sub, connection_idx in contexts.values():
         if session_owner in {auth0_sub, connection_idx}:
             return
