@@ -29,7 +29,6 @@ from ..entrypoint import (
     ready_ev,
     set_next_session_owner,
     update_user_list,
-    update_users,
     user_profiles,
 )
 from ..utils import gql_query
