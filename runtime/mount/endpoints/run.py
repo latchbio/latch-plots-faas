@@ -22,6 +22,7 @@ from ..entrypoint import (
     cell_sequencers,
     cell_status,
     contexts,
+    get_session_owner,
     k_proc,
     pod_id,
     pod_session_id,
@@ -29,7 +30,6 @@ from ..entrypoint import (
     set_next_session_owner,
     update_user_list,
     user_profiles,
-    session_owner,
 )
 from ..utils import gql_query
 
@@ -180,6 +180,7 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
                 k_proc.proc.send_signal(signal=signal.SIGINT)
                 continue
 
+            session_owner = get_session_owner()
             if msg["type"] == "run_cell" and session_owner not in {auth0_sub, connection_idx}:
                 await ctx.send_message(orjson.dumps({
                     "type": "error",

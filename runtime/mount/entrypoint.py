@@ -432,6 +432,10 @@ def set_next_session_owner() -> None:
 
     session_owner = auth0_sub if auth0_sub is not None else connection_idx
 
+def get_session_owner() -> str | int | None:
+    global session_owner
+    return session_owner
+
 
 # todo(rteqs): optimize so we don't have to iterate over all contexts
 async def update_user_list() -> None:
