@@ -182,15 +182,16 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
                 continue
 
             if msg["type"] == "run_cell" and session_owner not in {auth0_sub, connection_idx}:
-                ctx.send_message(orjson.dumps({
+                await ctx.send_message(orjson.dumps({
                     "type": "error",
                     "data": {
                         "message": "user is not session owner",
                         "session_owner": session_owner,
                         "auth0_sub": auth0_sub,
-                        "connection_idx": connection_idx,
-                    }
-                }))
+                            "connection_idx": connection_idx,
+                        }
+                    }).decode()
+                )
                 continue
 
             await conn_k.send(msg)
