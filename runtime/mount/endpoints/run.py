@@ -179,7 +179,7 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
                 k_proc.proc.send_signal(signal=signal.SIGINT)
                 continue
 
-            if msg["type"] == "run_cell" and session_owner in {
+            if msg["type"] == "run_cell" and session_owner not in {
                 connection_idx,
                 auth0_sub,
             }:
