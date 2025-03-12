@@ -1,5 +1,6 @@
 import inspect
 import sys
+import uuid
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
@@ -14,7 +15,7 @@ T = TypeVar("T")
 R = TypeVar("R")
 Computation: TypeAlias = Callable[..., R]
 
-live_nodes: dict[int, "Node"] = {}
+live_nodes: dict[str, "Node"] = {}
 live_node_names: set[str] = set()
 
 
@@ -37,21 +38,27 @@ class Node:
     disposed: bool = False
 
     parent: Self | None
-    children: dict[int, Self] = field(default_factory=dict)
+    children: dict[str, Self] = field(default_factory=dict)
 
-    signals: dict[int, "Signal"] = field(default_factory=dict)
+    signals: dict[str, "Signal"] = field(default_factory=dict)
 
     cell_id: str | None = None
     name: str | None = None
+    _id: str
 
     widget_states: dict[str, WidgetState] = field(default_factory=dict)
     widget_state_idx = 0
 
+    @property
+    def id(self) -> str:
+        assert self._id is not None
+        return self._id
+
     def __post_init__(self) -> None:
-        live_nodes[id(self)] = self
+        live_nodes[self.id] = self
 
         if self.parent is not None:
-            self.parent.children[id(self)] = self
+            self.parent.children[self.id] = self
             self.cell_id = self.parent.cell_id
         elif self.name is None:
             self.name = self.cell_id
@@ -63,6 +70,11 @@ class Node:
             raise ValueError(f"reactive node name is not unique: {self.name!r}")
 
         live_node_names.add(self.name)
+
+        self._id = str(uuid.uuid4())
+
+        if self._id is None:
+            self._id = str(uuid.uuid4())
 
     def name_path(self) -> str:
         assert self.name is not None
@@ -102,7 +114,7 @@ class Node:
             cur.disposed = True
 
             if cur.parent is not None:
-                del cur.parent.children[id(cur)]
+                del cur.parent.children[cur.id]
             cur.parent = None
 
             stack.extend(cur.children.values())
@@ -111,16 +123,16 @@ class Node:
             # which is not itself being disposed
 
             for s in cur.signals.values():
-                del s._listeners[id(cur)]
+                del s._listeners[cur.id]
             cur.signals = {}
 
-            del live_nodes[id(cur)]
+            del live_nodes[cur.id]
             if self.name is not None:
                 live_node_names.remove(self.name)
 
     def __repr__(self) -> str:
         stale_mark = "!" if self.stale else ""
-        return f"{stale_mark}{self.name}#{self.cell_id}@{id(self)}<{self.parent}"
+        return f"{stale_mark}{self.name}#{self.cell_id}@{self.id}<{self.parent}"
 
     def debug_state(self, *, no_parent: bool = False) -> dict[str, object]:
         return {
@@ -147,20 +159,20 @@ class Node:
         sig_list = [x._name for x in self.signals.values()]
 
         name = self.f.__name__.replace("<", "&lt;").replace(">", "&gt;")
-        label_str = "<BR />".join([f"{name} @ {id(self)}", ", ".join(sig_list)])
+        label_str = "<BR />".join([f"{name} @ {self.id}", ", ".join(sig_list)])
 
-        f.write(f"{id(self)}[label=<{label_str}>];\n")
+        f.write(f"{self.id}[label=<{label_str}>];\n")
 
         if self.parent is not None:
-            f.write(f"{id(self.parent)} -> {id(self)};\n")
+            f.write(f"{self.parent.id} -> {self.id};\n")
 
 
 @dataclass
 class RCtx:
     cur_comp: Node | None = None
 
-    updated_signals: dict[int, "Signal"] = field(default_factory=dict)
-    signals_update_from_code: dict[int, "Signal"] = field(default_factory=dict)
+    updated_signals: dict[str, "Signal"] = field(default_factory=dict)
+    signals_update_from_code: dict[str, "Signal"] = field(default_factory=dict)
     stale_nodes: dict[int, Node] = field(default_factory=dict)
 
     in_tx: bool = False
@@ -204,7 +216,7 @@ class RCtx:
 
             self.updated_signals = {}
 
-            to_dispose: dict[int, tuple[Node, Node | None]] = {}
+            to_dispose: dict[str, tuple[Node, Node | None]] = {}
             for n in self.stale_nodes.values():
                 if n.disposed:
                     continue
@@ -212,7 +224,7 @@ class RCtx:
                 fsa = n.farthest_stale_ancestor()
                 assert fsa is not None
 
-                to_dispose[id(fsa)] = (fsa, fsa.parent)
+                to_dispose[fsa.id] = (fsa, fsa.parent)
 
             self.stale_nodes = {}
 
@@ -268,13 +280,21 @@ class Updater(Generic[T]):
 class Signal(Generic[T]):
     _value: T
     _name: str
+    _id: str
 
     _updates: list[T | Updater[T]]
-    _listeners: dict[int, Node]
+    _listeners: dict[str, Node]
 
-    def __init__(self, initial: T, *, name: str | None = None) -> None:
+    def __init__(
+        self, initial: T, *, name: str | None = None, _id: str | None = None
+    ) -> None:
+        if _id is None:
+            self._id = str(uuid.uuid4())
+        else:
+            self._id = _id
+
         if name is None:
-            name = f"Signal@{id(self)}"
+            name = f"Signal@{self.id}"
 
         self._value = initial
         self._name = name
@@ -282,42 +302,43 @@ class Signal(Generic[T]):
         self._updates = []
         self._listeners = {}
 
+    @property
+    def id(self) -> str:
+        assert self._id is not None
+        return self._id
+
     def sample(self) -> T:
         return self._value
 
     @overload
-    def __call__(self, /) -> T: ...
+    def __call__(self, /) -> T:
+        ...
 
     @overload
-    def __call__(self, /, upd: T, *, _ui_update: bool = False) -> None: ...
+    def __call__(self, /, upd: T, *, _ui_update: bool = False) -> None:
+        ...
 
     @overload
-    def __call__(self, /, upd: Updater[T], *, _ui_update: bool = False) -> None: ...
+    def __call__(self, /, upd: Updater[T], *, _ui_update: bool = False) -> None:
+        ...
 
     def __call__(
         self, /, upd: T | Updater[T] | Nothing = Nothing.x, *, _ui_update: bool = False
     ) -> T | None:
         assert ctx.in_tx
 
-        # print(f"[@] {self}({upd}, _ui_update={_ui_update}): {self._listeners}")
-
         if upd is Nothing.x:
             assert ctx.cur_comp is not None
 
-            print(
-                # f"[@] {self} added listener {ctx.cur_comp.f.__name__} @ {id(ctx.cur_comp)}"
-            )
+            self._listeners[ctx.cur_comp.id] = ctx.cur_comp
+            ctx.cur_comp.signals[self.id] = self
 
-            self._listeners[id(ctx.cur_comp)] = ctx.cur_comp
-            ctx.cur_comp.signals[id(self)] = self
-
-            # print(f"[@] {self} has listeners: {self._listeners}")
             return self._value
 
         self._updates.append(upd)
-        ctx.updated_signals[id(self)] = self
+        ctx.updated_signals[self.id] = self
         if not _ui_update:
-            ctx.signals_update_from_code[id(self)] = self
+            ctx.signals_update_from_code[self.id] = self
 
         self._mark_listeners()
 
@@ -325,10 +346,8 @@ class Signal(Generic[T]):
 
     def _mark_listeners(self) -> None:
         for x in self._listeners.values():
-            # print(f"[@] {self} marked {x.f.__name__} @ {id(x)}")
-
             x.stale = True
-            ctx.stale_nodes[id(x)] = x
+            ctx.stale_nodes[x.id] = x
 
     def _apply_updates(self) -> None:
         for upd in self._updates:
@@ -343,7 +362,7 @@ class Signal(Generic[T]):
     # todo(maximsmol): dispose of signals too to avoid memory leaks
 
     def __repr__(self) -> str:
-        return f"{self._name}@{id(self)}"
+        return f"{self._name}@{self.id}"
 
 
 K = TypeVar("K")

@@ -648,7 +648,7 @@ class Kernel:
                     unused_signals.remove(abs_k)
 
                     sig = self.widget_signals[abs_k]
-                    if id(sig) in updated_signals:
+                    if sig.id in updated_signals:
                         updated_widgets.add(abs_k)
 
                     val = sig.sample()
@@ -690,7 +690,7 @@ class Kernel:
         assert ctx.cur_comp is not None
 
         ctx.cur_comp.widget_states[key] = data
-        self.nodes_with_widgets[id(ctx.cur_comp)] = ctx.cur_comp
+        self.nodes_with_widgets[ctx.cur_comp.id] = ctx.cur_comp
 
     def submit_widget_state(self) -> None:
         for s in ctx.updated_signals.values():
@@ -699,10 +699,10 @@ class Kernel:
         self.conn.call_fut(self.on_tick_finished(ctx.signals_update_from_code)).result()
 
     def on_dispose(self, node: Node) -> None:
-        if id(node) not in self.nodes_with_widgets:
+        if node.id not in self.nodes_with_widgets:
             return
 
-        del self.nodes_with_widgets[id(node)]
+        del self.nodes_with_widgets[node.id]
 
     def _cell_outputs(self) -> CategorizedCellOutputs:
         res = CategorizedCellOutputs()
