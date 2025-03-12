@@ -10,7 +10,7 @@ from latch_asgi.framework.websocket import WebsocketConnectionClosedError
 
 @dataclass(frozen=True, kw_only=True)
 class UserProfile:
-    key: str | int | None
+    key: str | None
     name: str
     picture_url: str | None
 
@@ -26,7 +26,7 @@ class PlotsContextManager:
             str, tuple[Context, UserProfile]
         ] = {}  # session_hash -> (context, UserProfile)
         self.session_count_by_user = defaultdict(lambda: 0)
-        self.session_owner: str | int | None = None
+        self.session_owner: str | None = None
         self.unique_users: set[UserProfile] = set()
 
     async def add_context(
