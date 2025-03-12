@@ -2,7 +2,6 @@ from dataclasses import dataclass
 from typing import Literal, NotRequired, TypedDict
 
 from ..reactive import Signal
-from ..utils.nothing import Nothing
 from . import _emit, _state
 from .shared import FormInputAppearance
 
@@ -18,15 +17,17 @@ class TextInputWidgetState(_emit.WidgetState[Literal["text_input"], str]):
 class TextInputWidget:
     _key: str
     _state: TextInputWidgetState
-    _signal: Signal[str]
+    _signal: Signal[object | str]
 
-    def _value(self, val: str | Nothing | None) -> str:
-        if val is Nothing.x or not isinstance(val, str):
-            val = self._state.get("default")
-            if val is None:
-                return ""
+    def _value(self, val: object) -> str:
+        if isinstance(val, str):
+            return val
 
-        return val
+        default = self._state.get("default")
+        if default is None:
+            return ""
+
+        return default
 
     @property
     def value(self) -> str:

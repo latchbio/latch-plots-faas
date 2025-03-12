@@ -20,10 +20,10 @@ class RegistryTablePickerState(
 class RegistryTablePicker:
     _key: str
     _state: RegistryTablePickerState
-    _signal: Signal[str]
+    _signal: Signal[object | str]
 
-    def _value(self, val: str | None) -> str | None:
-        if val is None:
+    def _value(self, val: object) -> str | None:
+        if not isinstance(val, str):
             val = self._state.get("default")
             if val is None:
                 return None

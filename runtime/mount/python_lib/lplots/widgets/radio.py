@@ -21,10 +21,10 @@ class RadioGroupState(_emit.WidgetState[Literal["radio_group"], str]):
 class RadioGroups:
     _key: str
     _state: RadioGroupState
-    _signal: Signal[str]
+    _signal: Signal[object | str]
 
-    def _value(self, val: str | None) -> str | None:
-        if val is None or val not in self._state["options"]:
+    def _value(self, val: object) -> str | None:
+        if not isinstance(val, str) or val not in self._state["options"]:
             val = self._state.get("default")
             if val is None:
                 return None

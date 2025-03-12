@@ -666,7 +666,7 @@ class Kernel:
         # for x in unused_signals:
         #     del self.widget_signals[x]
 
-    def get_widget_value(self, key: str) -> Signal[Any]:
+    def get_widget_value(self, key: str) -> Signal[object]:
         assert ctx.cur_comp is not None
 
         key = f"{ctx.cur_comp.name_path()}/{key}"

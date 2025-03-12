@@ -3,7 +3,6 @@ from datetime import UTC, datetime
 from typing import Any, Literal, TypedDict
 
 from ..reactive import Signal
-from ..utils.nothing import Nothing
 from . import _emit, _state
 
 
@@ -16,9 +15,6 @@ class ButtonWidgetState(_emit.WidgetState[Literal["button"], str]):
     label: str
     readonly: bool
     default: ButtonWidgetSignalValue
-
-
-datetime_format_string = "%Y-%m-%dT%H:%M:%S.%fZ"
 
 
 def parse_iso_strings(data: Any) -> tuple[datetime, datetime] | None:
@@ -42,7 +38,7 @@ def parse_iso_strings(data: Any) -> tuple[datetime, datetime] | None:
 class ButtonWidget:
     _key: str
     _state: ButtonWidgetState
-    _signal: Signal[ButtonWidgetSignalValue]
+    _signal: Signal[object | ButtonWidgetSignalValue]
 
     _last_clicked_ref: None | datetime = field(default=None, repr=False)
 
@@ -50,7 +46,9 @@ class ButtonWidget:
     def value(self) -> bool:
         res = self._signal()
 
-        if res is Nothing.x:
+        if not isinstance(res, dict) or not all(
+            key in res for key in ButtonWidgetSignalValue.__annotations__
+        ):
             return False
 
         parsed = parse_iso_strings(res)
@@ -79,7 +77,7 @@ def w_button(
     key = _state.use_state_key(key=key)
 
     if default is None:
-        now = str(datetime.now(UTC).strftime(datetime_format_string))
+        now = datetime.now(UTC).isoformat()
         default = {"clicked": now, "last_clicked": now}
 
     res = ButtonWidget(

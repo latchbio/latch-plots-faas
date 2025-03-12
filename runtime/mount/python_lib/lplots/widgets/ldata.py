@@ -20,10 +20,10 @@ class LDataPickerState(_emit.WidgetState[Literal["ldata_picker"], str]):
 class LDataPicker:
     _key: str
     _state: LDataPickerState
-    _signal: Signal[str]
+    _signal: Signal[object | LPath]
 
-    def _value(self, val: str | None) -> LPath | None:
-        if val is None or not val.startswith("latch://"):
+    def _value(self, val: object) -> LPath | None:
+        if not isinstance(val, str) or not val.startswith("latch://"):
             val = self._state.get("default")
             if val is None:
                 return None

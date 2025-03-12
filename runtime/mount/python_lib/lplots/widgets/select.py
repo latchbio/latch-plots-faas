@@ -3,8 +3,6 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal, NotRequired
 
-from lplots.utils.nothing import Nothing
-
 from ..reactive import Signal
 from . import _emit, _state
 from .shared import FormInputAppearance
@@ -23,12 +21,10 @@ class SelectState(_emit.WidgetState[Literal["select"], str]):
 class Select:
     _key: str
     _state: SelectState
-    _signal: Signal[str | int | float | bool | datetime]
+    _signal: Signal[object]
 
-    def _value(
-        self, val: str | int | float | bool | datetime | Nothing | None
-    ) -> str | int | float | bool | datetime | None:
-        if val is None or val not in self._state["options"]:
+    def _value(self, val: object) -> str | int | float | bool | datetime | None:
+        if val not in self._state["options"]:
             val = self._state.get("default")
             if val is None:
                 return None
