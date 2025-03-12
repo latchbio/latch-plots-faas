@@ -3,7 +3,6 @@ from datetime import UTC, datetime
 from typing import Any, Literal, TypedDict
 
 from ..reactive import Signal
-from ..utils.nothing import Nothing
 from . import _emit, _state
 
 
@@ -39,7 +38,7 @@ def parse_iso_strings(data: Any) -> tuple[datetime, datetime] | None:
 class ButtonWidget:
     _key: str
     _state: ButtonWidgetState
-    _signal: Signal[ButtonWidgetSignalValue | Nothing]
+    _signal: Signal[object]
 
     _last_clicked_ref: None | datetime = field(default=None, repr=False)
 
@@ -47,7 +46,9 @@ class ButtonWidget:
     def value(self) -> bool:
         res = self._signal()
 
-        if res is Nothing.x:
+        if not isinstance(res, dict) or not all(
+            key in res for key in ButtonWidgetSignalValue.__annotations__
+        ):
             return False
 
         parsed = parse_iso_strings(res)

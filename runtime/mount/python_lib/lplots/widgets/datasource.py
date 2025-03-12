@@ -5,8 +5,6 @@ import pandas as pd
 from latch.ldata.path import LPath
 from latch.registry.table import Table
 
-from lplots.utils.nothing import Nothing
-
 from .. import _inject
 from ..reactive import Signal
 from . import _emit, _state
@@ -91,10 +89,12 @@ def get_registry_df(table_id: Any) -> pd.DataFrame | None:
 class TabularDatasourcePicker:
     _key: str
     _state: DataSourceSelectState
-    _signal: Signal[DataSourceValue | Nothing]
+    _signal: Signal[object]
 
-    def _value(self, val: DataSourceValue | Nothing | None) -> pd.DataFrame | None:
-        if val is None or val is Nothing.x:
+    def _value(self, val: object) -> pd.DataFrame | None:
+        if not isinstance(val, dict) or not all(
+            key in val for key in DataSourceValue.__annotations__
+        ):
             val = self._state.get("default")
             # todo(manske): validate default
             if val is None:

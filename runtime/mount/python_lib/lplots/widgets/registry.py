@@ -1,8 +1,6 @@
 from dataclasses import dataclass
 from typing import Literal, NotRequired
 
-from lplots.utils.nothing import Nothing
-
 from ..reactive import Signal
 from . import _emit, _state
 from .shared import FormInputAppearance
@@ -22,10 +20,10 @@ class RegistryTablePickerState(
 class RegistryTablePicker:
     _key: str
     _state: RegistryTablePickerState
-    _signal: Signal[str | Nothing]
+    _signal: Signal[object]
 
-    def _value(self, val: str | None | Nothing) -> str | None:
-        if val is None or val is Nothing.x:
+    def _value(self, val: object) -> str | None:
+        if not isinstance(val, str):
             val = self._state.get("default")
             if val is None:
                 return None

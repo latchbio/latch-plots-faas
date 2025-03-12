@@ -1,5 +1,3 @@
-from typing import Any
-
 from .. import _inject
 from ..reactive import Signal, ctx
 
@@ -19,5 +17,5 @@ def use_state_key(key: str | None = None) -> str:
     return str(res)
 
 
-def use_value_signal(key: str) -> Signal[Any]:
+def use_value_signal(key: str) -> Signal[object]:
     return _inject.kernel.get_widget_value(key)
