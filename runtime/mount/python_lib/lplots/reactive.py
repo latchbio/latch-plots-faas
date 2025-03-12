@@ -71,8 +71,6 @@ class Node:
 
         live_node_names.add(self.name)
 
-        self._id = str(uuid.uuid4())
-
         if self._id is None:
             self._id = str(uuid.uuid4())
 
@@ -173,7 +171,7 @@ class RCtx:
 
     updated_signals: dict[str, "Signal"] = field(default_factory=dict)
     signals_update_from_code: dict[str, "Signal"] = field(default_factory=dict)
-    stale_nodes: dict[int, Node] = field(default_factory=dict)
+    stale_nodes: dict[str, Node] = field(default_factory=dict)
 
     in_tx: bool = False
 
@@ -181,7 +179,7 @@ class RCtx:
         self, f: Callable[..., Awaitable[R]], *, _cell_id: str | None = None
     ) -> R:
         async with self.transaction:
-            self.cur_comp = Node(f=f, parent=self.cur_comp, cell_id=_cell_id)
+            self.cur_comp = Node(f=f, parent=self.cur_comp, cell_id=_cell_id, _id=None)
 
             try:
                 if inspect.iscoroutinefunction(f):
