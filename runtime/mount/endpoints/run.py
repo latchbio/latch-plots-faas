@@ -139,31 +139,50 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
 
     conn_k = k_proc.conn_k
     assert conn_k is not None
-    await plots_ctx_manager.add_context(
-        sess_hash, ctx, connection_idx, auth0_sub, picture_url, name
+    user_key = await plots_ctx_manager.add_context(
+        sess_hash=sess_hash,
+        ctx=ctx,
+        connection_idx=connection_idx,
+        auth0_sub=auth0_sub,
+        picture_url=picture_url,
+        name=name,
     )
-
-    await ready_ev.wait()
-
-    await ctx.send_message(
-        orjson.dumps(
-            {
-                "type": "ready",
-                "connection_idx": connection_idx,
-                "cell_status": cell_status,
-                "cell_sequencers": cell_sequencers,
-                "cell_outputs": cell_last_run_outputs,
-            }
-        ).decode()
-    )
-
-    connection_idx += 1
 
     try:
+        await ready_ev.wait()
+
+        await ctx.send_message(
+            orjson.dumps(
+                {
+                    "type": "ready",
+                    "connection_idx": connection_idx,
+                    "cell_status": cell_status,
+                    "cell_sequencers": cell_sequencers,
+                    "cell_outputs": cell_last_run_outputs,
+                }
+            ).decode()
+        )
+
+        connection_idx += 1
+
         while True:
             msg = await receive_json(ctx.receive)
             session_owner = plots_ctx_manager.session_owner
-            is_session_owner = session_owner in {auth0_sub, connection_idx}
+            is_session_owner = user_key == session_owner
+
+            if (
+                msg["type"] in {"run_cell", "stop_cell", "dispose_cell"}
+                and not is_session_owner
+            ):
+                await ctx.send_message(
+                    orjson.dumps(
+                        {
+                            "type": "not_session_owner_error",
+                            "data": {"message": "user is not session owner"},
+                        }
+                    ).decode()
+                )
+                continue
 
             if msg["type"] == "dispose_cell":
                 cell_id = msg["cell_id"]
@@ -177,17 +196,6 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
 
             if msg["type"] == "stop_cell" and k_proc.proc is not None:
                 k_proc.proc.send_signal(signal=signal.SIGINT)
-                continue
-
-            if msg["type"] == "run_cell" and not is_session_owner:
-                await ctx.send_message(
-                    orjson.dumps(
-                        {
-                            "type": "error",
-                            "data": {"message": "user is not session owner"},
-                        }
-                    ).decode()
-                )
                 continue
 
             await conn_k.send(msg)
