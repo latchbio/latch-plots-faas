@@ -90,3 +90,7 @@ class PlotsContextManager:
                 }
             ).decode()
         )
+
+    async def override_session_owner(self, user_key: str) -> None:
+        self.session_owner = user_key
+        await self.broadcast_users()

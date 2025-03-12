@@ -198,6 +198,10 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
                 k_proc.proc.send_signal(signal=signal.SIGINT)
                 continue
 
+            if msg["type"] == "override_session_owner":
+                await plots_ctx_manager.override_session_owner(msg["user_key"])
+                continue
+
             await conn_k.send(msg)
     except WebsocketConnectionClosedError:
         ...
