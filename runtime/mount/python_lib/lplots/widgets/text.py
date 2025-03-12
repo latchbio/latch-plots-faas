@@ -17,7 +17,7 @@ class TextInputWidgetState(_emit.WidgetState[Literal["text_input"], str]):
 class TextInputWidget:
     _key: str
     _state: TextInputWidgetState
-    _signal: Signal[object]
+    _signal: Signal[object | str]
 
     def _value(self, val: object) -> str:
         if isinstance(val, str):

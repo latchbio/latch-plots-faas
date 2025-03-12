@@ -89,7 +89,7 @@ def get_registry_df(table_id: Any) -> pd.DataFrame | None:
 class TabularDatasourcePicker:
     _key: str
     _state: DataSourceSelectState
-    _signal: Signal[object]
+    _signal: Signal[object | DataSourceValue]
 
     def _value(self, val: object) -> pd.DataFrame | None:
         if not isinstance(val, dict) or not all(

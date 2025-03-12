@@ -21,7 +21,7 @@ class SelectState(_emit.WidgetState[Literal["select"], str]):
 class Select:
     _key: str
     _state: SelectState
-    _signal: Signal[object]
+    _signal: Signal[object | str]
 
     def _value(self, val: object) -> str | int | float | bool | datetime | None:
         if not isinstance(val, str) or val not in self._state["options"]:

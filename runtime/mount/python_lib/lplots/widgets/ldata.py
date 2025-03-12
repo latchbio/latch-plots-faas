@@ -20,7 +20,7 @@ class LDataPickerState(_emit.WidgetState[Literal["ldata_picker"], str]):
 class LDataPicker:
     _key: str
     _state: LDataPickerState
-    _signal: Signal[object]
+    _signal: Signal[object | LPath]
 
     def _value(self, val: object) -> LPath | None:
         if not isinstance(val, str) or not val.startswith("latch://"):

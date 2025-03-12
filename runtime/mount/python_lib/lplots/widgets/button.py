@@ -38,7 +38,7 @@ def parse_iso_strings(data: Any) -> tuple[datetime, datetime] | None:
 class ButtonWidget:
     _key: str
     _state: ButtonWidgetState
-    _signal: Signal[object]
+    _signal: Signal[object | ButtonWidgetSignalValue]
 
     _last_clicked_ref: None | datetime = field(default=None, repr=False)
 

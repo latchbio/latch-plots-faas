@@ -21,7 +21,7 @@ class RadioGroupState(_emit.WidgetState[Literal["radio_group"], str]):
 class RadioGroups:
     _key: str
     _state: RadioGroupState
-    _signal: Signal[object]
+    _signal: Signal[object | str]
 
     def _value(self, val: object) -> str | None:
         if not isinstance(val, str) or val not in self._state["options"]:

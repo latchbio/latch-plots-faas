@@ -20,7 +20,7 @@ class RegistryTablePickerState(
 class RegistryTablePicker:
     _key: str
     _state: RegistryTablePickerState
-    _signal: Signal[object]
+    _signal: Signal[object | str]
 
     def _value(self, val: object) -> str | None:
         if not isinstance(val, str):

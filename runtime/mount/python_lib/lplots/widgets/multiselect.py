@@ -21,7 +21,7 @@ class MultiSelectState(_emit.WidgetState[Literal["multi_select"], str]):
 class MultiSelect:
     _key: str
     _state: MultiSelectState
-    _signal: Signal[object]
+    _signal: Signal[object | list[str | int | float | bool | datetime]]
 
     def _value(self, val: object) -> list[str | int | float | bool | datetime] | None:
         if not isinstance(val, list):
