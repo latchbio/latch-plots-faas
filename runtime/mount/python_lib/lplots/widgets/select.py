@@ -23,12 +23,12 @@ class SelectState(_emit.WidgetState[Literal["select"], str]):
 class Select:
     _key: str
     _state: SelectState
-    _signal: Signal[str | int | float | bool | datetime]
+    _signal: Signal[str | int | float | bool | datetime | Nothing]
 
     def _value(
         self, val: str | int | float | bool | datetime | Nothing | None
     ) -> str | int | float | bool | datetime | None:
-        if val is None or val not in self._state["options"]:
+        if val is None or val is Nothing.x or val not in self._state["options"]:
             val = self._state.get("default")
             if val is None:
                 return None

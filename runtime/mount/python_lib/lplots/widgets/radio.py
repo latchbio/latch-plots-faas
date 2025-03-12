@@ -2,6 +2,8 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Literal, NotRequired
 
+from lplots.utils.nothing import Nothing
+
 from ..reactive import Signal
 from . import _emit, _state
 from .shared import FormInputAppearance
@@ -21,10 +23,10 @@ class RadioGroupState(_emit.WidgetState[Literal["radio_group"], str]):
 class RadioGroups:
     _key: str
     _state: RadioGroupState
-    _signal: Signal[str]
+    _signal: Signal[str | Nothing]
 
-    def _value(self, val: str | None) -> str | None:
-        if val is None or val not in self._state["options"]:
+    def _value(self, val: str | None | Nothing) -> str | None:
+        if val is None or val is Nothing.x or val not in self._state["options"]:
             val = self._state.get("default")
             if val is None:
                 return None

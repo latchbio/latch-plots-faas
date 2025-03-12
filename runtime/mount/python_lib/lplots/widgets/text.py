@@ -18,10 +18,10 @@ class TextInputWidgetState(_emit.WidgetState[Literal["text_input"], str]):
 class TextInputWidget:
     _key: str
     _state: TextInputWidgetState
-    _signal: Signal[str]
+    _signal: Signal[str | Nothing]
 
     def _value(self, val: str | Nothing | None) -> str:
-        if val is Nothing.x or not isinstance(val, str):
+        if val is Nothing.x or val is None:
             val = self._state.get("default")
             if val is None:
                 return ""

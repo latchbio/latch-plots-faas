@@ -3,6 +3,8 @@ from typing import Literal, NotRequired
 
 from latch.ldata.path import LPath
 
+from lplots.utils.nothing import Nothing
+
 from ..reactive import Signal
 from . import _emit, _state
 from .shared import FormInputAppearance
@@ -20,10 +22,10 @@ class LDataPickerState(_emit.WidgetState[Literal["ldata_picker"], str]):
 class LDataPicker:
     _key: str
     _state: LDataPickerState
-    _signal: Signal[str]
+    _signal: Signal[str | Nothing]
 
-    def _value(self, val: str | None) -> LPath | None:
-        if val is None or not val.startswith("latch://"):
+    def _value(self, val: str | None | Nothing) -> LPath | None:
+        if val is Nothing.x or val is None or not val.startswith("latch://"):
             val = self._state.get("default")
             if val is None:
                 return None

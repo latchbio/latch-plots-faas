@@ -3,6 +3,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal, NotRequired
 
+from lplots.utils.nothing import Nothing
+
 from ..reactive import Signal
 from . import _emit, _state
 from .shared import FormInputAppearance
@@ -21,12 +23,12 @@ class MultiSelectState(_emit.WidgetState[Literal["multi_select"], str]):
 class MultiSelect:
     _key: str
     _state: MultiSelectState
-    _signal: Signal[list[str | int | float | bool | datetime]]
+    _signal: Signal[list[str | int | float | bool | datetime] | Nothing]
 
     def _value(
-        self, val: list[str | int | float | bool | datetime] | None
+        self, val: list[str | int | float | bool | datetime] | None | Nothing
     ) -> list[str | int | float | bool | datetime] | None:
-        if val is None:
+        if val is None or val is Nothing.x:
             val = self._state.get("default")
             if val is None:
                 return None

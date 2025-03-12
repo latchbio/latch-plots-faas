@@ -22,7 +22,7 @@ class CheckboxWidgetState(_emit.WidgetState[Literal["checkbox"], str]):
 class CheckboxWidget:
     _key: str
     _state: CheckboxWidgetState
-    _signal: Signal[bool]
+    _signal: Signal[bool | Nothing]
 
     def _value(self, val: bool | Nothing) -> bool:
         if val is Nothing.x:

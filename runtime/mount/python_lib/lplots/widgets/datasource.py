@@ -91,10 +91,10 @@ def get_registry_df(table_id: Any) -> pd.DataFrame | None:
 class TabularDatasourcePicker:
     _key: str
     _state: DataSourceSelectState
-    _signal: Signal[DataSourceValue]
+    _signal: Signal[DataSourceValue | Nothing]
 
     def _value(self, val: DataSourceValue | Nothing | None) -> pd.DataFrame | None:
-        if val is None or not isinstance(val, dict):
+        if val is None or val is Nothing.x:
             val = self._state.get("default")
             # todo(manske): validate default
             if val is None:
