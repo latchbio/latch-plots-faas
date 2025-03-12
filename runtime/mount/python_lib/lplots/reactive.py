@@ -55,6 +55,9 @@ class Node:
         return self._id
 
     def __post_init__(self) -> None:
+        if self._id is None:
+            self._id = str(uuid.uuid4())
+
         live_nodes[self.id] = self
 
         if self.parent is not None:
@@ -70,9 +73,6 @@ class Node:
             raise ValueError(f"reactive node name is not unique: {self.name!r}")
 
         live_node_names.add(self.name)
-
-        if self._id is None:
-            self._id = str(uuid.uuid4())
 
     def name_path(self) -> str:
         assert self.name is not None
