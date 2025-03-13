@@ -1,8 +1,11 @@
+from base64 import b64decode, b64encode
 from typing import TypedDict
+
+from dill import dumps, loads
 
 
 class SerializedSignal(TypedDict):
-    value: bytes
+    value: str
     name: str
     listeners: list[str]
     error_msg: None | str
@@ -20,3 +23,23 @@ class SerializedNode(TypedDict):
 
 
 unserial_symbol = "<<UNSERIALIZABLE>>"
+
+
+def safe_serialize_obj(val: object) -> (str, str | None):
+    try:
+        s_val = dumps(val)
+        error_msg = None
+    except Exception as e:
+        s_val = dumps(unserial_symbol)
+        error_msg = f"Failed to pickle: {e}"
+    s_val = b64encode(s_val).decode("utf-8")
+    return s_val, error_msg
+
+
+def safe_unserialize_obj(s_val: str) -> object | None:
+    try:
+        val = loads(b64decode(s_val.encode("utf-8")))
+    except Exception as e:
+        # todo(kenny): handle
+        val = None
+    return val

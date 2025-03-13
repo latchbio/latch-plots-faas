@@ -11,7 +11,8 @@ from typing import Any, Generic, Self, TextIO, TypeAlias, TypeVar, overload
 import dill
 
 from . import _inject
-from .persistence import SerializedNode, SerializedSignal, unserial_symbol
+from .persistence import (SerializedNode, SerializedSignal, safe_serialize_obj,
+                          safe_unserialize_obj)
 from .utils.nothing import Nothing
 from .widgets._emit import WidgetState
 
@@ -92,6 +93,20 @@ class Node:
             name=self.name,
             parent=(self.parent.id if self.parent else None),
             id=self.id,
+        )
+
+    @classmethod
+    def load(cls, s_node) -> "Node":
+        return cls(
+            f=stub_node_noop,
+            code=s_node["code"],
+            stale=s_node["stale"],
+            signals={},
+            cell_id=s_node["cell_id"],
+            name=s_node["name"],
+            parent=None,
+            _id=s_node["id"],
+            _is_stub=True,
         )
 
     def name_path(self) -> str:
@@ -337,19 +352,25 @@ class Signal(Generic[T]):
         return self._value
 
     def serialize(self) -> SerializedSignal:
-        error_msg = None
-        try:
-            val = dill.dumps(self._value)
-        except Exception as e:
-            val = dill.dumps(unserial_symbol)
-            error_msg = f"Failed to pickle {self._name}: {e}"
+        s_val, error_msg = safe_serialize_obj(self._value)
         return SerializedSignal(
-            value=base64.b64encode(val).decode("utf-8"),
+            value=s_val,
             name=self._name,
             listeners=list(self._listeners.keys()),
-            error_msg=error_msg,
+            error_msg="" if error_msg is None else error_msg,
             id=self.id,
         )
+
+    @classmethod
+    def load(cls, s_sig) -> "Signal":
+        val = safe_unserialize_obj(s_sig["value"])
+
+        if val is None:
+            sig = cls(Nothing.x, name=s_sig["name"], _id=s_sig["id"])
+        else:
+            sig = cls(val, name=s_sig["name"], _id=s_sig["id"])
+
+        return sig
 
     @overload
     def __call__(self, /) -> T:

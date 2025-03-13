@@ -32,6 +32,7 @@ from plotly.basedatatypes import BaseFigure
 
 from lplots import _inject
 from lplots.persistence import (SerializedNode, SerializedSignal,
+                                safe_serialize_obj, safe_unserialize_obj,
                                 unserial_symbol)
 from lplots.reactive import Node, Signal, ctx, stub_node_noop
 from lplots.themes import graphpad_inspired_theme
@@ -509,6 +510,7 @@ class Kernel:
 
     restored_nodes: dict[str, Node] = field(default_factory=dict)
     restored_signals: dict[str, Signal[object]] = field(default_factory=dict)
+    restored_globals: dict[str, object] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         self.k_globals = TracedDict(self.duckdb)
@@ -686,17 +688,25 @@ class Kernel:
         #     del self.widget_signals[x]
 
     def store_dependencies(self) -> None:
-        serialized_nodes = {}
-        serialized_signals = {}
+        s_nodes = {}
+        s_signals = {}
         for node in self.cell_rnodes.values():
-            serialized_nodes[node.id] = node.serialize()
+            s_nodes[node.id] = node.serialize()
             for sid, sig in node.signals.items():
-                if sid not in serialized_signals:
-                    serialized_signals[sid] = sig.serialize()
+                if sid not in s_signals:
+                    s_signals[sid] = sig.serialize()
 
-        serialized_depens = {
-            "serialized_nodes": serialized_nodes,
-            "serialized_signals": serialized_signals,
+        s_globals = {}
+        for k, val in self.k_globals.items():
+            if isinstance(val, Signal):
+                s_globals[k] = val.serialize()
+            else:
+                s_globals[k] = safe_serialize_obj(val)
+
+        s_depens = {
+            "s_globals": s_globals,
+            "s_nodes": s_nodes,
+            "s_signals": s_signals,
             "widget_signals": {k: v.id for k, v in self.widget_signals.items()},
             "nodes_with_widgets": list(self.nodes_with_widgets.keys()),
             "cell_rnodes": {k: v.id for k, v in self.cell_rnodes.items()},
@@ -707,67 +717,57 @@ class Kernel:
 
         stored_dependency_dir.mkdir(parents=True, exist_ok=True)
         (stored_dependency_dir / "latest.json").write_text(
-            orjson.dumps(serialized_depens).decode("utf-8")
+            orjson.dumps(s_depens).decode("utf-8")
         )
 
     def load_dependencies(self) -> None:
-        serialized_depens = orjson.loads(
-            (stored_dependency_dir / "latest.json").read_text()
-        )
-        serialized_nodes: dict[str, SerializedNode] = serialized_depens[
-            "serialized_nodes"
-        ]
-        serialized_signals = serialized_depens["serialized_signals"]
+        s_depens = orjson.loads((stored_dependency_dir / "latest.json").read_text())
+        s_nodes: dict[str, SerializedNode] = s_depens["s_nodes"]
+        s_signals = s_depens["s_signals"]
 
         nodes: dict[str, Node] = {}
         signals: dict[str, Signal[object]] = {}
 
-        for nid, s_node in serialized_nodes.items():
-            nodes[nid] = Node(
-                f=stub_node_noop,
-                code=s_node["code"],
-                stale=s_node["stale"],
-                signals={},
-                cell_id=s_node["cell_id"],
-                name=s_node["name"],
-                parent=None,
-                _id=s_node["id"],
-                _is_stub=True,
-            )
+        for nid, s_node in s_nodes.items():
+            nodes[nid] = Node.load(s_node)
 
-        for sid, s_sig in serialized_signals.items():
-            try:
-                value = dill.loads(base64.b64decode(s_sig["value"].encode("utf-8")))
-            except Exception as e:
-                # todo(kenny): handle
-                value = unserial_symbol
+        for sid, s_sig in s_signals.items():
+            signals[sid] = Signal.load(s_sig)
 
-            if value == unserial_symbol:
-                signals[sid] = Signal(Nothing.x, name=s_sig["name"], _id=s_sig["id"])
-            else:
-                signals[sid] = Signal(value, name=s_sig["name"], _id=s_sig["id"])
-
-        for nid, s_node in serialized_nodes.items():
+        for nid, s_node in s_nodes.items():
             node = nodes[nid]
 
             node.signals = {x: signals.get(x) for x in s_node["signals"]}
-            node.parent = nodes.get(s_node["parent"])
+            # todo(kenny): deal with children
+            # node.parent = nodes.get(s_node["parent"])
 
-        for sid, s_signal in serialized_signals.items():
+        for sid, s_signal in s_signals.items():
             signal = signals[sid]
             signal._listeners = {x: nodes.get(x) for x in s_signal["listeners"]}
+
+        restored_globals = {}
+        for k, s_v in s_depens["s_globals"].items():
+            if isinstance(s_v, dict):
+                sig = Signal.load(s_v)
+                restored_globals[k] = sig
+                self.k_globals = sig
+            else:
+                val = safe_unserialize_obj(s_v)
+                if val is None:
+                    restored_globals[k] = "error"
+                else:
+                    restored_globals[k] = val
+                    self.k_globals[k] = val
 
         self.restored_nodes = nodes
         self.restored_signals = signals
 
-        self.cell_rnodes = {
-            k: nodes.get(v) for k, v in serialized_depens["cell_rnodes"].items()
-        }
+        self.cell_rnodes = {k: nodes.get(v) for k, v in s_depens["cell_rnodes"].items()}
         self.widget_signals = {
-            k: signals.get(v) for k, v in serialized_depens["widget_signals"].items()
+            k: signals.get(v) for k, v in s_depens["widget_signals"].items()
         }
         self.nodes_with_widgets = {
-            x: nodes.get(x) for x in serialized_depens["nodes_with_widgets"]
+            x: nodes.get(x) for x in s_depens["nodes_with_widgets"]
         }
 
         # plumb node parent, signals
