@@ -7,7 +7,10 @@ from dataclasses import dataclass, field
 from traceback import print_exc
 from typing import Any, Generic, Self, TextIO, TypeAlias, TypeVar, overload
 
+import dill
+
 from . import _inject
+from .persistence import SerializedNode, SerializedSignal
 from .utils.nothing import Nothing
 from .widgets._emit import WidgetState
 
@@ -307,6 +310,20 @@ class Signal(Generic[T]):
 
     def sample(self) -> T:
         return self._value
+
+    def serialize(self) -> SerializedSignal:
+        error_msg = None
+        try:
+            val = dill.dumps(self._value)
+        except Exception as e:
+            val = None
+            error_msg = f"Failed to pickle {self._name}: {e}"
+        return SerializedSignal(
+            value=val,
+            name=self._name,
+            listeners=self._listeners.keys(),
+            error_msg=error_msg,
+        )
 
     @overload
     def __call__(self, /) -> T:
