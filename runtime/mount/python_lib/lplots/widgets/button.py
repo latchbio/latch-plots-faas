@@ -63,6 +63,7 @@ class ButtonWidget:
         if clicked > self._last_clicked_ref:
             res["last_clicked"] = str(clicked)
             self._signal(res)
+            self._signal()
             return True
 
         return False
