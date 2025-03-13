@@ -507,6 +507,9 @@ class Kernel:
     plot_configs: dict[str, PlotConfig | None] = field(default_factory=dict)
     duckdb: DuckDBPyConnection = field(default=initialize_duckdb())
 
+    restored_nodes: dict[str, Node] = field(default_factory=dict)
+    restored_signals: dict[str, Signal[object]] = field(default_factory=dict)
+
     def __post_init__(self) -> None:
         self.k_globals = TracedDict(self.duckdb)
         self.k_globals["exit"] = cell_exit
@@ -551,6 +554,12 @@ class Kernel:
             "registry_dataframes": list(self.registry_dataframes.keys()),
             "url_dataframes": list(self.url_dataframes.keys()),
             "plot_configs": self.plot_configs,
+            "restored_nodes": {
+                k: v.serialize() for k, v in self.restored_nodes.items()
+            },
+            "restored_signals": {
+                k: v.serialize() for k, v in self.restored_signals.items()
+            },
         }
 
     async def set_active_cell(self, cell_id: str) -> None:
@@ -670,13 +679,13 @@ class Kernel:
                 }
             )
 
-        self.serialize_dependencies()
+        self.store_dependencies()
         # fixme(rteqs): cleanup signals in some other way. the below does not work because widget signals
         # are restored on `init` but there are no corresponding `rnodes`
         # for x in unused_signals:
         #     del self.widget_signals[x]
 
-    def serialize_dependencies(self) -> None:
+    def store_dependencies(self) -> None:
         serialized_nodes = {}
         serialized_signals = {}
         for node in self.cell_rnodes.values():
@@ -747,6 +756,9 @@ class Kernel:
         for sid, s_signal in serialized_signals.items():
             signal = signals[sid]
             signal._listeners = {x: nodes.get(x) for x in s_signal["listeners"]}
+
+        self.restored_nodes = nodes
+        self.restored_signals = signals
 
         self.cell_rnodes = {
             k: nodes.get(v) for k, v in serialized_depens["cell_rnodes"].items()
