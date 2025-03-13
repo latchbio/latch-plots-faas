@@ -68,9 +68,10 @@ class PlotsContextManager:
 
         if self.session_count_by_user[user.key] == 0:
             self.unique_users.remove(user)
+            del self.session_count_by_user[user.key]
+
             if self.session_owner == user.key:
                 self.session_owner = next(iter(self.contexts.values()))[1].key
-                del self.session_count_by_user[user.key]
 
         await self.broadcast_users()
 
