@@ -679,8 +679,8 @@ class Kernel:
     def serialize_dependencies(self) -> None:
         serialized_nodes = {}
         serialized_signals = {}
-        for nid, node in self.cell_rnodes.items():
-            serialized_nodes[nid] = node.serialize()
+        for node in self.cell_rnodes.values():
+            serialized_nodes[node.id] = node.serialize()
             for sid, sig in node.signals.items():
                 if sid not in serialized_signals:
                     serialized_signals[sid] = sig.serialize()
