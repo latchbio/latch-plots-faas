@@ -472,7 +472,7 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
     return pio_json.clean_to_json_compatible(res, modules=modules)
 
 
-stored_dependency_path = Path.home() / ".cache/plots-faas/latest.json"
+stored_dependency_dir = Path.home() / ".cache/plots-faas"
 
 
 @dataclass(kw_only=True)
@@ -696,13 +696,15 @@ class Kernel:
             "url_dataframes": {},
         }
 
-        stored_dependency_path.mkdir(exist_ok=True)
-        stored_dependency_path.write_text(
+        stored_dependency_dir.mkdir(parents=True, exist_ok=True)
+        (stored_dependency_dir / "latest.json").write_text(
             orjson.dumps(serialized_depens).decode("utf-8")
         )
 
     def load_dependencies(self) -> None:
-        serialized_depens = orjson.loads(stored_dependency_path.read_text())
+        serialized_depens = orjson.loads(
+            (stored_dependency_dir / "latest.json").read_text()
+        )
         serialized_nodes: dict[str, SerializedNode] = serialized_depens[
             "serialized_nodes"
         ]
