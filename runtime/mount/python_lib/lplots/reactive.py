@@ -22,7 +22,7 @@ Computation: TypeAlias = Callable[..., R]
 live_nodes: dict[str, "Node"] = {}
 live_node_names: set[str] = set()
 
-stub_node_noop = lambda:
+stub_node_noop = lambda: None
 
 
 def graphviz() -> None:
