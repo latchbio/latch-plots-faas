@@ -31,7 +31,8 @@ from pandas.io.json._table_schema import build_table_schema
 from plotly.basedatatypes import BaseFigure
 
 from lplots import _inject
-from lplots.persistence import unserial_symbol
+from lplots.persistence import (SerializedNode, SerializedSignal,
+                                unserial_symbol)
 from lplots.reactive import Node, Signal, ctx, stub_node_noop
 from lplots.themes import graphpad_inspired_theme
 from lplots.utils.nothing import Nothing
@@ -701,35 +702,37 @@ class Kernel:
 
     def load_dependencies(self) -> None:
         serialized_depens = orjson.loads(stored_dependency_path.read_text())
-        serialized_nodes = serialized_depens["serialized_nodes"]
+        serialized_nodes: dict[str, SerializedNode] = serialized_depens[
+            "serialized_nodes"
+        ]
         serialized_signals = serialized_depens["serialized_signals"]
 
-        nodes = {}
-        signals = {}
+        nodes: dict[str, Node] = {}
+        signals: dict[str, Signal[object]] = {}
 
-        for nid, node in serialized_nodes.items():
+        for nid, s_node in serialized_nodes.items():
             nodes[nid] = Node(
                 f=stub_node_noop,
-                code=node["code"],
-                stale=node["stale"],
+                code=s_node["code"],
+                stale=s_node["stale"],
                 signals={},
-                cell_id=node["cell_id"],
-                name=node["name"],
+                cell_id=s_node["cell_id"],
+                name=s_node["name"],
                 parent=None,
-                _id=node["id"],
+                _id=s_node["id"],
             )
 
-        for sid, sig in serialized_signals.items():
+        for sid, s_sig in serialized_signals.items():
             try:
-                value = dill.loads(base64.b64decode(sig["value"].encode("utf-8")))
+                value = dill.loads(base64.b64decode(s_sig["value"].encode("utf-8")))
             except Exception as e:
                 # todo(kenny): handle
                 value = unserial_symbol
 
             if value == unserial_symbol:
-                signals[sid] = Signal(Nothing.x, name=sig["name"], _id=sig["id"])
+                signals[sid] = Signal(Nothing.x, name=s_sig["name"], _id=s_sig["id"])
             else:
-                signals[sid] = Signal(value, name=sig["name"], _id=sig["id"])
+                signals[sid] = Signal(value, name=s_sig["name"], _id=s_sig["id"])
 
         for nid, s_node in serialized_nodes.items():
             node = nodes[nid]

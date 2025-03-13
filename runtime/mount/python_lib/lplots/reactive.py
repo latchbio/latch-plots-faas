@@ -90,7 +90,7 @@ class Node:
             signals=list(self.signals.keys()),
             cell_id=self.cell_id,
             name=self.name,
-            parent=self.parent.id,
+            parent=(self.parent.id if self.parent else None),
             id=self.id,
         )
 
