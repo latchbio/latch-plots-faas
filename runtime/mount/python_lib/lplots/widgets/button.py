@@ -44,7 +44,7 @@ class ButtonWidget:
 
     @property
     def value(self) -> bool:
-        res = self._signal()
+        res = self._signal.sample()
 
         if not isinstance(res, dict) or not all(
             key in res for key in ButtonWidgetSignalValue.__annotations__
@@ -62,7 +62,7 @@ class ButtonWidget:
 
         if clicked > self._last_clicked_ref:
             res["last_clicked"] = str(clicked)
-            self._signal._value = res
+            self._signal(res)
             return True
 
         return False
