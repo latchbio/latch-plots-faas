@@ -1,3 +1,4 @@
+import base64
 import inspect
 import sys
 import uuid
@@ -336,10 +337,10 @@ class Signal(Generic[T]):
         try:
             val = dill.dumps(self._value)
         except Exception as e:
-            val = None
+            val = "<<UNSERIALIZABLE>>"
             error_msg = f"Failed to pickle {self._name}: {e}"
         return SerializedSignal(
-            value=val,
+            value=base64.b64encode(val).decode("utf-8"),
             name=self._name,
             listeners=list(self._listeners.keys()),
             error_msg=error_msg,
