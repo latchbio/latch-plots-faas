@@ -750,7 +750,7 @@ class Kernel:
             if isinstance(s_v, dict):
                 sig = Signal.load(s_v)
                 restored_globals[k] = sig
-                self.k_globals = sig
+                self.k_globals[k] = sig
             else:
                 val = safe_unserialize_obj(s_v)
                 if val is None:
