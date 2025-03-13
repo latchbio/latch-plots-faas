@@ -723,6 +723,7 @@ class Kernel:
                 name=s_node["name"],
                 parent=None,
                 _id=s_node["id"],
+                _is_stub=True,
             )
 
         for sid, s_sig in serialized_signals.items():
@@ -748,7 +749,7 @@ class Kernel:
             signal._listeners = {x: nodes.get(x) for x in s_signal["listeners"]}
 
         self.cell_rnodes = {
-            k: nodes.get(v) for k, v in serialized_depens["cell_rnodes"]
+            k: nodes.get(v) for k, v in serialized_depens["cell_rnodes"].items()
         }
         self.widget_signals = {
             k: signals.get(v) for k, v in serialized_depens["widget_signals"].items()
