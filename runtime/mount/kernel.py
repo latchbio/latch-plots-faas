@@ -692,7 +692,7 @@ class Kernel:
             "serialized_signals": serialized_signals,
             "widget_signals": {k: v.id for k, v in self.widget_signals.items()},
             "nodes_with_widgets": list(self.nodes_with_widgets.keys()),
-            "cell_rnodes": list(self.cell_rnodes.keys()),
+            "cell_rnodes": {k: v.id for k, v in self.cell_rnodes.items()},
             "ldata_dataframes": {},
             "registry_dataframes": {},
             "url_dataframes": {},
@@ -749,7 +749,9 @@ class Kernel:
             signal = signals[sid]
             signal._listeners = {x: nodes.get(x) for x in s_signal["listeners"]}
 
-        self.cell_rnodes = {k: v for k, v in nodes.items()}
+        self.cell_rnodes = {
+            k: nodes.get(v) for k, v in serialized_depens["cell_rnodes"]
+        }
         self.widget_signals = {
             k: signals.get(v) for k, v in serialized_depens["widget_signals"].items()
         }
