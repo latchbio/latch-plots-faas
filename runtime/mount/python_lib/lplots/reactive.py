@@ -37,6 +37,7 @@ def graphviz() -> None:
 @dataclass(kw_only=True)
 class Node:
     f: Computation[Any]
+    code: str
     stale: bool = False
     disposed: bool = False
 
@@ -47,7 +48,9 @@ class Node:
 
     cell_id: str | None = None
     name: str | None = None
-    _id: str
+    _id: str | None
+
+    _is_stub: bool = False
 
     widget_states: dict[str, WidgetState] = field(default_factory=dict)
     widget_state_idx = 0
@@ -188,10 +191,12 @@ class RCtx:
     in_tx: bool = False
 
     async def run(
-        self, f: Callable[..., Awaitable[R]], *, _cell_id: str | None = None
+        self, f: Callable[..., Awaitable[R]], code: str, *, _cell_id: str | None = None
     ) -> R:
         async with self.transaction:
-            self.cur_comp = Node(f=f, parent=self.cur_comp, cell_id=_cell_id, _id=None)
+            self.cur_comp = Node(
+                f=f, parent=self.cur_comp, cell_id=_cell_id, _id=None, code=code
+            )
 
             try:
                 if inspect.iscoroutinefunction(f):
@@ -256,7 +261,13 @@ class RCtx:
                         await _inject.kernel.set_active_cell(n.cell_id)
 
                     try:
-                        await self.run(n.f, _cell_id=n.cell_id)
+                        if n._is_stub:
+                            n._is_stub = False
+                            # reconstruct the function with globals
+                            await _inject.kernel.exec(n.cell_id, n.code)
+                        else:
+                            await self.run(n.f, n.code, _cell_id=n.cell_id)
+
                     except Exception:
                         print_exc()
                     finally:

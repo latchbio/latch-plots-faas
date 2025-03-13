@@ -789,7 +789,7 @@ class Kernel:
             x.__name__ = filename
 
             await self.set_active_cell(cell_id)
-            await ctx.run(x, _cell_id=cell_id)
+            await ctx.run(x, code, _cell_id=cell_id)
 
         except Exception:
             self.cell_status[cell_id] = "error"
