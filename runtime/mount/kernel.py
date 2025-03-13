@@ -167,7 +167,13 @@ class TracedDict(dict[str, Signal[object] | object]):
 
         return self.getitem_signal(__key)
 
-    def _direct_set(self, __key: str, __value: object) -> None:
+    def _direct_set_on_restore(self, __key: str, __value: object) -> None:
+        # Internal use when restoring globals at init . Does not handle updates
+        dfs = self.dataframes.sample()
+        if hasattr(__value, "iloc") and __key not in dfs:
+            dfs.add(__key)
+            self.dataframes(dfs)
+
         return super().__setitem__(__key, __value)
 
     def __setitem__(self, __key: str, __value: object) -> None:
@@ -702,10 +708,10 @@ class Kernel:
 
         s_globals = {}
         for k, val in self.k_globals.items():
-            if isinstance(val, Signal):
-                s_globals[k] = val.serialize()
+            if isinstance(val._value, Signal):
+                s_globals[k] = val._value.serialize()
             else:
-                s_globals[k] = safe_serialize_obj(val)
+                s_globals[k] = safe_serialize_obj(val._value)
 
         s_depens = {
             "s_globals": s_globals,
@@ -754,14 +760,14 @@ class Kernel:
             if isinstance(s_v, dict):
                 sig = Signal.load(s_v)
                 restored_globals[k] = sig
-                # self.k_globals._direct_set(k, sig)
+                self.k_globals._direct_set_on_restore(k, sig)
             else:
                 val = safe_unserialize_obj(s_v)
                 if val is None:
                     restored_globals[k] = "error"
                 else:
                     restored_globals[k] = val
-                    # self.k_globals._direct_set(k, val)
+                    self.k_globals._direct_set_on_restore(k, val)
 
         self.restored_nodes = nodes
         self.restored_signals = signals
