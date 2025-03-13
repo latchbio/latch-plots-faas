@@ -764,6 +764,7 @@ class Kernel:
 
         self.restored_nodes = nodes
         self.restored_signals = signals
+        self.restored_globals = restored_globals
 
         self.cell_rnodes = {k: nodes.get(v) for k, v in s_depens["cell_rnodes"].items()}
         self.widget_signals = {
