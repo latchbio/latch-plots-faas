@@ -10,16 +10,15 @@ from pathlib import Path
 from typing import TypedDict, TypeVar
 
 import orjson
-from latch_asgi.framework.websocket import WebsocketConnectionClosedError
 from latch_data_validation.data_validation import validate
+
+from runtime.mount.plots_context_manager import PlotsContextManager
 
 from .socketio import SocketIo
 from .utils import PlotConfig, get_global_http_sess, gql_query, orjson_encoder
 
 dir_p = Path(__file__).parent
 
-
-from latch_asgi.context.websocket import Context
 
 T = TypeVar("T")
 
@@ -46,7 +45,6 @@ cell_last_run_outputs: dict[str, CellOutputs] = {}
 
 async_tasks: list[asyncio.Task] = []
 
-contexts: dict[str, Context] = {}
 
 latch_p = Path("/root/.latch")
 sdk_token = (latch_p / "token").read_text()
@@ -54,6 +52,8 @@ auth_token_sdk = f"Latch-SDK-Token {sdk_token}"
 
 pod_id = int((latch_p / "id").read_text())
 pod_session_id = (latch_p / "session-id").read_text()
+
+plots_ctx_manager = PlotsContextManager()
 
 
 @dataclass
@@ -95,18 +95,6 @@ class PlotsNotebookKernelState:
 @dataclass(frozen=True)
 class PlotsNotebookKernelStateResp:
     data: PlotsNotebookKernelState
-
-
-async def try_send_message(ctx: Context, msg: str) -> None:
-    with contextlib.suppress(WebsocketConnectionClosedError):
-        await ctx.send_message(msg)
-
-
-async def broadcast_message(msg: str) -> None:
-    tasks = [
-        asyncio.create_task(try_send_message(ctx, msg)) for ctx in contexts.values()
-    ]
-    await asyncio.gather(*tasks)
 
 
 async def add_pod_event(*, auth: str, event_type: str) -> None:
@@ -313,11 +301,11 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
 
                 msg = {"type": msg["type"], "plot_id": msg["plot_id"]}
 
-            await broadcast_message(orjson.dumps(msg).decode())
+            await plots_ctx_manager.broadcast_message(orjson.dumps(msg).decode())
 
         except Exception:
             err_msg = {"type": "error", "data": traceback.format_exc()}
-            await broadcast_message(orjson.dumps(err_msg).decode())
+            await plots_ctx_manager.broadcast_message(orjson.dumps(err_msg).decode())
 
 
 async def start_kernel_proc() -> None:
@@ -353,7 +341,7 @@ async def start_kernel_proc() -> None:
         k_state = data.data.plotsNotebookKernelState
     except Exception:
         err_msg = {"type": "error", "data": traceback.format_exc()}
-        await broadcast_message(orjson.dumps(err_msg).decode())
+        await plots_ctx_manager.broadcast_message(orjson.dumps(err_msg).decode())
         traceback.print_exc()
 
     if k_state is None:
