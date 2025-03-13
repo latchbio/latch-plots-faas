@@ -696,6 +696,7 @@ class Kernel:
             "url_dataframes": {},
         }
 
+        stored_dependency_path.mkdir(exist_ok=True)
         stored_dependency_path.write_text(
             orjson.dumps(serialized_depens).decode("utf-8")
         )
