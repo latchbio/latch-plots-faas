@@ -77,6 +77,15 @@ class Node:
 
         live_node_names.add(self.name)
 
+    def serialize(self) -> SerializedNode:
+        return SerializedNode(
+            code="",
+            stale=self.stale,
+            signals=list(self.signals.keys()),
+            cell_id=self.cell_id,
+            name=self.name,
+        )
+
     def name_path(self) -> str:
         assert self.name is not None
         res = [self.name]
@@ -321,7 +330,7 @@ class Signal(Generic[T]):
         return SerializedSignal(
             value=val,
             name=self._name,
-            listeners=self._listeners.keys(),
+            listeners=list(self._listeners.keys()),
             error_msg=error_msg,
         )
 
