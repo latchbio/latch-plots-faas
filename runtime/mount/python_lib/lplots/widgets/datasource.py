@@ -89,29 +89,28 @@ def get_registry_df(table_id: Any) -> pd.DataFrame | None:
 class TabularDatasourcePicker:
     _key: str
     _state: DataSourceSelectState
-    _signal: Signal[DataSourceValue]
+    _signal: Signal[object | DataSourceValue]
 
-    @property
-    def value(self) -> pd.DataFrame | None:
-        res = self._signal()
-
-        if res is None or not isinstance(res, dict):
-            res = self._state.get("default")
+    def _value(self, val: object) -> pd.DataFrame | None:
+        if not isinstance(val, dict) or not all(
+            key in val for key in DataSourceValue.__annotations__
+        ):
+            val = self._state.get("default")
             # todo(manske): validate default
-            if res is None:
+            if val is None:
                 return None
 
-        res_type = res.get("type")
+        res_type = val.get("type")
         if res_type == "ldata":
-            node_id = res.get("node_id")
+            node_id = val.get("node_id")
             return get_ldata_df(node_id)
 
         if res_type == "dataframe":
-            df_id = res.get("key")
+            df_id = val.get("key")
             return get_kernel_df(df_id)
 
         if res_type == "viewer":
-            viewer_id = res.get("viewer_id")
+            viewer_id = val.get("viewer_id")
             if viewer_id is None:
                 return None
 
@@ -129,10 +128,19 @@ class TabularDatasourcePicker:
                 return _inject.kernel.url_dataframes.get(key)
 
         if res_type == "registry":
-            table_id = res.get("table_id")
+            table_id = val.get("table_id")
             return get_registry_df(table_id)
 
         return None
+
+    @property
+    def value(self) -> pd.DataFrame | None:
+        val = self._signal()
+        return self._value(val)
+
+    def sample(self) -> pd.DataFrame | None:
+        val = self._signal.sample()
+        return self._value(val)
 
 
 def w_datasource_picker(

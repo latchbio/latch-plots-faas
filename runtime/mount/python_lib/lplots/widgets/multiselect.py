@@ -21,17 +21,24 @@ class MultiSelectState(_emit.WidgetState[Literal["multi_select"], str]):
 class MultiSelect:
     _key: str
     _state: MultiSelectState
-    _signal: Signal[list[str | int | float | bool | datetime]]
+    _signal: Signal[object | list[str | int | float | bool | datetime]]
+
+    def _value(self, val: object) -> list[str | int | float | bool | datetime] | None:
+        if not isinstance(val, list):
+            val = self._state.get("default")
+            if val is None:
+                return None
+
+        return [x for x in val if x in self._state["options"]]
 
     @property
     def value(self) -> list[str | int | float | bool | datetime] | None:
         res = self._signal()
-        if res is None or not isinstance(res, list):
-            res = self._state.get("default")
-            if res is None:
-                return None
+        return self._value(res)
 
-        return [x for x in res if x in self._state["options"]]
+    def sample(self) -> list[str | int | float | bool | datetime] | None:
+        res = self._signal.sample()
+        return self._value(res)
 
 
 def w_multi_select(

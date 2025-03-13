@@ -221,10 +221,6 @@ class ExitException(Exception):
     ...
 
 
-class CellInterruptException(Exception):
-    ...
-
-
 KeyType = Literal["key", "ldata_node_id", "registry_table_id", "url"]
 
 
@@ -233,7 +229,7 @@ def cell_exit(code: int = 0) -> None:
 
 
 def cell_interrupt(code: int = 0) -> None:
-    raise CellInterruptException
+    raise KeyboardInterrupt
 
 
 leading_digits_and_dash = re.compile(r"^\d+-")
@@ -277,9 +273,6 @@ def filter_dataframe(
 
     if opcode == "empty":
         return df[col_vals.notna() & (col_vals != "")]
-
-    if filter_value is None:
-        return df
 
     mask: Series[bool] | NDArray[np.bool] | None = None
 
@@ -493,7 +486,7 @@ class Kernel:
     active_cell: str | None = None
 
     widget_signals: dict[str, Signal[Any]] = field(default_factory=dict)
-    nodes_with_widgets: dict[int, Node] = field(default_factory=dict)
+    nodes_with_widgets: dict[str, Node] = field(default_factory=dict)
 
     cell_output_selections: dict[str, str] = field(default_factory=dict)
     viewer_cell_selections: dict[str, tuple[str, KeyType]] = field(default_factory=dict)
@@ -519,9 +512,8 @@ class Kernel:
         self.k_globals.clear()
         pio.templates["graphpad_inspired_theme"] = graphpad_inspired_theme()
 
-        # todo(rteqs): figure out why we can't just catch KeyboardInterrupt without crashing the kernel
         signal.signal(
-            signal.SIGUSR1,
+            signal.SIGINT,
             lambda signum, frame: cell_interrupt()
             if self.active_cell is not None
             and self.cell_status[self.active_cell] == "running"
@@ -751,7 +743,7 @@ class Kernel:
 
         # plumb node parent, signals
 
-    def get_widget_value(self, key: str) -> Signal[Any]:
+    def get_widget_value(self, key: str) -> Signal[object]:
         assert ctx.cur_comp is not None
 
         key = f"{ctx.cur_comp.name_path()}/{key}"
@@ -857,7 +849,7 @@ class Kernel:
                     self.cell_status[cell_id] = "ok"
                     await self.send_cell_result(cell_id)
 
-                except Exception:
+                except (KeyboardInterrupt, Exception):
                     self.cell_status[cell_id] = "error"
                     await self.send_cell_result(cell_id)
 
@@ -866,7 +858,7 @@ class Kernel:
             await self.set_active_cell(cell_id)
             await ctx.run(x, code, _cell_id=cell_id)
 
-        except Exception:
+        except (KeyboardInterrupt, Exception):
             self.cell_status[cell_id] = "error"
             await self.send_cell_result(cell_id)
 

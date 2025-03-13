@@ -2,7 +2,6 @@ from dataclasses import dataclass
 from typing import Literal, NotRequired, TypedDict
 
 from ..reactive import Signal
-from ..utils.nothing import Nothing
 from . import _emit, _state
 
 
@@ -22,15 +21,22 @@ class CheckboxWidgetState(_emit.WidgetState[Literal["checkbox"], str]):
 class CheckboxWidget:
     _key: str
     _state: CheckboxWidgetState
-    _signal: Signal[bool]
+    _signal: Signal[object | bool]
+
+    def _value(self, val: object) -> bool:
+        if not isinstance(val, bool):
+            return self._state["default"]
+
+        return val
 
     @property
     def value(self) -> bool:
         res = self._signal()
-        if res is Nothing.x or not isinstance(res, bool):
-            res = self._state["default"]
+        return self._value(res)
 
-        return res
+    def sample(self) -> bool:
+        res = self._signal.sample()
+        return self._value(res)
 
 
 def w_checkbox(

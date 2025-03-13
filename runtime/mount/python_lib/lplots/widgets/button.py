@@ -1,9 +1,8 @@
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Literal, TypedDict
 
 from ..reactive import Signal
-from ..utils.nothing import Nothing
 from . import _emit, _state
 
 
@@ -18,37 +17,28 @@ class ButtonWidgetState(_emit.WidgetState[Literal["button"], str]):
     default: ButtonWidgetSignalValue
 
 
-datetime_format_string = "%Y-%m-%dT%H:%M:%S.%fZ"
-
-
-def _iso_string_to_datetime(iso_string: str) -> datetime:
-    return datetime.strptime(iso_string, datetime_format_string).replace(
-        tzinfo=timezone.utc
-    )
-
-
 def parse_iso_strings(data: Any) -> tuple[datetime, datetime] | None:
     if not isinstance(data, dict):
-        return
+        return None
 
     required_keys = ButtonWidgetSignalValue.__annotations__.keys()
 
     if not all(key in data for key in required_keys):
-        return
+        return None
 
     try:
-        clicked = _iso_string_to_datetime(data["clicked"])
-        last_clicked = _iso_string_to_datetime(data["last_clicked"])
+        clicked = datetime.fromisoformat(data["clicked"])
+        last_clicked = datetime.fromisoformat(data["last_clicked"])
         return (clicked, last_clicked)
     except ValueError:
-        return
+        return None
 
 
 @dataclass(kw_only=True)
 class ButtonWidget:
     _key: str
     _state: ButtonWidgetState
-    _signal: Signal[ButtonWidgetSignalValue]
+    _signal: Signal[object | ButtonWidgetSignalValue]
 
     _last_clicked_ref: None | datetime = field(default=None, repr=False)
 
@@ -56,7 +46,9 @@ class ButtonWidget:
     def value(self) -> bool:
         res = self._signal()
 
-        if res is Nothing.x:
+        if not isinstance(res, dict) or not all(
+            key in res for key in ButtonWidgetSignalValue.__annotations__
+        ):
             return False
 
         parsed = parse_iso_strings(res)
@@ -85,7 +77,7 @@ def w_button(
     key = _state.use_state_key(key=key)
 
     if default is None:
-        now = str(datetime.now(timezone.utc).strftime(datetime_format_string))
+        now = datetime.now(UTC).isoformat()
         default = {"clicked": now, "last_clicked": now}
 
     res = ButtonWidget(

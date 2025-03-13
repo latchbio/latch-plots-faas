@@ -21,18 +21,24 @@ class SelectState(_emit.WidgetState[Literal["select"], str]):
 class Select:
     _key: str
     _state: SelectState
-    _signal: Signal[str | int | float | bool | datetime]
+    _signal: Signal[object]
+
+    def _value(self, val: object) -> str | int | float | bool | datetime | None:
+        if val not in self._state["options"]:
+            val = self._state.get("default")
+            if val is None:
+                return None
+
+        return val
 
     @property
     def value(self) -> str | int | float | bool | datetime | None:
         res = self._signal()
+        return self._value(res)
 
-        if res is None or res not in self._state["options"]:
-            res = self._state.get("default")
-            if res is None:
-                return None
-
-        return res
+    def sample(self) -> str | int | float | bool | datetime | None:
+        res = self._signal.sample()
+        return self._value(res)
 
 
 def w_select(

@@ -17,8 +17,7 @@ class Singleton:
         return cls._instance
 
 
-class _Nothing(Singleton):
-    ...
+class _Nothing(Singleton): ...
 
 
 class Nothing(Enum):

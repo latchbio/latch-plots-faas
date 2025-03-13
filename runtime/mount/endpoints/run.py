@@ -21,8 +21,8 @@ from ..entrypoint import (
     cell_last_run_outputs,
     cell_sequencers,
     cell_status,
-    contexts,
     k_proc,
+    plots_ctx_manager,
     pod_id,
     pod_session_id,
     ready_ev,
@@ -78,7 +78,7 @@ auth_header_regex = re.compile(
 
 @trace_app_function_with_span
 async def run(s: Span, ctx: Context) -> HandlerResult:
-    global connection_idx
+    global connection_idx, session_owner
 
     sess_hash = secrets.token_hex(32)
     await ctx.accept_connection()
@@ -98,6 +98,10 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
     )
 
     auth_header_regex_match = auth_header_regex.match(auth_msg.token)
+    auth0_sub: str | None = None
+    picture_url: str | None = None
+    name: str | None = None
+
     if auth_header_regex_match is not None:
         oauth_token = auth_header_regex_match.group("oauth_token")
         session_token = auth_header_regex_match.group("session_token")
@@ -105,8 +109,14 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
         if oauth_token is not None:
             # todo(rteqs): expose functionality in latch_asgi
             auth_data = jwt.decode(oauth_token, options={"verify_signature": False})
-            s.set_attribute("auth0_sub", auth_data.get("sub"))
-            s.set_attribute("name", auth_data.get("name"))
+            auth0_sub = auth_data.get("sub")
+            picture_url = auth_data.get("picture")
+            name = auth_data.get("name")
+
+            if auth0_sub is not None and name is not None:
+                s.set_attribute("auth0_sub", auth0_sub)
+                s.set_attribute("name", name)
+
         elif session_token is not None:
             s.set_attribute("session_token", session_token)
 
@@ -129,45 +139,73 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
 
     conn_k = k_proc.conn_k
     assert conn_k is not None
-    contexts[sess_hash] = ctx
-
-    await ready_ev.wait()
-    await ctx.send_message(
-        orjson.dumps(
-            {
-                "type": "ready",
-                "connection_idx": connection_idx,
-                "cell_status": cell_status,
-                "cell_sequencers": cell_sequencers,
-                "cell_outputs": cell_last_run_outputs,
-            }
-        ).decode()
+    user_key = await plots_ctx_manager.add_context(
+        sess_hash=sess_hash,
+        ctx=ctx,
+        connection_idx=connection_idx,
+        auth0_sub=auth0_sub,
+        picture_url=picture_url,
+        name=name,
     )
 
-    connection_idx += 1
-
     try:
+        await ready_ev.wait()
+
+        await ctx.send_message(
+            orjson.dumps(
+                {
+                    "type": "ready",
+                    "connection_idx": connection_idx,
+                    "cell_status": cell_status,
+                    "cell_sequencers": cell_sequencers,
+                    "cell_outputs": cell_last_run_outputs,
+                }
+            ).decode()
+        )
+
+        connection_idx += 1
+
         while True:
             msg = await receive_json(ctx.receive)
+            session_owner = plots_ctx_manager.session_owner
+            is_session_owner = user_key == session_owner
+
+            if (
+                msg["type"] in {"run_cell", "stop_cell", "dispose_cell"}
+                and not is_session_owner
+            ):
+                await ctx.send_message(
+                    orjson.dumps(
+                        {
+                            "type": "not_session_owner_error",
+                            "data": {"message": "user is not session owner"},
+                        }
+                    ).decode()
+                )
+                continue
 
             if msg["type"] == "dispose_cell":
                 cell_id = msg["cell_id"]
 
                 if cell_status.get(cell_id) == "running" and k_proc.proc is not None:
-                    k_proc.proc.send_signal(signal=signal.SIGUSR1)
+                    k_proc.proc.send_signal(signal=signal.SIGINT)
 
                 cell_status.pop(cell_id, None)
                 cell_last_run_outputs.pop(cell_id, None)
                 cell_sequencers.pop(cell_id, None)
 
             if msg["type"] == "stop_cell" and k_proc.proc is not None:
-                k_proc.proc.send_signal(signal=signal.SIGUSR1)
+                k_proc.proc.send_signal(signal=signal.SIGINT)
+                continue
+
+            if msg["type"] == "override_session_owner":
+                await plots_ctx_manager.override_session_owner(msg["user_key"])
                 continue
 
             await conn_k.send(msg)
     except WebsocketConnectionClosedError:
         ...
     finally:
-        del contexts[sess_hash]
+        await plots_ctx_manager.delete_context(sess_hash)
 
     return "Ok"
