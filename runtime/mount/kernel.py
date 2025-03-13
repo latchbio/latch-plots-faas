@@ -513,7 +513,7 @@ class Kernel:
         self.k_globals.clear()
         pio.templates["graphpad_inspired_theme"] = graphpad_inspired_theme()
 
-        self.load_dependencies()
+        # self.load_dependencies()
 
         signal.signal(
             signal.SIGINT,
