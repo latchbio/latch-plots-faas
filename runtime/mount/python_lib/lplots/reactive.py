@@ -82,7 +82,7 @@ class Node:
 
     def serialize(self) -> SerializedNode:
         return SerializedNode(
-            code="",
+            code=self.code,
             stale=self.stale,
             signals=list(self.signals.keys()),
             cell_id=self.cell_id,
