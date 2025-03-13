@@ -697,7 +697,9 @@ class Kernel:
             "url_dataframes": {},
         }
 
-        (Path.home() / ".cache/plots-faas").write_text(orjson.dumps(serialized_depens))
+        (Path.home() / ".cache/plots-faas").write_text(
+            orjson.dumps(serialized_depens).decode("utf-8")
+        )
 
     def get_widget_value(self, key: str) -> Signal[Any]:
         assert ctx.cur_comp is not None

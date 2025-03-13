@@ -337,7 +337,7 @@ class Signal(Generic[T]):
         try:
             val = dill.dumps(self._value)
         except Exception as e:
-            val = "<<UNSERIALIZABLE>>"
+            val = dill.dumps("<<UNSERIALIZABLE>>")
             error_msg = f"Failed to pickle {self._name}: {e}"
         return SerializedSignal(
             value=base64.b64encode(val).decode("utf-8"),
