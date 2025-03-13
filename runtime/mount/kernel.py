@@ -559,12 +559,13 @@ class Kernel:
             "registry_dataframes": list(self.registry_dataframes.keys()),
             "url_dataframes": list(self.url_dataframes.keys()),
             "plot_configs": self.plot_configs,
-            # "restored_nodes": {
-            #     k: v.serialize() for k, v in self.restored_nodes.items()
-            # },
-            # "restored_signals": {
-            #     k: v.serialize() for k, v in self.restored_signals.items()
-            # },
+            "restored_nodes": {
+                k: v.serialize() for k, v in self.restored_nodes.items()
+            },
+            "restored_signals": {
+                k: v.serialize() for k, v in self.restored_signals.items()
+            },
+            "restored_globals": self.restored_globals,
         }
 
     async def set_active_cell(self, cell_id: str) -> None:
@@ -753,14 +754,14 @@ class Kernel:
             if isinstance(s_v, dict):
                 sig = Signal.load(s_v)
                 restored_globals[k] = sig
-                self.k_globals._direct_set(k, sig)
+                # self.k_globals._direct_set(k, sig)
             else:
                 val = safe_unserialize_obj(s_v)
                 if val is None:
                     restored_globals[k] = "error"
                 else:
                     restored_globals[k] = val
-                    self.k_globals._direct_set(k, val)
+                    # self.k_globals._direct_set(k, val)
 
         self.restored_nodes = nodes
         self.restored_signals = signals
