@@ -14,4 +14,3 @@ class SerializedNode(TypedDict):
     signals: list[str]
     cell_id: str
     name: str
-    error_msg: None | str

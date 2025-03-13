@@ -671,10 +671,33 @@ class Kernel:
                 }
             )
 
+        self.serialize_dependencies()
         # fixme(rteqs): cleanup signals in some other way. the below does not work because widget signals
         # are restored on `init` but there are no corresponding `rnodes`
         # for x in unused_signals:
         #     del self.widget_signals[x]
+
+    def serialize_dependencies(self) -> None:
+        serialized_nodes = {}
+        serialized_signals = {}
+        for nid, node in self.cell_rnodes.items():
+            serialized_nodes[nid] = node.serialize()
+            for sid, sig in node.signals.items():
+                if sid not in serialized_signals:
+                    serialized_signals[sid] = sig.serialize()
+
+        serialized_depens = {
+            "serialized_nodes": serialized_nodes,
+            "serialized_signals": serialized_signals,
+            "widget_signals": {k: v.id for k, v in self.widget_signals.items()},
+            "nodes_with_widgets": list(self.nodes_with_widgets.keys()),
+            "cell_rnodes": list(self.cell_rnodes.keys()),
+            "ldata_dataframes": {},
+            "registry_dataframes": {},
+            "url_dataframes": {},
+        }
+
+        (Path.home() / ".cache/plots-faas").write_text(orjson.dumps(serialized_depens))
 
     def get_widget_value(self, key: str) -> Signal[Any]:
         assert ctx.cur_comp is not None
