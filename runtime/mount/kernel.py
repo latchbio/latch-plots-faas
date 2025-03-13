@@ -559,12 +559,12 @@ class Kernel:
             "registry_dataframes": list(self.registry_dataframes.keys()),
             "url_dataframes": list(self.url_dataframes.keys()),
             "plot_configs": self.plot_configs,
-            "restored_nodes": {
-                k: v.serialize() for k, v in self.restored_nodes.items()
-            },
-            "restored_signals": {
-                k: v.serialize() for k, v in self.restored_signals.items()
-            },
+            # "restored_nodes": {
+            #     k: v.serialize() for k, v in self.restored_nodes.items()
+            # },
+            # "restored_signals": {
+            #     k: v.serialize() for k, v in self.restored_signals.items()
+            # },
         }
 
     async def set_active_cell(self, cell_id: str) -> None:
