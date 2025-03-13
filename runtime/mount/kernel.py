@@ -655,7 +655,7 @@ class Kernel:
                         continue
 
                     res[abs_k]["value"] = val
-            if self.cell_status[cell_id] == "error":
+            if self.cell_status.get(cell_id) == "error":
                 # skip errored cells to avoid clobbering widget state
                 # must be here so that we update unused_signals properly
                 # todo(maximsmol): optimize
