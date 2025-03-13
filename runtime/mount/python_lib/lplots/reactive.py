@@ -11,7 +11,7 @@ from typing import Any, Generic, Self, TextIO, TypeAlias, TypeVar, overload
 import dill
 
 from . import _inject
-from .persistence import SerializedNode, SerializedSignal
+from .persistence import SerializedNode, SerializedSignal, unserial_symbol
 from .utils.nothing import Nothing
 from .widgets._emit import WidgetState
 
@@ -21,6 +21,8 @@ Computation: TypeAlias = Callable[..., R]
 
 live_nodes: dict[str, "Node"] = {}
 live_node_names: set[str] = set()
+
+stub_node_noop = lambda:
 
 
 def graphviz() -> None:
@@ -88,6 +90,8 @@ class Node:
             signals=list(self.signals.keys()),
             cell_id=self.cell_id,
             name=self.name,
+            parent=self.parent.id,
+            id=self.id,
         )
 
     def name_path(self) -> str:
@@ -337,13 +341,14 @@ class Signal(Generic[T]):
         try:
             val = dill.dumps(self._value)
         except Exception as e:
-            val = dill.dumps("<<UNSERIALIZABLE>>")
+            val = dill.dumps(unserial_symbol)
             error_msg = f"Failed to pickle {self._name}: {e}"
         return SerializedSignal(
             value=base64.b64encode(val).decode("utf-8"),
             name=self._name,
             listeners=list(self._listeners.keys()),
             error_msg=error_msg,
+            id=self.id,
         )
 
     @overload

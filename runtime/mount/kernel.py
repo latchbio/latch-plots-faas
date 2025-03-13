@@ -1,5 +1,6 @@
 import ast
 import asyncio
+import base64
 import math
 import pprint
 import re
@@ -15,6 +16,7 @@ from traceback import format_exc
 from types import FrameType
 from typing import TYPE_CHECKING, Any, Literal, TypedDict, TypeVar
 
+import dill
 import numpy as np
 import orjson
 import pandas as pd
@@ -29,7 +31,8 @@ from pandas.io.json._table_schema import build_table_schema
 from plotly.basedatatypes import BaseFigure
 
 from lplots import _inject
-from lplots.reactive import Node, Signal, ctx
+from lplots.persistence import unserial_symbol
+from lplots.reactive import Node, Signal, ctx, stub_node_noop
 from lplots.themes import graphpad_inspired_theme
 from lplots.utils.nothing import Nothing
 from lplots.widgets._emit import WidgetState
@@ -475,6 +478,9 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
     return pio_json.clean_to_json_compatible(res, modules=modules)
 
 
+stored_dependency_path = Path.home() / ".cache/plots-faas/latest.json"
+
+
 @dataclass(kw_only=True)
 class Kernel:
     conn: SocketIoThread
@@ -697,9 +703,53 @@ class Kernel:
             "url_dataframes": {},
         }
 
-        (Path.home() / ".cache/plots-faas").write_text(
+        stored_dependency_path.write_text(
             orjson.dumps(serialized_depens).decode("utf-8")
         )
+
+    def load_dependencies(self) -> None:
+        serialized_depens = orjson.loads(stored_dependency_path.read_text())
+        serialized_nodes = serialized_depens["serialized_nodes"]
+        serialized_signals = serialized_depens["serialized_signals"]
+
+        nodes = {}
+        signals = {}
+
+        for nid, node in serialized_nodes.items():
+            nodes[nid] = Node(
+                f=stub_node_noop,
+                code=node["code"],
+                stale=node["stale"],
+                signals={},
+                cell_id=node["cell_id"],
+                name=node["name"],
+                parent=None,
+                _id=node["id"],
+            )
+
+        for sid, sig in serialized_signals.items():
+            try:
+                value = dill.loads(base64.b64decode(sig["value"].encode("utf-8")))
+            except Exception as e:
+                # todo(kenny): handle
+                value = unserial_symbol
+
+            if value == unserial_symbol:
+                signals[sid] = Signal(Nothing.x, name=sig["name"], _id=sig["id"])
+            else:
+                signals[sid] = Signal(value, name=sig["name"], _id=sig["id"])
+
+        for nid, s_node in serialized_nodes.items():
+            node = nodes[nid]
+
+            node.signals = {x: signals.get(x) for x in s_node["signals"]}
+            node.parent = nodes.get(s_node["parent"])
+
+        for sid, s_signal in serialized_signals.items():
+            signal = signals[sid]
+            signal._listeners = {x: nodes.get(x) for x in s_signal["listeners"]}
+
+        # plumb node parent, signals
 
     def get_widget_value(self, key: str) -> Signal[Any]:
         assert ctx.cur_comp is not None
