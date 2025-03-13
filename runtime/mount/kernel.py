@@ -513,8 +513,6 @@ class Kernel:
         self.k_globals.clear()
         pio.templates["graphpad_inspired_theme"] = graphpad_inspired_theme()
 
-        self.load_dependencies()
-
         signal.signal(
             signal.SIGINT,
             lambda signum, frame: cell_interrupt()
@@ -1215,6 +1213,7 @@ class Kernel:
         # print("[kernel] <", msg)
 
         if msg["type"] == "init":
+            self.load_dependencies()
             self.cell_output_selections = msg["cell_output_selections"]
             self.plot_data_selections = msg["plot_data_selections"]
             self.plot_configs = msg["plot_configs"]
