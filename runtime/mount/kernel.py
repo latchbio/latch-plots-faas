@@ -167,6 +167,9 @@ class TracedDict(dict[str, Signal[object] | object]):
 
         return self.getitem_signal(__key)
 
+    def _direct_set(self, __key: str, __value: object) -> None:
+        return super().__setitem__(__key, __value)
+
     def __setitem__(self, __key: str, __value: object) -> None:
         self.touched.add(__key)
         self.item_write_counter[__key] += 1
@@ -750,14 +753,14 @@ class Kernel:
             if isinstance(s_v, dict):
                 sig = Signal.load(s_v)
                 restored_globals[k] = sig
-                self.k_globals[k] = sig
+                self.k_globals._direct_set(k, sig)
             else:
                 val = safe_unserialize_obj(s_v)
                 if val is None:
                     restored_globals[k] = "error"
                 else:
                     restored_globals[k] = val
-                    self.k_globals[k] = val
+                    self.k_globals._direct_set(k, val)
 
         self.restored_nodes = nodes
         self.restored_signals = signals
