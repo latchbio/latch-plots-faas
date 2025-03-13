@@ -513,6 +513,8 @@ class Kernel:
         self.k_globals.clear()
         pio.templates["graphpad_inspired_theme"] = graphpad_inspired_theme()
 
+        self.load_dependencies()
+
         signal.signal(
             signal.SIGINT,
             lambda signum, frame: cell_interrupt()
@@ -746,6 +748,14 @@ class Kernel:
         for sid, s_signal in serialized_signals.items():
             signal = signals[sid]
             signal._listeners = {x: nodes.get(x) for x in s_signal["listeners"]}
+
+        self.cell_rnodes = {k: v for k, v in nodes.items()}
+        self.widget_signals = {
+            k: signals.get(v) for k, v in serialized_depens["widget_signals"].items()
+        }
+        self.nodes_with_widgets = {
+            x: nodes.get(x) for x in serialized_depens["nodes_with_widgets"]
+        }
 
         # plumb node parent, signals
 
