@@ -162,7 +162,6 @@ class RCtx:
     updated_signals: dict[int, "Signal"] = field(default_factory=dict)
     signals_update_from_code: dict[int, "Signal"] = field(default_factory=dict)
     stale_nodes: dict[int, Node] = field(default_factory=dict)
-    ran_cells: set[str] = field(default_factory=set)
 
     in_tx: bool = False
 
@@ -232,7 +231,6 @@ class RCtx:
                     # for this to work with top level nodes, the kernel calls
                     # set_active_cell manually before calling ctx.run()
                     if n.cell_id is not None:
-                        self.ran_cells.add(n.cell_id)
                         await _inject.kernel.set_active_cell(n.cell_id)
 
                     try:
