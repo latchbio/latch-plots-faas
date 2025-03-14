@@ -783,7 +783,7 @@ class Kernel:
                         "value": val,
                         "msg": f"stored error: {s_v['error_msg']}",
                     }
-                    self.k_globals._direct_set(k, val)
+                    self.k_globals._direct_set(k, Signal(val))
 
         self.restored_nodes = nodes
         self.restored_signals = signals
