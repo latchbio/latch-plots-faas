@@ -1,6 +1,5 @@
 import ast
 import asyncio
-import base64
 import math
 import pprint
 import re
@@ -16,7 +15,6 @@ from traceback import format_exc
 from types import FrameType
 from typing import TYPE_CHECKING, Any, Literal, TypedDict, TypeVar
 
-import dill
 import numpy as np
 import orjson
 import pandas as pd
@@ -1276,17 +1274,17 @@ class Kernel:
                         v,
                     )
 
-            for state_raw in msg["widget_states"].values():
-                try:
-                    state: dict[str, WidgetState] = orjson.loads(state_raw)
-                except orjson.JSONDecodeError:
-                    continue
+            # for state_raw in msg["widget_states"].values():
+            #     try:
+            #         state: dict[str, WidgetState] = orjson.loads(state_raw)
+            #     except orjson.JSONDecodeError:
+            #         continue
 
-                for k, v in state.items():
-                    if "value" not in v:
-                        continue
+            #     for k, v in state.items():
+            #         if "value" not in v:
+            #             continue
 
-                    self.widget_signals[k] = Signal(v["value"])
+            #         self.widget_signals[k] = Signal(v["value"])
 
             async with ctx.transaction:
                 for viewer_id, (
