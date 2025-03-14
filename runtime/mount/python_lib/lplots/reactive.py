@@ -438,12 +438,6 @@ class Signal(Generic[T]):
 
         self._updates = []
 
-    # todo(maximsmol): dispose of signals too to avoid memory leaks
-
-    def __del__(self) -> None:
-        del live_signals[self.id]
-        live_signal_ids.remove(self.id)
-
     def __repr__(self) -> str:
         return f"{self._name}@{self.id}"
 
