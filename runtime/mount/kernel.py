@@ -628,6 +628,8 @@ class Kernel:
             res: dict[str, WidgetState] = {}
 
             for n in nww_by_cell[cell_id]:
+                if cell_id not in ctx.ran_nodes:
+                    continue
                 path = n.name_path()
                 for k, v in n.widget_states.items():
                     abs_k = f"{path}/{k}"
