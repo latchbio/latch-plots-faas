@@ -708,6 +708,8 @@ class Kernel:
 
         s_globals = {}
         for k, val in self.k_globals.items():
+            if k == "__builtins__":
+                continue
             if isinstance(val._value, Signal):
                 s_globals[k] = val._value.serialize()
             else:
