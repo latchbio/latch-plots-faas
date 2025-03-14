@@ -71,8 +71,6 @@ class Node:
         if self._id is None:
             self._id = str(uuid.uuid4())
 
-        live_nodes[self.id] = self
-
         if self.parent is not None:
             self.parent.children[self.id] = self
             self.cell_id = self.parent.cell_id
@@ -85,6 +83,7 @@ class Node:
         if self.id in live_node_ids:
             raise ValueError(f"reactive node id is not unique: {self.id!r}")
 
+        live_nodes[self.id] = self
         live_node_ids.add(self.id)
 
     def serialize(self) -> SerializedNode:
@@ -358,6 +357,7 @@ class Signal(Generic[T]):
         if self.id in live_signal_ids:
             raise ValueError(f"signal id is not unique: {self.id!r}")
 
+        live_signals[self.id] = self
         live_signal_ids.add(self.id)
 
     @property
