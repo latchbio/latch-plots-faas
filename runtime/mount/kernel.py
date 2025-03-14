@@ -477,6 +477,7 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
 
 
 stored_dependency_dir = Path.home() / ".cache/plots-faas"
+snapshot_f_name = "snapshot.json"
 
 
 class SerializedGlobal(TypedDict):
@@ -735,12 +736,12 @@ class Kernel:
         }
 
         stored_dependency_dir.mkdir(parents=True, exist_ok=True)
-        (stored_dependency_dir / "latest.json").write_text(
+        (stored_dependency_dir / snapshot_f_name).write_text(
             orjson.dumps(s_depens).decode("utf-8")
         )
 
     def load_dependencies(self) -> None:
-        s_depens = orjson.loads((stored_dependency_dir / "latest.json").read_text())
+        s_depens = orjson.loads((stored_dependency_dir / snapshot_f_name).read_text())
         self.s_depens = s_depens
         s_nodes: dict[str, SerializedNode] = s_depens["s_nodes"]
         s_signals = s_depens["s_signals"]

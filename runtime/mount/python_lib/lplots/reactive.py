@@ -85,7 +85,7 @@ class Node:
         if self.id in live_node_ids:
             raise ValueError(f"reactive node id is not unique: {self.id!r}")
 
-        live_node_ids.add(self.name)
+        live_node_ids.add(self.id)
 
     def serialize(self) -> SerializedNode:
         return SerializedNode(
