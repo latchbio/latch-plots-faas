@@ -483,7 +483,7 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
     return pio_json.clean_to_json_compatible(res, modules=modules)
 
 
-stored_dependency_dir = Path.home() / ".cache/plots-faas"
+snapshot_dir = Path.home() / ".cache/plots-faas"
 snapshot_f_name = "snapshot.json"
 
 
@@ -705,13 +705,13 @@ class Kernel:
                 }
             )
 
-        self.store_dependencies()
+        self.save_kernel_snapshot()
         # fixme(rteqs): cleanup signals in some other way. the below does not work because widget signals
         # are restored on `init` but there are no corresponding `rnodes`
         # for x in unused_signals:
         #     del self.widget_signals[x]
 
-    def store_dependencies(self) -> None:
+    def save_kernel_snapshot(self) -> None:
         s_nodes = {}
         s_signals = {}
         for node in self.cell_rnodes.values():
@@ -742,13 +742,13 @@ class Kernel:
             "url_dataframes": {},
         }
 
-        stored_dependency_dir.mkdir(parents=True, exist_ok=True)
-        (stored_dependency_dir / snapshot_f_name).write_text(
+        snapshot_dir.mkdir(parents=True, exist_ok=True)
+        (snapshot_dir / snapshot_f_name).write_text(
             orjson.dumps(s_depens).decode("utf-8")
         )
 
-    def load_dependencies(self) -> None:
-        s_depens = orjson.loads((stored_dependency_dir / snapshot_f_name).read_text())
+    def load_kernel_snapshot(self) -> None:
+        s_depens = orjson.loads((snapshot_dir / snapshot_f_name).read_text())
         self.s_depens = s_depens
         s_nodes: dict[str, SerializedNode] = s_depens["s_nodes"]
         s_signals = s_depens["s_signals"]
@@ -766,8 +766,7 @@ class Kernel:
             node = nodes[nid]
 
             node.signals = {x: signals.get(x) for x in s_node["signals"]}
-            # todo(kenny): deal with children
-            # node.parent = nodes.get(s_node["parent"])
+            # todo(kenny): deal with node parents/children if necessary
 
         for sid, s_signal in s_signals.items():
             signal = signals[sid]
@@ -1267,7 +1266,7 @@ class Kernel:
         # print("[kernel] <", msg)
 
         if msg["type"] == "init":
-            self.load_dependencies()
+            self.load_kernel_snapshot()
             self.cell_output_selections = msg["cell_output_selections"]
             self.plot_data_selections = msg["plot_data_selections"]
             self.plot_configs = msg["plot_configs"]
@@ -1286,17 +1285,19 @@ class Kernel:
                         v,
                     )
 
-            # for state_raw in msg["widget_states"].values():
-            #     try:
-            #         state: dict[str, WidgetState] = orjson.loads(state_raw)
-            #     except orjson.JSONDecodeError:
-            #         continue
+            for state_raw in msg["widget_states"].values():
+                try:
+                    state: dict[str, WidgetState] = orjson.loads(state_raw)
+                except orjson.JSONDecodeError:
+                    continue
 
-            #     for k, v in state.items():
-            #         if "value" not in v:
-            #             continue
+                for k, v in state.items():
+                    if "value" not in v:
+                        continue
 
-            #         self.widget_signals[k] = Signal(v["value"])
+                    sig = self.widget_signals.get(k)
+                    if sig is None:
+                        self.widget_signals[k] = Signal(v["value"])
 
             async with ctx.transaction:
                 for viewer_id, (
