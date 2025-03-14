@@ -854,14 +854,18 @@ class Kernel:
 
         return res
 
-    async def exec(self, *, cell_id: str, code: str) -> None:
+    async def exec(self, *, cell_id: str, code: str, _from_stub: bool = False) -> None:
         filename = f"<cell {cell_id}>"
 
         try:
+            if not _from_stub:
+                assert ctx.cur_comp is None
+                assert not ctx.in_tx
+
             self.cell_status[cell_id] = "running"
 
             comp = self.cell_rnodes.get(cell_id)
-            if comp is not None:
+            if comp is not None and not _from_stub:
                 comp.dispose()
                 del self.cell_rnodes[cell_id]
 

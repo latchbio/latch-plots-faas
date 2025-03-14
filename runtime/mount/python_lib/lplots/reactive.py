@@ -286,7 +286,9 @@ class RCtx:
                             n._is_stub = False
                             assert n.cell_id is not None
                             # reconstruct the function with globals
-                            await _inject.kernel.exec(cell_id=n.cell_id, code=n.code)
+                            await _inject.kernel.exec(
+                                cell_id=n.cell_id, code=n.code, _from_stub=True
+                            )
                         else:
                             await self.run(n.f, n.code, _cell_id=n.cell_id)
 
