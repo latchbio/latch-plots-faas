@@ -21,7 +21,10 @@ R = TypeVar("R")
 Computation: TypeAlias = Callable[..., R]
 
 live_nodes: dict[str, "Node"] = {}
-live_node_names: set[str] = set()
+live_node_ids: set[str] = set()
+
+live_signals: dict[str, "Signal[object]"] = {}
+live_signal_ids: set[str] = set()
 
 stub_node_noop = lambda: None
 
@@ -79,10 +82,10 @@ class Node:
         if self.name is None:
             self.name = self.f.__name__
 
-        if self.name in live_node_names:
-            raise ValueError(f"reactive node name is not unique: {self.name!r}")
+        if self.id in live_node_ids:
+            raise ValueError(f"reactive node id is not unique: {self.id!r}")
 
-        live_node_names.add(self.name)
+        live_node_ids.add(self.name)
 
     def serialize(self) -> SerializedNode:
         return SerializedNode(
@@ -160,8 +163,7 @@ class Node:
             cur.signals = {}
 
             del live_nodes[cur.id]
-            if self.name is not None:
-                live_node_names.remove(self.name)
+            live_node_ids.remove(self.id)
 
     def __repr__(self) -> str:
         stale_mark = "!" if self.stale else ""
@@ -343,6 +345,11 @@ class Signal(Generic[T]):
         self._updates = []
         self._listeners = {}
 
+        if self.id in live_signal_ids:
+            raise ValueError(f"signal id is not unique: {self.id!r}")
+
+        live_signal_ids.add(self.id)
+
     @property
     def id(self) -> str:
         assert self._id is not None
@@ -362,10 +369,10 @@ class Signal(Generic[T]):
         )
 
     @classmethod
-    def load(cls, s_sig) -> "Signal":
+    def load(cls, s_sig) -> "Signal[T]":
         val = safe_unserialize_obj(s_sig["value"])
 
-        if val is None:
+        if not isinstance(val, type(T)) or val is None:
             sig = cls(Nothing.x, name=s_sig["name"], _id=s_sig["id"])
         else:
             sig = cls(val, name=s_sig["name"], _id=s_sig["id"])
@@ -422,6 +429,10 @@ class Signal(Generic[T]):
         self._updates = []
 
     # todo(maximsmol): dispose of signals too to avoid memory leaks
+
+    def __del__(self) -> None:
+        del live_signals[self.id]
+        live_signal_ids.remove(self.id)
 
     def __repr__(self) -> str:
         return f"{self._name}@{self.id}"

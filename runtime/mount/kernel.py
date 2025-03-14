@@ -768,7 +768,9 @@ class Kernel:
         restored_globals = {}
         for k, s_v in s_depens["s_globals"].items():
             if "listeners" in s_v:
-                sig = Signal.load(s_v)
+                sig = signals.get(s_v["id"])
+                if sig is None:
+                    sig = Signal.load(s_v)
                 restored_globals[k] = sig
                 self.k_globals._direct_set(k, Signal(sig))
             else:
