@@ -576,7 +576,6 @@ class Kernel:
             "restored_signals": {
                 k: v.serialize() for k, v in self.restored_signals.items()
             },
-            "restored_globals": self.restored_globals,
             "serialized_depens": self.s_depens,
         }
 
@@ -775,12 +774,12 @@ class Kernel:
                 val = safe_unserialize_obj(s_v["value"])
                 if val is None:
                     restored_globals[k] = {
-                        "value": val.__repr__(),
+                        "value": repr(val),
                         "msg": f"unserializable. stored err: {s_v['error_msg']}",
                     }
                 else:
                     restored_globals[k] = {
-                        "value": val.__repr__(),
+                        "value": repr(val),
                         "msg": f"stored error: {s_v['error_msg']}",
                     }
                     self.k_globals._direct_set(k, Signal(val))
