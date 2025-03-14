@@ -43,6 +43,8 @@ from plotly_utils.precalc_violin import precalc_violin
 from socketio_thread import SocketIoThread
 from stdio_over_socket import SocketWriter, text_socket_writer
 
+from .persistence import SerializedGlobal
+
 sys.path.append(str(Path(__file__).parent.absolute()))
 from subsample import downsample_df, initialize_duckdb
 from utils import PlotConfig, get_presigned_url
@@ -167,13 +169,7 @@ class TracedDict(dict[str, Signal[object] | object]):
 
         return self.getitem_signal(__key)
 
-    def _direct_set_on_restore(self, __key: str, __value: object) -> None:
-        # Internal use when restoring globals at init . Does not handle updates
-        dfs = self.dataframes.sample()
-        if hasattr(__value, "iloc") and __key not in dfs:
-            dfs.add(__key)
-            self.dataframes(dfs)
-
+    def _direct_set(self, __key: str, __value: object) -> None:
         return super().__setitem__(__key, __value)
 
     def __setitem__(self, __key: str, __value: object) -> None:
@@ -485,6 +481,16 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
 stored_dependency_dir = Path.home() / ".cache/plots-faas"
 
 
+class SerializedGlobal(TypedDict):
+    value: str
+    error_msg: str | None
+
+
+class RestoredGlobalInfo(TypedDict):
+    value: object
+    msg: str
+
+
 @dataclass(kw_only=True)
 class Kernel:
     conn: SocketIoThread
@@ -706,14 +712,15 @@ class Kernel:
                 if sid not in s_signals:
                     s_signals[sid] = sig.serialize()
 
-        s_globals = {}
+        s_globals: dict[str, SerializedSignal | SerializedGlobal] = {}
         for k, val in self.k_globals.items():
             if k == "__builtins__":
                 continue
             if isinstance(val._value, Signal):
                 s_globals[k] = val._value.serialize()
             else:
-                s_globals[k] = safe_serialize_obj(val._value)
+                s_val, msg = safe_serialize_obj(val._value)
+                s_globals[k] = {"value": s_val, "error_msg": msg}
 
         s_depens = {
             "s_globals": s_globals,
@@ -759,17 +766,23 @@ class Kernel:
 
         restored_globals = {}
         for k, s_v in s_depens["s_globals"].items():
-            if isinstance(s_v, dict):
+            if "listeners" in s_v:
                 sig = Signal.load(s_v)
                 restored_globals[k] = sig
-                self.k_globals._direct_set_on_restore(k, sig)
+                self.k_globals._direct_set(k, sig)
             else:
-                val = safe_unserialize_obj(s_v)
+                val, error_msg = safe_unserialize_obj(s_v["value"])
                 if val is None:
-                    restored_globals[k] = "error"
+                    restored_globals[k] = {
+                        "value": val,
+                        "msg": f"unserializable. stored err: {s_v['error_msg']}",
+                    }
                 else:
-                    restored_globals[k] = val
-                    self.k_globals._direct_set_on_restore(k, val)
+                    restored_globals[k] = {
+                        "value": val,
+                        "msg": f"stored error: {s_v['error_msg']}",
+                    }
+                    self.k_globals._direct_set(k, val)
 
         self.restored_nodes = nodes
         self.restored_signals = signals
