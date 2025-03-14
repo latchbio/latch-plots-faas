@@ -775,12 +775,12 @@ class Kernel:
                 val = safe_unserialize_obj(s_v["value"])
                 if val is None:
                     restored_globals[k] = {
-                        "value": val,
+                        "value": val.__repr__(),
                         "msg": f"unserializable. stored err: {s_v['error_msg']}",
                     }
                 else:
                     restored_globals[k] = {
-                        "value": val,
+                        "value": val.__repr__(),
                         "msg": f"stored error: {s_v['error_msg']}",
                     }
                     self.k_globals._direct_set(k, Signal(val))
