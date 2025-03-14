@@ -576,6 +576,7 @@ class Kernel:
             "restored_signals": {
                 k: v.serialize() for k, v in self.restored_signals.items()
             },
+            "restored_globals": self.restored_globals,
             "serialized_depens": self.s_depens,
         }
 
