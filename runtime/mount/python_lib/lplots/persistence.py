@@ -40,6 +40,6 @@ def safe_unserialize_obj(s_val: str) -> object | None:
     try:
         val = loads(b64decode(s_val.encode("utf-8")))
     except Exception as e:
-        # todo(kenny): handle
+        # todo(kenny): is it OK to collapse with actual None
         val = None
     return val

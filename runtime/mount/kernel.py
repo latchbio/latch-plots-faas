@@ -1298,6 +1298,8 @@ class Kernel:
                     sig = self.widget_signals.get(k)
                     if sig is None:
                         self.widget_signals[k] = Signal(v["value"])
+                    else:
+                        sig(v["value"])
 
             async with ctx.transaction:
                 for viewer_id, (
