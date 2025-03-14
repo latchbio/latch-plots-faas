@@ -610,9 +610,9 @@ class Kernel:
             tg.create_task(self.send_globals_summary())
 
     async def on_tick_finished(self, updated_signals: dict[int, Signal]) -> None:
-        # todo(maximsmol): this can be optimizied
-        # 1. we can just update nodes that actually re-ran last tick instead of everything
-        # 2. we can pre-compute nww_by_cell
+        # todo(maximsmol / rteqs): this can be optimizied
+        # 1. we can pre-compute nww_by_cell
+        # 2. batch into one message, to save on gql
 
         nww_by_cell = {
             cell_id: [
