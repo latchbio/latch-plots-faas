@@ -43,8 +43,6 @@ from plotly_utils.precalc_violin import precalc_violin
 from socketio_thread import SocketIoThread
 from stdio_over_socket import SocketWriter, text_socket_writer
 
-from .persistence import SerializedGlobal
-
 sys.path.append(str(Path(__file__).parent.absolute()))
 from subsample import downsample_df, initialize_duckdb
 from utils import PlotConfig, get_presigned_url
