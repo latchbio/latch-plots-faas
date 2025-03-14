@@ -624,12 +624,10 @@ class Kernel:
         updated_widgets: set[str] = set()
 
         unused_signals: set[str] = set(self.widget_signals.keys())
-        for cell_id in self.cell_rnodes:
+        for cell_id in ctx.ran_cells:
             res: dict[str, WidgetState] = {}
 
             for n in nww_by_cell[cell_id]:
-                if cell_id not in ctx.ran_nodes:
-                    continue
                 path = n.name_path()
                 for k, v in n.widget_states.items():
                     abs_k = f"{path}/{k}"
@@ -663,6 +661,7 @@ class Kernel:
                 }
             )
 
+        ctx.ran_cells.clear()
         # fixme(rteqs): cleanup signals in some other way. the below does not work because widget signals
         # are restored on `init` but there are no corresponding `rnodes`
         # for x in unused_signals:
