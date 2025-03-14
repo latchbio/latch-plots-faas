@@ -577,7 +577,7 @@ class Kernel:
                 k: v.serialize() for k, v in self.restored_signals.items()
             },
             "restored_globals": self.restored_globals,
-            "serialized_depens": self.s_depens,
+            # "serialized_depens": self.s_depens,
         }
 
     async def set_active_cell(self, cell_id: str) -> None:
