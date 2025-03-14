@@ -769,7 +769,7 @@ class Kernel:
         for k, s_v in s_depens["s_globals"].items():
             if "listeners" in s_v:
                 sig = Signal.load(s_v)
-                restored_globals[k] = sig
+                restored_globals[k] = Signal(sig)
                 self.k_globals._direct_set(k, sig)
             else:
                 val = safe_unserialize_obj(s_v["value"])
