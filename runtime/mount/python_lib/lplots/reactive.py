@@ -285,8 +285,9 @@ class RCtx:
                     try:
                         if n._is_stub:
                             n._is_stub = False
+                            assert n.cell_id is not None
                             # reconstruct the function with globals
-                            await _inject.kernel.exec(n.cell_id, n.code)
+                            await _inject.kernel.exec(cell_id=n.cell_id, code=n.code)
                         else:
                             await self.run(n.f, n.code, _cell_id=n.cell_id)
 
@@ -296,6 +297,15 @@ class RCtx:
                         self.cur_comp = None
         finally:
             await _inject.kernel.on_tick_finished(tick_updated_signals)
+            await self.gc_signals()
+
+    async def gc_signals(self) -> None:
+        used_signals = {sid for node in live_nodes.values() for sid in node.signals}
+        unused_signals = set(live_signal_ids) - used_signals
+
+        for sid in unused_signals:
+            del live_signals[sid]
+            live_signal_ids.remove(sid)
 
     @property
     @asynccontextmanager
