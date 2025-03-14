@@ -223,11 +223,12 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                     },
                 )
 
-                msg = {
-                    "type": msg["type"],
-                    "cell_id": msg["cell_id"],
-                    "updated_widgets": msg["updated_widgets"],
-                }
+                if len(msg["updated_widgets"]) > 0:
+                    msg = {
+                        "type": msg["type"],
+                        "cell_id": msg["cell_id"],
+                        "updated_widgets": msg["updated_widgets"],
+                    }
 
             elif msg["type"] == "output_value" and "cell_id" in msg:
                 await gql_query(

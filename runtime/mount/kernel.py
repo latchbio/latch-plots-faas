@@ -610,9 +610,9 @@ class Kernel:
             tg.create_task(self.send_globals_summary())
 
     async def on_tick_finished(self, updated_signals: dict[int, Signal]) -> None:
-        # todo(maximsmol): this can be optimizied
-        # 1. we can just update nodes that actually re-ran last tick instead of everything
-        # 2. we can pre-compute nww_by_cell
+        # todo(maximsmol / rteqs): this can be optimizied
+        # 1. we can pre-compute nww_by_cell
+        # 2. batch into one message, to save on gql
 
         nww_by_cell = {
             cell_id: [
@@ -624,7 +624,7 @@ class Kernel:
         updated_widgets: set[str] = set()
 
         unused_signals: set[str] = set(self.widget_signals.keys())
-        for cell_id in self.cell_rnodes:
+        for cell_id in ctx.ran_cells:
             res: dict[str, WidgetState] = {}
 
             for n in nww_by_cell[cell_id]:
@@ -661,6 +661,7 @@ class Kernel:
                 }
             )
 
+        ctx.ran_cells.clear()
         # fixme(rteqs): cleanup signals in some other way. the below does not work because widget signals
         # are restored on `init` but there are no corresponding `rnodes`
         # for x in unused_signals:
