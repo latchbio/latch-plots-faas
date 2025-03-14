@@ -13,7 +13,7 @@ from io import TextIOWrapper
 from pathlib import Path
 from traceback import format_exc
 from types import FrameType
-from typing import TYPE_CHECKING, Any, Literal, TypedDict, TypeVar
+from typing import TYPE_CHECKING, Any, Dict, Literal, TypedDict, TypeVar
 
 import numpy as np
 import orjson
@@ -247,6 +247,15 @@ multi_index_col_name = re.compile(r"^level_\d+$")
 
 def is_multi_index_col(col: str) -> bool:
     return re.match(multi_index_col_name, col) is not None
+
+
+K = TypeVar("K")
+V = TypeVar("V")
+U = TypeVar("U")
+
+
+def filter_items(source: Dict[K, V], lookup: Dict[V, U]) -> Dict[K, U]:
+    return {k: value for k, v in source.items() if (value := lookup.get(v)) is not None}
 
 
 def filter_dataframe(
@@ -790,13 +799,16 @@ class Kernel:
         self.restored_signals = signals
         self.restored_globals = restored_globals
 
-        self.cell_rnodes = {k: nodes.get(v) for k, v in s_depens["cell_rnodes"].items()}
-        self.widget_signals = {
-            k: signals.get(v) for k, v in s_depens["widget_signals"].items()
-        }
-        self.nodes_with_widgets = {
-            x: nodes.get(x) for x in s_depens["nodes_with_widgets"]
-        }
+        self.cell_rnodes = filter_items(s_depens["cell_rnodes"], nodes)
+        self.widget_signals = filter_items(s_depens["widget_signals"], signals)
+
+        nodes_with_widgets = {}
+        for x in s_depens["nodes_with_widgets"]:
+            node = nodes.get(x)
+            if node is not None:
+                nodes_with_widgets[x] = node
+
+        self.nodes_with_widgets = nodes_with_widgets
 
         # plumb node parent, signals
 
