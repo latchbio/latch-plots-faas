@@ -105,6 +105,6 @@ def w_button(
 
     coro = ctx.run(res._helper)
     loop = asyncio.get_running_loop()
-    loop.run_until_complete(coro)
+    asyncio.run_coroutine_threadsafe(coro, loop)
 
     return res
