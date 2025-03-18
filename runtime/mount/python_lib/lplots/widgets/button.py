@@ -104,7 +104,7 @@ def w_button(
     _emit.emit_widget(key, res._state)
 
     coro = ctx.run(res._helper)
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     loop.run_until_complete(coro)
 
     return res
