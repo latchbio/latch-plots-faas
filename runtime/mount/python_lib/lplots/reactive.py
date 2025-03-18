@@ -95,6 +95,8 @@ class Node:
             name=self.name,
             parent=(self.parent.id if self.parent else None),
             id=self.id,
+            widget_state_idx=self.widget_state_idx,
+            widget_states=self.widget_states,
         )
 
     @classmethod
@@ -107,6 +109,8 @@ class Node:
             cell_id=s_node["cell_id"],
             name=s_node["name"],
             parent=None,
+            widget_state_idx=s_node["widget_state_idx"],
+            widget_states=s_node["widget_states"],
             _id=s_node["id"],
             _is_stub=True,
         )

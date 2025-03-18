@@ -20,6 +20,8 @@ class SerializedNode(TypedDict):
     name: str | None
     parent: str | None
     id: str
+    widget_state_idx: int
+    widget_states: list[dict]
 
 
 unserial_symbol = "<<UNSERIALIZABLE>>"
