@@ -48,7 +48,7 @@ class ButtonWidget:
 
     @property
     def value(self) -> bool:
-        print('DEBUG: value')
+        print("DEBUG: value")
         self._lambda_signal()
         res = self._signal.sample()
 
@@ -73,9 +73,10 @@ class ButtonWidget:
         return False
 
     def _helper(self) -> None:
-        print('DEBUG: _helper')
+        print("DEBUG: _helper")
         self._signal()
         self._lambda_signal(Nothing.x)
+        print("DEBUG: _helper done")
 
 
 def w_button(
