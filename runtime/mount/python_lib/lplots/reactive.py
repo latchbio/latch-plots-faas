@@ -225,7 +225,7 @@ class RCtx:
 
                     # we do this here rather than in self.run
                     # because the node is initialized by the cell function
-                    # therefor it would not have a cell_id set until before
+                    # therefore it would not have a cell_id set until before
                     # self.run enters f()
                     #
                     # for this to work with top level nodes, the kernel calls
