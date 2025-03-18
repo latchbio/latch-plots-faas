@@ -299,19 +299,19 @@ class Signal(Generic[T]):
     ) -> T | None:
         assert ctx.in_tx
 
-        # print(f"[@] {self}({upd}, _ui_update={_ui_update}): {self._listeners}")
+        print(f"[@] {self}({upd}, _ui_update={_ui_update}): {self._listeners}")
 
         if upd is Nothing.x:
             assert ctx.cur_comp is not None
 
             print(
-                # f"[@] {self} added listener {ctx.cur_comp.f.__name__} @ {id(ctx.cur_comp)}"
+                f"[@] {self} added listener {ctx.cur_comp.f.__name__} @ {id(ctx.cur_comp)}"
             )
 
             self._listeners[id(ctx.cur_comp)] = ctx.cur_comp
             ctx.cur_comp.signals[id(self)] = self
 
-            # print(f"[@] {self} has listeners: {self._listeners}")
+            print(f"[@] {self} has listeners: {self._listeners}")
             return self._value
 
         self._updates.append(upd)
@@ -325,7 +325,7 @@ class Signal(Generic[T]):
 
     def _mark_listeners(self) -> None:
         for x in self._listeners.values():
-            # print(f"[@] {self} marked {x.f.__name__} @ {id(x)}")
+            print(f"[@] {self} marked {x.f.__name__} @ {id(x)}")
 
             x.stale = True
             ctx.stale_nodes[id(x)] = x
