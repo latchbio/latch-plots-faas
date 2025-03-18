@@ -76,7 +76,7 @@ class ButtonWidget:
         self._lambda_signal(Nothing.x)
 
 
-async def w_button(
+def w_button(
     *,
     key: str | None = None,
     label: str,
@@ -103,5 +103,8 @@ async def w_button(
     )
     _emit.emit_widget(key, res._state)
 
-    await ctx.run(res._helper)
+    coro = ctx.run(res._helper)
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(coro)
+
     return res
