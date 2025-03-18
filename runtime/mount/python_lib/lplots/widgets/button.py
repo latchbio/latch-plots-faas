@@ -3,8 +3,6 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, Literal, TypedDict
 
-from lplots.utils.nothing import Nothing
-
 from ..reactive import Signal, ctx
 from . import _emit, _state
 
@@ -75,7 +73,7 @@ class ButtonWidget:
     def h(self) -> None:
         print("DEBUG: _helper")
         self._signal()
-        self._lambda_signal(Nothing.x)
+        self._lambda_signal(None)
         print("DEBUG: _helper done")
 
     async def _helper(self) -> None:
