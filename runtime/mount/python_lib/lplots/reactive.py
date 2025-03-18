@@ -60,7 +60,7 @@ class Node:
     _is_stub: bool = False
 
     widget_states: dict[str, WidgetState] = field(default_factory=dict)
-    widget_state_idx = 0
+    widget_state_idx: int = 0
 
     @property
     def id(self) -> str:
