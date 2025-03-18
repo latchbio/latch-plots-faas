@@ -779,6 +779,7 @@ class Kernel:
             x.__name__ = filename
 
             await self.set_active_cell(cell_id)
+            print(f"running {x.__name__} @ {id(x)} {cell_id}")
             await ctx.run(x, _cell_id=cell_id)
 
         except (KeyboardInterrupt, Exception):
