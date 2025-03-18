@@ -115,8 +115,8 @@ class Node:
             cur.signals = {}
 
             del live_nodes[id(cur)]
-            if self.name is not None:
-                live_node_names.remove(self.name)
+            if cur.name is not None and cur.name in live_node_names:
+                live_node_names.remove(cur.name)
 
     def __repr__(self) -> str:
         stale_mark = "!" if self.stale else ""
