@@ -748,7 +748,10 @@ class Kernel:
         )
 
     def load_kernel_snapshot(self) -> None:
-        s_depens = orjson.loads((snapshot_dir / snapshot_f_name).read_text())
+        snapshot_f = snapshot_dir / snapshot_f_name
+        if not snapshot_f.exists():
+            return
+        s_depens = orjson.loads(snapshot_f.read_text())
         self.s_depens = s_depens
         s_nodes: dict[str, SerializedNode] = s_depens["s_nodes"]
         s_signals = s_depens["s_signals"]
