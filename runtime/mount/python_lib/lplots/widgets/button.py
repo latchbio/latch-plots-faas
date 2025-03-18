@@ -46,8 +46,6 @@ class ButtonWidget:
 
     @property
     def value(self) -> bool:
-        print("DEBUG: value")
-        self._lambda_signal()
         res = self._signal.sample()
 
         if not isinstance(res, dict) or not all(
@@ -78,7 +76,7 @@ class ButtonWidget:
 
     async def _helper(self) -> None:
         async with ctx.transaction:
-            await ctx.run(self.h)
+            await ctx.run(self.h, _cell_id=f"lambd {self.key}")
 
 
 def w_button(
