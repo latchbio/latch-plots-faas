@@ -179,6 +179,7 @@ class RCtx:
                 self.cur_comp = self.cur_comp.parent
 
     async def _tick(self) -> None:
+        print(f"{self.cur_comp} starting tick, {self.updated_signals}")
         tick_updated_signals = self.signals_update_from_code
         self.signals_update_from_code = {}
 
@@ -242,7 +243,7 @@ class RCtx:
                     finally:
                         self.cur_comp = None
         finally:
-            print(f"finished tick {tick_updated_signals}")
+            print(f"{self.cur_comp} finished tick {tick_updated_signals}")
             await _inject.kernel.on_tick_finished(tick_updated_signals)
 
     @property
