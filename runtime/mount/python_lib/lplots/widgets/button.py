@@ -1,3 +1,4 @@
+import asyncio
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, Literal, TypedDict
@@ -102,6 +103,7 @@ def w_button(
     )
     _emit.emit_widget(key, res._state)
 
-    ctx.run(res._helper)
+    coro = ctx.run(res._helper)
+    asyncio.run(coro)
 
     return res
