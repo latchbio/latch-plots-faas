@@ -44,7 +44,7 @@ class ButtonWidget:
 
     @property
     def value(self) -> bool:
-        res = self._signal.sample()
+        res = self._signal()
 
         if not isinstance(res, dict) or not all(
             key in res for key in ButtonWidgetSignalValue.__annotations__
