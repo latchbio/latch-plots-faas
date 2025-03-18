@@ -234,12 +234,15 @@ class RCtx:
                         await _inject.kernel.set_active_cell(n.cell_id)
 
                     try:
+                        print(f"running {n.f.__name__} @ {id(n)}")
                         await self.run(n.f, _cell_id=n.cell_id)
+                        print(f"finished running {n.f.__name__} @ {id(n)}")
                     except Exception:
                         print_exc()
                     finally:
                         self.cur_comp = None
         finally:
+            print(f"finished tick {tick_updated_signals}")
             await _inject.kernel.on_tick_finished(tick_updated_signals)
 
     @property
