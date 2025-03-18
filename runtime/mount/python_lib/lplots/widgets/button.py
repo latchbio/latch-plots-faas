@@ -77,7 +77,7 @@ class ButtonWidget:
 
     async def _helper(self) -> None:
         async with ctx.transaction:
-            await ctx.run(self.h, _cell_id=f"lambd {self.key}")
+            await ctx.run(self.h, _cell_id=f"lambda {self._key}")
 
 
 def w_button(
