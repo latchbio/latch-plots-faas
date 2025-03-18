@@ -4,8 +4,7 @@ from typing import Any, Literal, TypedDict
 
 from lplots.utils.nothing import Nothing
 
-from .. import _inject
-from ..reactive import Signal
+from ..reactive import Signal, ctx
 from . import _emit, _state
 
 
@@ -103,7 +102,6 @@ def w_button(
     )
     _emit.emit_widget(key, res._state)
 
-    ctx = _inject.kernel.ctx
     ctx.run(res._helper)
 
     return res
