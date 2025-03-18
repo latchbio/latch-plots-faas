@@ -46,6 +46,7 @@ class ButtonWidget:
 
     @property
     def value(self) -> bool:
+        self._lambda_signal()
         res = self._signal.sample()
 
         if not isinstance(res, dict) or not all(
