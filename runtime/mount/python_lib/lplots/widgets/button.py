@@ -72,11 +72,12 @@ class ButtonWidget:
 
         return False
 
-    def _helper(self) -> None:
-        print("DEBUG: _helper")
-        self._signal()
-        self._lambda_signal(Nothing.x)
-        print("DEBUG: _helper done")
+    async def _helper(self) -> None:
+        async with ctx.transaction:
+            print("DEBUG: _helper")
+            self._signal()
+            self._lambda_signal(Nothing.x)
+            print("DEBUG: _helper done")
 
 
 def w_button(
