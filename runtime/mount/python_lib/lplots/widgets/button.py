@@ -46,6 +46,7 @@ class ButtonWidget:
 
     @property
     def value(self) -> bool:
+        # todo(rteqs): duplicate
         self._lambda_signal()
         res = self._signal.sample()
 
@@ -61,19 +62,35 @@ class ButtonWidget:
         clicked, last_clicked = parsed
 
         if self._last_clicked_ref is None:
+            return False
+
+        return clicked > self._last_clicked_ref
+
+    def h(self) -> None:
+        print("DEBUG: _helper")
+        self._lambda_signal(None)
+
+        res = self._signal()
+
+        if not isinstance(res, dict) or not all(
+            key in res for key in ButtonWidgetSignalValue.__annotations__
+        ):
+            return
+
+        parsed = parse_iso_strings(res)
+        if parsed is None:
+            return
+
+        clicked, last_clicked = parsed
+
+        if self._last_clicked_ref is None:
             self._last_clicked_ref = last_clicked
 
         if clicked > self._last_clicked_ref:
             self._signal({"clicked": str(clicked), "last_clicked": str(clicked)})
-            return True
 
-        return False
-
-    def h(self) -> None:
-        print("DEBUG: _helper")
-        self._signal()
-        self._lambda_signal(None)
         print("DEBUG: _helper done")
+        return
 
     async def _helper(self) -> None:
         async with ctx.transaction:
