@@ -546,6 +546,9 @@ class Kernel:
 
     # note(maximsmol): called by the reactive context
     async def set_active_cell(self, cell_id: str) -> None:
+        if self.active_cell == cell_id:
+            return
+
         # note(maximsmol): stdio_over_socket will fetch the active cell id
         # synchronously in `.write` (which will be called by the buffered writers' `.flush`)
         sys.stdout.flush()
@@ -750,9 +753,6 @@ class Kernel:
                 #
                 # the only complication is to tell when it has *finished*
                 # running so we can set the status & send results + flush logs
-                #
-                # afaik the status is only used for interrupting "a cell" (even though
-                # the interrupt is just sent to whatever code happens to be running)
                 self.cell_status[cell_id] = "running"
 
                 try:
