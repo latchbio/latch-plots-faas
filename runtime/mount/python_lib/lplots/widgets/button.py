@@ -37,19 +37,28 @@ def parse_iso_strings(data: Any) -> tuple[datetime, datetime] | None:
         return None
 
 
+lambda_signals: dict[str, Signal[object]] = {}
+
+
+def _get_lambda_signal(key: str) -> Signal[object]:
+    if key not in lambda_signals:
+        lambda_signals[key] = Signal(Nothing.x, name=key)
+
+    return lambda_signals[key]
+
+
 @dataclass(kw_only=True)
 class ButtonWidget:
     _key: str
     _state: ButtonWidgetState
     _signal: Signal[object | ButtonWidgetSignalValue]
-    _lambda_signal: Signal[object]
 
     _clicked_ref: None | datetime = field(default=None, repr=False)
     _last_clicked_ref: None | datetime = field(default=None, repr=False)
 
     @property
     def value(self) -> bool:
-        self._lambda_signal()
+        _get_lambda_signal(self._key)()
 
         if self._clicked_ref is None or self._last_clicked_ref is None:
             return False
@@ -58,7 +67,7 @@ class ButtonWidget:
 
     def h(self) -> None:
         print("DEBUG: _helper")
-        self._lambda_signal(None)
+        _get_lambda_signal(self._key)(None)
 
         res = self._signal()
 
@@ -103,7 +112,7 @@ def w_button(
         now = datetime.now(UTC).isoformat()
         default = {"clicked": now, "last_clicked": now}
 
-    lambda_signal = _state.use_value_signal(key=lambda_key)
+    lambda_signal = _get_lambda_signal(lambda_key)
     res = ButtonWidget(
         _key=key,
         _state={
@@ -113,7 +122,6 @@ def w_button(
             "readonly": readonly,
         },
         _signal=_state.use_value_signal(key=key),
-        _lambda_signal=lambda_signal,
     )
     _emit.emit_widget(key, res._state)
 
