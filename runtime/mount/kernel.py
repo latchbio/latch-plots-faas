@@ -555,8 +555,15 @@ class Kernel:
 
     # note(maximsmol): called by the reactive context
     async def set_active_cell(self, cell_id: str) -> None:
-        if self.active_cell == cell_id:
-            return
+        # todo(maximsmol): I still believe this is correct
+        # but we need to deal with the frontend clearing logs in weird ways
+        # e.g. a button should maybe clear the logs if it triggered its own cell
+        # but a subnode should probably not clear logs?
+        #
+        # right now we rely on start_cell to clear logs each time anything in a cell runs
+
+        # if self.active_cell == cell_id:
+        #     return
 
         # note(maximsmol): stdio_over_socket will fetch the active cell id
         # synchronously in `.write` (which will be called by the buffered writers' `.flush`)
