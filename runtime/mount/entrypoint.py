@@ -103,7 +103,7 @@ class TmpPlotsNotebookKernelSnapshotMode:
 
 @dataclass(frozen=True)
 class TmpPlotsNotebookKernelSnapshotModeResp:
-    data: bool
+    data: TmpPlotsNotebookKernelSnapshotMode
 
 
 async def add_pod_event(*, auth: str, event_type: str) -> None:
