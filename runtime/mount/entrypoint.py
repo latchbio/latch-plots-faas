@@ -366,6 +366,8 @@ async def start_kernel_proc() -> None:
         data = validate(resp, TmpPlotsNotebookKernelSnapshotModeResp)
         session_snapshot_mode = data.data
     except Exception:
+        err_msg = {"type": "error", "data": traceback.format_exc()}
+        await plots_ctx_manager.broadcast_message(orjson.dumps(err_msg).decode())
         session_snapshot_mode = False
 
     await add_pod_event(auth=auth_token_sdk, event_type="runtime_ready")
