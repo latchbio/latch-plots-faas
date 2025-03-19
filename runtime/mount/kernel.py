@@ -24,6 +24,7 @@ from duckdb import DuckDBPyConnection
 from latch.ldata.path import LPath
 from latch.registry.table import Table
 from lplots import _inject
+from lplots.ann_data.handlers import handle_ann_data
 from lplots.reactive import Node, Signal, ctx
 from lplots.themes import graphpad_inspired_theme
 from lplots.utils.nothing import Nothing
@@ -36,8 +37,6 @@ from plotly_utils.precalc_box import precalc_box
 from plotly_utils.precalc_violin import precalc_violin
 from socketio_thread import SocketIoThread
 from stdio_over_socket import SocketWriter, text_socket_writer
-
-from .python_lib.ann_data.handlers import handle_ann_data
 
 sys.path.append(str(Path(__file__).parent.absolute()))
 from subsample import downsample_df, initialize_duckdb
