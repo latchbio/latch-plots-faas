@@ -484,6 +484,7 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
 
 
 snapshot_dir = Path.home() / ".cache/plots-faas"
+large_globals_dir = snapshot_dir / "large_globals"
 snapshot_f_name = "snapshot.json"
 
 
@@ -705,13 +706,15 @@ class Kernel:
                 }
             )
 
-        self.save_kernel_snapshot()
         # fixme(rteqs): cleanup signals in some other way. the below does not work because widget signals
         # are restored on `init` but there are no corresponding `rnodes`
         # for x in unused_signals:
         #     del self.widget_signals[x]
 
-    def save_kernel_snapshot(self) -> None:
+    async def save_kernel_snapshot(self) -> None:
+        snapshot_dir.mkdir(parents=True, exist_ok=True)
+        large_globals_dir.mkdir(parents=True, exist_ok=True)
+
         s_nodes = {}
         s_signals = {}
         for node in self.cell_rnodes.values():
@@ -742,10 +745,11 @@ class Kernel:
             "url_dataframes": {},
         }
 
-        snapshot_dir.mkdir(parents=True, exist_ok=True)
         (snapshot_dir / snapshot_f_name).write_text(
             orjson.dumps(s_depens).decode("utf-8")
         )
+
+        await self.send({"type": "save_kernel_snapshot", "status": "done"})
 
     def load_kernel_snapshot(self) -> None:
         snapshot_f = snapshot_dir / snapshot_f_name
@@ -1269,7 +1273,7 @@ class Kernel:
         # print("[kernel] <", msg)
 
         if msg["type"] == "init":
-            self.load_kernel_snapshot()
+            # self.load_kernel_snapshot()
             self.cell_output_selections = msg["cell_output_selections"]
             self.plot_data_selections = msg["plot_data_selections"]
             self.plot_configs = msg["plot_configs"]
@@ -1485,6 +1489,10 @@ class Kernel:
             )
 
             await self.send({"type": "upload_ldata"})
+            return
+
+        if msg["type"] == "save_kernel_snapshot":
+            await self.save_kernel_snapshot()
             return
 
 
