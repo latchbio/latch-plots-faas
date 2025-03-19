@@ -530,6 +530,8 @@ class Kernel:
     plot_configs: dict[str, PlotConfig | None] = field(default_factory=dict)
     duckdb: DuckDBPyConnection = field(default=initialize_duckdb())
 
+    session_snapshot_mode: bool = False
+
     restored_nodes: dict[str, Node] = field(default_factory=dict)
     restored_signals: dict[str, Signal[object]] = field(default_factory=dict)
     restored_globals: dict[str, object] = field(default_factory=dict)
@@ -587,6 +589,7 @@ class Kernel:
             },
             "restored_globals": self.restored_globals,
             "serialized_depens": self.s_depens,
+            "session_snapshot_mode": self.session_snapshot_mode,
         }
 
     async def set_active_cell(self, cell_id: str) -> None:
@@ -1273,10 +1276,13 @@ class Kernel:
         # print("[kernel] <", msg)
 
         if msg["type"] == "init":
-            # self.load_kernel_snapshot()
             self.cell_output_selections = msg["cell_output_selections"]
             self.plot_data_selections = msg["plot_data_selections"]
             self.plot_configs = msg["plot_configs"]
+            self.session_snapshot_mode = msg["session_snapshot_mode"]
+
+            if self.session_snapshot_mode:
+                self.load_kernel_snapshot()
 
             viewer_cell_data = msg["viewer_cell_data"]
             for cell_id, data in viewer_cell_data.items():

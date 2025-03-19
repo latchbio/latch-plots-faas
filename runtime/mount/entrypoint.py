@@ -11,7 +11,6 @@ from typing import TypedDict, TypeVar
 
 import orjson
 from latch_data_validation.data_validation import validate
-
 from runtime.mount.plots_context_manager import PlotsContextManager
 
 from .socketio import SocketIo
@@ -95,6 +94,16 @@ class PlotsNotebookKernelState:
 @dataclass(frozen=True)
 class PlotsNotebookKernelStateResp:
     data: PlotsNotebookKernelState
+
+
+@dataclass(frozen=True)
+class TmpPlotsNotebookKernelSnapshotMode:
+    session_snapshot_mode: bool
+
+
+@dataclass(frozen=True)
+class TmpPlotsNotebookKernelSnapshotModeResp:
+    data: TmpPlotsNotebookKernelSnapshotMode
 
 
 async def add_pod_event(*, auth: str, event_type: str) -> None:
@@ -347,6 +356,23 @@ async def start_kernel_proc() -> None:
     if k_state is None:
         return
 
+    # todo(kenny): separate query for backwards compatability. Pull into main
+    # fn when "snapshot mode" merged and works well
+    try:
+        resp = await gql_query(
+            auth=auth_token_sdk,
+            query="""
+                query tmpPlotsNotebookKernelSnapshotMode($pod_id: BigInt!) {
+                    tmpPlotsNotebookKernelSnapshotMode($pod_id)
+                }
+            """,
+            variables={"pod_id": pod_id},
+        )
+        data = validate(resp, TmpPlotsNotebookKernelSnapshotModeResp)
+        session_snapshot_mode = data.data.session_snapshot_mode
+    except Exception:
+        session_snapshot_mode = False
+
     await add_pod_event(auth=auth_token_sdk, event_type="runtime_ready")
     await ready_ev.wait()
     await conn_k.send(
@@ -357,6 +383,7 @@ async def start_kernel_proc() -> None:
             "plot_data_selections": k_state.plot_data_selections,
             "viewer_cell_data": k_state.viewer_cell_data,
             "plot_configs": k_state.plot_configs,
+            "session_snapshot_mode": session_snapshot_mode,
         }
     )
 
