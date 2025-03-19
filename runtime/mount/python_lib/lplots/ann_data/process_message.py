@@ -62,6 +62,7 @@ async def handle_ann_data_widget_message(  # noqa: RUF029
     if op == "get_embedding_options":
         return {
             "type": "ann_data",
+            "op": op,
             "key": widget_key,
             "value": {
                 "data": list(adata.obsm.keys()),
@@ -72,6 +73,7 @@ async def handle_ann_data_widget_message(  # noqa: RUF029
         if "embedding" not in msg or msg["embedding"] not in adata.obsm:
             return {
                 "type": "ann_data",
+                "op": op,
                 "key": widget_key,
                 "value": {
                     "error": f"Embedding {msg.get('embedding', '`embedding` key missing from message')} not found",
@@ -83,6 +85,7 @@ async def handle_ann_data_widget_message(  # noqa: RUF029
 
         return {
             "type": "ann_data",
+            "op": op,
             "key": widget_key,
             "value": {
                 "data": embedding,
@@ -92,6 +95,7 @@ async def handle_ann_data_widget_message(  # noqa: RUF029
     if op == "get_obs_options":
         return {
             "type": "ann_data",
+            "op": op,
             "key": widget_key,
             "value": {
                 "data": list(adata.obs.keys()),
@@ -102,6 +106,7 @@ async def handle_ann_data_widget_message(  # noqa: RUF029
         if "obs" not in msg or msg["obs"] not in adata.obs:
             return {
                 "type": "ann_data",
+                "op": op,
                 "key": widget_key,
                 "value": {
                     "error": f"Observation {msg.get('obs', '`obs` key missing from message')} not found",
@@ -111,6 +116,7 @@ async def handle_ann_data_widget_message(  # noqa: RUF029
         obs = adata.obs[msg["obs"]]
         return {
             "type": "ann_data",
+            "op": op,
             "key": widget_key,
             "value": {
                 "data": obs.to_list(),
