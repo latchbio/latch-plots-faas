@@ -366,7 +366,10 @@ def filter_and_sort(
             df = df.sort_index(ascending=is_asc)
         elif is_multi_index_col(col) and isinstance(df.index, MultiIndex):
             df = df.sort_index(level=int(col.split("_")[-1]), ascending=is_asc)
-        elif col in df.index.names:
+        elif not hasattr(df, "compute") and col in df.index.names:
+            # todo(maximsmol): proper Dask support?
+            # it seems like they simply do not have categorical indices
+
             df = df.sort_index(level=col, ascending=is_asc)
         elif col in df:
             df = df.sort_values(by=col, ascending=is_asc)
@@ -384,7 +387,10 @@ def filter_and_sort(
                 elif is_multi_index_col(col) and isinstance(df.index, MultiIndex):
                     level = int(col.split("_")[-1])
                     sub_mask &= df.index.get_level_values(level).isin(sel)
-                elif col in df.index.names:
+                elif not hasattr(df, "compute") and col in df.index.names:
+                    # todo(maximsmol): proper Dask support?
+                    # it seems like they simply do not have categorical indices
+
                     sub_mask &= df.index.get_level_values(col).isin(sel)
                 else:
                     sub_mask &= filter_dataframe_by_selections(df, col, sel)
@@ -972,6 +978,8 @@ class Kernel:
             sort_settings = pagination_settings.sort_settings
             row_filters = pagination_settings.row_filters
 
+            # todo(maximsmol): Dask support
+            # we want to filter + sort + paginate inside Dask computations
             res = filter_and_sort(df=res, pagination_settings=pagination_settings)
 
             if viewer_id is not None:
