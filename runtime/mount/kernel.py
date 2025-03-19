@@ -1286,7 +1286,7 @@ class Kernel:
             self.session_snapshot_mode = msg["session_snapshot_mode"]
 
             if self.session_snapshot_mode:
-                self.load_kernel_snapshot()
+                await self.load_kernel_snapshot()
 
             viewer_cell_data = msg["viewer_cell_data"]
             for cell_id, data in viewer_cell_data.items():
