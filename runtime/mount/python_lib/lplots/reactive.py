@@ -168,6 +168,12 @@ class RCtx:
     async def run(
         self, f: Callable[..., Awaitable[R]], *, _cell_id: str | None = None
     ) -> R:
+        # note(maximsmol): we want this to happen for non-cell nodes too
+        # so it has to be inside `RCtx` which sees every ran node
+        # and not just the cell body in the kernel
+        if _cell_id is not None:
+            await _inject.kernel.set_active_cell(_cell_id)
+
         async with self.transaction:
             self.cur_comp = Node(f=f, parent=self.cur_comp, cell_id=_cell_id)
 
@@ -222,16 +228,6 @@ class RCtx:
             async with self.transaction:
                 for n, p in to_dispose.values():
                     self.cur_comp = p
-
-                    # we do this here rather than in self.run
-                    # because the node is initialized by the cell function
-                    # therefor it would not have a cell_id set until before
-                    # self.run enters f()
-                    #
-                    # for this to work with top level nodes, the kernel calls
-                    # set_active_cell manually before calling ctx.run()
-                    if n.cell_id is not None:
-                        await _inject.kernel.set_active_cell(n.cell_id)
 
                     try:
                         await self.run(n.f, _cell_id=n.cell_id)
