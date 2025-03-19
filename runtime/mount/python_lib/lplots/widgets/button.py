@@ -65,7 +65,7 @@ class ButtonWidget:
         if clicked <= last_clicked:
             return
 
-        self._signal({**res, "last_clicked": str(last_clicked)})
+        self._signal({**res, "last_clicked": str(clicked)})
         self._trigger_signal(None)
 
     async def _create_update_node(self) -> None:
