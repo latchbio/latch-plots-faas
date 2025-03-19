@@ -19,4 +19,3 @@ def use_state_key(key: str | None = None) -> str:
 
 def use_value_signal(key: str) -> Signal[object]:
     return _inject.kernel.get_widget_value(key)
-

@@ -3,6 +3,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, Literal, TypedDict
 
+from lplots.utils.nothing import Nothing
+
 from ..reactive import Signal, ctx
 from . import _emit, _state
 
@@ -101,6 +103,7 @@ def w_button(
         now = datetime.now(UTC).isoformat()
         default = {"clicked": now, "last_clicked": now}
 
+    lambda_signal = _state.use_value_signal(key=lambda_key)
     res = ButtonWidget(
         _key=key,
         _state={
@@ -110,11 +113,13 @@ def w_button(
             "readonly": readonly,
         },
         _signal=_state.use_value_signal(key=key),
-        _lambda_signal=_state.use_value_signal(key=lambda_key),
+        _lambda_signal=lambda_signal,
     )
     _emit.emit_widget(key, res._state)
 
-    loop = asyncio.get_running_loop()
-    asyncio.run_coroutine_threadsafe(res._helper(), loop).done()
+    if lambda_signal.sample() is Nothing.x:
+        asyncio.run_coroutine_threadsafe(
+            res._helper(), asyncio.get_running_loop()
+        ).done()
 
     return res
