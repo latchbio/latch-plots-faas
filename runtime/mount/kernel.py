@@ -413,7 +413,7 @@ def paginate(*, df: DataFrame, pagination_settings: PaginationSettings) -> DataF
 
     if hasattr(df, "compute"):
         # to support Dask and similar datasets which cannot index on rows
-        data = df.iloc[:, x : x + w].head(y + h)[y:]
+        data = df.iloc[:, x : x + w].head(y + h, npartitions=-1)[y:]
     else:
         data = df.iloc[y : y + h, x : x + w]
 
