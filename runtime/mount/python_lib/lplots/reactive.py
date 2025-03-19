@@ -59,11 +59,11 @@ class Node:
         if self.name is None:
             self.name = self.f.__name__
 
-        if self.name in live_node_names:
-            raise ValueError(f"reactive node name is not unique: {self.name!r}")
+        # if self.name in live_node_names:
+        #     raise ValueError(f"reactive node name is not unique: {self.name!r}")
 
-        print(f"DEBUG: {self.name=}")
-        live_node_names.add(self.name)
+        # print(f"DEBUG: {self.name=}")
+        # live_node_names.add(self.name)
 
     def name_path(self) -> str:
         assert self.name is not None
@@ -117,8 +117,8 @@ class Node:
 
             del live_nodes[id(cur)]
 
-            if self.name is not None:
-                live_node_names.remove(self.name)
+            # if self.name is not None:
+            #     live_node_names.remove(self.name)
 
     def __repr__(self) -> str:
         stale_mark = "!" if self.stale else ""
