@@ -70,7 +70,7 @@ class ButtonWidget:
         print("DEBUG: _helper")
 
         res = self._signal()
-        _get_lambda_signal(self._key)._value = None
+        _get_lambda_signal(self._key)[1]._value = None
 
         if not isinstance(res, dict) or not all(
             key in res for key in ButtonWidgetSignalValue.__annotations__
