@@ -97,6 +97,11 @@ class PlotsNotebookKernelStateResp:
 
 
 @dataclass(frozen=True)
+class TmpPlotsNotebookKernelSnapshotMode:
+    tmpPlotsNotebookKernelSnapshotMode: bool
+
+
+@dataclass(frozen=True)
 class TmpPlotsNotebookKernelSnapshotModeResp:
     data: bool
 
@@ -364,11 +369,8 @@ async def start_kernel_proc() -> None:
             variables={"pod_id": pod_id},
         )
 
-        with open("foo.txt", "w") as f:
-            f.write(resp)
-
         data = validate(resp, TmpPlotsNotebookKernelSnapshotModeResp)
-        session_snapshot_mode = data.data
+        session_snapshot_mode = data.data.tmpPlotsNotebookKernelSnapshotMode
     except Exception:
         err_msg = {"type": "error", "data": traceback.format_exc()}
         await plots_ctx_manager.broadcast_message(orjson.dumps(err_msg).decode())
