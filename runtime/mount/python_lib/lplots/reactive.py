@@ -116,8 +116,7 @@ class Node:
 
             del live_nodes[id(cur)]
 
-            # todo(rteqs): figure out why key is not in live_node_names
-            if self.name is not None and self.name in live_node_names:
+            if self.name is not None:
                 live_node_names.remove(self.name)
 
     def __repr__(self) -> str:
