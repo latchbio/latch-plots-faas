@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Literal, TypedDict
 
-from ..reactive import Nothing, Signal, ctx
+from ..reactive import Signal, ctx
 from . import _emit, _state
 
 
@@ -44,7 +44,7 @@ class ButtonWidget:
 
     @property
     def value(self) -> bool:
-        # todo(rteqs): check if this was from code or signal
+        # todo(rteqs): return false if this was ran from code
         self._trigger_signal()
         return True
 
@@ -101,9 +101,8 @@ def w_button(
     )
     _emit.emit_widget(key, res._state)
 
-    if res._trigger_signal.sample() is Nothing.x:
-        asyncio.run_coroutine_threadsafe(
-            res._create_update_node(), asyncio.get_running_loop()
-        )
+    asyncio.run_coroutine_threadsafe(
+        res._create_update_node(), asyncio.get_running_loop()
+    )
 
     return res
