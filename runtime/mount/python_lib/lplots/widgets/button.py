@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Literal, TypedDict
 
-from ..reactive import Nothing, Signal
+from ..reactive import Nothing, Signal, ctx
 from . import _emit, _state
 
 
@@ -68,6 +68,10 @@ class ButtonWidget:
         self._signal({**res, "last_clicked": str(last_clicked)})
         self._trigger_signal(Nothing.x)
 
+    async def _create_update_node(self) -> None:
+        async with ctx.transaction:
+            await ctx.run(self._update)
+
 
 def w_button(
     *,
@@ -96,6 +100,8 @@ def w_button(
     )
     _emit.emit_widget(key, res._state)
 
-    asyncio.run_coroutine_threadsafe(res._update(), asyncio.get_running_loop())
+    asyncio.run_coroutine_threadsafe(
+        res._create_update_node(), asyncio.get_running_loop()
+    )
 
     return res
