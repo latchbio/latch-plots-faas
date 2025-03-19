@@ -58,13 +58,13 @@ class ButtonWidget:
 
         parsed = parse_iso_strings(res)
         if parsed is None:
-            print("DEBUG: invalid signal value", res)
+            print(f"DEBUG: invalid iso strings {parsed=}")
             return
 
         clicked, last_clicked = parsed
 
         if clicked <= last_clicked:
-            print("DEBUG: invalid signal value", res)
+            print(f"DEBUG: {clicked <= last_clicked=}")
             return
 
         self._signal({**res, "last_clicked": str(clicked)})
