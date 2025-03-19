@@ -42,29 +42,17 @@ class ButtonWidget:
     _signal: Signal[object | ButtonWidgetSignalValue]
     _lambda_signal: Signal[object]
 
+    _clicked_ref: None | datetime = field(default=None, repr=False)
     _last_clicked_ref: None | datetime = field(default=None, repr=False)
 
     @property
     def value(self) -> bool:
-        # todo(rteqs): duplicate
         self._lambda_signal()
-        res = self._signal.sample()
 
-        if not isinstance(res, dict) or not all(
-            key in res for key in ButtonWidgetSignalValue.__annotations__
-        ):
+        if self._clicked_ref is None or self._last_clicked_ref is None:
             return False
 
-        parsed = parse_iso_strings(res)
-        if parsed is None:
-            return False
-
-        clicked, last_clicked = parsed
-
-        if self._last_clicked_ref is None:
-            return False
-
-        return clicked > self._last_clicked_ref
+        return self._clicked_ref > self._last_clicked_ref
 
     def h(self) -> None:
         print("DEBUG: _helper")
@@ -85,6 +73,8 @@ class ButtonWidget:
 
         if self._last_clicked_ref is None:
             self._last_clicked_ref = last_clicked
+
+        self._clicked_ref = clicked
 
         if clicked > self._last_clicked_ref:
             res["last_clicked"] = str(clicked)
@@ -124,8 +114,7 @@ def w_button(
     )
     _emit.emit_widget(key, res._state)
 
-    coro = ctx.run(res._helper)
     loop = asyncio.get_running_loop()
-    asyncio.run_coroutine_threadsafe(coro, loop).done()
+    asyncio.run_coroutine_threadsafe(res._helper(), loop).done()
 
     return res
