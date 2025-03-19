@@ -752,9 +752,11 @@ class Kernel:
             orjson.dumps(s_depens).decode("utf-8")
         )
 
-        await self.send({"type": "save_kernel_snapshot", "status": "created"})
+        await self.send({"type": "save_kernel_snapshot", "status": "done"})
 
-    def load_kernel_snapshot(self) -> None:
+    async def load_kernel_snapshot(self) -> None:
+        await self.send({"type": "load_kernel_snapshot", "status": "loading"})
+
         snapshot_f = snapshot_dir / snapshot_f_name
         if not snapshot_f.exists():
             return
@@ -819,7 +821,9 @@ class Kernel:
 
         self.nodes_with_widgets = nodes_with_widgets
 
-        # plumb node parent, signals
+        # todo(kenny): plumb node parent, signals
+
+        await self.send({"type": "save_kernel_snapshot", "status": "done"})
 
     def get_widget_value(self, key: str) -> Signal[object]:
         assert ctx.cur_comp is not None
