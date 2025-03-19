@@ -66,9 +66,10 @@ class ButtonWidget:
             return
 
         self._signal({**res, "last_clicked": str(last_clicked)})
-        self._trigger_signal(Nothing.x)
+        self._trigger_signal(None)
 
     async def _create_update_node(self) -> None:
+        print("DEBUG: creating update node")
         async with ctx.transaction:
             await ctx.run(self._update)
 
@@ -100,8 +101,9 @@ def w_button(
     )
     _emit.emit_widget(key, res._state)
 
-    asyncio.run_coroutine_threadsafe(
-        res._create_update_node(), asyncio.get_running_loop()
-    )
+    if res._trigger_signal.sample() is Nothing.x:
+        asyncio.run_coroutine_threadsafe(
+            res._create_update_node(), asyncio.get_running_loop()
+        )
 
     return res
