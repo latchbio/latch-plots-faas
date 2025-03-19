@@ -748,8 +748,12 @@ class Kernel:
                 return
 
             async def x() -> None:
+                self.cell_status[cell_id] = "running"
+
                 try:
                     assert ctx.cur_comp is not None
+
+                    print(ctx.cur_comp)
 
                     self.cell_rnodes[cell_id] = ctx.cur_comp
                     self.k_globals.clear()
