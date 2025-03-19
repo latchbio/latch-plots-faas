@@ -37,12 +37,12 @@ def parse_iso_strings(data: Any) -> tuple[datetime, datetime] | None:
         return None
 
 
-lambda_signals: dict[str, Signal[object]] = {}
+lambda_signals: dict[str, tuple[int, Signal[object]]] = {}
 
 
-def _get_lambda_signal(key: str) -> Signal[object]:
+def _get_lambda_signal(key: str) -> tuple[int, Signal[object]]:
     if key not in lambda_signals:
-        lambda_signals[key] = Signal(Nothing.x, name=key)
+        lambda_signals[key] = (0, Signal(Nothing.x, name=key))
 
     return lambda_signals[key]
 
@@ -115,7 +115,7 @@ def w_button(
         now = datetime.now(UTC).isoformat()
         default = {"clicked": now, "last_clicked": now}
 
-    lambda_signal = _get_lambda_signal(lambda_key)
+    generation, lambda_signal = _get_lambda_signal(lambda_key)
     res = ButtonWidget(
         _key=key,
         _state={
@@ -131,9 +131,10 @@ def w_button(
     print(f"DEBUG: {lambda_signal.sample()}")
 
     # todo(rteqs): need a better way to gate this
-    if lambda_signal.sample() is Nothing.x:
+    if generation == 0:
         asyncio.run_coroutine_threadsafe(
             res._helper(), asyncio.get_running_loop()
         ).done()
+        lambda_signals[lambda_key] = (generation + 1, lambda_signal)
 
     return res
