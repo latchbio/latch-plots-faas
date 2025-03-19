@@ -358,14 +358,11 @@ async def start_kernel_proc() -> None:
             auth=auth_token_sdk,
             query="""
                 query tmpPlotsNotebookKernelSnapshotMode($pod_id: BigInt!) {
-                    tmpPlotsNotebookKernelSnapshotMode($pod_id)
+                    tmpPlotsNotebookKernelSnapshotMode(argPodId: $pod_id)
                 }
             """,
             variables={"pod_id": pod_id},
         )
-
-        with open("foo.txt", "w") as f:
-            f.write(resp)
 
         data = validate(resp, TmpPlotsNotebookKernelSnapshotModeResp)
         session_snapshot_mode = data.data
