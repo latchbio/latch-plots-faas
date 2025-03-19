@@ -1,8 +1,9 @@
-from dataclasses import dataclass, field
+import asyncio
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Literal, TypedDict
 
-from ..reactive import Signal
+from ..reactive import Nothing, Signal
 from . import _emit, _state
 
 
@@ -39,32 +40,33 @@ class ButtonWidget:
     _key: str
     _state: ButtonWidgetState
     _signal: Signal[object | ButtonWidgetSignalValue]
-
-    _last_clicked_ref: None | datetime = field(default=None, repr=False)
+    _trigger_signal: Signal[object]
 
     @property
     def value(self) -> bool:
+        # todo(rteqs): check if this was from code or signal
+        self._trigger_signal()
+        return True
+
+    def _update(self) -> None:
         res = self._signal()
 
         if not isinstance(res, dict) or not all(
             key in res for key in ButtonWidgetSignalValue.__annotations__
         ):
-            return False
+            return
 
         parsed = parse_iso_strings(res)
         if parsed is None:
-            return False
+            return
 
         clicked, last_clicked = parsed
 
-        if self._last_clicked_ref is None:
-            self._last_clicked_ref = last_clicked
+        if clicked <= last_clicked:
+            return
 
-        if clicked > self._last_clicked_ref:
-            res["last_clicked"] = str(clicked)
-            return True
-
-        return False
+        self._signal({**res, "last_clicked": str(last_clicked)})
+        self._trigger_signal(Nothing.x)
 
 
 def w_button(
@@ -75,6 +77,7 @@ def w_button(
     readonly: bool = False,
 ) -> ButtonWidget:
     key = _state.use_state_key(key=key)
+    trigger_key = _state.use_state_key(key=f"trigger_{key}")
 
     if default is None:
         now = datetime.now(UTC).isoformat()
@@ -89,7 +92,10 @@ def w_button(
             "readonly": readonly,
         },
         _signal=_state.use_value_signal(key=key),
+        _trigger_signal=_state.use_value_signal(key=trigger_key),
     )
     _emit.emit_widget(key, res._state)
+
+    asyncio.run_coroutine_threadsafe(res._update(), asyncio.get_running_loop())
 
     return res
