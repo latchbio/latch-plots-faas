@@ -70,7 +70,9 @@ class ButtonWidget:
 
     async def _create_update_node(self) -> None:
         print("DEBUG: creating update node")
-        await ctx.run(self._update)
+        await ctx._tick()
+        async with ctx.transaction:
+            await ctx.run(self._update)
 
 
 def w_button(
