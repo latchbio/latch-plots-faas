@@ -117,6 +117,8 @@ def w_button(
     )
     _emit.emit_widget(key, res._state)
 
+    print(f"DEBUG: {lambda_signal.sample()}")
+
     if lambda_signal.sample() is Nothing.x:
         asyncio.run_coroutine_threadsafe(
             res._helper(), asyncio.get_running_loop()
