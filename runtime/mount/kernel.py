@@ -749,7 +749,7 @@ class Kernel:
                 # child reactive node is running
                 #
                 # the only complication is to tell when it has *finished*
-                # running so we can set the status & send results
+                # running so we can set the status & send results + flush logs
                 #
                 # afaik the status is only used for interrupting "a cell" (even though
                 # the interrupt is just sent to whatever code happens to be running)
@@ -782,6 +782,10 @@ class Kernel:
                 except (KeyboardInterrupt, Exception):
                     self.cell_status[cell_id] = "error"
                     await self.send_cell_result(cell_id)
+
+                finally:
+                    sys.stdout.flush()
+                    sys.stderr.flush()
 
             x.__name__ = filename
 
