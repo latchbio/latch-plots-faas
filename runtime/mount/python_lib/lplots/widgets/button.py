@@ -44,11 +44,8 @@ class ButtonWidget:
 
     @property
     def value(self) -> bool:
-        if ctx.cur_comp is None or ctx.cur_comp.parent is None:
-            return False
-
         self._trigger_signal()
-        return True
+        return not (ctx.cur_comp is None or ctx.cur_comp.parent is None)
 
     def _update(self) -> None:
         res = self._signal()
@@ -56,15 +53,18 @@ class ButtonWidget:
         if not isinstance(res, dict) or not all(
             key in res for key in ButtonWidgetSignalValue.__annotations__
         ):
+            print("DEBUG: invalid signal value", res)
             return
 
         parsed = parse_iso_strings(res)
         if parsed is None:
+            print("DEBUG: invalid signal value", res)
             return
 
         clicked, last_clicked = parsed
 
         if clicked <= last_clicked:
+            print("DEBUG: invalid signal value", res)
             return
 
         self._signal({**res, "last_clicked": str(clicked)})
