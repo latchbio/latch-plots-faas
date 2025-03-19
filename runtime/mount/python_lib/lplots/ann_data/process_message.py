@@ -3,38 +3,26 @@ from typing import Any
 
 import anndata as ad  # type: ignore  # noqa: PGH003
 
-from lplots.reactive import ctx
-
 ann_data_ops = ["get_embedding_options", "get_embeddings", "get_obs_options", "get_obs"]
 
 ann_data_object_cache: dict[str, ad.AnnData] = {}
 
 
-async def handle_ann_data_widget_message(
-    msg: dict[str, str],
+async def handle_ann_data_widget_message(  # noqa: RUF029
+    msg: dict[str, Any],
 ) -> dict[str, Any]:
-    if msg["type"] != "ann_data" or "key" not in msg:
+    if msg["type"] != "ann_data" or "key" not in msg or "state" not in msg:
         return {
             "type": "ann_data",
             "key": None,
             "value": {
-                "error": "Invalid message",
+                "error": "Invalid message -- missing `key` or `state`",
             },
         }
 
     widget_key = msg["key"]
-    assert ctx.cur_comp is not None
+    widget_state: dict[str, Any] = msg["state"]
 
-    if widget_key not in ctx.cur_comp.widget_states:
-        return {
-            "type": "ann_data",
-            "key": widget_key,
-            "value": {
-                "error": "Widget not found",
-            },
-        }
-
-    widget_state = ctx.cur_comp.widget_states[widget_key]
     if "src" not in widget_state:
         return {
             "type": "ann_data",
