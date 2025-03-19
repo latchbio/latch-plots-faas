@@ -319,6 +319,8 @@ class Signal(Generic[T]):
             return self._value
 
         self._updates.append(upd)
+        name = ctx.cur_comp.name_path() if ctx.cur_comp is not None else "top level"
+        print(f"[@] node={name}, signal={self} triggered update {upd}")
         ctx.updated_signals[id(self)] = self
         if not _ui_update:
             ctx.signals_update_from_code[id(self)] = self
