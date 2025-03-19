@@ -258,7 +258,7 @@ def filter_dataframe(
     elif is_multi_index_col(col) and isinstance(df.index, MultiIndex):
         level = int(col.split("_")[-1])
         col_vals = df.index.get_level_values(level)
-    elif col in df.index.names:
+    elif not hasattr(df, "compute") and col in df.index.names:
         col_vals = df.index.get_level_values(col)
     else:
         if col not in df:
