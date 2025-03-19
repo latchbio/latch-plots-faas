@@ -97,13 +97,8 @@ class PlotsNotebookKernelStateResp:
 
 
 @dataclass(frozen=True)
-class TmpPlotsNotebookKernelSnapshotMode:
-    session_snapshot_mode: bool
-
-
-@dataclass(frozen=True)
 class TmpPlotsNotebookKernelSnapshotModeResp:
-    data: TmpPlotsNotebookKernelSnapshotMode
+    data: bool
 
 
 async def add_pod_event(*, auth: str, event_type: str) -> None:
@@ -369,7 +364,7 @@ async def start_kernel_proc() -> None:
             variables={"pod_id": pod_id},
         )
         data = validate(resp, TmpPlotsNotebookKernelSnapshotModeResp)
-        session_snapshot_mode = data.data.session_snapshot_mode
+        session_snapshot_mode = data.data
     except Exception:
         session_snapshot_mode = False
 
