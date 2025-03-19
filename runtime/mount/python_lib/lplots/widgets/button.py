@@ -44,7 +44,9 @@ class ButtonWidget:
 
     @property
     def value(self) -> bool:
-        # todo(rteqs): return false if this was ran from code
+        if ctx.cur_comp is None or ctx.cur_comp.parent is None:
+            return False
+
         self._trigger_signal()
         return True
 
@@ -70,7 +72,6 @@ class ButtonWidget:
 
     async def _create_update_node(self) -> None:
         print("DEBUG: creating update node")
-        await ctx._tick()
         async with ctx.transaction:
             await ctx.run(self._update)
 
