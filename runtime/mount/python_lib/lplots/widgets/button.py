@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Literal, TypedDict
 
-from ..reactive import Signal, ctx, Node
+from ..reactive import Signal, ctx
 from . import _emit, _state
 
 
@@ -72,8 +72,7 @@ class ButtonWidget:
 
     async def _create_update_node(self) -> None:
         print("DEBUG: creating update node")
-        n = Node(f=self._update, parent=ctx.cur_comp)
-        ctx.stale_nodes[id(n)] = n
+        await ctx.run(self._update, _name=f"{self._key}/update_node")
 
 
 def w_button(
