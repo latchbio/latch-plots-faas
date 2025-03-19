@@ -314,6 +314,9 @@ def filter_dataframe(
     if negate and mask is not None:
         mask = ~mask
 
+    if hasattr(mask, "compute"):
+        mask = mask.array
+
     res = df[mask]
     if TYPE_CHECKING:
         assert isinstance(res, DataFrame)
