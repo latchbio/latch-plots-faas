@@ -85,7 +85,7 @@ def w_button(
     key = _state.use_state_key(key=key)
     assert ctx.cur_comp is not None
 
-    trigger_key = _state.use_state_key(key=f"{ctx.cur_comp.cell_id}/trigger_{key}")
+    trigger_key = _state.use_state_key(key=f"{ctx.cur_comp.cell_id}_trigger_{key}")
 
     if default is None:
         now = datetime.now(UTC).isoformat()
