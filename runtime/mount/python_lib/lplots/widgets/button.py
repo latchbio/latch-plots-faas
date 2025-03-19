@@ -60,6 +60,7 @@ class ButtonWidget:
     def value(self) -> bool:
         _get_lambda_signal(self._key)()
 
+        print(f"DEBUG: value={self._clicked_ref} {self._last_clicked_ref}")
         if self._clicked_ref is None or self._last_clicked_ref is None:
             return False
 
@@ -67,7 +68,6 @@ class ButtonWidget:
 
     def h(self) -> None:
         print("DEBUG: _helper")
-        _get_lambda_signal(self._key)(None)
 
         res = self._signal()
 
@@ -80,6 +80,7 @@ class ButtonWidget:
         if parsed is None:
             return
 
+        print(f"DEBUG: parsed={parsed}")
         clicked, last_clicked = parsed
 
         if self._last_clicked_ref is None:
@@ -89,6 +90,7 @@ class ButtonWidget:
 
         if clicked > self._last_clicked_ref:
             res["last_clicked"] = str(clicked)
+            _get_lambda_signal(self._key)(None)
 
         print("DEBUG: _helper done")
         return
@@ -127,6 +129,7 @@ def w_button(
 
     print(f"DEBUG: {lambda_signal.sample()}")
 
+    # todo(rteqs): need a better way to gate this
     if lambda_signal.sample() is Nothing.x:
         asyncio.run_coroutine_threadsafe(
             res._helper(), asyncio.get_running_loop()
