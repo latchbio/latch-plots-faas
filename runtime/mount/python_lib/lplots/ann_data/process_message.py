@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import Any
 
 import anndata as ad  # type: ignore  # noqa: PGH003
+
 from lplots.reactive import ctx
 
 ann_data_ops = ["get_embedding_options", "get_embeddings", "get_obs_options", "get_obs"]
@@ -9,14 +10,16 @@ ann_data_ops = ["get_embedding_options", "get_embeddings", "get_obs_options", "g
 ann_data_object_cache: dict[str, ad.AnnData] = {}
 
 
-def handle_ann_data_widget_message(
+async def handle_ann_data_widget_message(
     msg: dict[str, str],
 ) -> dict[str, Any]:
     if msg["type"] != "ann_data" or "key" not in msg:
         return {
             "type": "ann_data",
-            "key": "error",
-            "error": "Invalid message",
+            "key": None,
+            "value": {
+                "error": "Invalid message",
+            },
         }
 
     widget_key = msg["key"]
@@ -26,7 +29,9 @@ def handle_ann_data_widget_message(
         return {
             "type": "ann_data",
             "key": widget_key,
-            "error": "Widget not found",
+            "value": {
+                "error": "Widget not found",
+            },
         }
 
     widget_state = ctx.cur_comp.widget_states[widget_key]
@@ -34,7 +39,9 @@ def handle_ann_data_widget_message(
         return {
             "type": "ann_data",
             "key": widget_key,
-            "error": "Widget state does not contain src",
+            "value": {
+                "error": "Widget state does not contain src",
+            },
         }
 
     path_src = Path(widget_state["src"])
@@ -42,7 +49,9 @@ def handle_ann_data_widget_message(
         return {
             "type": "ann_data",
             "key": widget_key,
-            "error": f"File {path_src} does not exist",
+            "value": {
+                "error": f"File {path_src} does not exist",
+            },
         }
 
     if widget_state["src"] in ann_data_object_cache:
@@ -55,7 +64,9 @@ def handle_ann_data_widget_message(
         return {
             "type": "ann_data",
             "key": widget_key,
-            "error": f"Invalid operation: {msg.get('op', '`op` key missing from message')}",
+            "value": {
+                "error": f"Invalid operation: {msg.get('op', '`op` key missing from message')}",
+            },
         }
 
     op = msg["op"]
@@ -64,7 +75,9 @@ def handle_ann_data_widget_message(
         return {
             "type": "ann_data",
             "key": widget_key,
-            "options": list(adata.obsm.keys()),
+            "value": {
+                "data": list(adata.obsm.keys()),
+            },
         }
 
     if op == "get_embeddings":
@@ -72,7 +85,9 @@ def handle_ann_data_widget_message(
             return {
                 "type": "ann_data",
                 "key": widget_key,
-                "error": f"Embedding {msg.get('embedding', '`embedding` key missing from message')} not found",
+                "value": {
+                    "error": f"Embedding {msg.get('embedding', '`embedding` key missing from message')} not found",
+                },
             }
 
         embedding = adata.obsm[msg["embedding"]]
@@ -81,14 +96,18 @@ def handle_ann_data_widget_message(
         return {
             "type": "ann_data",
             "key": widget_key,
-            "embedding": embedding,
+            "value": {
+                "data": embedding,
+            },
         }
 
     if op == "get_obs_options":
         return {
             "type": "ann_data",
             "key": widget_key,
-            "options": list(adata.obs.keys()),
+            "value": {
+                "data": list(adata.obs.keys()),
+            },
         }
 
     if op == "get_obs":
@@ -96,14 +115,18 @@ def handle_ann_data_widget_message(
             return {
                 "type": "ann_data",
                 "key": widget_key,
-                "error": f"Observation {msg.get('obs', '`obs` key missing from message')} not found",
+                "value": {
+                    "error": f"Observation {msg.get('obs', '`obs` key missing from message')} not found",
+                },
             }
 
         obs = adata.obs[msg["obs"]]
         return {
             "type": "ann_data",
             "key": widget_key,
-            "obs": obs.to_list(),
+            "value": {
+                "data": obs.to_list(),
+            },
         }
 
     raise ValueError(f"Invalid operation: {op}")
