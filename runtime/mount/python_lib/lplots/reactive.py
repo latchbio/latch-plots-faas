@@ -62,6 +62,7 @@ class Node:
         if self.name in live_node_names:
             raise ValueError(f"reactive node name is not unique: {self.name!r}")
 
+        print(f"DEBUG: {self.name=}")
         live_node_names.add(self.name)
 
     def name_path(self) -> str:
