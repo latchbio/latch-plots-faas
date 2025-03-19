@@ -749,7 +749,7 @@ class Kernel:
             orjson.dumps(s_depens).decode("utf-8")
         )
 
-        await self.send({"type": "save_kernel_snapshot", "status": "done"})
+        await self.send({"type": "save_kernel_snapshot", "status": "created"})
 
     def load_kernel_snapshot(self) -> None:
         snapshot_f = snapshot_dir / snapshot_f_name
