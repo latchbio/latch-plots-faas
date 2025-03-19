@@ -1003,6 +1003,7 @@ class Kernel:
                     **(id_fields),
                     **(key_fields),
                     "dataframe_json": {
+                        "type": "pandas" if not hasattr(res, "compute") else "dask",
                         "schema": build_table_schema(data, version=False),
                         "data": data.to_dict(orient="split"),
                         # todo(maximsmol): this seems useless?
