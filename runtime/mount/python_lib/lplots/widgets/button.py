@@ -58,7 +58,7 @@ class ButtonWidget:
 
     @property
     def value(self) -> bool:
-        _get_lambda_signal(self._key)()
+        _get_lambda_signal(self._key)[1]()
 
         print(f"DEBUG: value={self._clicked_ref} {self._last_clicked_ref}")
         if self._clicked_ref is None or self._last_clicked_ref is None:
@@ -91,7 +91,7 @@ class ButtonWidget:
 
         if clicked > self._last_clicked_ref:
             res["last_clicked"] = str(clicked)
-            _get_lambda_signal(self._key)(None)
+            _get_lambda_signal(self._key)[1](None)
 
         print("DEBUG: _helper done")
         return
