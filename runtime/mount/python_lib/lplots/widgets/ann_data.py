@@ -7,7 +7,7 @@ from . import _emit, _state
 
 
 class AnnDataState(_emit.WidgetState[Literal["ann_data"], str]):
-    src: Path
+    src: str
     readonly: NotRequired[bool]
 
 
@@ -45,7 +45,7 @@ def w_ann_data(
         _key=key,
         _state={
             "type": "ann_data",
-            "src": src,
+            "src": str(src),
             "readonly": readonly,
         },
         _signal=_state.use_value_signal(key=key),
