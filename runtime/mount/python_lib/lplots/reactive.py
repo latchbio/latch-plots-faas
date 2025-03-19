@@ -115,7 +115,9 @@ class Node:
             cur.signals = {}
 
             del live_nodes[id(cur)]
-            if self.name is not None:
+
+            # todo(rteqs): figure out why key is not in live_node_names
+            if self.name is not None and self.name in live_node_names:
                 live_node_names.remove(self.name)
 
     def __repr__(self) -> str:
