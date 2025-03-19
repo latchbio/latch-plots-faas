@@ -364,6 +364,9 @@ async def start_kernel_proc() -> None:
             variables={"pod_id": pod_id},
         )
 
+        with open("foo.txt", "w") as f:
+            f.write(resp)
+
         data = validate(resp, TmpPlotsNotebookKernelSnapshotModeResp)
         session_snapshot_mode = data.data
     except Exception:
