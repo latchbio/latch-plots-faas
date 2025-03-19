@@ -37,6 +37,8 @@ from plotly_utils.precalc_violin import precalc_violin
 from socketio_thread import SocketIoThread
 from stdio_over_socket import SocketWriter, text_socket_writer
 
+from .python_lib.ann_data.handlers import handle_ann_data
+
 sys.path.append(str(Path(__file__).parent.absolute()))
 from subsample import downsample_df, initialize_duckdb
 from utils import PlotConfig, get_presigned_url
@@ -1333,6 +1335,10 @@ class Kernel:
             await self.send({"type": "upload_ldata"})
             return
 
+        if msg["type"] == "ann_data":
+            res = handle_ann_data(msg)
+            await self.send(res)
+            return
 
 loop: asyncio.AbstractEventLoop | None = None
 shutdown_requested = False
