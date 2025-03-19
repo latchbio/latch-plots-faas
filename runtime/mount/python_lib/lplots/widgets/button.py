@@ -40,6 +40,7 @@ class ButtonWidget:
     _key: str
     _state: ButtonWidgetState
     _signal: Signal[object | ButtonWidgetSignalValue]
+    _trigger_key: str
     _trigger_signal: Signal[object]
 
     @property
@@ -72,7 +73,7 @@ class ButtonWidget:
 
     async def _create_update_node(self) -> None:
         print("DEBUG: creating update node")
-        await ctx.run(self._update, _name=f"{self._key}/update_node")
+        await ctx.run(self._update, _name=f"{self._trigger_key}")
 
 
 def w_button(
@@ -83,9 +84,7 @@ def w_button(
     readonly: bool = False,
 ) -> ButtonWidget:
     key = _state.use_state_key(key=key)
-    assert ctx.cur_comp is not None
-
-    trigger_key = _state.use_state_key(key=f"{ctx.cur_comp.cell_id}_trigger_{key}")
+    trigger_key = _state.use_state_key(key=f"trigger_{key}")
 
     if default is None:
         now = datetime.now(UTC).isoformat()
@@ -100,6 +99,7 @@ def w_button(
             "readonly": readonly,
         },
         _signal=_state.use_value_signal(key=key),
+        _trigger_key=trigger_key,
         _trigger_signal=_state.use_value_signal(key=trigger_key),
     )
     _emit.emit_widget(key, res._state)
