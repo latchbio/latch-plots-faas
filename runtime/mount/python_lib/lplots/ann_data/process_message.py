@@ -9,7 +9,7 @@ ann_data_ops = ["get_embedding_options", "get_embeddings", "get_obs_options", "g
 ann_data_object_cache: dict[str, ad.AnnData] = {}
 
 
-def handle_ann_data(
+def handle_ann_data_widget_message(
     msg: dict[str, str],
 ) -> dict[str, Any]:
     if msg["type"] != "ann_data" or "key" not in msg:

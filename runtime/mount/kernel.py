@@ -24,7 +24,7 @@ from duckdb import DuckDBPyConnection
 from latch.ldata.path import LPath
 from latch.registry.table import Table
 from lplots import _inject
-from lplots.ann_data.handlers import handle_ann_data
+from lplots.ann_data.process_message import handle_ann_data_widget_message
 from lplots.reactive import Node, Signal, ctx
 from lplots.themes import graphpad_inspired_theme
 from lplots.utils.nothing import Nothing
@@ -1335,7 +1335,7 @@ class Kernel:
             return
 
         if msg["type"] == "ann_data":
-            res = handle_ann_data(msg)
+            res = handle_ann_data_widget_message(msg)
             await self.send(res)
             return
 
