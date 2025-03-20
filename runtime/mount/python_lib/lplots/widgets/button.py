@@ -40,17 +40,14 @@ class ButtonWidget:
     _key: str
     _state: ButtonWidgetState
     _signal: Signal[object | ButtonWidgetSignalValue]
-    _trigger_signal: Signal[object | int]
-    _last_observed_generation: int = 0
+    _trigger_signal: Signal[object]
 
     @property
     def value(self) -> bool:
         self._trigger_signal()
-        print(f">>> {ctx.prev_updated_signals}")
         return id(self._trigger_signal) in ctx.prev_updated_signals
 
     def _update(self) -> None:
-        print(">>> _update called")
         res = self._signal()
 
         if not isinstance(res, dict) or not all(
@@ -68,13 +65,7 @@ class ButtonWidget:
             return
 
         self._signal({**res, "last_clicked": str(clicked)})
-        print(">>> _signal updated")
-
-        trg_sig_gen = self._trigger_signal.sample()
-        if not isinstance(trg_sig_gen, int):
-            trg_sig_gen = 0
-
-        self._trigger_signal(lambda x: x + 1)
+        self._trigger_signal(None)
 
     async def _create_update_node(self) -> None:
         await ctx.run(self._update)
