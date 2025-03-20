@@ -193,6 +193,7 @@ class RCtx:
                 self.cur_comp = self.cur_comp.parent
 
     async def _tick(self) -> None:
+        print("DEBUG: _tick")
         tick_updated_signals = self.signals_update_from_code
         self.signals_update_from_code = {}
 
@@ -303,7 +304,7 @@ class Signal(Generic[T]):
     ) -> T | None:
         assert ctx.in_tx
 
-        print(f"[@] {self}({upd}, _ui_update={_ui_update}): {self._listeners}")
+        # print(f"[@] {self}({upd}, _ui_update={_ui_update}): {self._listeners}")
 
         if upd is Nothing.x:
             assert ctx.cur_comp is not None
@@ -320,7 +321,7 @@ class Signal(Generic[T]):
 
         self._updates.append(upd)
         name = ctx.cur_comp.name_path() if ctx.cur_comp is not None else "top level"
-        print(f"[@] node={name}, signal={self._name} triggered update {upd}")
+        print(f"[@] node={name}, signal={self} triggered update {upd}")
         ctx.updated_signals[id(self)] = self
         if not _ui_update:
             ctx.signals_update_from_code[id(self)] = self
