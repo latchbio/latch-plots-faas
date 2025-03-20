@@ -1,8 +1,9 @@
-from dataclasses import dataclass, field
+import asyncio
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Literal, TypedDict
 
-from ..reactive import Signal
+from ..reactive import Signal, ctx
 from . import _emit, _state
 
 
@@ -21,7 +22,7 @@ def parse_iso_strings(data: Any) -> tuple[datetime, datetime] | None:
     if not isinstance(data, dict):
         return None
 
-    required_keys = ButtonWidgetSignalValue.__annotations__.keys()
+    required_keys = ButtonWidgetSignalValue.__required_keys__
 
     if not all(key in data for key in required_keys):
         return None
@@ -39,32 +40,35 @@ class ButtonWidget:
     _key: str
     _state: ButtonWidgetState
     _signal: Signal[object | ButtonWidgetSignalValue]
-
-    _last_clicked_ref: None | datetime = field(default=None, repr=False)
+    _trigger_signal: Signal[object]
 
     @property
     def value(self) -> bool:
+        self._trigger_signal()
+        return id(self._trigger_signal) in ctx.prev_updated_signals
+
+    def _update(self) -> None:
         res = self._signal()
 
         if not isinstance(res, dict) or not all(
             key in res for key in ButtonWidgetSignalValue.__annotations__
         ):
-            return False
+            return
 
         parsed = parse_iso_strings(res)
         if parsed is None:
-            return False
+            return
 
         clicked, last_clicked = parsed
 
-        if self._last_clicked_ref is None:
-            self._last_clicked_ref = last_clicked
+        if clicked <= last_clicked:
+            return
 
-        if clicked > self._last_clicked_ref:
-            res["last_clicked"] = str(clicked)
-            return True
+        self._signal({**res, "last_clicked": str(clicked)})
+        self._trigger_signal(None)
 
-        return False
+    async def _create_update_node(self) -> None:
+        await ctx.run(self._update)
 
 
 def w_button(
@@ -75,6 +79,7 @@ def w_button(
     readonly: bool = False,
 ) -> ButtonWidget:
     key = _state.use_state_key(key=key)
+    trigger_key = _state.use_state_key(key=f"{key}#trigger")
 
     if default is None:
         now = datetime.now(UTC).isoformat()
@@ -89,7 +94,13 @@ def w_button(
             "readonly": readonly,
         },
         _signal=_state.use_value_signal(key=key),
+        _trigger_signal=_state.use_value_signal(key=trigger_key),
     )
     _emit.emit_widget(key, res._state)
+
+    # todo(rteqs): this can deadlock. either we make w_button async or figure something out
+    asyncio.run_coroutine_threadsafe(
+        res._create_update_node(), asyncio.get_running_loop()
+    )
 
     return res

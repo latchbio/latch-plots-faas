@@ -92,9 +92,7 @@ class TabularDatasourcePicker:
     _signal: Signal[object | DataSourceValue]
 
     def _value(self, val: object) -> pd.DataFrame | None:
-        if not isinstance(val, dict) or not all(
-            key in val for key in DataSourceValue.__annotations__
-        ):
+        if not isinstance(val, dict):
             val = self._state.get("default")
             # todo(manske): validate default
             if val is None:

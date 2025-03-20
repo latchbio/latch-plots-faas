@@ -166,7 +166,6 @@ class Node:
             cur.signals = {}
 
             del live_nodes[cur.id]
-            live_node_ids.remove(self.id)
 
     def __repr__(self) -> str:
         stale_mark = "!" if self.stale else ""
@@ -212,12 +211,19 @@ class RCtx:
     updated_signals: dict[str, "Signal"] = field(default_factory=dict)
     signals_update_from_code: dict[str, "Signal"] = field(default_factory=dict)
     stale_nodes: dict[str, Node] = field(default_factory=dict)
+    prev_updated_signals: dict[str, "Signal"] = field(default_factory=dict)
 
     in_tx: bool = False
 
     async def run(
         self, f: Callable[..., Awaitable[R]], code: str, *, _cell_id: str | None = None
     ) -> R:
+        # note(maximsmol): we want this to happen for non-cell nodes too
+        # so it has to be inside `RCtx` which sees every ran node
+        # and not just the cell body in the kernel
+        if _cell_id is not None:
+            await _inject.kernel.set_active_cell(_cell_id)
+
         async with self.transaction:
             self.cur_comp = Node(
                 f=f, parent=self.cur_comp, cell_id=_cell_id, _id=None, code=code
@@ -254,6 +260,7 @@ class RCtx:
             for s in self.updated_signals.values():
                 s._apply_updates()
 
+            self.prev_updated_signals = self.updated_signals
             self.updated_signals = {}
 
             to_dispose: dict[str, tuple[Node, Node | None]] = {}
@@ -275,16 +282,6 @@ class RCtx:
                 for n, p in to_dispose.values():
                     self.cur_comp = p
 
-                    # we do this here rather than in self.run
-                    # because the node is initialized by the cell function
-                    # therefor it would not have a cell_id set until before
-                    # self.run enters f()
-                    #
-                    # for this to work with top level nodes, the kernel calls
-                    # set_active_cell manually before calling ctx.run()
-                    if n.cell_id is not None:
-                        await _inject.kernel.set_active_cell(n.cell_id)
-
                     try:
                         if n._is_stub:
                             n._is_stub = False
@@ -300,6 +297,7 @@ class RCtx:
                         print_exc()
                     finally:
                         self.cur_comp = None
+
         finally:
             await _inject.kernel.on_tick_finished(tick_updated_signals)
             await self.gc_signals()
@@ -311,6 +309,7 @@ class RCtx:
         for sid in unused_signals:
             del live_signals[sid]
             live_signal_ids.remove(sid)
+            self.prev_updated_signals = {}
 
     @property
     @asynccontextmanager

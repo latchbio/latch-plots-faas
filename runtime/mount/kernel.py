@@ -430,7 +430,7 @@ def paginate(*, df: DataFrame, pagination_settings: PaginationSettings) -> DataF
 
     if hasattr(df, "compute"):
         # to support Dask and similar datasets which cannot index on rows
-        data = df.iloc[:, x : x + w].head(w)
+        data = df.iloc[:, x : x + w].head(y + h, npartitions=-1)[y:]
     else:
         data = df.iloc[y : y + h, x : x + w]
 
@@ -592,17 +592,24 @@ class Kernel:
             "session_snapshot_mode": self.session_snapshot_mode,
         }
 
+    # note(maximsmol): called by the reactive context
     async def set_active_cell(self, cell_id: str) -> None:
-        self.active_cell = cell_id
-
-        # todo(maximsmol): huge hack to make sure runtime has time to read
-        # our std streams before we ask for active cell to be switched
+        # todo(maximsmol): I still believe this is correct
+        # but we need to deal with the frontend clearing logs in weird ways
+        # e.g. a button should maybe clear the logs if it triggered its own cell
+        # but a subnode should probably not clear logs?
         #
-        # we need to instead overwrite stdout/stderr with a thing that appends
-        # headers indicating the active cell
+        # right now we rely on start_cell to clear logs each time anything in a cell runs
+
+        # if self.active_cell == cell_id:
+        #     return
+
+        # note(maximsmol): stdio_over_socket will fetch the active cell id
+        # synchronously in `.write` (which will be called by the buffered writers' `.flush`)
         sys.stdout.flush()
         sys.stderr.flush()
-        await asyncio.sleep(0.1)
+
+        self.active_cell = cell_id
 
         self.cell_seq += 1
         await self.send(
@@ -908,6 +915,13 @@ class Kernel:
                 return
 
             async def x() -> None:
+                # fixme(maximsmol): a cell should also be considered running if a
+                # child reactive node is running
+                #
+                # the only complication is to tell when it has *finished*
+                # running so we can set the status & send results + flush logs
+                self.cell_status[cell_id] = "running"
+
                 try:
                     assert ctx.cur_comp is not None
 
@@ -936,10 +950,13 @@ class Kernel:
                     self.cell_status[cell_id] = "error"
                     await self.send_cell_result(cell_id)
 
+                finally:
+                    sys.stdout.flush()
+                    sys.stderr.flush()
+
             x.__name__ = filename
 
-            await self.set_active_cell(cell_id)
-            await ctx.run(x, code, _cell_id=cell_id)
+            await ctx.run(x, _cell_id=cell_id)
 
         except (KeyboardInterrupt, Exception):
             self.cell_status[cell_id] = "error"
@@ -948,7 +965,6 @@ class Kernel:
     async def send_cell_result(self, cell_id: str) -> None:
         await self.send_global_updates()
 
-        outputs = sorted(self.k_globals.available)
         outputs = self._cell_outputs()
 
         msg = {
@@ -1147,6 +1163,7 @@ class Kernel:
                     **(id_fields),
                     **(key_fields),
                     "dataframe_json": {
+                        "type": "pandas" if not hasattr(res, "compute") else "dask",
                         "schema": build_table_schema(data, version=False),
                         "data": data.to_dict(orient="split"),
                         # todo(maximsmol): this seems useless?
