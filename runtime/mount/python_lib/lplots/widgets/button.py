@@ -45,8 +45,8 @@ class ButtonWidget:
     @property
     def value(self) -> bool:
         self._trigger_signal()
-        print(f"DEBUG: {ctx.cur_comp is not None=} {ctx.cur_comp.parent is not None=}")
-        return ctx.cur_comp is not None and ctx.cur_comp.parent is not None
+        print(f"DEBUG: {ctx.cur_comp is not None=} {ctx.cur_comp.stale=}")
+        return ctx.cur_comp is not None and ctx.cur_comp.stale
 
     def _update(self) -> None:
         res = self._signal()
@@ -73,7 +73,7 @@ class ButtonWidget:
 
     async def _create_update_node(self) -> None:
         print("DEBUG: creating update node")
-        await ctx.run(self._update, _cell_id="<synthetic>")
+        await ctx.run(self._update)
 
 
 def w_button(
