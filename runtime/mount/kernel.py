@@ -956,7 +956,7 @@ class Kernel:
 
             x.__name__ = filename
 
-            await ctx.run(x, _cell_id=cell_id)
+            await ctx.run(x, _cell_id=cell_id, code=code)
 
         except (KeyboardInterrupt, Exception):
             self.cell_status[cell_id] = "error"
