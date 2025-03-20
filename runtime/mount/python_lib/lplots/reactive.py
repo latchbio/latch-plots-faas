@@ -315,9 +315,9 @@ class Signal(Generic[T]):
         if upd is Nothing.x:
             assert ctx.cur_comp is not None
 
-            print(
-                # f"[@] {self} added listener {ctx.cur_comp.f.__name__} @ {id(ctx.cur_comp)}"
-            )
+            # print(
+            # f"[@] {self} added listener {ctx.cur_comp.f.__name__} @ {id(ctx.cur_comp)}"
+            # )
 
             self._listeners[id(ctx.cur_comp)] = ctx.cur_comp
             ctx.cur_comp.signals[id(self)] = self
