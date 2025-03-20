@@ -869,7 +869,10 @@ class Kernel:
                 "type": "plot_data",
                 "plot_id": plot_id,
                 "key": key,
-                "dataframe_json": {"schema": build_table_schema(res, version=False)},
+                "dataframe_json": {
+                    "schema": build_table_schema(res, version=False),
+                    "type": "pandas",
+                },
             }
 
             df_size_mb = res.memory_usage(index=True, deep=True).sum() / 10**6
