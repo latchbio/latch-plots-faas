@@ -48,7 +48,7 @@ class ButtonWidget:
         trg_sig_gen = self._trigger_signal()
         if (
             not isinstance(trg_sig_gen, int)
-            or trg_sig_gen > self._last_observed_generation
+            or self._last_observed_generation > trg_sig_gen
         ):
             return False
 
