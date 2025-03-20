@@ -45,8 +45,8 @@ class ButtonWidget:
     @property
     def value(self) -> bool:
         self._trigger_signal()
-        print(f"DEBUG: {ctx.cur_comp is not None=} {ctx.cur_comp.stale=}")
-        return ctx.cur_comp is not None and ctx.cur_comp.stale
+        print(f"DEBUG: {ctx.cur_comp is not None=} {ctx.cur_comp.disposed=}")
+        return ctx.cur_comp is not None and ctx.cur_comp.disposed
 
     def _update(self) -> None:
         res = self._signal()
