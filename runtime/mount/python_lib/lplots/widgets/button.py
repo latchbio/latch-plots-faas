@@ -42,11 +42,18 @@ class ButtonWidget:
     _signal: Signal[object | ButtonWidgetSignalValue]
     _trigger_signal: Signal[object]
 
+    _clicked: datetime | None = None
+    _last_clicked: datetime | None = None
+
     @property
     def value(self) -> bool:
         self._trigger_signal()
-        print(f"DEBUG: {ctx.cur_comp is not None=} {ctx.cur_comp.disposed=}")
-        return ctx.cur_comp is not None and ctx.cur_comp.disposed
+        # print(f"DEBUG: {ctx.cur_comp is not None=} {ctx.cur_comp.disposed=}")
+        # return ctx.cur_comp is not None and ctx.cur_comp.disposed
+        if self._clicked is None or self._last_clicked is None:
+            return False
+
+        return self._clicked > self._last_clicked
 
     def _update(self) -> None:
         res = self._signal()
@@ -63,6 +70,9 @@ class ButtonWidget:
             return
 
         clicked, last_clicked = parsed
+
+        self._clicked = clicked
+        self._last_clicked = last_clicked
 
         if clicked <= last_clicked:
             print(f"DEBUG: {clicked <= last_clicked=}")
