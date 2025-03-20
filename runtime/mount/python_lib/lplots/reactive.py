@@ -178,9 +178,11 @@ class RCtx:
         # note(maximsmol): we want this to happen for non-cell nodes too
         # so it has to be inside `RCtx` which sees every ran node
         # and not just the cell body in the kernel
-        assert self.cur_comp is not None
-
-        if _cell_id == "<synthetic>" and self.cur_comp.parent is not None:
+        if (
+            _cell_id == "<synthetic>"
+            and self.cur_comp is not None
+            and self.cur_comp.parent is not None
+        ):
             _cell_id = self.cur_comp.parent.cell_id
 
         if _cell_id is not None and _cell_id != "<synthetic>":
