@@ -47,6 +47,8 @@ class Node:
     widget_states: dict[str, WidgetState] = field(default_factory=dict)
     widget_state_idx = 0
 
+    from_signal_update: bool = False
+
     def __post_init__(self) -> None:
         live_nodes[id(self)] = self
 
@@ -59,6 +61,7 @@ class Node:
         if self.name is None:
             self.name = self.f.__name__
 
+        # todo(rteqs): fix bookkeeping
         # if self.name in live_node_names:
         #     raise ValueError(f"reactive node name is not unique: {self.name!r}")
 
@@ -172,7 +175,7 @@ class RCtx:
         f: Callable[..., Awaitable[R]],
         *,
         _cell_id: str | None = None,
-        _name: str | None = None,
+        _from_signal_update: bool = False,
     ) -> R:
         print(f"DEBUG: ctx.run({f.__name__}, {_cell_id=})")
         # note(maximsmol): we want this to happen for non-cell nodes too
@@ -183,7 +186,10 @@ class RCtx:
 
         async with self.transaction:
             self.cur_comp = Node(
-                f=f, parent=self.cur_comp, cell_id=_cell_id, name=_name
+                f=f,
+                parent=self.cur_comp,
+                cell_id=_cell_id,
+                from_signal_update=_from_signal_update,
             )
 
             try:
@@ -240,7 +246,11 @@ class RCtx:
                     self.cur_comp = p
 
                     try:
-                        await self.run(n.f, _cell_id=n.cell_id)
+                        await self.run(
+                            n.f,
+                            _cell_id=n.cell_id,
+                            _from_signal_update=n.from_signal_update,
+                        )
                     except Exception:
                         print_exc()
                     finally:
