@@ -40,15 +40,17 @@ class ButtonWidget:
     _key: str
     _state: ButtonWidgetState
     _signal: Signal[object | ButtonWidgetSignalValue]
-    _trigger_signal: Signal[object]
+    _trigger_signal: Signal[object | int]
+    _generation: int = 0
 
     @property
     def value(self) -> bool:
-        self._trigger_signal()
-        if ctx.cur_comp is None:
+        cur_gen = self._trigger_signal()
+        if cur_gen is None or cur_gen != self._generation:
             return False
 
-        return ctx.cur_comp.from_signal_update
+        self._generation += 1
+        return True
 
     def _update(self) -> None:
         res = self._signal()
@@ -68,7 +70,7 @@ class ButtonWidget:
             return
 
         self._signal({**res, "last_clicked": str(clicked)})
-        self._trigger_signal(None)
+        self._trigger_signal(self._generation)
 
     async def _create_update_node(self) -> None:
         await ctx.run(self._update)
