@@ -59,10 +59,11 @@ class Node:
         if self.name is None:
             self.name = self.f.__name__
 
-        if self.name in live_node_names:
-            raise ValueError(f"reactive node name is not unique: {self.name!r}")
+        # todo(rteqs): fix bookkeeping
+        # if self.name in live_node_names:
+        #     raise ValueError(f"reactive node name is not unique: {self.name!r}")
 
-        live_node_names.add(self.name)
+        # live_node_names.add(self.name)
 
     def name_path(self) -> str:
         assert self.name is not None
@@ -115,8 +116,9 @@ class Node:
             cur.signals = {}
 
             del live_nodes[id(cur)]
-            if self.name is not None:
-                live_node_names.remove(self.name)
+
+            # if self.name is not None:
+            #     live_node_names.remove(self.name)
 
     def __repr__(self) -> str:
         stale_mark = "!" if self.stale else ""
@@ -162,6 +164,7 @@ class RCtx:
     updated_signals: dict[int, "Signal"] = field(default_factory=dict)
     signals_update_from_code: dict[int, "Signal"] = field(default_factory=dict)
     stale_nodes: dict[int, Node] = field(default_factory=dict)
+    prev_updated_signals: dict[int, "Signal"] = field(default_factory=dict)
 
     in_tx: bool = False
 
@@ -208,6 +211,7 @@ class RCtx:
             for s in self.updated_signals.values():
                 s._apply_updates()
 
+            self.prev_updated_signals = self.updated_signals
             self.updated_signals = {}
 
             to_dispose: dict[int, tuple[Node, Node | None]] = {}
@@ -235,8 +239,10 @@ class RCtx:
                         print_exc()
                     finally:
                         self.cur_comp = None
+
         finally:
             await _inject.kernel.on_tick_finished(tick_updated_signals)
+            self.prev_updated_signals = {}
 
     @property
     @asynccontextmanager
@@ -300,9 +306,9 @@ class Signal(Generic[T]):
         if upd is Nothing.x:
             assert ctx.cur_comp is not None
 
-            print(
-                # f"[@] {self} added listener {ctx.cur_comp.f.__name__} @ {id(ctx.cur_comp)}"
-            )
+            # print(
+            # f"[@] {self} added listener {ctx.cur_comp.f.__name__} @ {id(ctx.cur_comp)}"
+            # )
 
             self._listeners[id(ctx.cur_comp)] = ctx.cur_comp
             ctx.cur_comp.signals[id(self)] = self
@@ -311,6 +317,8 @@ class Signal(Generic[T]):
             return self._value
 
         self._updates.append(upd)
+        # name = ctx.cur_comp.name_path() if ctx.cur_comp is not None else "top level"
+        # print(f"[@] node={name}, signal={self} triggered update {upd}")
         ctx.updated_signals[id(self)] = self
         if not _ui_update:
             ctx.signals_update_from_code[id(self)] = self
