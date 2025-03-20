@@ -338,7 +338,7 @@ class Signal(Generic[T]):
 
     def _mark_listeners(self) -> None:
         for x in self._listeners.values():
-            print(f"[@] {self} marked {x.f.__name__} @ {id(x)}")
+            # print(f"[@] {self} marked {x.f.__name__} @ {id(x)}")
 
             x.stale = True
             ctx.stale_nodes[id(x)] = x
