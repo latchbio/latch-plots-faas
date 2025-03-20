@@ -174,6 +174,7 @@ class RCtx:
         _cell_id: str | None = None,
         _name: str | None = None,
     ) -> R:
+        print(f"DEBUG: ctx.run({f.__name__}, {_cell_id=})")
         # note(maximsmol): we want this to happen for non-cell nodes too
         # so it has to be inside `RCtx` which sees every ran node
         # and not just the cell body in the kernel
@@ -310,7 +311,7 @@ class Signal(Generic[T]):
             assert ctx.cur_comp is not None
 
             print(
-                # f"[@] {self} added listener {ctx.cur_comp.f.__name__} @ {id(ctx.cur_comp)}"
+                f"[@] {self} added listener {ctx.cur_comp.f.__name__} @ {id(ctx.cur_comp)}"
             )
 
             self._listeners[id(ctx.cur_comp)] = ctx.cur_comp

@@ -72,8 +72,7 @@ class ButtonWidget:
 
     async def _create_update_node(self) -> None:
         print("DEBUG: creating update node")
-        await ctx._tick()
-        await ctx.run(self._update)
+        await ctx.run(self._update, _cell_id=f"<button_{self._key}_update>")
 
 
 def w_button(
@@ -84,7 +83,7 @@ def w_button(
     readonly: bool = False,
 ) -> ButtonWidget:
     key = _state.use_state_key(key=key)
-    trigger_key = _state.use_state_key(key=f"trigger_{key}")
+    trigger_key = _state.use_state_key(key=f"button_{key}_trigger")
 
     if default is None:
         now = datetime.now(UTC).isoformat()
