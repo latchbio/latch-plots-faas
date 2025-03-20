@@ -216,8 +216,16 @@ class RCtx:
     in_tx: bool = False
 
     async def run(
-        self, f: Callable[..., Awaitable[R]], code: str, *, _cell_id: str | None = None
+        self,
+        f: Callable[..., Awaitable[R]],
+        code: str | None = None,
+        *,
+        _cell_id: str | None = None,
     ) -> R:
+        # note(kenny): it is only safe to call without code if the node is a
+        # child and can be reconstructed by the parent
+        assert code is not None or self.cur_comp.parent is not None
+
         # note(maximsmol): we want this to happen for non-cell nodes too
         # so it has to be inside `RCtx` which sees every ran node
         # and not just the cell body in the kernel
