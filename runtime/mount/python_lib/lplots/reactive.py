@@ -247,9 +247,7 @@ class RCtx:
 
                     try:
                         await self.run(
-                            n.f,
-                            _cell_id=n.cell_id,
-                            _from_signal_update=n.from_signal_update,
+                            n.f, _cell_id=n.cell_id, _from_signal_update=True
                         )
                     except Exception:
                         print_exc()
