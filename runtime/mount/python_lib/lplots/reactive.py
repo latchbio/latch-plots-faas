@@ -168,6 +168,7 @@ class RCtx:
     updated_signals: dict[int, "Signal"] = field(default_factory=dict)
     signals_update_from_code: dict[int, "Signal"] = field(default_factory=dict)
     stale_nodes: dict[int, Node] = field(default_factory=dict)
+    prev_updated_signals: dict[int, "Signal"] = field(default_factory=dict)
 
     in_tx: bool = False
 
@@ -223,6 +224,9 @@ class RCtx:
             for s in self.updated_signals.values():
                 s._apply_updates()
 
+            self.prev_updated_signals = self.updated_signals
+            self.updated_signals = {}
+
             to_dispose: dict[int, tuple[Node, Node | None]] = {}
             for n in self.stale_nodes.values():
                 if n.disposed:
@@ -250,10 +254,10 @@ class RCtx:
                         print_exc()
                     finally:
                         self.cur_comp = None
-                        
-            self.updated_signals = {}
+
         finally:
             await _inject.kernel.on_tick_finished(tick_updated_signals)
+            self.prev_updated_signals = {}
 
     @property
     @asynccontextmanager

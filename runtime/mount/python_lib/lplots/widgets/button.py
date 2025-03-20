@@ -46,8 +46,8 @@ class ButtonWidget:
     @property
     def value(self) -> bool:
         self._trigger_signal()
-        print(f">>> {ctx.updated_signals}")
-        return id(self._trigger_signal) in ctx.updated_signals
+        print(f">>> {ctx.prev_updated_signals}")
+        return id(self._trigger_signal) in ctx.prev_updated_signals
 
     def _update(self) -> None:
         print(">>> _update called")
