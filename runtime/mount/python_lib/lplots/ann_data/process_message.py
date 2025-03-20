@@ -2,10 +2,16 @@ from pathlib import Path
 from typing import Any
 
 import anndata as ad  # type: ignore  # noqa: PGH003
+import numpy as np
 
 ann_data_ops = ["get_embedding_options", "get_embeddings", "get_obs_options", "get_obs"]
 
 ann_data_object_cache: dict[str, ad.AnnData] = {}
+ann_data_index_cache: dict[str, np.ndarray] = {}
+
+
+MAX_VISUALIZATION_CELLS = 100000
+RNG = np.random.default_rng()
 
 
 async def handle_ann_data_widget_message(  # noqa: RUF029
@@ -80,15 +86,32 @@ async def handle_ann_data_widget_message(  # noqa: RUF029
                 },
             }
 
-        embedding = adata.obsm[msg["embedding"]]
-        embedding = embedding[:, 0:3].tolist()
+        embedding = np.asarray(adata.obsm[msg["embedding"]])
+        obs_names = np.asarray(adata.obs_names)
+
+        n_cells = embedding.shape[0]
+        if n_cells > MAX_VISUALIZATION_CELLS:
+            if widget_state["src"] not in ann_data_index_cache:
+                idxs = RNG.choice(n_cells, size=MAX_VISUALIZATION_CELLS, replace=False)
+                ann_data_index_cache[widget_state["src"]] = idxs
+            else:
+                idxs = ann_data_index_cache[widget_state["src"]]
+
+            embedding = embedding[idxs, :]
+            obs_names = obs_names[idxs]
+
+        embedding_list = embedding.tolist()
+        obs_names_list = obs_names.tolist()
 
         return {
             "type": "ann_data",
             "op": op,
             "key": widget_key,
             "value": {
-                "data": embedding,
+                "data": {
+                    "embedding": embedding_list,
+                    "obs_names": obs_names_list,
+                },
             },
         }
 
