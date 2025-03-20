@@ -22,7 +22,7 @@ def parse_iso_strings(data: Any) -> tuple[datetime, datetime] | None:
     if not isinstance(data, dict):
         return None
 
-    required_keys = ButtonWidgetSignalValue.__annotations__.keys()
+    required_keys = ButtonWidgetSignalValue.__required_keys__
 
     if not all(key in data for key in required_keys):
         return None
@@ -45,15 +45,10 @@ class ButtonWidget:
 
     @property
     def value(self) -> bool:
-        trg_sig_gen = self._trigger_signal()
-        if (
-            not isinstance(trg_sig_gen, int)
-            or self._last_observed_generation > trg_sig_gen
-        ):
-            return False
-
-        self._last_observed_generation = trg_sig_gen
-        return True
+        fst = ctx.cur_comp.stuff.get("fst", True)
+        self._trigger_signal()
+        ctx.cur_comp.stuff["fst"] = False
+        return not fst
 
     def _update(self) -> None:
         res = self._signal()

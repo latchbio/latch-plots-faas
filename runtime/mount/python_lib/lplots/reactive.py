@@ -49,6 +49,8 @@ class Node:
 
     from_signal_update: bool = False
 
+    stuff: dict[str, Any] = field(default_factory=dict)
+
     def __post_init__(self) -> None:
         live_nodes[id(self)] = self
 
