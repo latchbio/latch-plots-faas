@@ -41,15 +41,18 @@ class ButtonWidget:
     _state: ButtonWidgetState
     _signal: Signal[object | ButtonWidgetSignalValue]
     _trigger_signal: Signal[object | int]
-    _generation: int = 0
+    _last_observed_generation: int = 0
 
     @property
     def value(self) -> bool:
-        cur_gen = self._trigger_signal()
-        if cur_gen is None or cur_gen != self._generation:
+        trg_sig_gen = self._trigger_signal()
+        if (
+            not isinstance(trg_sig_gen, int)
+            or trg_sig_gen > self._last_observed_generation
+        ):
             return False
 
-        self._generation += 1
+        self._last_observed_generation = trg_sig_gen
         return True
 
     def _update(self) -> None:
@@ -70,7 +73,12 @@ class ButtonWidget:
             return
 
         self._signal({**res, "last_clicked": str(clicked)})
-        self._trigger_signal(self._generation)
+
+        trg_sig_gen = self._trigger_signal.sample()
+        if not isinstance(trg_sig_gen, int):
+            trg_sig_gen = 0
+
+        self._trigger_signal(trg_sig_gen + 1)
 
     async def _create_update_node(self) -> None:
         await ctx.run(self._update)
@@ -84,7 +92,7 @@ def w_button(
     readonly: bool = False,
 ) -> ButtonWidget:
     key = _state.use_state_key(key=key)
-    trigger_key = _state.use_state_key(key=f"button_{key}_trigger")
+    trigger_key = _state.use_state_key(key=f"{key}#trigger")
 
     if default is None:
         now = datetime.now(UTC).isoformat()
@@ -98,11 +106,12 @@ def w_button(
             "default": default,
             "readonly": readonly,
         },
-        _signal=_state.use_value_signal(key=f"{key}"),
+        _signal=_state.use_value_signal(key=key),
         _trigger_signal=_state.use_value_signal(key=trigger_key),
     )
     _emit.emit_widget(key, res._state)
 
+    # todo(rteqs): this can deadlock. either we make w_button async or figure something out
     asyncio.run_coroutine_threadsafe(
         res._create_update_node(), asyncio.get_running_loop()
     )
