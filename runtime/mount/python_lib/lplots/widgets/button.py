@@ -64,9 +64,6 @@ class ButtonWidget:
 
         clicked, last_clicked = parsed
 
-        self._clicked = clicked
-        self._last_clicked = last_clicked
-
         if clicked <= last_clicked:
             return
 
