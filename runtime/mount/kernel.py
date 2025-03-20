@@ -1335,9 +1335,9 @@ class Kernel:
             return
 
         if msg["type"] == "ann_data":
-            res = await handle_ann_data_widget_message(msg)
-            await self.send(res)
+            await self.send(handle_ann_data_widget_message(msg))
             return
+
 
 loop: asyncio.AbstractEventLoop | None = None
 shutdown_requested = False
