@@ -42,13 +42,9 @@ class ButtonWidget:
     _signal: Signal[object | ButtonWidgetSignalValue]
     _trigger_signal: Signal[object]
 
-    _clicked: datetime | None = None
-    _last_clicked: datetime | None = None
-
     @property
     def value(self) -> bool:
         self._trigger_signal()
-        print(f"DEBUG: {ctx.cur_comp.from_signal_update=}")
         if ctx.cur_comp is None:
             return False
 
@@ -60,12 +56,10 @@ class ButtonWidget:
         if not isinstance(res, dict) or not all(
             key in res for key in ButtonWidgetSignalValue.__annotations__
         ):
-            print("DEBUG: invalid signal value", res)
             return
 
         parsed = parse_iso_strings(res)
         if parsed is None:
-            print(f"DEBUG: invalid iso strings {parsed=}")
             return
 
         clicked, last_clicked = parsed
@@ -74,14 +68,12 @@ class ButtonWidget:
         self._last_clicked = last_clicked
 
         if clicked <= last_clicked:
-            print(f"DEBUG: {clicked <= last_clicked=}")
             return
 
         self._signal({**res, "last_clicked": str(clicked)})
         self._trigger_signal(None)
 
     async def _create_update_node(self) -> None:
-        print("DEBUG: creating update node")
         await ctx.run(self._update)
 
 

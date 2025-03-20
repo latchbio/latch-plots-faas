@@ -65,7 +65,6 @@ class Node:
         # if self.name in live_node_names:
         #     raise ValueError(f"reactive node name is not unique: {self.name!r}")
 
-        # print(f"DEBUG: {self.name=}")
         # live_node_names.add(self.name)
 
     def name_path(self) -> str:
@@ -177,7 +176,6 @@ class RCtx:
         _cell_id: str | None = None,
         _from_signal_update: bool = False,
     ) -> R:
-        print(f"DEBUG: ctx.run({f.__name__}, {_cell_id=})")
         # note(maximsmol): we want this to happen for non-cell nodes too
         # so it has to be inside `RCtx` which sees every ran node
         # and not just the cell body in the kernel
@@ -200,7 +198,6 @@ class RCtx:
                 self.cur_comp = self.cur_comp.parent
 
     async def _tick(self) -> None:
-        print("DEBUG: _tick")
         tick_updated_signals = self.signals_update_from_code
         self.signals_update_from_code = {}
 
@@ -319,7 +316,7 @@ class Signal(Generic[T]):
             assert ctx.cur_comp is not None
 
             print(
-                f"[@] {self} added listener {ctx.cur_comp.f.__name__} @ {id(ctx.cur_comp)}"
+                # f"[@] {self} added listener {ctx.cur_comp.f.__name__} @ {id(ctx.cur_comp)}"
             )
 
             self._listeners[id(ctx.cur_comp)] = ctx.cur_comp
@@ -329,8 +326,8 @@ class Signal(Generic[T]):
             return self._value
 
         self._updates.append(upd)
-        name = ctx.cur_comp.name_path() if ctx.cur_comp is not None else "top level"
-        print(f"[@] node={name}, signal={self} triggered update {upd}")
+        # name = ctx.cur_comp.name_path() if ctx.cur_comp is not None else "top level"
+        # print(f"[@] node={name}, signal={self} triggered update {upd}")
         ctx.updated_signals[id(self)] = self
         if not _ui_update:
             ctx.signals_update_from_code[id(self)] = self
