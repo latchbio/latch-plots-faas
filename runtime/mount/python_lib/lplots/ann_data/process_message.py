@@ -24,7 +24,7 @@ def get_obsm(
         return None, None
 
     obsm = np.asarray(adata.obsm[obsm_key])
-    obs_names = np.asarray(adata.obs_names)
+    index = np.asarray(adata.obs_names)
 
     n_cells = adata.n_obs
 
@@ -37,9 +37,9 @@ def get_obsm(
             idxs = ann_data_index_cache[src]
 
         obsm = obsm[idxs, :]
-        obs_names = obs_names[idxs]
+        index = index[idxs]
 
-    return obsm, obs_names
+    return obsm, index
 
 
 def get_obs(
@@ -144,9 +144,9 @@ def handle_ann_data_widget_message(
             init_obs_key = possible_obs_keys[0]
 
         obsm = None
-        obs_names = None
+        index = None
         if init_obsm_key is not None:
-            obsm, obs_names = get_obsm(widget_state["src"], adata, init_obsm_key)
+            obsm, index = get_obsm(widget_state["src"], adata, init_obsm_key)
 
         obs = None
         unique_obs = None
@@ -172,6 +172,7 @@ def handle_ann_data_widget_message(
                     "init_obs_key": init_obs_key,
                     "init_obsm_key": init_obsm_key,
                     "init_obsm_values": obsm.tolist() if obsm is not None else None,
+                    "init_obsm_index": index.tolist() if index is not None else None,
                     "init_obs_values": obs.tolist() if obs is not None else None,
                     "nrof_unique_obs": nrof_obs,
                 }
@@ -187,18 +188,18 @@ def handle_ann_data_widget_message(
         }
 
     if op == "get_obsm":
-        if "obsm" not in msg or msg["obsm"] not in adata.obsm:
+        if "obsm_key" not in msg or msg["obsm_key"] not in adata.obsm:
             return {
                 "type": "ann_data",
                 "op": op,
                 "key": widget_key,
                 "value": {
-                    "error": f"Obsm {msg.get('obsm', '`obsm` key missing from message')} not found",
+                    "error": f"Obsm {msg.get('obsm_key', '`obsm_key` key missing from message')} not found",
                 },
             }
 
-        obsm, obs_names = get_obsm(widget_state["src"], adata, msg["obsm"])
-        if obsm is None or obs_names is None:
+        obsm, index = get_obsm(widget_state["src"], adata, msg["obsm_key"])
+        if obsm is None or index is None:
             return {
                 "type": "ann_data",
                 "op": op,
@@ -213,7 +214,7 @@ def handle_ann_data_widget_message(
             "value": {
                 "data": {
                     "obsm": obsm.tolist(),
-                    "obs_names": obs_names.tolist(),
+                    "index": index.tolist(),
                 },
             },
         }
@@ -229,17 +230,17 @@ def handle_ann_data_widget_message(
         }
 
     if op == "get_obs":
-        if "obs" not in msg or msg["obs"] not in adata.obs:
+        if "obs_key" not in msg or msg["obs_key"] not in adata.obs:
             return {
                 "type": "ann_data",
                 "op": op,
                 "key": widget_key,
                 "value": {
-                    "error": f"Observation {msg.get('obs', '`obs` key missing from message')} not found",
+                    "error": f"Observation {msg.get('obs_key', '`obs_key` key missing from message')} not found",
                 },
             }
 
-        obs, (unique_obs, counts), nrof_obs = get_obs(widget_state["src"], adata, msg["obs"])
+        obs, (unique_obs, counts), nrof_obs = get_obs(widget_state["src"], adata, msg["obs_key"])
 
         return {
             "type": "ann_data",
