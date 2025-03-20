@@ -102,17 +102,14 @@ async def handle_ann_data_widget_message(  # noqa: RUF029
             embedding = embedding[idxs, :]
             obs_names = obs_names[idxs]
 
-        embedding_list = embedding.tolist()
-        obs_names_list = obs_names.tolist()
-
         return {
             "type": "ann_data",
             "op": op,
             "key": widget_key,
             "value": {
                 "data": {
-                    "embedding": embedding_list,
-                    "obs_names": obs_names_list,
+                    "embedding": embedding.tolist(),
+                    "obs_names": obs_names.tolist(),
                 },
             },
         }
@@ -161,8 +158,8 @@ async def handle_ann_data_widget_message(  # noqa: RUF029
             "key": widget_key,
             "value": {
                 "data": {
-                    "values": obs,
-                    "unique_values": unique_obs,
+                    "values": obs.tolist(),
+                    "unique_values": unique_obs.tolist(),
                 },
             },
         }
