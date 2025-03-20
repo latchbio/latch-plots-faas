@@ -46,11 +46,17 @@ class ButtonWidget:
     @property
     def value(self) -> bool:
         fst = ctx.cur_comp.stuff.get("fst", True)
+        print(
+            f">>> value {ctx.cur_comp}, fst={fst} by_signal={ctx.cur_comp.from_signal_update}"
+        )
+
         self._trigger_signal()
+
         ctx.cur_comp.stuff["fst"] = False
         return not fst
 
     def _update(self) -> None:
+        print(">>> _update called")
         res = self._signal()
 
         if not isinstance(res, dict) or not all(
@@ -68,12 +74,13 @@ class ButtonWidget:
             return
 
         self._signal({**res, "last_clicked": str(clicked)})
+        print(">>> _signal updated")
 
         trg_sig_gen = self._trigger_signal.sample()
         if not isinstance(trg_sig_gen, int):
             trg_sig_gen = 0
 
-        self._trigger_signal(trg_sig_gen + 1)
+        self._trigger_signal(lambda x: x + 1)
 
     async def _create_update_node(self) -> None:
         await ctx.run(self._update)
