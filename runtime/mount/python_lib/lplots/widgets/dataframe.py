@@ -34,7 +34,7 @@ class DataframePicker:
         return self._value(key)
 
     def sample(self) -> Any | None:
-        key = self._select.sample
+        key = self._select.sample()
         assert isinstance(key, str | None)
         return self._value(key)
 
