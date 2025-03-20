@@ -223,8 +223,6 @@ class RCtx:
             for s in self.updated_signals.values():
                 s._apply_updates()
 
-            self.updated_signals = {}
-
             to_dispose: dict[int, tuple[Node, Node | None]] = {}
             for n in self.stale_nodes.values():
                 if n.disposed:
@@ -252,6 +250,8 @@ class RCtx:
                         print_exc()
                     finally:
                         self.cur_comp = None
+                        
+            self.updated_signals = {}
         finally:
             await _inject.kernel.on_tick_finished(tick_updated_signals)
 

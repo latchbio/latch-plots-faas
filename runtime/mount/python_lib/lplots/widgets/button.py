@@ -45,15 +45,8 @@ class ButtonWidget:
 
     @property
     def value(self) -> bool:
-        fst = ctx.cur_comp.stuff.get("fst", True)
-        print(
-            f">>> value {ctx.cur_comp}, fst={fst} by_signal={ctx.cur_comp.from_signal_update}"
-        )
-
         self._trigger_signal()
-
-        ctx.cur_comp.stuff["fst"] = False
-        return not fst
+        return id(self._trigger_signal) in ctx.updated_signals
 
     def _update(self) -> None:
         print(">>> _update called")
