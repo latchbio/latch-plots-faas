@@ -89,7 +89,9 @@ async def handle_ann_data_widget_message(  # noqa: RUF029
         embedding = np.asarray(adata.obsm[msg["embedding"]])
         obs_names = np.asarray(adata.obs_names)
 
-        n_cells = embedding.shape[0]
+        n_cells = adata.n_obs
+
+        # todo(aidan): intelligent downsampling to preserve outliers / information in general
         if n_cells > MAX_VISUALIZATION_CELLS:
             if widget_state["src"] not in ann_data_index_cache:
                 idxs = RNG.choice(n_cells, size=MAX_VISUALIZATION_CELLS, replace=False)
@@ -136,13 +138,32 @@ async def handle_ann_data_widget_message(  # noqa: RUF029
                 },
             }
 
-        obs = adata.obs[msg["obs"]]
+        obs = np.asarray(adata.obs[msg["obs"]])
+        n_cells = adata.n_obs
+
+        # todo(aidan): intelligent downsampling to preserve outliers / information in general
+        if n_cells > MAX_VISUALIZATION_CELLS:
+            if widget_state["src"] not in ann_data_index_cache:
+                idxs = RNG.choice(n_cells, size=MAX_VISUALIZATION_CELLS, replace=False)
+                ann_data_index_cache[widget_state["src"]] = idxs
+            else:
+                idxs = ann_data_index_cache[widget_state["src"]]
+
+            obs = obs[idxs]
+
+            unique_obs = np.unique(obs)
+            if len(unique_obs) > MAX_VISUALIZATION_CELLS:
+                unique_obs = unique_obs[RNG.choice(len(unique_obs), size=MAX_VISUALIZATION_CELLS, replace=False)]
+
         return {
             "type": "ann_data",
             "op": op,
             "key": widget_key,
             "value": {
-                "data": obs.to_list(),
+                "data": {
+                    "values": obs,
+                    "unique_values": unique_obs,
+                },
             },
         }
 
