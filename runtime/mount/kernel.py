@@ -535,7 +535,6 @@ class Kernel:
     restored_nodes: dict[str, Node] = field(default_factory=dict)
     restored_signals: dict[str, Signal[object]] = field(default_factory=dict)
     restored_globals: dict[str, object] = field(default_factory=dict)
-    s_depens: dict = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         self.k_globals = TracedDict(self.duckdb)
@@ -588,7 +587,6 @@ class Kernel:
                 k: v.serialize(short_val=True) for k, v in self.restored_signals.items()
             },
             "restored_globals": self.restored_globals,
-            "serialized_depens": self.s_depens,
             "session_snapshot_mode": self.session_snapshot_mode,
         }
 
@@ -769,7 +767,6 @@ class Kernel:
         if not snapshot_f.exists():
             return
         s_depens = orjson.loads(snapshot_f.read_text())
-        self.s_depens = s_depens
         s_nodes: dict[str, SerializedNode] = s_depens["s_nodes"]
         s_signals = s_depens["s_signals"]
 

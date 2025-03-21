@@ -26,7 +26,7 @@ class SerializedNode(TypedDict):
 
 unserial_symbol = "<<UNSERIALIZABLE>>"
 
-MAX_SHORT_VAL_LEN = MAX_REPR_LEN = 1000
+MAX_SHORT_VAL_LEN = MAX_REPR_LEN = 100
 
 
 def safe_serialize_obj(val: object, short: bool = False) -> (str, str | None):
