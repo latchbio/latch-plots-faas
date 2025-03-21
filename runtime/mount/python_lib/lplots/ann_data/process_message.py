@@ -23,21 +23,20 @@ def get_obsm(
     if obsm_key not in adata.obsm:
         return None, None
 
-    obsm = np.asarray(adata.obsm[obsm_key])
-    index = np.asarray(adata.obs_names)
-
     n_cells = adata.n_obs
 
-    # todo(aidan): intelligent downsampling to preserve information in general
     if n_cells > MAX_VISUALIZATION_CELLS:
         if src not in ann_data_index_cache:
             idxs = RNG.choice(n_cells, size=MAX_VISUALIZATION_CELLS, replace=False)
             ann_data_index_cache[src] = idxs
         else:
             idxs = ann_data_index_cache[src]
+    else:
+        idxs = np.arange(n_cells)
 
-        obsm = obsm[idxs, :]
-        index = index[idxs]
+    # todo(aidan): support sparse data?
+    obsm = np.asarray(adata.obsm[obsm_key][idxs, :])  # type: ignore  # noqa: E261, PGH003, RUF100
+    index = np.asarray(adata.obs_names[idxs])
 
     return obsm, index
 
@@ -63,7 +62,6 @@ def get_obs(
         unique_obs, counts = np.unique(obs, return_counts=True)
         truncated_unique_obs = unique_obs
         if len(unique_obs) > MAX_VISUALIZATION_CELLS:
-            # Keep the most frequent categories up to MAX_VISUALIZATION_CELLS
             sorted_indices = np.argsort(-counts)[:MAX_VISUALIZATION_CELLS]
             truncated_unique_obs = unique_obs[sorted_indices]
             counts = counts[sorted_indices]
