@@ -7,11 +7,10 @@ import traceback
 from asyncio.subprocess import Process
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TypedDict, TypeVar
+from typing import Literal, TypedDict, TypeVar
 
 import orjson
 from latch_data_validation.data_validation import validate
-
 from runtime.mount.plots_context_manager import PlotsContextManager
 
 from .socketio import SocketIo
@@ -42,6 +41,14 @@ class CellOutputs(TypedDict):
 cell_status: dict[str, str] = {}
 cell_sequencers: dict[str, int] = {}
 cell_last_run_outputs: dict[str, CellOutputs] = {}
+
+
+@dataclass
+class KernelSnapshotState:
+    status: Literal["done", "creating", "loading"] = "done"
+
+
+kernel_snapshot_state = KernelSnapshotState()
 
 async_tasks: list[asyncio.Task] = []
 
@@ -95,6 +102,16 @@ class PlotsNotebookKernelState:
 @dataclass(frozen=True)
 class PlotsNotebookKernelStateResp:
     data: PlotsNotebookKernelState
+
+
+@dataclass(frozen=True)
+class TmpPlotsNotebookKernelSnapshotMode:
+    tmpPlotsNotebookKernelSnapshotMode: bool
+
+
+@dataclass(frozen=True)
+class TmpPlotsNotebookKernelSnapshotModeResp:
+    data: TmpPlotsNotebookKernelSnapshotMode
 
 
 async def add_pod_event(*, auth: str, event_type: str) -> None:
@@ -301,6 +318,9 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
 
                 msg = {"type": msg["type"], "plot_id": msg["plot_id"]}
 
+            elif msg["type"] in {"load_kernel_snapshot", "save_kernel_snapshot"}:
+                kernel_snapshot_state.status = msg["status"]
+
             await plots_ctx_manager.broadcast_message(orjson.dumps(msg).decode())
 
         except Exception:
@@ -347,6 +367,28 @@ async def start_kernel_proc() -> None:
     if k_state is None:
         return
 
+    # todo(kenny): separate query for backwards compatability. Pull into main
+    # fn when "snapshot mode" merged and works well
+    try:
+        resp = await gql_query(
+            auth=auth_token_sdk,
+            query="""
+                query tmpPlotsNotebookKernelSnapshotMode($pod_id: BigInt!) {
+                    tmpPlotsNotebookKernelSnapshotMode(argPodId: $pod_id)
+                }
+            """,
+            variables={"pod_id": pod_id},
+        )
+
+        data = validate(resp, TmpPlotsNotebookKernelSnapshotModeResp)
+        session_snapshot_mode = data.data.tmpPlotsNotebookKernelSnapshotMode
+        if session_snapshot_mode:
+            kernel_snapshot_state.status = "loading"
+    except Exception:
+        err_msg = {"type": "error", "data": traceback.format_exc()}
+        await plots_ctx_manager.broadcast_message(orjson.dumps(err_msg).decode())
+        session_snapshot_mode = False
+
     await add_pod_event(auth=auth_token_sdk, event_type="runtime_ready")
     await ready_ev.wait()
     await conn_k.send(
@@ -357,6 +399,7 @@ async def start_kernel_proc() -> None:
             "plot_data_selections": k_state.plot_data_selections,
             "viewer_cell_data": k_state.viewer_cell_data,
             "plot_configs": k_state.plot_configs,
+            "session_snapshot_mode": session_snapshot_mode,
         }
     )
 

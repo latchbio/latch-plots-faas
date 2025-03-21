@@ -23,15 +23,19 @@ import plotly.io._json as pio_json
 from duckdb import DuckDBPyConnection
 from latch.ldata.path import LPath
 from latch.registry.table import Table
-from lplots import _inject
-from lplots.reactive import Node, Signal, ctx
-from lplots.themes import graphpad_inspired_theme
-from lplots.utils.nothing import Nothing
-from lplots.widgets._emit import WidgetState
 from matplotlib.figure import Figure
 from pandas import DataFrame, Index, MultiIndex, Series
 from pandas.io.json._table_schema import build_table_schema
 from plotly.basedatatypes import BaseFigure
+
+from lplots import _inject
+from lplots.persistence import (SerializedNode, SerializedSignal,
+                                safe_serialize_obj, safe_unserialize_obj,
+                                small_repr, unserial_symbol)
+from lplots.reactive import Node, Signal, ctx, stub_node_noop
+from lplots.themes import graphpad_inspired_theme
+from lplots.utils.nothing import Nothing
+from lplots.widgets._emit import WidgetState
 from plotly_utils.precalc_box import precalc_box
 from plotly_utils.precalc_violin import precalc_violin
 from socketio_thread import SocketIoThread
@@ -161,6 +165,9 @@ class TracedDict(dict[str, Signal[object] | object]):
 
         return self.getitem_signal(__key)
 
+    def _direct_set(self, __key: str, __value: object) -> None:
+        return super().__setitem__(__key, __value)
+
     def __setitem__(self, __key: str, __value: object) -> None:
         self.touched.add(__key)
         self.item_write_counter[__key] += 1
@@ -213,7 +220,8 @@ class TracedDict(dict[str, Signal[object] | object]):
         return self.touched - self.removed
 
 
-class ExitException(Exception): ...
+class ExitException(Exception):
+    ...
 
 
 KeyType = Literal["key", "ldata_node_id", "registry_table_id", "url"]
@@ -239,6 +247,15 @@ multi_index_col_name = re.compile(r"^level_\d+$")
 
 def is_multi_index_col(col: str) -> bool:
     return re.match(multi_index_col_name, col) is not None
+
+
+K = TypeVar("K")
+V = TypeVar("V")
+U = TypeVar("U")
+
+
+def filter_items(source: dict[K, V], lookup: dict[V, U]) -> dict[K, U]:
+    return {k: value for k, v in source.items() if (value := lookup.get(v)) is not None}
 
 
 def filter_dataframe(
@@ -466,6 +483,21 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
     return pio_json.clean_to_json_compatible(res, modules=modules)
 
 
+snapshot_dir = Path.home() / ".cache" / "plots-faas"
+large_globals_dir = snapshot_dir / "large_globals"
+snapshot_f_name = "snapshot.json"
+
+
+class SerializedGlobal(TypedDict):
+    value: str
+    error_msg: str | None
+
+
+class RestoredGlobalInfo(TypedDict):
+    value: object
+    msg: str
+
+
 @dataclass(kw_only=True)
 class Kernel:
     conn: SocketIoThread
@@ -478,7 +510,7 @@ class Kernel:
     active_cell: str | None = None
 
     widget_signals: dict[str, Signal[Any]] = field(default_factory=dict)
-    nodes_with_widgets: dict[int, Node] = field(default_factory=dict)
+    nodes_with_widgets: dict[str, Node] = field(default_factory=dict)
 
     cell_output_selections: dict[str, str] = field(default_factory=dict)
     viewer_cell_selections: dict[str, tuple[str, KeyType]] = field(default_factory=dict)
@@ -488,15 +520,21 @@ class Kernel:
     registry_dataframes: dict[str, DataFrame] = field(default_factory=dict)
     url_dataframes: dict[str, DataFrame] = field(default_factory=dict)
 
-    cell_pagination_settings: defaultdict[str, defaultdict[str, PaginationSettings]] = (
-        field(default_factory=pagination_settings_dict_factory)
-    )
+    cell_pagination_settings: defaultdict[
+        str, defaultdict[str, PaginationSettings]
+    ] = field(default_factory=pagination_settings_dict_factory)
     viewer_pagination_settings: defaultdict[
         str, defaultdict[str, PaginationSettings]
     ] = field(default_factory=pagination_settings_dict_factory)
 
     plot_configs: dict[str, PlotConfig | None] = field(default_factory=dict)
     duckdb: DuckDBPyConnection = field(default=initialize_duckdb())
+
+    session_snapshot_mode: bool = False
+
+    restored_nodes: dict[str, Node] = field(default_factory=dict)
+    restored_signals: dict[str, Signal[object]] = field(default_factory=dict)
+    restored_globals: dict[str, object] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         self.k_globals = TracedDict(self.duckdb)
@@ -542,6 +580,14 @@ class Kernel:
             "registry_dataframes": list(self.registry_dataframes.keys()),
             "url_dataframes": list(self.url_dataframes.keys()),
             "plot_configs": self.plot_configs,
+            "restored_nodes": {
+                k: v.serialize() for k, v in self.restored_nodes.items()
+            },
+            "restored_signals": {
+                k: v.serialize(short_val=True) for k, v in self.restored_signals.items()
+            },
+            "restored_globals": self.restored_globals,
+            "session_snapshot_mode": self.session_snapshot_mode,
         }
 
     # note(maximsmol): called by the reactive context
@@ -645,7 +691,7 @@ class Kernel:
                     unused_signals.remove(abs_k)
 
                     sig = self.widget_signals[abs_k]
-                    if id(sig) in updated_signals:
+                    if sig.id in updated_signals:
                         updated_widgets.add(abs_k)
 
                     val = sig.sample()
@@ -653,7 +699,7 @@ class Kernel:
                         continue
 
                     res[abs_k]["value"] = val
-            if self.cell_status[cell_id] == "error":
+            if self.cell_status.get(cell_id) == "error":
                 # skip errored cells to avoid clobbering widget state
                 # must be here so that we update unused_signals properly
                 # todo(maximsmol): optimize
@@ -673,6 +719,114 @@ class Kernel:
         # for x in unused_signals:
         #     del self.widget_signals[x]
 
+    async def save_kernel_snapshot(self) -> None:
+        snapshot_dir.mkdir(parents=True, exist_ok=True)
+        large_globals_dir.mkdir(parents=True, exist_ok=True)
+
+        s_nodes = {}
+        s_signals = {}
+        for node in self.cell_rnodes.values():
+            s_nodes[node.id] = node.serialize()
+            for sid, sig in node.signals.items():
+                if sid not in s_signals:
+                    s_signals[sid] = sig.serialize()
+
+        s_globals: dict[str, SerializedSignal | SerializedGlobal] = {}
+        for k, val in self.k_globals.items():
+            if k == "__builtins__":
+                continue
+            if isinstance(val._value, Signal):
+                s_globals[k] = val._value.serialize()
+            else:
+                s_val, msg = safe_serialize_obj(val._value)
+                s_globals[k] = {"value": s_val, "error_msg": msg}
+
+        s_depens = {
+            "s_globals": s_globals,
+            "s_nodes": s_nodes,
+            "s_signals": s_signals,
+            "widget_signals": {k: v.id for k, v in self.widget_signals.items()},
+            "nodes_with_widgets": list(self.nodes_with_widgets.keys()),
+            "cell_rnodes": {k: v.id for k, v in self.cell_rnodes.items()},
+            # todo(kenny): figure out what to do with these
+            "ldata_dataframes": {},
+            "registry_dataframes": {},
+            "url_dataframes": {},
+        }
+
+        (snapshot_dir / snapshot_f_name).write_text(
+            orjson.dumps(s_depens).decode("utf-8")
+        )
+
+        await self.send({"type": "save_kernel_snapshot", "status": "done"})
+
+    async def load_kernel_snapshot(self) -> None:
+        snapshot_f = snapshot_dir / snapshot_f_name
+        if not snapshot_f.exists():
+            return
+        s_depens = orjson.loads(snapshot_f.read_text())
+        s_nodes: dict[str, SerializedNode] = s_depens["s_nodes"]
+        s_signals = s_depens["s_signals"]
+
+        nodes: dict[str, Node] = {}
+        signals: dict[str, Signal[object]] = {}
+
+        for nid, s_node in s_nodes.items():
+            nodes[nid] = Node.load(s_node)
+
+        for sid, s_sig in s_signals.items():
+            signals[sid] = Signal.load(s_sig)
+
+        for nid, s_node in s_nodes.items():
+            node = nodes[nid]
+
+            # note(kenny): node children will get constructed by parents when
+            # called so no need to build entire reactive tree
+            node.signals = {x: signals.get(x) for x in s_node["signals"]}
+
+        for sid, s_signal in s_signals.items():
+            signal = signals[sid]
+            signal._listeners = {x: nodes.get(x) for x in s_signal["listeners"]}
+
+        restored_globals = {}
+        for k, s_v in s_depens["s_globals"].items():
+            if "listeners" in s_v:
+                sig = signals.get(s_v["id"])
+                if sig is None:
+                    sig = Signal.load(s_v)
+                restored_globals[k] = sig.serialize(short_val=True)
+                self.k_globals._direct_set(k, Signal(sig))
+            else:
+                val = safe_unserialize_obj(s_v["value"])
+                if val is None:
+                    restored_globals[k] = {
+                        "value": small_repr(val),
+                        "msg": f"unserializable. stored err: {s_v['error_msg']}",
+                    }
+                else:
+                    restored_globals[k] = {
+                        "value": small_repr(val),
+                        "msg": f"stored error: {s_v['error_msg']}",
+                    }
+                    self.k_globals._direct_set(k, Signal(val))
+
+        self.restored_nodes = nodes
+        self.restored_signals = signals
+        self.restored_globals = restored_globals
+
+        self.cell_rnodes = filter_items(s_depens["cell_rnodes"], nodes)
+        self.widget_signals = filter_items(s_depens["widget_signals"], signals)
+
+        nodes_with_widgets = {}
+        for x in s_depens["nodes_with_widgets"]:
+            node = nodes.get(x)
+            if node is not None:
+                nodes_with_widgets[x] = node
+
+        self.nodes_with_widgets = nodes_with_widgets
+
+        await self.send({"type": "load_kernel_snapshot", "status": "done"})
+
     def get_widget_value(self, key: str) -> Signal[object]:
         assert ctx.cur_comp is not None
 
@@ -687,7 +841,7 @@ class Kernel:
         assert ctx.cur_comp is not None
 
         ctx.cur_comp.widget_states[key] = data
-        self.nodes_with_widgets[id(ctx.cur_comp)] = ctx.cur_comp
+        self.nodes_with_widgets[ctx.cur_comp.id] = ctx.cur_comp
 
     def submit_widget_state(self) -> None:
         for s in ctx.updated_signals.values():
@@ -696,10 +850,10 @@ class Kernel:
         self.conn.call_fut(self.on_tick_finished(ctx.signals_update_from_code)).result()
 
     def on_dispose(self, node: Node) -> None:
-        if id(node) not in self.nodes_with_widgets:
+        if node.id not in self.nodes_with_widgets:
             return
 
-        del self.nodes_with_widgets[id(node)]
+        del self.nodes_with_widgets[node.id]
 
     def _cell_outputs(self) -> CategorizedCellOutputs:
         res = CategorizedCellOutputs()
@@ -725,17 +879,18 @@ class Kernel:
 
         return res
 
-    async def exec(self, *, cell_id: str, code: str) -> None:
+    async def exec(self, *, cell_id: str, code: str, _from_stub: bool = False) -> None:
         filename = f"<cell {cell_id}>"
 
         try:
-            assert ctx.cur_comp is None
-            assert not ctx.in_tx
+            if not _from_stub:
+                assert ctx.cur_comp is None
+                assert not ctx.in_tx
 
             self.cell_status[cell_id] = "running"
 
             comp = self.cell_rnodes.get(cell_id)
-            if comp is not None:
+            if comp is not None and not _from_stub:
                 comp.dispose()
                 del self.cell_rnodes[cell_id]
 
@@ -796,7 +951,7 @@ class Kernel:
 
             x.__name__ = filename
 
-            await ctx.run(x, _cell_id=cell_id)
+            await ctx.run(x, _cell_id=cell_id, code=code)
 
         except (KeyboardInterrupt, Exception):
             self.cell_status[cell_id] = "error"
@@ -1143,6 +1298,10 @@ class Kernel:
             self.cell_output_selections = msg["cell_output_selections"]
             self.plot_data_selections = msg["plot_data_selections"]
             self.plot_configs = msg["plot_configs"]
+            self.session_snapshot_mode = msg["session_snapshot_mode"]
+
+            if self.session_snapshot_mode:
+                await self.load_kernel_snapshot()
 
             viewer_cell_data = msg["viewer_cell_data"]
             for cell_id, data in viewer_cell_data.items():
@@ -1168,7 +1327,11 @@ class Kernel:
                     if "value" not in v:
                         continue
 
-                    self.widget_signals[k] = Signal(v["value"])
+                    sig = self.widget_signals.get(k)
+                    if sig is None:
+                        self.widget_signals[k] = Signal(v["value"])
+                    else:
+                        sig._value = v["value"]
 
             async with ctx.transaction:
                 for viewer_id, (
@@ -1351,6 +1514,10 @@ class Kernel:
             )
 
             await self.send({"type": "upload_ldata"})
+            return
+
+        if msg["type"] == "save_kernel_snapshot":
+            await self.save_kernel_snapshot()
             return
 
 
