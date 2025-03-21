@@ -325,6 +325,8 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
 
 
 async def start_kernel_proc() -> None:
+    global kernel_snapshot_status
+
     await add_pod_event(auth=auth_token_sdk, event_type="runtime_starting")
     conn_k = k_proc.conn_k = await SocketIo.from_socket(sock)
     async_tasks.append(
