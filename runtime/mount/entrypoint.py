@@ -381,6 +381,8 @@ async def start_kernel_proc() -> None:
         data = validate(resp, TmpPlotsNotebookKernelSnapshotModeResp)
         session_snapshot_mode = data.data.tmpPlotsNotebookKernelSnapshotMode
         if session_snapshot_mode:
+            with open("foo.txt", "w") as f:
+                f.write("loading")
             kernel_snapshot_status = "loading"
     except Exception:
         err_msg = {"type": "error", "data": traceback.format_exc()}
