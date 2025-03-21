@@ -138,6 +138,7 @@ async def add_pod_event(*, auth: str, event_type: str) -> None:
 
 async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
     global active_cell
+    global kernel_snapshot_status
 
     print("Starting kernel message listener")
     while True:
