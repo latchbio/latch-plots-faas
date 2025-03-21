@@ -47,14 +47,14 @@ class Node:
     widget_states: dict[str, WidgetState] = field(default_factory=dict)
     widget_state_idx = 0
 
-    has_cell: bool = False
+    is_cell: bool = True
 
     def __post_init__(self) -> None:
         live_nodes[id(self)] = self
 
         if self.parent is not None:
             self.parent.children[id(self)] = self
-            if self.has_cell and self.parent.has_cell:
+            if self.is_cell and self.parent.is_cell:
                 self.cell_id = self.parent.cell_id
         elif self.name is None:
             self.name = self.cell_id
@@ -176,18 +176,17 @@ class RCtx:
         f: Callable[..., Awaitable[R]],
         *,
         _cell_id: str | None = None,
-        cell: bool = True,
+        _is_cell: bool = True,
     ) -> R:
         # note(maximsmol): we want this to happen for non-cell nodes too
         # so it has to be inside `RCtx` which sees every ran node
         # and not just the cell body in the kernel
-        print(f"run {f.__name__} @ {_cell_id} {cell}")
-        if _cell_id is not None and cell:
+        if _cell_id is not None and _is_cell:
             await _inject.kernel.set_active_cell(_cell_id)
 
         async with self.transaction:
             self.cur_comp = Node(
-                f=f, parent=self.cur_comp, cell_id=_cell_id, has_cell=cell
+                f=f, parent=self.cur_comp, cell_id=_cell_id, is_cell=_is_cell
             )
 
             try:
@@ -244,7 +243,7 @@ class RCtx:
                     self.cur_comp = p
 
                     try:
-                        await self.run(n.f, _cell_id=n.cell_id, cell=n.has_cell)
+                        await self.run(n.f, _cell_id=n.cell_id, _is_cell=n.is_cell)
                     except Exception:
                         print_exc()
                     finally:
