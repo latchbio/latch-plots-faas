@@ -7,7 +7,7 @@ import traceback
 from asyncio.subprocess import Process
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TypedDict, TypeVar
+from typing import Literal, TypedDict, TypeVar
 
 import orjson
 from latch_data_validation.data_validation import validate
@@ -41,6 +41,9 @@ class CellOutputs(TypedDict):
 cell_status: dict[str, str] = {}
 cell_sequencers: dict[str, int] = {}
 cell_last_run_outputs: dict[str, CellOutputs] = {}
+
+KernelSnapshotStatus = Literal["done", "creating", "loading"]
+kernel_snapshot_status: KernelSnapshotStatus = "done"
 
 async_tasks: list[asyncio.Task] = []
 
@@ -309,6 +312,12 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                 )
 
                 msg = {"type": msg["type"], "plot_id": msg["plot_id"]}
+
+            elif msg["type"] == "load_kernel_snapshot":
+                kernel_snapshot_status = msg["status"]
+
+            elif msg["type"] == "save_kernel_snapshot":
+                kernel_snapshot_status = msg["status"]
 
             await plots_ctx_manager.broadcast_message(orjson.dumps(msg).decode())
 

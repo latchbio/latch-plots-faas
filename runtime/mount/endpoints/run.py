@@ -8,25 +8,16 @@ import aiohttp
 import jwt
 import orjson
 from latch_asgi.context.websocket import Context, HandlerResult
-from latch_asgi.framework.websocket import (
-    WebsocketBadMessage,
-    WebsocketConnectionClosedError,
-    receive_json,
-)
+from latch_asgi.framework.websocket import (WebsocketBadMessage,
+                                            WebsocketConnectionClosedError,
+                                            receive_json)
 from latch_data_validation.data_validation import validate
 from latch_o11y.o11y import trace_app_function_with_span
 from opentelemetry.trace import Span
 
-from ..entrypoint import (
-    cell_last_run_outputs,
-    cell_sequencers,
-    cell_status,
-    k_proc,
-    plots_ctx_manager,
-    pod_id,
-    pod_session_id,
-    ready_ev,
-)
+from ..entrypoint import (cell_last_run_outputs, cell_sequencers, cell_status,
+                          k_proc, kernel_snapshot_status, plots_ctx_manager,
+                          pod_id, pod_session_id, ready_ev)
 from ..utils import gql_query
 
 
@@ -159,6 +150,7 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
                     "cell_status": cell_status,
                     "cell_sequencers": cell_sequencers,
                     "cell_outputs": cell_last_run_outputs,
+                    "kernel_snapshot_status": kernel_snapshot_status,
                 }
             ).decode()
         )
