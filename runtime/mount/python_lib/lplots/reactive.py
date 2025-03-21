@@ -47,12 +47,15 @@ class Node:
     widget_states: dict[str, WidgetState] = field(default_factory=dict)
     widget_state_idx = 0
 
+    has_cell: bool = False
+
     def __post_init__(self) -> None:
         live_nodes[id(self)] = self
 
         if self.parent is not None:
             self.parent.children[id(self)] = self
-            self.cell_id = self.parent.cell_id
+            if self.has_cell and self.parent.has_cell:
+                self.cell_id = self.parent.cell_id
         elif self.name is None:
             self.name = self.cell_id
 
@@ -169,7 +172,11 @@ class RCtx:
     in_tx: bool = False
 
     async def run(
-        self, f: Callable[..., Awaitable[R]], *, _cell_id: str | None = None, cell: bool = True
+        self,
+        f: Callable[..., Awaitable[R]],
+        *,
+        _cell_id: str | None = None,
+        cell: bool = True,
     ) -> R:
         # note(maximsmol): we want this to happen for non-cell nodes too
         # so it has to be inside `RCtx` which sees every ran node
@@ -179,7 +186,9 @@ class RCtx:
             await _inject.kernel.set_active_cell(_cell_id)
 
         async with self.transaction:
-            self.cur_comp = Node(f=f, parent=self.cur_comp, cell_id=_cell_id)
+            self.cur_comp = Node(
+                f=f, parent=self.cur_comp, cell_id=_cell_id, has_cell=cell
+            )
 
             try:
                 if inspect.iscoroutinefunction(f):
