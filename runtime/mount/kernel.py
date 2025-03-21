@@ -762,6 +762,7 @@ class Kernel:
         await self.send({"type": "save_kernel_snapshot", "status": "done"})
 
     async def load_kernel_snapshot(self) -> None:
+        await asyncio.sleep(1)
         await self.send({"type": "load_kernel_snapshot", "status": "loading"})
 
         snapshot_f = snapshot_dir / snapshot_f_name
