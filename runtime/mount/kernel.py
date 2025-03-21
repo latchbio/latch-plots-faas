@@ -799,7 +799,7 @@ class Kernel:
                 sig = signals.get(s_v["id"])
                 if sig is None:
                     sig = Signal.load(s_v)
-                restored_globals[k] = sig
+                restored_globals[k] = sig.serialize(short_val=True)
                 self.k_globals._direct_set(k, Signal(sig))
             else:
                 val = safe_unserialize_obj(s_v["value"])
