@@ -68,7 +68,7 @@ class ButtonWidget:
         self._trigger_signal(None)
 
     async def _create_update_node(self) -> None:
-        await ctx.run(self._update)
+        await ctx.run(self._update, _is_cell=False)
 
 
 def w_button(
