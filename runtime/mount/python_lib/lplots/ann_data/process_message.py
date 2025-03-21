@@ -25,6 +25,7 @@ def get_obsm(
 
     n_cells = adata.n_obs
 
+    # todo(aidan): intelligent downsampling to preserve outliers / information in genera
     if n_cells > MAX_VISUALIZATION_CELLS:
         if src not in ann_data_index_cache:
             idxs = RNG.choice(n_cells, size=MAX_VISUALIZATION_CELLS, replace=False)
@@ -36,7 +37,7 @@ def get_obsm(
 
     # todo(aidan): allow specifying dimensions to fetch (PCA components is an example where this is useful)
     # todo(aidan): support sparse data?
-    obsm = np.asarray(adata.obsm[obsm_key][idxs, :2], dtype=np.float32)  # type: ignore  # noqa: E261, PGH003, RUF100
+    obsm = np.asarray(adata.obsm[obsm_key][idxs, :2], dtype=np.float32)  # type: ignore  # noqa: PGH003
     index = np.asarray(adata.obs_names[idxs])
 
     return obsm, index
@@ -46,28 +47,31 @@ def get_obs(
     src: str,
     adata: ad.AnnData,
     obs_key: str,
-) -> tuple[NDArray[np.str_], tuple[NDArray[np.str_], NDArray[np.int64]], int]:
-    obs = np.asarray(adata.obs[obs_key])
+) -> tuple[NDArray[np.str_], tuple[NDArray[np.str_], NDArray[np.uint32]], int]:
     n_cells = adata.n_obs
 
-    # todo(aidan): intelligent downsampling to preserve outliers / information in general
+    # todo(aidan): intelligent downsampling to preserve outliers / information in genera
     if n_cells > MAX_VISUALIZATION_CELLS:
         if src not in ann_data_index_cache:
             idxs = RNG.choice(n_cells, size=MAX_VISUALIZATION_CELLS, replace=False)
             ann_data_index_cache[src] = idxs
         else:
             idxs = ann_data_index_cache[src]
-
-        obs = obs[idxs]
-
-        unique_obs, counts = np.unique(obs, return_counts=True)
-        truncated_unique_obs = unique_obs
-        if len(unique_obs) > MAX_VISUALIZATION_CELLS:
-            sorted_indices = np.argsort(-counts)[:MAX_VISUALIZATION_CELLS]
-            truncated_unique_obs = unique_obs[sorted_indices]
-            counts = counts[sorted_indices]
     else:
-        truncated_unique_obs, counts = np.unique(obs, return_counts=True)
+        idxs = np.arange(n_cells)
+
+    # todo(aidan): support sparse data?
+    obs = np.asarray(adata.obs[obs_key][idxs]).astype(str)  # type: ignore  # noqa: PGH003
+
+    # Get unique values and counts from the reduced set
+    unique_obs, counts = np.unique(obs, return_counts=True)
+    truncated_unique_obs = unique_obs
+    if len(unique_obs) > MAX_VISUALIZATION_CELLS:
+        sorted_indices = np.argsort(-counts)[:MAX_VISUALIZATION_CELLS]
+        truncated_unique_obs = unique_obs[sorted_indices]
+        counts = counts[sorted_indices]
+
+    counts = counts.astype(np.uint32)
 
     return obs, (truncated_unique_obs, counts), len(unique_obs)
 
