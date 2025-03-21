@@ -244,7 +244,7 @@ class RCtx:
                     self.cur_comp = p
 
                     try:
-                        await self.run(n.f, _cell_id=n.cell_id)
+                        await self.run(n.f, _cell_id=n.cell_id, cell=n.has_cell)
                     except Exception:
                         print_exc()
                     finally:
