@@ -153,7 +153,7 @@ def handle_ann_data_widget_message(
         nrof_obs = None
         counts = None
         if init_obs_key is not None:
-            obs, (unique_obs, counts), nrof_obs = get_obs(widget_state["src"], adata, msg["obs_key"])
+            obs, (unique_obs, counts), nrof_obs = get_obs(widget_state["src"], adata, init_obs_key)
 
         return {
             "type": "ann_data",
