@@ -761,9 +761,6 @@ class Kernel:
         await self.send({"type": "save_kernel_snapshot", "status": "done"})
 
     async def load_kernel_snapshot(self) -> None:
-        await self.send({"type": "load_kernel_snapshot", "status": "loading"})
-        await self.send({"type": "ready"})
-
         snapshot_f = snapshot_dir / snapshot_f_name
         if not snapshot_f.exists():
             return
@@ -1300,9 +1297,7 @@ class Kernel:
             self.plot_configs = msg["plot_configs"]
             self.session_snapshot_mode = msg["session_snapshot_mode"]
 
-            if not self.session_snapshot_mode:
-                await self.send({"type": "ready"})
-            else:
+            if self.session_snapshot_mode:
                 await self.load_kernel_snapshot()
 
             viewer_cell_data = msg["viewer_cell_data"]
@@ -1563,6 +1558,8 @@ async def main() -> None:
         sys.stderr = text_socket_writer(
             SocketWriter(conn=k.conn, kernel=k, name="stderr", loop=loop)
         )
+
+        await k.send({"type": "ready"})
 
         while not shutdown_requested:
             try:
