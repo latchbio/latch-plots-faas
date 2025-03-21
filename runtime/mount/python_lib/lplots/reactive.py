@@ -169,12 +169,12 @@ class RCtx:
     in_tx: bool = False
 
     async def run(
-        self, f: Callable[..., Awaitable[R]], *, _cell_id: str | None = None
+        self, f: Callable[..., Awaitable[R]], *, _cell_id: str | None = None, cell: bool = True
     ) -> R:
         # note(maximsmol): we want this to happen for non-cell nodes too
         # so it has to be inside `RCtx` which sees every ran node
         # and not just the cell body in the kernel
-        if _cell_id is not None:
+        if _cell_id is not None and cell:
             await _inject.kernel.set_active_cell(_cell_id)
 
         async with self.transaction:
