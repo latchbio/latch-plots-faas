@@ -11,7 +11,7 @@ ann_data_object_cache: dict[str, ad.AnnData] = {}
 ann_data_index_cache: dict[str, NDArray[np.int64]] = {}
 
 
-MAX_VISUALIZATION_CELLS = 100000
+MAX_VISUALIZATION_CELLS = 10000
 RNG = np.random.default_rng()
 
 
