@@ -1564,8 +1564,6 @@ async def main() -> None:
             SocketWriter(conn=k.conn, kernel=k, name="stderr", loop=loop)
         )
 
-        await k.send({"type": "ready"})
-
         while not shutdown_requested:
             try:
                 await k.accept()
