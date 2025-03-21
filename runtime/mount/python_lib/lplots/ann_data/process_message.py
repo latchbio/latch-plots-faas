@@ -213,6 +213,7 @@ def handle_ann_data_widget_message(
             "key": widget_key,
             "value": {
                 "data": {
+                    "fetched_for_key": msg["obsm_key"],
                     "obsm": obsm.tolist(),
                     "index": index.tolist(),
                 },
@@ -248,6 +249,7 @@ def handle_ann_data_widget_message(
             "key": widget_key,
             "value": {
                 "data": {
+                    "fetched_for_key": msg["obs_key"],
                     "values": obs.tolist(),
                     "unique_values": unique_obs.tolist(),
                     "counts": counts.tolist(),
