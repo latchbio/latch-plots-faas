@@ -24,6 +24,7 @@ from duckdb import DuckDBPyConnection
 from latch.ldata.path import LPath
 from latch.registry.table import Table
 from lplots import _inject
+from lplots.ann_data.process_message import handle_ann_data_widget_message
 from lplots.reactive import Node, Signal, ctx
 from lplots.themes import graphpad_inspired_theme
 from lplots.utils.nothing import Nothing
@@ -1351,6 +1352,10 @@ class Kernel:
             )
 
             await self.send({"type": "upload_ldata"})
+            return
+
+        if msg["type"] == "ann_data":
+            await self.send(handle_ann_data_widget_message(msg))
             return
 
 
