@@ -11,7 +11,7 @@ ann_data_object_cache: dict[str, ad.AnnData] = {}
 ann_data_index_cache: dict[str, NDArray[np.int64]] = {}
 
 
-MAX_VISUALIZATION_CELLS = 10000
+MAX_VISUALIZATION_CELLS = 100000
 RNG = np.random.default_rng()
 
 
@@ -19,7 +19,7 @@ def get_obsm(
     src: str,
     adata: ad.AnnData,
     obsm_key: str,
-) -> tuple[NDArray[np.float64], NDArray[np.str_]] | tuple[None, None]:
+) -> tuple[NDArray[np.float32], NDArray[np.str_]] | tuple[None, None]:
     if obsm_key not in adata.obsm:
         return None, None
 
@@ -34,8 +34,9 @@ def get_obsm(
     else:
         idxs = np.arange(n_cells)
 
+    # todo(aidan): allow specifying dimensions to fetch (PCA components is an example where this is useful)
     # todo(aidan): support sparse data?
-    obsm = np.asarray(adata.obsm[obsm_key][idxs, :])  # type: ignore  # noqa: E261, PGH003, RUF100
+    obsm = np.asarray(adata.obsm[obsm_key][idxs, :2], dtype=np.float32)  # type: ignore  # noqa: E261, PGH003, RUF100
     index = np.asarray(adata.obs_names[idxs])
 
     return obsm, index
