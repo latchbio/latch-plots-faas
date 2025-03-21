@@ -829,8 +829,6 @@ class Kernel:
 
         self.nodes_with_widgets = nodes_with_widgets
 
-        # todo(kenny): plumb node parent, signals
-
         await self.send({"type": "load_kernel_snapshot", "status": "done"})
 
     def get_widget_value(self, key: str) -> Signal[object]:
