@@ -13,7 +13,7 @@ from io import TextIOWrapper
 from pathlib import Path
 from traceback import format_exc
 from types import FrameType
-from typing import TYPE_CHECKING, Any, Dict, Literal, TypedDict, TypeVar
+from typing import TYPE_CHECKING, Any, Literal, TypedDict, TypeVar
 
 import numpy as np
 import orjson
@@ -31,7 +31,7 @@ from plotly.basedatatypes import BaseFigure
 from lplots import _inject
 from lplots.persistence import (SerializedNode, SerializedSignal,
                                 safe_serialize_obj, safe_unserialize_obj,
-                                unserial_symbol)
+                                small_repr, unserial_symbol)
 from lplots.reactive import Node, Signal, ctx, stub_node_noop
 from lplots.themes import graphpad_inspired_theme
 from lplots.utils.nothing import Nothing
@@ -254,7 +254,7 @@ V = TypeVar("V")
 U = TypeVar("U")
 
 
-def filter_items(source: Dict[K, V], lookup: Dict[V, U]) -> Dict[K, U]:
+def filter_items(source: dict[K, V], lookup: dict[V, U]) -> dict[K, U]:
     return {k: value for k, v in source.items() if (value := lookup.get(v)) is not None}
 
 
@@ -483,7 +483,7 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
     return pio_json.clean_to_json_compatible(res, modules=modules)
 
 
-snapshot_dir = Path.home() / ".cache/plots-faas"
+snapshot_dir = Path.home() / ".cache" / "plots-faas"
 large_globals_dir = snapshot_dir / "large_globals"
 snapshot_f_name = "snapshot.json"
 
@@ -585,7 +585,7 @@ class Kernel:
                 k: v.serialize() for k, v in self.restored_nodes.items()
             },
             "restored_signals": {
-                k: v.serialize() for k, v in self.restored_signals.items()
+                k: v.serialize(short_val=True) for k, v in self.restored_signals.items()
             },
             "restored_globals": self.restored_globals,
             "serialized_depens": self.s_depens,
@@ -750,6 +750,7 @@ class Kernel:
             "widget_signals": {k: v.id for k, v in self.widget_signals.items()},
             "nodes_with_widgets": list(self.nodes_with_widgets.keys()),
             "cell_rnodes": {k: v.id for k, v in self.cell_rnodes.items()},
+            # todo(kenny): figure out what to do with these
             "ldata_dataframes": {},
             "registry_dataframes": {},
             "url_dataframes": {},
@@ -804,12 +805,12 @@ class Kernel:
                 val = safe_unserialize_obj(s_v["value"])
                 if val is None:
                     restored_globals[k] = {
-                        "value": repr(val),
+                        "value": small_repr(val),
                         "msg": f"unserializable. stored err: {s_v['error_msg']}",
                     }
                 else:
                     restored_globals[k] = {
-                        "value": repr(val),
+                        "value": small_repr(val),
                         "msg": f"stored error: {s_v['error_msg']}",
                     }
                     self.k_globals._direct_set(k, Signal(val))

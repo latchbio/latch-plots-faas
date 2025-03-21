@@ -313,10 +313,7 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
 
                 msg = {"type": msg["type"], "plot_id": msg["plot_id"]}
 
-            elif msg["type"] == "load_kernel_snapshot":
-                kernel_snapshot_status = msg["status"]
-
-            elif msg["type"] == "save_kernel_snapshot":
+            elif msg["type"] == {"load_kernel_snapshot", "save_kernel_snapshot"}:
                 kernel_snapshot_status = msg["status"]
 
             await plots_ctx_manager.broadcast_message(orjson.dumps(msg).decode())

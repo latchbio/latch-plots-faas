@@ -381,8 +381,8 @@ class Signal(Generic[T]):
     def sample(self) -> T:
         return self._value
 
-    def serialize(self) -> SerializedSignal:
-        s_val, error_msg = safe_serialize_obj(self._value)
+    def serialize(self, short_val: bool = False) -> SerializedSignal:
+        s_val, error_msg = safe_serialize_obj(self._value, short_val)
         return SerializedSignal(
             value=s_val,
             name=self._name,
