@@ -784,8 +784,9 @@ class Kernel:
         for nid, s_node in s_nodes.items():
             node = nodes[nid]
 
+            # note(kenny): node children will get constructed by parents when
+            # called so no need to build entire reactive tree
             node.signals = {x: signals.get(x) for x in s_node["signals"]}
-            # todo(kenny): deal with node parents/children if necessary
 
         for sid, s_signal in s_signals.items():
             signal = signals[sid]
@@ -830,7 +831,7 @@ class Kernel:
 
         # todo(kenny): plumb node parent, signals
 
-        await self.send({"type": "save_kernel_snapshot", "status": "done"})
+        await self.send({"type": "load_kernel_snapshot", "status": "done"})
 
     def get_widget_value(self, key: str) -> Signal[object]:
         assert ctx.cur_comp is not None
