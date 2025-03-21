@@ -151,8 +151,9 @@ def handle_ann_data_widget_message(
         obs = None
         unique_obs = None
         nrof_obs = None
+        counts = None
         if init_obs_key is not None:
-            obs, unique_obs, nrof_obs = get_obs(widget_state["src"], adata, init_obs_key)
+            obs, (unique_obs, counts), nrof_obs = get_obs(widget_state["src"], adata, msg["obs_key"])
 
         return {
             "type": "ann_data",
@@ -174,7 +175,9 @@ def handle_ann_data_widget_message(
                     "init_obsm_values": obsm.tolist() if obsm is not None else None,
                     "init_obsm_index": index.tolist() if index is not None else None,
                     "init_obs_values": obs.tolist() if obs is not None else None,
-                    "nrof_unique_obs": nrof_obs,
+                    "init_obs_unique_values": unique_obs.tolist() if unique_obs is not None else None,
+                    "init_obs_counts": counts.tolist() if counts is not None else None,
+                    "init_obs_nrof_values": nrof_obs,
                 }
             },
         }
