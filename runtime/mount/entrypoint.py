@@ -42,8 +42,13 @@ cell_status: dict[str, str] = {}
 cell_sequencers: dict[str, int] = {}
 cell_last_run_outputs: dict[str, CellOutputs] = {}
 
-KernelSnapshotStatus = Literal["done", "creating", "loading"]
-kernel_snapshot_status: KernelSnapshotStatus = "done"
+
+@dataclass
+class KernelSnapshotState:
+    status: Literal["done", "creating", "loading"] = "done"
+
+
+kernel_snapshot_state = KernelSnapshotState()
 
 async_tasks: list[asyncio.Task] = []
 
@@ -138,7 +143,6 @@ async def add_pod_event(*, auth: str, event_type: str) -> None:
 
 async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
     global active_cell
-    global kernel_snapshot_status
 
     print("Starting kernel message listener")
     while True:
@@ -315,7 +319,7 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                 msg = {"type": msg["type"], "plot_id": msg["plot_id"]}
 
             elif msg["type"] in {"load_kernel_snapshot", "save_kernel_snapshot"}:
-                kernel_snapshot_status = msg["status"]
+                kernel_snapshot_state.status = msg["status"]
 
             await plots_ctx_manager.broadcast_message(orjson.dumps(msg).decode())
 
@@ -325,8 +329,6 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
 
 
 async def start_kernel_proc() -> None:
-    global kernel_snapshot_status
-
     await add_pod_event(auth=auth_token_sdk, event_type="runtime_starting")
     conn_k = k_proc.conn_k = await SocketIo.from_socket(sock)
     async_tasks.append(
@@ -381,9 +383,7 @@ async def start_kernel_proc() -> None:
         data = validate(resp, TmpPlotsNotebookKernelSnapshotModeResp)
         session_snapshot_mode = data.data.tmpPlotsNotebookKernelSnapshotMode
         if session_snapshot_mode:
-            with open("foo.txt", "w") as f:
-                f.write("loading")
-            kernel_snapshot_status = "loading"
+            kernel_snapshot_state.status = "loading"
     except Exception:
         err_msg = {"type": "error", "data": traceback.format_exc()}
         await plots_ctx_manager.broadcast_message(orjson.dumps(err_msg).decode())

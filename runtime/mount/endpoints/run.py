@@ -5,7 +5,6 @@ from contextlib import suppress
 from dataclasses import dataclass
 
 import aiohttp
-import entrypoint
 import jwt
 import orjson
 from latch_asgi.context.websocket import Context, HandlerResult
@@ -17,7 +16,7 @@ from latch_o11y.o11y import trace_app_function_with_span
 from opentelemetry.trace import Span
 
 from ..entrypoint import (cell_last_run_outputs, cell_sequencers, cell_status,
-                          k_proc, kernel_snapshot_status, plots_ctx_manager,
+                          k_proc, kernel_snapshot_state, plots_ctx_manager,
                           pod_id, pod_session_id, ready_ev)
 from ..utils import gql_query
 
@@ -151,7 +150,7 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
                     "cell_status": cell_status,
                     "cell_sequencers": cell_sequencers,
                     "cell_outputs": cell_last_run_outputs,
-                    "kernel_snapshot_status": entrypoint.kernel_snapshot_status,
+                    "kernel_snapshot_status": kernel_snapshot_state.status,
                 }
             ).decode()
         )
