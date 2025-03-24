@@ -545,7 +545,7 @@ class Kernel:
         }
 
     # note(maximsmol): called by the reactive context
-    async def set_active_cell(self, cell_id: str) -> None:
+    async def set_active_cell(self, cell_id: str | None) -> None:
         # todo(maximsmol): I still believe this is correct
         # but we need to deal with the frontend clearing logs in weird ways
         # e.g. a button should maybe clear the logs if it triggered its own cell
@@ -667,6 +667,8 @@ class Kernel:
                     "updated_widgets": list(updated_widgets),
                 }
             )
+
+            await self.set_active_cell(None)
 
         # fixme(rteqs): cleanup signals in some other way. the below does not work because widget signals
         # are restored on `init` but there are no corresponding `rnodes`
