@@ -207,9 +207,6 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                 }
 
             elif msg["type"] == "cell_widgets":
-                if len(msg["updated_widgets"]) <= 0:
-                    return
-
                 await gql_query(
                     auth=auth,
                     query="""
@@ -226,6 +223,9 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                         "state": orjson.dumps(msg["widget_state"]).decode(),
                     },
                 )
+
+                if len(msg["updated_widgets"]) <= 0:
+                    return
 
                 msg = {
                     "type": msg["type"],
