@@ -143,10 +143,8 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
 
             elif msg["type"] == "start_cell":
                 cell_id = msg["cell_id"]
-                if active_cell is None and cell_id is None:
-                    return
-
                 if cell_id is not None:
+                    active_cell = cell_id
                     cell_sequencers[cell_id] = msg["run_sequencer"]
                     cell_status[cell_id] = "running"
 
@@ -164,7 +162,6 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                         variables={"id": msg["cell_id"]},
                     )
 
-                active_cell = cell_id
                 msg = {
                     "type": msg["type"],
                     "cell_id": msg["cell_id"],
