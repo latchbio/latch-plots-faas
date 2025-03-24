@@ -668,7 +668,7 @@ class Kernel:
                 }
             )
 
-            await self.set_active_cell(None)
+        await self.set_active_cell(None)
 
         # fixme(rteqs): cleanup signals in some other way. the below does not work because widget signals
         # are restored on `init` but there are no corresponding `rnodes`
