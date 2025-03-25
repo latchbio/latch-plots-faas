@@ -1415,7 +1415,7 @@ if __name__ == "__main__":
 
         libc = CDLL("libc.so.6")
         PR_SET_NAME = 15
-        libc.prctl(PR_SET_NAME, b"latch-plots-kernel")
+        libc.prctl(PR_SET_NAME, b"kernel")
 
     import multiprocessing
 
