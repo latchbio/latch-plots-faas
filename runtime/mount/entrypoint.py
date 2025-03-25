@@ -211,9 +211,6 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                 }
 
             elif msg["type"] == "cell_widgets":
-                if len(msg["updated_widgets"]) == 0:
-                    continue
-
                 await gql_query(
                     auth=auth,
                     query="""
