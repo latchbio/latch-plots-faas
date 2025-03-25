@@ -45,7 +45,7 @@ class ButtonWidget:
     @property
     def value(self) -> bool:
         self._trigger_signal()
-        return self._trigger_signal in ctx.prev_updated_signals
+        return self._trigger_signal.id in ctx.prev_updated_signals
 
     def _update(self) -> None:
         res = self._signal()
