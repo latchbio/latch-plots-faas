@@ -638,13 +638,12 @@ class Kernel:
             for cell_id in self.cell_rnodes
         }
 
-        updated_widgets: set[str] = set()
-
         for cell_id in self.cell_rnodes:
             if self.cell_status[cell_id] == "error":
                 # skip errored cells to avoid clobbering widget state
                 continue
 
+            updated_widgets: set[str] = set()
             res: dict[str, WidgetState[str, object]] = {}
             for n in nww_by_cell[cell_id]:
                 path = n.name_path()
