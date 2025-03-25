@@ -4,8 +4,7 @@ import os
 import orjson
 from latch_asgi.context.websocket import Context, HandlerResult
 from latch_asgi.framework.websocket import WebsocketConnectionClosedError, receive_data
-from latch_o11y.o11y import trace_app_function_with_span
-from opentelemetry.trace import Span
+from latch_o11y.o11y import trace_app_function
 
 
 async def send_lsp_msg(stdin: asyncio.StreamWriter, msg: bytes) -> None:
@@ -28,8 +27,8 @@ async def recv_lsp_msg(stdout: asyncio.StreamReader) -> bytes:
     return await stdout.readexactly(content_length)
 
 
-@trace_app_function_with_span
-async def lsp_proxy(s: Span, ctx: Context) -> HandlerResult:
+@trace_app_function
+async def lsp_proxy(ctx: Context) -> HandlerResult:
     await ctx.accept_connection()
 
     async def poll_lsp_msg(stdout: asyncio.StreamReader) -> None:

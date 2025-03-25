@@ -4,6 +4,7 @@ from io import BufferedWriter, RawIOBase, TextIOWrapper, UnsupportedOperation
 from typing import TYPE_CHECKING
 
 from socketio_thread import SocketIoThread
+from typing_extensions import override
 
 if TYPE_CHECKING:
     from _typeshed import ReadableBuffer
@@ -17,6 +18,7 @@ class SocketWriter(RawIOBase):
     name: str
     loop: asyncio.AbstractEventLoop
 
+    @override
     def fileno(self) -> int:
         # todo(maximsmol): if this causes problems, allow a workaround of some sort here
         # either return the default fd for stdout/stderr if it's not actually important
@@ -28,21 +30,21 @@ class SocketWriter(RawIOBase):
             "and does not have a corresponding file descriptor"
         )
 
+    @override
     def writable(self) -> bool:
         return True
 
+    @override
     def write(self, __b: "ReadableBuffer") -> int | None:
         b = bytes(__b)
-        self.conn.send_fut(
-            {
-                "type": "kernel_stdio",
-                "active_cell": self.kernel.active_cell,
-                "stream": self.name,
-                # todo(maximsmol): this is a bit silly because we are going to have
-                # a TextIOWrapper above that just encoded this for us
-                "data": b.decode(errors="replace"),
-            }
-        ).result()
+        self.conn.send_fut({
+            "type": "kernel_stdio",
+            "active_cell": self.kernel.active_cell,
+            "stream": self.name,
+            # todo(maximsmol): this is a bit silly because we are going to have
+            # a TextIOWrapper above that just encoded this for us
+            "data": b.decode(errors="replace"),
+        }).result()
         return len(b)
 
 
