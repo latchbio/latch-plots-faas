@@ -591,7 +591,7 @@ class Kernel:
         }
 
     # note(maximsmol): called by the reactive context
-    async def set_active_cell(self, cell_id: str) -> None:
+    async def set_active_cell(self, cell_id: str | None) -> None:
         # todo(maximsmol): I still believe this is correct
         # but we need to deal with the frontend clearing logs in weird ways
         # e.g. a button should maybe clear the logs if it triggered its own cell
@@ -607,7 +607,8 @@ class Kernel:
         sys.stdout.flush()
         sys.stderr.flush()
 
-        self.active_cell = cell_id
+        if cell_id is not None:
+            self.active_cell = cell_id
 
         self.cell_seq += 1
         await self.send(
@@ -713,6 +714,8 @@ class Kernel:
                     "updated_widgets": list(updated_widgets),
                 }
             )
+
+        await self.set_active_cell(None)
 
         # fixme(rteqs): cleanup signals in some other way. the below does not work because widget signals
         # are restored on `init` but there are no corresponding `rnodes`
@@ -1024,7 +1027,10 @@ class Kernel:
                 "type": "plot_data",
                 "plot_id": plot_id,
                 "key": key,
-                "dataframe_json": {"schema": build_table_schema(res, version=False)},
+                "dataframe_json": {
+                    "schema": build_table_schema(res, version=False),
+                    "type": "pandas",
+                },
             }
 
             df_size_mb = res.memory_usage(index=True, deep=True).sum() / 10**6

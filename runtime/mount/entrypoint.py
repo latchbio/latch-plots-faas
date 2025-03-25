@@ -160,23 +160,28 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
 
             elif msg["type"] == "start_cell":
                 cell_id = msg["cell_id"]
-                active_cell = cell_id
-                cell_sequencers[cell_id] = msg["run_sequencer"]
-                cell_status[cell_id] = "running"
 
-                await gql_query(
-                    auth=auth,
-                    query="""
-                        mutation ClearCellMetadata($id: BigInt!) {
-                            updatePlotTransformInfo(
-                                input: { id: $id, patch: { logs: "", exception: null } }
-                            ) {
-                                clientMutationId
+                if cell_id is not None:
+                    # note: active_cell is set to None when on_tick_finished is called to tell console to mark all cells as ran.
+                    # active_cell is not overwritten here becuase kernel_stdio messages require an active_cell field,
+                    # if active_cell is None in kernel_stdio, console will display an error
+                    active_cell = cell_id
+                    cell_sequencers[cell_id] = msg["run_sequencer"]
+                    cell_status[cell_id] = "running"
+
+                    await gql_query(
+                        auth=auth,
+                        query="""
+                            mutation ClearCellMetadata($id: BigInt!) {
+                                updatePlotTransformInfo(
+                                    input: { id: $id, patch: { logs: "", exception: null } }
+                                ) {
+                                    clientMutationId
+                                }
                             }
-                        }
-                    """,
-                    variables={"id": msg["cell_id"]},
-                )
+                        """,
+                        variables={"id": msg["cell_id"]},
+                    )
 
                 msg = {
                     "type": msg["type"],
