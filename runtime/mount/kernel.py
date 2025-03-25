@@ -661,6 +661,7 @@ class Kernel:
                         continue
 
                     res[abs_k]["value"] = val
+
             if self.cell_status[cell_id] == "error":
                 # skip errored cells to avoid clobbering widget state
                 # must be here so that we update unused_signals properly
@@ -1409,6 +1410,13 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
+    if sys.platform == "linux":
+        from ctypes import CDLL
+
+        libc = CDLL("libc.so.6")
+        PR_SET_NAME = 15
+        libc.prctl(PR_SET_NAME, b"latch-plots-kernel")
+
     import multiprocessing
 
     multiprocessing.set_start_method("forkserver")
