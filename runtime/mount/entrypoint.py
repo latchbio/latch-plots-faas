@@ -354,16 +354,14 @@ async def start_kernel_proc() -> None:
 
     await add_pod_event(auth=auth_token_sdk, event_type="runtime_ready")
     await ready_ev.wait()
-    await conn_k.send(
-        {
-            "type": "init",
-            "widget_states": k_state.widget_states,
-            "cell_output_selections": k_state.cell_output_selections,
-            "plot_data_selections": k_state.plot_data_selections,
-            "viewer_cell_data": k_state.viewer_cell_data,
-            "plot_configs": k_state.plot_configs,
-        }
-    )
+    await conn_k.send({
+        "type": "init",
+        "widget_states": k_state.widget_states,
+        "cell_output_selections": k_state.cell_output_selections,
+        "plot_data_selections": k_state.plot_data_selections,
+        "viewer_cell_data": k_state.viewer_cell_data,
+        "plot_configs": k_state.plot_configs,
+    })
 
 
 async def stop_kernel_proc() -> None:

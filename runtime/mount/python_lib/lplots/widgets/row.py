@@ -19,8 +19,6 @@ AllowedWidgets = (
     | MultiSelect
     | DataframePicker
     | TextInputWidget
-    | CheckboxWidget
-    | DataframePicker
     | RegistryTablePicker
     | TabularDatasourcePicker
 )

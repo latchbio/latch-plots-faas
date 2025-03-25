@@ -21,7 +21,7 @@ live_node_names: set[str] = set()
 def graphviz() -> None:
     from pathlib import Path
 
-    with Path("graph.dot").open("w") as f:
+    with Path("graph.dot").open("w", encoding="utf-8") as f:
         f.write("digraph G {\n")
 
         for n in live_nodes.values():
@@ -44,8 +44,8 @@ class Node:
     cell_id: str | None = None
     name: str | None = None
 
-    widget_states: dict[str, WidgetState] = field(default_factory=dict)
-    widget_state_idx = 0
+    widget_states: dict[str, WidgetState[str, object]] = field(default_factory=dict)
+    widget_state_idx: int = 0
 
     def __post_init__(self) -> None:
         live_nodes[id(self)] = self
@@ -348,23 +348,6 @@ class Signal(Generic[T]):
 
     def __repr__(self) -> str:
         return f"{self._name}@{id(self)}"
-
-
-K = TypeVar("K")
-V = TypeVar("V")
-
-
-class RDict(dict[K, Signal[V]]):
-    def __setitem__(self, k: K, v: V) -> None:
-        # print(f"SET {k} = {v}")
-        if k not in self:
-            super().__setitem__(k, Signal(v, name=str(k)))
-
-        super().__getitem__(k)(v)
-
-    def __getitem__(self, k: K) -> V:
-        # print(f"GET {k}")
-        return super().__getitem__(k)()
 
 
 def global_var_signal(key: str) -> Signal[object] | None:
