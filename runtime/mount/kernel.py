@@ -481,6 +481,8 @@ class Kernel:
     widget_signals: dict[str, Signal[Any]] = field(default_factory=dict)
     nodes_with_widgets: dict[int, Node] = field(default_factory=dict)
 
+    cells_with_pending_widget_updates: set[str] = field(default_factory=set)
+
     cell_output_selections: dict[str, str] = field(default_factory=dict)
     viewer_cell_selections: dict[str, tuple[str, KeyType]] = field(default_factory=dict)
     plot_data_selections: dict[str, str] = field(default_factory=dict)
@@ -638,10 +640,15 @@ class Kernel:
 
         updated_widgets: set[str] = set()
 
-        unused_signals: set[str] = set(self.widget_signals.keys())
         for cell_id in self.cell_rnodes:
-            res: dict[str, WidgetState[str, object]] = {}
+            if cell_id not in self.cells_with_pending_widget_updates:
+                continue
 
+            if self.cell_status[cell_id] == "error":
+                # skip errored cells to avoid clobbering widget state
+                continue
+
+            res: dict[str, WidgetState[str, object]] = {}
             for n in nww_by_cell[cell_id]:
                 path = n.name_path()
                 for k, v in n.widget_states.items():
@@ -650,7 +657,6 @@ class Kernel:
 
                     if abs_k not in self.widget_signals:
                         continue
-                    unused_signals.remove(abs_k)
 
                     sig = self.widget_signals[abs_k]
                     if id(sig) in updated_signals:
@@ -662,12 +668,6 @@ class Kernel:
 
                     res[abs_k]["value"] = val
 
-            if self.cell_status[cell_id] == "error":
-                # skip errored cells to avoid clobbering widget state
-                # must be here so that we update unused_signals properly
-                # todo(maximsmol): optimize
-                continue
-
             await self.send({
                 "type": "cell_widgets",
                 "cell_id": cell_id,
@@ -676,6 +676,7 @@ class Kernel:
             })
 
         await self.set_active_cell(None)
+        self.cells_with_pending_widget_updates.clear()
 
         # fixme(rteqs): cleanup signals in some other way. the below does not work because widget signals
         # are restored on `init` but there are no corresponding `rnodes`
@@ -698,11 +699,18 @@ class Kernel:
         ctx.cur_comp.widget_states[key] = data
         self.nodes_with_widgets[id(ctx.cur_comp)] = ctx.cur_comp
 
+        # todo(maximsmol): I don't think this is actually nullable anymore
+        cell_id = ctx.cur_comp.cell_id
+        if cell_id is not None:
+            self.cells_with_pending_widget_updates.add(cell_id)
+
     def submit_widget_state(self) -> None:
         for s in ctx.updated_signals.values():
             s._apply_updates()
 
-        self.conn.call_fut(self.on_tick_finished(ctx.signals_update_from_code)).result()
+        self.conn.call_fut(
+            self.on_tick_finished(ctx.signals_updated_from_code)
+        ).result()
 
     def on_dispose(self, node: Node) -> None:
         if id(node) not in self.nodes_with_widgets:
