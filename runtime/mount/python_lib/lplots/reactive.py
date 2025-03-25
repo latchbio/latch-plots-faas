@@ -162,7 +162,7 @@ class RCtx:
     cur_comp: Node | None = None
 
     updated_signals: dict[int, "Signal"] = field(default_factory=dict)
-    signals_update_from_code: dict[int, "Signal"] = field(default_factory=dict)
+    signals_updated_from_code: dict[int, "Signal"] = field(default_factory=dict)
     stale_nodes: dict[int, Node] = field(default_factory=dict)
     prev_updated_signals: dict[int, "Signal"] = field(default_factory=dict)
 
@@ -188,8 +188,8 @@ class RCtx:
                 self.cur_comp = self.cur_comp.parent
 
     async def _tick(self) -> None:
-        tick_updated_signals = self.signals_update_from_code
-        self.signals_update_from_code = {}
+        tick_updated_signals = self.signals_updated_from_code
+        self.signals_updated_from_code = {}
 
         try:
             stack_depth = 1
@@ -321,7 +321,7 @@ class Signal(Generic[T]):
         # print(f"[@] node={name}, signal={self} triggered update {upd}")
         ctx.updated_signals[id(self)] = self
         if not _ui_update:
-            ctx.signals_update_from_code[id(self)] = self
+            ctx.signals_updated_from_code[id(self)] = self
 
         self._mark_listeners()
 
