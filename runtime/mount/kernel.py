@@ -719,6 +719,9 @@ class Kernel:
         if id(node) not in self.nodes_with_widgets:
             return
 
+        if node.cell_id is not None:
+            self.cells_with_pending_widget_updates.add(node.cell_id)
+
         del self.nodes_with_widgets[id(node)]
 
     def _cell_outputs(self) -> CategorizedCellOutputs:
