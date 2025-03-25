@@ -641,9 +641,6 @@ class Kernel:
         updated_widgets: set[str] = set()
 
         for cell_id in self.cell_rnodes:
-            if cell_id not in self.cells_with_pending_widget_updates:
-                continue
-
             if self.cell_status[cell_id] == "error":
                 # skip errored cells to avoid clobbering widget state
                 continue
@@ -667,6 +664,12 @@ class Kernel:
                         continue
 
                     res[abs_k]["value"] = val
+
+            if (
+                len(updated_widgets) == 0
+                and cell_id not in self.cells_with_pending_widget_updates
+            ):
+                continue
 
             await self.send({
                 "type": "cell_widgets",
