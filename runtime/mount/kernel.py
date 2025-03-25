@@ -561,7 +561,8 @@ class Kernel:
         sys.stdout.flush()
         sys.stderr.flush()
 
-        self.active_cell = cell_id
+        if cell_id is not None:
+            self.active_cell = cell_id
 
         self.cell_seq += 1
         await self.send(
