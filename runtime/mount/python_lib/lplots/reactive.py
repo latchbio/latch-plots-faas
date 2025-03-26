@@ -245,6 +245,7 @@ class RCtx:
                 self.cur_comp = self.cur_comp.parent
 
     async def _tick(self) -> None:
+        print("[@#] in tick")
         tick_updated_signals = self.signals_updated_from_code
         self.signals_updated_from_code = {}
 
@@ -290,6 +291,8 @@ class RCtx:
                 for n, p in to_dispose.values():
                     self.cur_comp = p
 
+                    print(f"[@#] rerunning {n} {p}")
+
                     try:
                         if n._is_stub:
                             n._is_stub = False
@@ -309,6 +312,7 @@ class RCtx:
         finally:
             await _inject.kernel.on_tick_finished(tick_updated_signals)
             await self.gc_signals()
+            self.prev_updated_signals = {}
 
     async def gc_signals(self) -> None:
         used_signals = {sid for node in live_nodes.values() for sid in node.signals}
@@ -317,7 +321,6 @@ class RCtx:
         for sid in unused_signals:
             del live_signals[sid]
             live_signal_ids.remove(sid)
-            self.prev_updated_signals = {}
 
     @property
     @asynccontextmanager
