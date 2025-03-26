@@ -430,7 +430,7 @@ class Signal(Generic[T]):
         self._updates.append(upd)
         ctx.updated_signals[self.id] = self
         if not _ui_update:
-            ctx.signals_update_from_code[self.id] = self
+            ctx.signals_updated_from_code[self.id] = self
 
         self._mark_listeners()
 
