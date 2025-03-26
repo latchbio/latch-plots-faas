@@ -428,6 +428,7 @@ class Signal(Generic[T]):
         if upd is Nothing.x:
             assert ctx.cur_comp is not None
 
+            print(f"[@#] adding listener {ctx.cur_comp.cell_id} to signal {self.id}")
             self._listeners[ctx.cur_comp.id] = ctx.cur_comp
             ctx.cur_comp.signals[self.id] = self
 
