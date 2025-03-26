@@ -1,7 +1,7 @@
 import asyncio
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, Literal, TypedDict
+from typing import Literal, TypedDict
 
 from ..reactive import Signal, ctx
 from . import _emit, _state
@@ -18,7 +18,7 @@ class ButtonWidgetState(_emit.WidgetState[Literal["button"], str]):
     default: ButtonWidgetSignalValue
 
 
-def parse_iso_strings(data: Any) -> tuple[datetime, datetime] | None:
+def parse_iso_strings(data: object) -> tuple[datetime, datetime] | None:
     if not isinstance(data, dict):
         return None
 
@@ -75,7 +75,7 @@ def w_button(
     *,
     key: str | None = None,
     label: str,
-    default: None | ButtonWidgetSignalValue = None,
+    default: ButtonWidgetSignalValue | None = None,
     readonly: bool = False,
 ) -> ButtonWidget:
     key = _state.use_state_key(key=key)

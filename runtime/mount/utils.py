@@ -101,7 +101,7 @@ async def gql_query(query: str, variables: dict[str, Any], auth: str) -> Any:
 
 
 def plot_to_webp_string(
-    fig: Figure | SubFigure, quality: int = 80, lossless: bool = False
+    fig: Figure | SubFigure, *, quality: int = 80, lossless: bool = False
 ) -> str:
     buf = io.BytesIO()
     fig.canvas.print_figure(
@@ -115,7 +115,7 @@ def plot_to_webp_string(
     return f"data:image/webp;base64,{fig_b64}"
 
 
-def orjson_encoder(obj: Any) -> Any:
+def orjson_encoder(obj: object) -> str | None:
     if isinstance(obj, Figure):
         return plot_to_webp_string(obj)
 
@@ -123,6 +123,7 @@ def orjson_encoder(obj: Any) -> Any:
         fig = obj.figure
         if fig is None:
             return None
+
         return plot_to_webp_string(fig)
 
     if isinstance(obj, LatchFile | LatchDir):

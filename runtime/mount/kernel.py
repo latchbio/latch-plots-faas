@@ -8,6 +8,7 @@ import socket
 import sys
 import traceback
 from collections import defaultdict
+from copy import copy
 from dataclasses import asdict, dataclass, field
 from io import TextIOWrapper
 from pathlib import Path
@@ -502,7 +503,7 @@ class RestoredGlobalInfo(TypedDict):
 class Kernel:
     conn: SocketIoThread
 
-    cell_seq = 0
+    cell_seq: int = 0
     cell_rnodes: dict[str, Node] = field(default_factory=dict)
     k_globals: TracedDict = field(init=False)
     cell_status: dict[str, str] = field(default_factory=dict)
@@ -511,6 +512,8 @@ class Kernel:
 
     widget_signals: dict[str, Signal[Any]] = field(default_factory=dict)
     nodes_with_widgets: dict[str, Node] = field(default_factory=dict)
+
+    cells_with_pending_widget_updates: set[str] = field(default_factory=set)
 
     cell_output_selections: dict[str, str] = field(default_factory=dict)
     viewer_cell_selections: dict[str, tuple[str, KeyType]] = field(default_factory=dict)
@@ -612,7 +615,11 @@ class Kernel:
 
         self.cell_seq += 1
         await self.send(
-            {"type": "start_cell", "cell_id": cell_id, "run_sequencer": self.cell_seq}
+            {
+                "type": "start_cell",
+                "cell_id": cell_id,
+                "run_sequencer": self.cell_seq,
+            }
         )
 
     async def send_global_updates(self) -> None:
@@ -663,10 +670,14 @@ class Kernel:
 
             tg.create_task(self.send_globals_summary())
 
-    async def on_tick_finished(self, updated_signals: dict[int, Signal]) -> None:
+    async def on_tick_finished(
+        self, updated_signals: dict[int, Signal[object]]
+    ) -> None:
         # todo(maximsmol): this can be optimizied
         # 1. we can just update nodes that actually re-ran last tick instead of everything
         # 2. we can pre-compute nww_by_cell
+        # 3. we can batch together the update messages so the frontend does not
+        # need to spam GQL requests
 
         nww_by_cell = {
             cell_id: [
@@ -675,21 +686,21 @@ class Kernel:
             for cell_id in self.cell_rnodes
         }
 
-        updated_widgets: set[str] = set()
-
-        unused_signals: set[str] = set(self.widget_signals.keys())
         for cell_id in self.cell_rnodes:
-            res: dict[str, WidgetState] = {}
+            if self.cell_status[cell_id] == "error":
+                # skip errored cells to avoid clobbering widget state
+                continue
 
+            updated_widgets: set[str] = set()
+            res: dict[str, WidgetState[str, object]] = {}
             for n in nww_by_cell[cell_id]:
                 path = n.name_path()
                 for k, v in n.widget_states.items():
                     abs_k = f"{path}/{k}"
-                    res[abs_k] = {**v}
+                    res[abs_k] = copy(v)
 
                     if abs_k not in self.widget_signals:
                         continue
-                    unused_signals.remove(abs_k)
 
                     sig = self.widget_signals[abs_k]
                     if sig.id in updated_signals:
@@ -700,10 +711,11 @@ class Kernel:
                         continue
 
                     res[abs_k]["value"] = val
-            if self.cell_status.get(cell_id) == "error":
-                # skip errored cells to avoid clobbering widget state
-                # must be here so that we update unused_signals properly
-                # todo(maximsmol): optimize
+
+            if (
+                len(updated_widgets) == 0
+                and cell_id not in self.cells_with_pending_widget_updates
+            ):
                 continue
 
             await self.send(
@@ -716,6 +728,7 @@ class Kernel:
             )
 
         await self.set_active_cell(None)
+        self.cells_with_pending_widget_updates.clear()
 
         # fixme(rteqs): cleanup signals in some other way. the below does not work because widget signals
         # are restored on `init` but there are no corresponding `rnodes`
@@ -846,15 +859,25 @@ class Kernel:
         ctx.cur_comp.widget_states[key] = data
         self.nodes_with_widgets[ctx.cur_comp.id] = ctx.cur_comp
 
+        # todo(maximsmol): I don't think this is actually nullable anymore
+        cell_id = ctx.cur_comp.cell_id
+        if cell_id is not None:
+            self.cells_with_pending_widget_updates.add(cell_id)
+
     def submit_widget_state(self) -> None:
         for s in ctx.updated_signals.values():
             s._apply_updates()
 
-        self.conn.call_fut(self.on_tick_finished(ctx.signals_update_from_code)).result()
+        self.conn.call_fut(
+            self.on_tick_finished(ctx.signals_updated_from_code)
+        ).result()
 
     def on_dispose(self, node: Node) -> None:
         if node.id not in self.nodes_with_widgets:
             return
+
+        if node.cell_id is not None:
+            self.cells_with_pending_widget_updates.add(node.cell_id)
 
         del self.nodes_with_widgets[node.id]
 
@@ -1215,7 +1238,12 @@ class Kernel:
             hasattr(res, "figure") and isinstance(res.figure, Figure)
         ):
             await self.send(
-                {"type": "output_value", **(id_fields), **(key_fields), "webp": res}
+                {
+                    "type": "output_value",
+                    **(id_fields),
+                    **(key_fields),
+                    "webp": res,
+                }
             )
             return
 
@@ -1584,6 +1612,13 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
+    if sys.platform == "linux":
+        from ctypes import CDLL
+
+        libc = CDLL("libc.so.6")
+        PR_SET_NAME = 15  # https://github.com/torvalds/linux/blob/2df0c02dab829dd89360d98a8a1abaa026ef5798/include/uapi/linux/prctl.h#L56
+        libc.prctl(PR_SET_NAME, b"kernel")
+
     import multiprocessing
 
     multiprocessing.set_start_method("forkserver")

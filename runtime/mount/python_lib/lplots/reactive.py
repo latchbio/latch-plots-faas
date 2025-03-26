@@ -32,7 +32,7 @@ stub_node_noop = lambda: None
 def graphviz() -> None:
     from pathlib import Path
 
-    with Path("graph.dot").open("w") as f:
+    with Path("graph.dot").open("w", encoding="utf-8") as f:
         f.write("digraph G {\n")
 
         for n in live_nodes.values():
@@ -59,7 +59,7 @@ class Node:
 
     _is_stub: bool = False
 
-    widget_states: dict[str, WidgetState] = field(default_factory=dict)
+    widget_states: dict[str, WidgetState[str, object]] = field(default_factory=dict)
     widget_state_idx: int = 0
 
     @property
@@ -245,8 +245,8 @@ class RCtx:
                 self.cur_comp = self.cur_comp.parent
 
     async def _tick(self) -> None:
-        tick_updated_signals = self.signals_update_from_code
-        self.signals_update_from_code = {}
+        tick_updated_signals = self.signals_updated_from_code
+        self.signals_updated_from_code = {}
 
         try:
             stack_depth = 1
@@ -453,23 +453,6 @@ class Signal(Generic[T]):
 
     def __repr__(self) -> str:
         return f"{self._name}@{self.id}"
-
-
-K = TypeVar("K")
-V = TypeVar("V")
-
-
-class RDict(dict[K, Signal[V]]):
-    def __setitem__(self, k: K, v: V) -> None:
-        # print(f"SET {k} = {v}")
-        if k not in self:
-            super().__setitem__(k, Signal(v, name=str(k)))
-
-        super().__getitem__(k)(v)
-
-    def __getitem__(self, k: K) -> V:
-        # print(f"GET {k}")
-        return super().__getitem__(k)()
 
 
 def global_var_signal(key: str) -> Signal[object] | None:
