@@ -433,7 +433,12 @@ class Signal(Generic[T]):
 
             return self._value
 
-        print(f"[@#] signal {self} ; update {upd} ; _ui_update {_ui_update}")
+        print(
+            f"[@#] cur comp {ctx.cur_comp.serialize()"
+        )
+        print(
+            f"[@#] signal {self.serialize()} ; update {upd} ; _ui_update {_ui_update}"
+        )
         self._updates.append(upd)
         ctx.updated_signals[self.id] = self
         if not _ui_update:
