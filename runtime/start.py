@@ -44,6 +44,7 @@ os.execle(
     "-n",
     "-2",
     "/opt/mamba/envs/plots-faas/bin/python",
+    "-u",
     "-m",
     "runtime.main",
     env_vars,
