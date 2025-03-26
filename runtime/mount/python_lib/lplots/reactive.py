@@ -433,7 +433,8 @@ class Signal(Generic[T]):
 
             return self._value
 
-        print(f"[@#] cur comp {ctx.cur_comp.serialize()}")
+        if ctx.cur_comp is not None:
+            print(f"[@#] cur comp {ctx.cur_comp.serialize()}")
         print(
             f"[@#] signal {self.serialize()} ; update {upd} ; _ui_update {_ui_update}"
         )
