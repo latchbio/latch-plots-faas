@@ -209,7 +209,7 @@ class RCtx:
     cur_comp: Node | None = None
 
     updated_signals: dict[str, "Signal"] = field(default_factory=dict)
-    signals_update_from_code: dict[str, "Signal"] = field(default_factory=dict)
+    signals_updated_from_code: dict[str, "Signal"] = field(default_factory=dict)
     stale_nodes: dict[str, Node] = field(default_factory=dict)
     prev_updated_signals: dict[str, "Signal"] = field(default_factory=dict)
 
