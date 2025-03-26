@@ -271,6 +271,10 @@ class RCtx:
             self.prev_updated_signals = self.updated_signals
             self.updated_signals = {}
 
+            print(
+                f"[@#] stale {self.stale_nodes} ; prev_updated_signals {self.prev_updated_signals}"
+            )
+
             to_dispose: dict[str, tuple[Node, Node | None]] = {}
             for n in self.stale_nodes.values():
                 if n.disposed:
