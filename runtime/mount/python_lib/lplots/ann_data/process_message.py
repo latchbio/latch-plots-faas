@@ -206,8 +206,8 @@ def handle_ann_data_widget_message(
                     "init_obs_nrof_values": nrof_obs,
 
                     # var info
-                    "var_index": var_index,
-                    "var_names": var_names,
+                    "init_var_index": var_index.tolist(),
+                    "init_var_names": var_names.tolist() if var_names is not None else None,
                 }
             },
         }
@@ -300,8 +300,8 @@ def handle_ann_data_widget_message(
             "key": widget_key,
             "value": {
                 "data": {
-                    "var_index": var_index,
-                    "var_names": var_names,
+                    "var_index": var_index.tolist(),
+                    "var_names": var_names.tolist() if var_names is not None else None,
                 },
             },
         }
