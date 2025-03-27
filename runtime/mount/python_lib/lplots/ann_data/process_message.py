@@ -74,6 +74,25 @@ def get_obs(
     return obs, (truncated_unique_obs, counts), len(unique_obs)
 
 
+def get_obs_vector(
+    src: str,
+    adata: ad.AnnData,
+    var_index: str,
+) -> NDArray[np.int64]:
+    n_cells = adata.n_obs
+
+    if n_cells > MAX_VISUALIZATION_CELLS:
+        if src not in ann_data_index_cache:
+            idxs = RNG.choice(n_cells, size=MAX_VISUALIZATION_CELLS, replace=False)
+            ann_data_index_cache[src] = idxs
+        else:
+            idxs = ann_data_index_cache[src]
+    else:
+        idxs = np.arange(n_cells)
+
+    return np.asarray(adata[:, var_index].X[idxs, 0])  # type: ignore  # noqa: PGH003
+
+
 def get_var_index(
     src: str,
     adata: ad.AnnData
@@ -300,7 +319,7 @@ def handle_ann_data_widget_message(
                 "value": {"error": f"Variable {msg.get('var_index', '`var_index` key missing from message')} not found"},
             }
 
-        gene_column = adata.obs_vector(msg["var_index"])
+        gene_column = get_obs_vector(widget_state["src"], adata, msg["var_index"])
 
         return {
             "type": "ann_data",
