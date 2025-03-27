@@ -314,16 +314,16 @@ class RCtx:
 
         finally:
             await _inject.kernel.on_tick_finished(tick_updated_signals)
-            await self.gc_signals()
+            # await self.gc_signals()
             self.prev_updated_signals = {}
 
-    async def gc_signals(self) -> None:
-        used_signals = {sid for node in live_nodes.values() for sid in node.signals}
-        unused_signals = set(live_signal_ids) - used_signals
+    # async def gc_signals(self) -> None:
+    #     used_signals = {sid for node in live_nodes.values() for sid in node.signals}
+    #     unused_signals = set(live_signal_ids) - used_signals
 
-        for sid in unused_signals:
-            del live_signals[sid]
-            live_signal_ids.remove(sid)
+    #     for sid in unused_signals:
+    #         del live_signals[sid]
+    #         live_signal_ids.remove(sid)
 
     @property
     @asynccontextmanager
