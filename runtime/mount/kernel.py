@@ -564,7 +564,9 @@ class Kernel:
             },
             "cell_status": self.cell_status,
             "active_cell": self.active_cell,
-            "widget_signals": {k: repr(v) for k, v in self.widget_signals.items()},
+            "widget_signals": {
+                k: v.serialize(short_val=True) for k, v in self.widget_signals.items()
+            },
             "nodes_with_widgets": {
                 str(k): v.debug_state() for k, v in self.nodes_with_widgets.items()
             },
