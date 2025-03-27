@@ -306,7 +306,10 @@ def handle_ann_data_widget_message(
             "type": "ann_data",
             "op": op,
             "key": widget_key,
-            "value": {"data": gene_column.tolist()},
+            "value": {"data": {
+                "fetched_for_key": msg["var_index"],
+                "values": gene_column.tolist(),
+            }},
         }
 
     raise ValueError(f"Invalid operation: {op}")
