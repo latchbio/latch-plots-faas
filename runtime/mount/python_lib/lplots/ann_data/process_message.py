@@ -261,4 +261,29 @@ def handle_ann_data_widget_message(
             },
         }
 
+    if op == "get_var_index":
+        var_index = np.asarray(adata.var_names)
+
+        name_key = None
+        for key in adata.var_keys():
+            if any(key.lower() in x for x in ["gene_symbols", "gene_names", "gene_ids"]):
+                name_key = key
+                break
+
+        var_names = None
+        if name_key is not None:
+            var_names = np.asarray(adata.var[name_key])
+
+        return {
+            "type": "ann_data",
+            "op": op,
+            "key": widget_key,
+            "value": {
+                "data": {
+                    "var_index": var_index,
+                    "var_names": var_names,
+                },
+            },
+        }
+
     raise ValueError(f"Invalid operation: {op}")
