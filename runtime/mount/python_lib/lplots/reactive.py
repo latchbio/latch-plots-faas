@@ -222,11 +222,9 @@ class RCtx:
         *,
         _cell_id: str | None = None,
     ) -> R:
-        print(f"[@#] running {f.__name__} {_cell_id}, {self.cur_comp}")
-        print(f"[@#] assert {_cell_id} code {code}")
-
         # note(kenny): it is only safe to call without code if the node is a
-        # child and can be reconstructed by the parent
+        # child and can be reconstructed by the parent. Otherwise not possible
+        # to serialize when snapshot requested.
         assert code is not None or self.cur_comp is not None
 
         # note(maximsmol): we want this to happen for non-cell nodes too
@@ -239,7 +237,6 @@ class RCtx:
             self.cur_comp = Node(
                 f=f, parent=self.cur_comp, cell_id=_cell_id, _id=None, code=code
             )
-            print(f"[@#] created node with cell_id {_cell_id} code {code}")
 
             try:
                 if inspect.iscoroutinefunction(f):
@@ -275,10 +272,6 @@ class RCtx:
             self.prev_updated_signals = self.updated_signals
             self.updated_signals = {}
 
-            print(
-                f"[@#] stale {self.stale_nodes} ; prev_updated_signals {self.prev_updated_signals}"
-            )
-
             to_dispose: dict[str, tuple[Node, Node | None]] = {}
             for n in self.stale_nodes.values():
                 if n.disposed:
@@ -297,8 +290,6 @@ class RCtx:
             async with self.transaction:
                 for n, p in to_dispose.values():
                     self.cur_comp = p
-
-                    print(f"[@#] rerunning {n} {p}")
 
                     try:
                         if n._is_stub:
@@ -432,19 +423,11 @@ class Signal(Generic[T]):
         if upd is Nothing.x:
             assert ctx.cur_comp is not None
 
-            print(
-                f"[@#] adding listener id: {ctx.cur_comp.cell_id} name: {ctx.cur_comp.name} to signal {self.id}"
-            )
             self._listeners[ctx.cur_comp.id] = ctx.cur_comp
             ctx.cur_comp.signals[self.id] = self
 
             return self._value
 
-        if ctx.cur_comp is not None:
-            print(f"[@#] cur comp {ctx.cur_comp.name}")
-        else:
-            print(f"[@#] cur comp None. Signal: {self._name}")
-        print(f"[@#] signal {self._name} ; update {upd} ; _ui_update {_ui_update}")
         self._updates.append(upd)
         ctx.updated_signals[self.id] = self
         if not _ui_update:
