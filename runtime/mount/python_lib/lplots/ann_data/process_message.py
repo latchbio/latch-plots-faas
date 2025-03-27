@@ -9,6 +9,7 @@ ann_data_ops = ["init_data", "get_obsm_options", "get_obsm", "get_obs_options", 
 
 ann_data_object_cache: dict[str, ad.AnnData] = {}
 ann_data_index_cache: dict[str, NDArray[np.int64]] = {}
+ann_data_var_index_cache: dict[str, tuple[NDArray[np.str_], NDArray[np.str_] | None]] = {}
 
 
 MAX_VISUALIZATION_CELLS = 100000
@@ -71,6 +72,29 @@ def get_obs(
         truncated_unique_obs, counts = np.unique(obs, return_counts=True)
 
     return obs, (truncated_unique_obs, counts), len(unique_obs)
+
+
+def get_var_index(
+    src: str,
+    adata: ad.AnnData
+) -> tuple[NDArray[np.str_], NDArray[np.str_] | None]:
+    if src in ann_data_var_index_cache:
+        return ann_data_var_index_cache[src]
+
+    var_index = np.asarray(adata.var_names)
+
+    name_key = None
+    for key in adata.var_keys():
+        if any(key.lower() in x for x in ["gene_symbols", "gene_names", "gene_ids"]):
+            name_key = key
+            break
+
+    var_names = None
+    if name_key is not None:
+        var_names = np.asarray(adata.var[name_key])
+
+    ann_data_var_index_cache[src] = var_index, var_names
+    return var_index, var_names
 
 
 def handle_ann_data_widget_message(
@@ -155,6 +179,8 @@ def handle_ann_data_widget_message(
         if init_obs_key is not None:
             obs, (unique_obs, counts), nrof_obs = get_obs(widget_state["src"], adata, init_obs_key)
 
+        var_index, var_names = get_var_index(widget_state["src"], adata)
+
         return {
             "type": "ann_data",
             "op": op,
@@ -178,6 +204,10 @@ def handle_ann_data_widget_message(
                     "init_obs_unique_values": unique_obs.tolist() if unique_obs is not None else None,
                     "init_obs_counts": counts.tolist() if counts is not None else None,
                     "init_obs_nrof_values": nrof_obs,
+
+                    # var info
+                    "var_index": var_index,
+                    "var_names": var_names,
                 }
             },
         }
@@ -262,17 +292,7 @@ def handle_ann_data_widget_message(
         }
 
     if op == "get_var_index":
-        var_index = np.asarray(adata.var_names)
-
-        name_key = None
-        for key in adata.var_keys():
-            if any(key.lower() in x for x in ["gene_symbols", "gene_names", "gene_ids"]):
-                name_key = key
-                break
-
-        var_names = None
-        if name_key is not None:
-            var_names = np.asarray(adata.var[name_key])
+        var_index, var_names = get_var_index(widget_state["src"], adata)
 
         return {
             "type": "ann_data",
