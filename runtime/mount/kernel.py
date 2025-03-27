@@ -33,7 +33,7 @@ from lplots import _inject
 from lplots.persistence import (SerializedNode, SerializedSignal,
                                 safe_serialize_obj, safe_unserialize_obj,
                                 small_repr, unserial_symbol)
-from lplots.reactive import Node, Signal, ctx, stub_node_noop
+from lplots.reactive import Node, Signal, ctx, live_nodes, live_signals
 from lplots.themes import graphpad_inspired_theme
 from lplots.utils.nothing import Nothing
 from lplots.widgets._emit import WidgetState
@@ -591,6 +591,8 @@ class Kernel:
             "restored_signals": {
                 k: v.serialize(short_val=True) for k, v in self.restored_signals.items()
             },
+            "live_signals": {k: v.serialize() for k, v in live_signals.items()},
+            "live_nodes": {k: v.serialize() for k, v in live_nodes.items()},
             "restored_globals": self.restored_globals,
             "session_snapshot_mode": self.session_snapshot_mode,
         }
