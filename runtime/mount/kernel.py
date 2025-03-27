@@ -691,7 +691,9 @@ class Kernel:
         }
 
         for cell_id in self.cell_rnodes:
-            if self.cell_status[cell_id] == "error":
+            # note(kenny): if kernel loaded from snapshot, not every cell rnode
+            # will have a status
+            if self.cell_status.get(cell_id) == "error":
                 # skip errored cells to avoid clobbering widget state
                 continue
 
