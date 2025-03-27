@@ -437,10 +437,10 @@ class Signal(Generic[T]):
             return self._value
 
         if ctx.cur_comp is not None:
-            print(f"[@#] cur comp {ctx.cur_comp.serialize()}")
-        print(
-            f"[@#] signal {self.serialize()} ; update {upd} ; _ui_update {_ui_update}"
-        )
+            print(f"[@#] cur comp {ctx.cur_comp.name}")
+        else:
+            print(f"[@#] cur comp None. Signal: {self._name}")
+        print(f"[@#] signal {self._name} ; update {upd} ; _ui_update {_ui_update}")
         self._updates.append(upd)
         ctx.updated_signals[self.id] = self
         if not _ui_update:
