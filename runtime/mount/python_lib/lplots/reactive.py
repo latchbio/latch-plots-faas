@@ -222,6 +222,8 @@ class RCtx:
         *,
         _cell_id: str | None = None,
     ) -> R:
+        print(f"[@#] running {f.__name__} {_cell_id}")
+
         # note(kenny): it is only safe to call without code if the node is a
         # child and can be reconstructed by the parent
         assert code is not None or self.cur_comp.parent is not None
@@ -236,6 +238,7 @@ class RCtx:
             self.cur_comp = Node(
                 f=f, parent=self.cur_comp, cell_id=_cell_id, _id=None, code=code
             )
+            print(f"[@#] created node with cell_id {_cell_id} code {code}")
 
             try:
                 if inspect.iscoroutinefunction(f):
