@@ -5,7 +5,7 @@ import anndata as ad  # type: ignore  # noqa: PGH003
 import numpy as np
 from numpy.typing import NDArray
 
-ann_data_ops = ["init_data", "get_obsm_options", "get_obsm", "get_obs_options", "get_obs"]
+ann_data_ops = ["init_data", "get_obsm_options", "get_obsm", "get_obs_options", "get_obs", "get_counts_column"]
 
 ann_data_object_cache: dict[str, ad.AnnData] = {}
 ann_data_index_cache: dict[str, NDArray[np.int64]] = {}
@@ -291,19 +291,22 @@ def handle_ann_data_widget_message(
             },
         }
 
-    if op == "get_var_index":
-        var_index, var_names = get_var_index(widget_state["src"], adata)
+    if op == "get_counts_column":
+        if "var_index" not in msg or msg["var_index"] not in adata.var_names:
+            return {
+                "type": "ann_data",
+                "op": op,
+                "key": widget_key,
+                "value": {"error": f"Variable {msg.get('var_index', '`var_index` key missing from message')} not found"},
+            }
+
+        gene_column = adata.obs_vector(msg["var_index"])
 
         return {
             "type": "ann_data",
             "op": op,
             "key": widget_key,
-            "value": {
-                "data": {
-                    "var_index": var_index.tolist(),
-                    "var_names": var_names.tolist() if var_names is not None else None,
-                },
-            },
+            "value": {"data": gene_column.tolist()},
         }
 
     raise ValueError(f"Invalid operation: {op}")
