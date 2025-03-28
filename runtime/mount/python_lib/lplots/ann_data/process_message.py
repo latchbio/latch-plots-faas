@@ -360,17 +360,20 @@ def handle_ann_data_widget_message(
             mutate_obs(adata, msg["obsm_key"], obs_key, msg["obs_value"], msg["lasso_points"])
 
         obs, (unique_obs, counts), nrof_obs = get_obs(obj_id, adata, obs_key)
+
         return {
             "type": "ann_data",
-            "op": op,
+            "op": "get_obs",
             "key": widget_key,
-            "value": {"data": {
-                "obs_key": obs_key,
-                "values": obs.tolist(),
-                "unique_values": unique_obs.tolist(),
-                "counts": counts.tolist(),
-                "nrof_values": nrof_obs,
-            }},
+            "value": {
+                "data": {
+                    "fetched_for_key": msg["obs_key"],
+                    "values": obs.tolist(),
+                    "unique_values": unique_obs.tolist(),
+                    "counts": counts.tolist(),
+                    "nrof_values": nrof_obs
+                },
+            },
         }
 
     raise ValueError(f"Invalid operation: {op}")
