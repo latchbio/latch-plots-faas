@@ -1,5 +1,5 @@
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Literal, TypedDict
 
@@ -45,17 +45,39 @@ def parse_iso_strings(data: object) -> tuple[datetime, datetime] | None:
         return None
 
 
-@dataclass(frozen=True, kw_only=True)
+@dataclass(kw_only=True)
 class ButtonWidget(widget.BaseWidget):
     _key: str
     _state: ButtonWidgetState
     _signal: Signal[object | ButtonWidgetSignalValue]
     _trigger_signal: Signal[object]
 
+    _last_clicked_ref: None | datetime = field(default=None, repr=False)
+
+    # @property
+    # def value(self) -> bool:
+    #     self._trigger_signal()
+    #     return self._trigger_signal.id in ctx.prev_updated_signals
+
     @property
     def value(self) -> bool:
-        self._trigger_signal()
-        return self._trigger_signal.id in ctx.prev_updated_signals
+        res = self._signal()
+        if not isinstance(res, dict) or not all(
+            key in res for key in ButtonWidgetSignalValue.__annotations__
+        ):
+            return False
+        parsed = parse_iso_strings(res)
+        if parsed is None:
+            return False
+        clicked, last_clicked = parsed
+        if self._last_clicked_ref is None:
+            self._last_clicked_ref = last_clicked
+
+        if clicked > self._last_clicked_ref:
+            # self._signal({"clicked": str(clicked), "last_clicked": str(last_clicked)})
+            return True
+
+        return False
 
     def _update(self) -> None:
         res = self._signal()
@@ -135,8 +157,8 @@ def w_button(
     _emit.emit_widget(key, res._state)
 
     # todo(rteqs): this can deadlock. either we make w_button async or figure something out
-    asyncio.run_coroutine_threadsafe(
-        res._create_update_node(), asyncio.get_running_loop()
-    )
+    # asyncio.run_coroutine_threadsafe(
+    #     res._create_update_node(), asyncio.get_running_loop()
+    # )
 
     return res
