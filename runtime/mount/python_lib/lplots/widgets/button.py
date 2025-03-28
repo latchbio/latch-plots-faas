@@ -62,10 +62,10 @@ class ButtonWidget(widget.BaseWidget):
     @property
     def value(self) -> bool:
         print(f"[@#] value from sig {self._signal} {self._signal._ui_update}")
+        res = self._signal()
+
         if not self._signal._ui_update:
             return False
-
-        res = self._signal()
 
         if not isinstance(res, dict) or not all(
             key in res for key in ButtonWidgetSignalValue.__annotations__
