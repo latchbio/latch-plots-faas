@@ -54,14 +54,8 @@ class ButtonWidget(widget.BaseWidget):
         default_factory=lambda: [None], repr=False
     )
 
-    # @property
-    # def value(self) -> bool:
-    #     self._trigger_signal()
-    #     return self._trigger_signal.id in ctx.prev_updated_signals
-
     @property
     def value(self) -> bool:
-        print(f"[@#] value from sig {self._signal} {self._signal._ui_update}")
         res = self._signal()
 
         if not self._signal._ui_update:
@@ -80,33 +74,9 @@ class ButtonWidget(widget.BaseWidget):
             self._last_clicked_ref[0] = last_clicked
 
         if clicked > self._last_clicked_ref[0]:
-            # self._signal({"clicked": str(clicked), "last_clicked": str(last_clicked)})
             return True
 
         return False
-
-    def _update(self) -> None:
-        res = self._signal()
-
-        if not isinstance(res, dict) or not all(
-            key in res for key in ButtonWidgetSignalValue.__annotations__
-        ):
-            return
-
-        parsed = parse_iso_strings(res)
-        if parsed is None:
-            return
-
-        clicked, last_clicked = parsed
-
-        if clicked <= last_clicked:
-            return
-
-        self._signal({**res, "last_clicked": str(clicked)})
-        self._trigger_signal(None)
-
-    async def _create_update_node(self) -> None:
-        await ctx.run(self._update)
 
     def serialize(self) -> "SerializedButtonWidget":  # type: ignore[override]
         return SerializedButtonWidget(
@@ -140,7 +110,6 @@ def w_button(
     readonly: bool = False,
 ) -> ButtonWidget:
     key = _state.use_state_key(key=key)
-    # trigger_key = _state.use_state_key(key=f"{key}#trigger")
 
     if default is None:
         now = datetime.now(UTC).isoformat()
@@ -155,13 +124,7 @@ def w_button(
             "readonly": readonly,
         },
         _signal=_state.use_value_signal(key=key),
-        #    _trigger_signal=_state.use_value_signal(key=trigger_key),
     )
     _emit.emit_widget(key, res._state)
-
-    # todo(rteqs): this can deadlock. either we make w_button async or figure something out
-    # asyncio.run_coroutine_threadsafe(
-    #     res._create_update_node(), asyncio.get_running_loop()
-    # )
 
     return res
