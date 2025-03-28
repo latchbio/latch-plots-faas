@@ -1,15 +1,15 @@
 from typing import TYPE_CHECKING, Generic, NotRequired, TypedDict, TypeVar
 
 from .. import _inject
-from . import widget
 
 if TYPE_CHECKING:
     from ..reactive import Signal
+    from . import widget
 
 WidgetType = TypeVar("WidgetType", bound=str)
 WidgetValue = TypeVar("WidgetValue")
 
-widget_registry: dict[str, type[widget.BaseWidget]] = {}
+widget_registry: dict[str, "widget.BaseWidget"] = {}
 
 
 class WidgetState(TypedDict, Generic[WidgetType, WidgetValue]):
