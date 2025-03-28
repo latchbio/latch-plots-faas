@@ -15,6 +15,7 @@ from traceback import format_exc
 from types import FrameType
 from typing import TYPE_CHECKING, Any, Literal, TypedDict, TypeVar
 
+import anndata as ad  # type: ignore  # noqa: PGH003
 import numpy as np
 import orjson
 import pandas as pd
@@ -488,6 +489,8 @@ class Kernel:
     ldata_dataframes: dict[str, DataFrame] = field(default_factory=dict)
     registry_dataframes: dict[str, DataFrame] = field(default_factory=dict)
     url_dataframes: dict[str, DataFrame] = field(default_factory=dict)
+
+    ann_data_objects: dict[str, ad.AnnData] = field(default_factory=dict)
 
     cell_pagination_settings: defaultdict[str, defaultdict[str, PaginationSettings]] = (
         field(default_factory=pagination_settings_dict_factory)

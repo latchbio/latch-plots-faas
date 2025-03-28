@@ -1,9 +1,10 @@
-from pathlib import Path
 from typing import Any
 
 import anndata as ad  # type: ignore  # noqa: PGH003
 import numpy as np
 from numpy.typing import NDArray
+
+from .. import _inject
 
 ann_data_ops = ["init_data", "get_obsm_options", "get_obsm", "get_obs_options", "get_obs", "get_counts_column"]
 
@@ -17,7 +18,7 @@ RNG = np.random.default_rng()
 
 
 def get_obsm(
-    src: str,
+    obj_id: str,
     adata: ad.AnnData,
     obsm_key: str,
 ) -> tuple[NDArray[np.float32], NDArray[np.str_]] | tuple[None, None]:
@@ -28,11 +29,11 @@ def get_obsm(
 
     # todo(aidan): intelligent downsampling to preserve outliers / information in genera
     if n_cells > MAX_VISUALIZATION_CELLS:
-        if src not in ann_data_index_cache:
+        if obj_id not in ann_data_index_cache:
             idxs = RNG.choice(n_cells, size=MAX_VISUALIZATION_CELLS, replace=False)
-            ann_data_index_cache[src] = idxs
+            ann_data_index_cache[obj_id] = idxs
         else:
-            idxs = ann_data_index_cache[src]
+            idxs = ann_data_index_cache[obj_id]
     else:
         idxs = np.arange(n_cells)
 
@@ -45,7 +46,7 @@ def get_obsm(
 
 
 def get_obs(
-    src: str,
+    obj_id: str,
     adata: ad.AnnData,
     obs_key: str,
 ) -> tuple[NDArray[np.str_], tuple[NDArray[np.str_], NDArray[np.int64]], int]:
@@ -55,11 +56,11 @@ def get_obs(
 
     # todo(aidan): intelligent downsampling to preserve outliers / information in general
     if n_cells > MAX_VISUALIZATION_CELLS:
-        if src not in ann_data_index_cache:
+        if obj_id not in ann_data_index_cache:
             idxs = RNG.choice(n_cells, size=MAX_VISUALIZATION_CELLS, replace=False)
-            ann_data_index_cache[src] = idxs
+            ann_data_index_cache[obj_id] = idxs
         else:
-            idxs = ann_data_index_cache[src]
+            idxs = ann_data_index_cache[obj_id]
 
         obs = obs[idxs]
 
@@ -75,18 +76,18 @@ def get_obs(
 
 
 def get_obs_vector(
-    src: str,
+    obj_id: str,
     adata: ad.AnnData,
     var_index: str,
 ) -> NDArray[np.int64]:
     n_cells = adata.n_obs
 
     if n_cells > MAX_VISUALIZATION_CELLS:
-        if src not in ann_data_index_cache:
+        if obj_id not in ann_data_index_cache:
             idxs = RNG.choice(n_cells, size=MAX_VISUALIZATION_CELLS, replace=False)
-            ann_data_index_cache[src] = idxs
+            ann_data_index_cache[obj_id] = idxs
         else:
-            idxs = ann_data_index_cache[src]
+            idxs = ann_data_index_cache[obj_id]
     else:
         idxs = np.arange(n_cells)
 
@@ -94,11 +95,11 @@ def get_obs_vector(
 
 
 def get_var_index(
-    src: str,
+    obj_id: str,
     adata: ad.AnnData
 ) -> tuple[NDArray[np.str_], NDArray[np.str_] | None]:
-    if src in ann_data_var_index_cache:
-        return ann_data_var_index_cache[src]
+    if obj_id in ann_data_var_index_cache:
+        return ann_data_var_index_cache[obj_id]
 
     var_index = np.asarray(adata.var_names)
 
@@ -112,7 +113,7 @@ def get_var_index(
     if name_key is not None:
         var_names = np.asarray(adata.var[name_key])
 
-    ann_data_var_index_cache[src] = var_index, var_names
+    ann_data_var_index_cache[obj_id] = var_index, var_names
     return var_index, var_names
 
 
@@ -131,30 +132,26 @@ def handle_ann_data_widget_message(
     widget_key = msg["key"]
     widget_state: dict[str, Any] = msg["state"]
 
-    if "src" not in widget_state:
+    if "obj_id" not in widget_state:
         return {
             "type": "ann_data",
             "key": widget_key,
             "value": {
-                "error": "Widget state does not contain src",
+                "error": "Widget state does not contain obj_id",
             },
         }
 
-    path_src = Path(widget_state["src"])
-    if not path_src.exists():
+    obj_id = widget_state["obj_id"]
+    if obj_id not in _inject.kernel.ann_data_objects:
         return {
             "type": "ann_data",
             "key": widget_key,
             "value": {
-                "error": f"File {path_src} does not exist",
+                "error": f"AnnData object with ID {obj_id} not found in cache",
             },
         }
 
-    if widget_state["src"] in ann_data_object_cache:
-        adata = ann_data_object_cache[widget_state["src"]]
-    else:
-        adata = ad.read_h5ad(path_src, backed="r")
-        ann_data_object_cache[widget_state["src"]] = adata
+    adata = _inject.kernel.ann_data_objects[obj_id]
 
     if "op" not in msg or msg["op"] not in ann_data_ops:
         return {
@@ -189,16 +186,16 @@ def handle_ann_data_widget_message(
         obsm = None
         index = None
         if init_obsm_key is not None:
-            obsm, index = get_obsm(widget_state["src"], adata, init_obsm_key)
+            obsm, index = get_obsm(obj_id, adata, init_obsm_key)
 
         obs = None
         unique_obs = None
         nrof_obs = None
         counts = None
         if init_obs_key is not None:
-            obs, (unique_obs, counts), nrof_obs = get_obs(widget_state["src"], adata, init_obs_key)
+            obs, (unique_obs, counts), nrof_obs = get_obs(obj_id, adata, init_obs_key)
 
-        var_index, var_names = get_var_index(widget_state["src"], adata)
+        var_index, var_names = get_var_index(obj_id, adata)
 
         return {
             "type": "ann_data",
@@ -250,7 +247,7 @@ def handle_ann_data_widget_message(
                 },
             }
 
-        obsm, index = get_obsm(widget_state["src"], adata, msg["obsm_key"])
+        obsm, index = get_obsm(obj_id, adata, msg["obsm_key"])
         if obsm is None or index is None:
             return {
                 "type": "ann_data",
@@ -293,7 +290,7 @@ def handle_ann_data_widget_message(
                 },
             }
 
-        obs, (unique_obs, counts), nrof_obs = get_obs(widget_state["src"], adata, msg["obs_key"])
+        obs, (unique_obs, counts), nrof_obs = get_obs(obj_id, adata, msg["obs_key"])
 
         return {
             "type": "ann_data",
@@ -319,7 +316,7 @@ def handle_ann_data_widget_message(
                 "value": {"error": f"Variable {msg.get('var_index', '`var_index` key missing from message')} not found"},
             }
 
-        gene_column = get_obs_vector(widget_state["src"], adata, msg["var_index"])
+        gene_column = get_obs_vector(obj_id, adata, msg["var_index"])
 
         return {
             "type": "ann_data",

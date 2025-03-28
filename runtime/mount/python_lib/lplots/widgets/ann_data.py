@@ -1,13 +1,15 @@
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Literal, NotRequired
 
+import anndata as ad  # type: ignore  # noqa: PGH003
+
+from .. import _inject
 from ..reactive import Signal
 from . import _emit, _state
 
 
 class AnnDataState(_emit.WidgetState[Literal["ann_data"], str]):
-    src: str
+    obj_id: str
     readonly: NotRequired[bool]
 
 
@@ -17,18 +19,17 @@ class AnnData:
     _state: AnnDataState
     _signal: Signal[object]
 
-    def _value(self, val: object) -> Path | None:
-        if not isinstance(val, Path):
+    def _value(self, val: object) -> ad.AnnData | None:
+        if not isinstance(val, ad.AnnData):
             return None
-
         return val
 
     @property
-    def value(self) -> Path | None:
+    def value(self) -> ad.AnnData | None:
         res = self._signal()
         return self._value(res)
 
-    def sample(self) -> Path | None:
+    def sample(self) -> ad.AnnData | None:
         res = self._signal.sample()
         return self._value(res)
 
@@ -36,16 +37,19 @@ class AnnData:
 def w_ann_data(
     *,
     key: str | None = None,
-    src: Path,
+    adata: ad.AnnData,
     readonly: bool = False,
 ) -> AnnData:
     key = _state.use_state_key(key=key)
+    obj_id = str(id(adata))
+
+    _inject.kernel.ann_data_objects[obj_id] = adata
 
     res = AnnData(
         _key=key,
         _state={
             "type": "ann_data",
-            "src": str(src),
+            "obj_id": obj_id,
             "readonly": readonly,
         },
         _signal=_state.use_value_signal(key=key),
