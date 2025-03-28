@@ -23,7 +23,6 @@ class ButtonWidgetState(_emit.WidgetState[button_type, str]):
 
 
 class SerializedButtonWidget(SerializedWidget):
-    trigger_signal_id: str
     # state: _emit.WidgetState[Literal["button"], str]
     state: ButtonWidgetState  # type: ignore[override]
 
@@ -50,7 +49,6 @@ class ButtonWidget(widget.BaseWidget):
     _key: str
     _state: ButtonWidgetState
     _signal: Signal[object | ButtonWidgetSignalValue]
-    _trigger_signal: Signal[object]
 
     _last_clicked_ref: list[None | datetime] = field(
         default_factory=lambda: [None], repr=False
@@ -113,7 +111,6 @@ class ButtonWidget(widget.BaseWidget):
     def serialize(self) -> "SerializedButtonWidget":  # type: ignore[override]
         return SerializedButtonWidget(
             signal_id=self._signal.id,
-            trigger_signal_id=self._trigger_signal.id,
             state=self._state,
             key=self._key,
             _is_plots_faas_widget=True,
@@ -124,11 +121,9 @@ class ButtonWidget(widget.BaseWidget):
         cls, s_widget: SerializedButtonWidget, widget_sigs: dict[str, Signal]
     ) -> "ButtonWidget":
         sig = widget_sigs[s_widget["signal_id"]]
-        trigger_sig = widget_sigs[s_widget["trigger_signal_id"]]
 
         return cls(
             _signal=sig,
-            _trigger_signal=trigger_sig,
             _state=s_widget["state"],
             _key=s_widget["key"],
         )
