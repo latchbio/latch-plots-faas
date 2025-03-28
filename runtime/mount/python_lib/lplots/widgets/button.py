@@ -52,7 +52,9 @@ class ButtonWidget(widget.BaseWidget):
     _signal: Signal[object | ButtonWidgetSignalValue]
     _trigger_signal: Signal[object]
 
-    _last_clicked_ref: list[None | datetime] = field(default=[None], repr=False)
+    _last_clicked_ref: list[None | datetime] = field(
+        default_factory=lambda: [None], repr=False
+    )
 
     # @property
     # def value(self) -> bool:
