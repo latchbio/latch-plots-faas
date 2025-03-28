@@ -38,9 +38,10 @@ DataSourceValue = (
 )
 
 
-class DataSourceSelectState(
-    _emit.WidgetState[Literal["tabular_datasource_select"], DataSourceValue]
-):
+datasource_type: Literal["tabular_datasource_select"] = "tabular_datasource_select"
+
+
+class DataSourceSelectState(_emit.WidgetState[datasource_type, DataSourceValue]):
     label: str
     readonly: bool
     default: NotRequired[DataSourceValue | None]
@@ -141,6 +142,9 @@ class TabularDatasourcePicker(widget.BaseWidget):
         return self._value(val)
 
 
+_emit.widget_registry[datasource_type] = TabularDatasourcePicker
+
+
 def w_datasource_picker(
     *,
     key: str | None = None,
@@ -155,7 +159,7 @@ def w_datasource_picker(
     res = TabularDatasourcePicker(
         _key=key,
         _state={
-            "type": "tabular_datasource_select",
+            "type": datasource_type,
             "label": label,
             "readonly": readonly,
             "default": default,

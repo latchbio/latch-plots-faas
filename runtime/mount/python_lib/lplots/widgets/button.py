@@ -13,7 +13,10 @@ class ButtonWidgetSignalValue(TypedDict):
     last_clicked: str
 
 
-class ButtonWidgetState(_emit.WidgetState[Literal["button"], str]):
+button_type: Literal["button"] = "button"
+
+
+class ButtonWidgetState(_emit.WidgetState[button_type, str]):
     label: str
     readonly: bool
     default: ButtonWidgetSignalValue
@@ -101,6 +104,9 @@ class ButtonWidget(widget.BaseWidget):
         )
 
 
+_emit.widget_registry[button_type] = ButtonWidget
+
+
 def w_button(
     *,
     key: str | None = None,
@@ -118,7 +124,7 @@ def w_button(
     res = ButtonWidget(
         _key=key,
         _state={
-            "type": "button",
+            "type": button_type,
             "label": label,
             "default": default,
             "readonly": readonly,

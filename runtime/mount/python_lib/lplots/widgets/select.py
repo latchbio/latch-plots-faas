@@ -7,8 +7,10 @@ from ..reactive import Signal
 from . import _emit, _state, widget
 from .shared import FormInputAppearance
 
+select_widget_type: Literal["select"] = "select"
 
-class SelectState(_emit.WidgetState[Literal["select"], str]):
+
+class SelectState(_emit.WidgetState[select_widget_type, str]):
     label: str
     readonly: bool
     options: list[str | int | float | bool | datetime]
@@ -41,6 +43,9 @@ class Select(widget.BaseWidget):
         return self._value(res)
 
 
+_emit.widget_registry[select_widget_type] = Select
+
+
 def w_select(
     *,
     key: str | None = None,
@@ -56,7 +61,7 @@ def w_select(
     res = Select(
         _key=key,
         _state={
-            "type": "select",
+            "type": select_widget_type,
             "label": label,
             "readonly": readonly,
             "options": list(options),

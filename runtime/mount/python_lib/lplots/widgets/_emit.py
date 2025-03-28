@@ -9,7 +9,7 @@ if TYPE_CHECKING:
 WidgetType = TypeVar("WidgetType", bound=str)
 WidgetValue = TypeVar("WidgetValue")
 
-widget_registry: dict[str, widget.BaseWidget] = {}
+widget_registry: dict[str, type[widget.BaseWidget]] = {}
 
 
 class WidgetState(TypedDict, Generic[WidgetType, WidgetValue]):

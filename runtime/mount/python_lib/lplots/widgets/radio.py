@@ -6,8 +6,10 @@ from ..reactive import Signal
 from . import _emit, _state, widget
 from .shared import FormInputAppearance
 
+radio_group_type: Literal["radio_group"] = "radio_group"
 
-class RadioGroupState(_emit.WidgetState[Literal["radio_group"], str]):
+
+class RadioGroupState(_emit.WidgetState[radio_group_type, str]):
     label: str
     readonly: bool
     options: list[str]
@@ -41,6 +43,9 @@ class RadioGroups(widget.BaseWidget):
         return self._value(res)
 
 
+_emit.widget_registry[radio_group_type] = RadioGroups
+
+
 def w_radio_group(
     *,
     key: str | None = None,
@@ -57,7 +62,7 @@ def w_radio_group(
     res = RadioGroups(
         _key=key,
         _state={
-            "type": "radio_group",
+            "type": radio_group_type,
             "label": label,
             "readonly": readonly,
             "options": list(options),

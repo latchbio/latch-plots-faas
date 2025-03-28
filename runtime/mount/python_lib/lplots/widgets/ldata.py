@@ -7,8 +7,10 @@ from ..reactive import Signal
 from . import _emit, _state, widget
 from .shared import FormInputAppearance
 
+ldata_picker_type: Literal["ldata_picker"] = "ldata_picker"
 
-class LDataPickerState(_emit.WidgetState[Literal["ldata_picker"], str]):
+
+class LDataPickerState(_emit.WidgetState[ldata_picker_type, str]):
     default: NotRequired[str | None]
     label: str
     readonly: bool
@@ -40,6 +42,9 @@ class LDataPicker(widget.BaseWidget):
         return self._value(res)
 
 
+_emit.widget_registry[ldata_picker_type] = LDataPicker
+
+
 def w_ldata_picker(
     *,
     key: str | None = None,
@@ -54,7 +59,7 @@ def w_ldata_picker(
     res = LDataPicker(
         _key=key,
         _state={
-            "type": "ldata_picker",
+            "type": ldata_picker_type,
             "readonly": readonly,
             "label": label,
             "default": default,

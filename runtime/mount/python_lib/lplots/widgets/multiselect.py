@@ -7,8 +7,10 @@ from ..reactive import Signal
 from . import _emit, _state, widget
 from .shared import FormInputAppearance
 
+multi_select_type: Literal["multi_select"] = "multi_select"
 
-class MultiSelectState(_emit.WidgetState[Literal["multi_select"], str]):
+
+class MultiSelectState(_emit.WidgetState[multi_select_type, str]):
     label: str
     readonly: bool
     options: list[str | int | float | bool | datetime]
@@ -41,6 +43,9 @@ class MultiSelect(widget.BaseWidget):
         return self._value(res)
 
 
+_emit.widget_registry[multi_select_type] = MultiSelect
+
+
 def w_multi_select(
     *,
     key: str | None = None,
@@ -56,7 +61,7 @@ def w_multi_select(
     res = MultiSelect(
         _key=key,
         _state={
-            "type": "multi_select",
+            "type": multi_select_type,
             "label": label,
             "readonly": readonly,
             "options": list(options),
