@@ -4,9 +4,12 @@ from .. import _inject
 
 if TYPE_CHECKING:
     from ..reactive import Signal
+    from . import widget
 
 WidgetType = TypeVar("WidgetType", bound=str)
 WidgetValue = TypeVar("WidgetValue")
+
+widget_registry: dict[str, "widget.BaseWidget"] = {}
 
 
 class WidgetState(TypedDict, Generic[WidgetType, WidgetValue]):

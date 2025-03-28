@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import Literal, NotRequired, TypedDict
 
 from ..reactive import Signal
-from . import _emit, _state
+from . import _emit, _state, widget
 
 
 class CheckboxInputAppearance(TypedDict, total=False):
@@ -10,7 +10,10 @@ class CheckboxInputAppearance(TypedDict, total=False):
     description: str | None
 
 
-class CheckboxWidgetState(_emit.WidgetState[Literal["checkbox"], str]):
+checkbox_type: Literal["checkbox"] = "checkbox"
+
+
+class CheckboxWidgetState(_emit.WidgetState[checkbox_type, str]):
     label: str
     readonly: bool
     default: bool
@@ -18,7 +21,7 @@ class CheckboxWidgetState(_emit.WidgetState[Literal["checkbox"], str]):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CheckboxWidget:
+class CheckboxWidget(widget.BaseWidget):
     _key: str
     _state: CheckboxWidgetState
     _signal: Signal[object | bool]
@@ -39,6 +42,9 @@ class CheckboxWidget:
         return self._value(res)
 
 
+_emit.widget_registry[checkbox_type] = CheckboxWidget
+
+
 def w_checkbox(
     *,
     key: str | None = None,
@@ -52,7 +58,7 @@ def w_checkbox(
     res = CheckboxWidget(
         _key=key,
         _state={
-            "type": "checkbox",
+            "type": checkbox_type,
             "label": label,
             "default": default,
             "readonly": readonly,
