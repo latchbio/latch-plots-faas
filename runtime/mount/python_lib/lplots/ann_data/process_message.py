@@ -90,7 +90,7 @@ def get_obs_vector(
     else:
         idxs = np.arange(n_cells)
 
-    return np.asarray(adata[:, var_index].X[idxs, 0])  # type: ignore  # noqa: PGH003
+    return np.asarray(adata[idxs, var_index].to_df().iloc[:, 0:].values.ravel())
 
 
 def get_var_index(
