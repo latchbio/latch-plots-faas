@@ -63,6 +63,7 @@ class ButtonWidget(widget.BaseWidget):
 
     @property
     def value(self) -> bool:
+        print(f"[@#] value from sig {self._signal} {self._ui_update}")
         if not self._signal._ui_update:
             return False
 

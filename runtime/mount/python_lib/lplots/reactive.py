@@ -438,6 +438,7 @@ class Signal(Generic[T]):
         if not _ui_update:
             ctx.signals_updated_from_code[self.id] = self
         else:
+            print(f"[@#] updating: {self._name} {self._id}")
             self._ui_update = True
 
         self._mark_listeners()

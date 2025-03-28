@@ -1547,6 +1547,7 @@ class Kernel:
                         continue
 
                     async with ctx.transaction:
+                        print(f"[@#] updating: {w_key}")
                         self.widget_signals[w_key](
                             orjson.loads(payload), _ui_update=True
                         )
