@@ -37,13 +37,13 @@ class AnnData:
 def w_ann_data(
     *,
     key: str | None = None,
-    adata: ad.AnnData,
+    ann_data: ad.AnnData,
     readonly: bool = False,
 ) -> AnnData:
     key = _state.use_state_key(key=key)
-    obj_id = str(id(adata))
+    obj_id = str(id(ann_data))
 
-    _inject.kernel.ann_data_objects[obj_id] = adata
+    _inject.kernel.ann_data_objects[obj_id] = ann_data
 
     res = AnnData(
         _key=key,
