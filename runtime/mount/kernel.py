@@ -37,7 +37,7 @@ from lplots.reactive import Node, Signal, ctx, live_nodes, live_signals
 from lplots.themes import graphpad_inspired_theme
 from lplots.utils.nothing import Nothing
 from lplots.widgets._emit import WidgetState
-from lplots.widgets.widget import BaseWidget
+from lplots.widgets.widget import BaseWidget, load_widget_helper
 from plotly_utils.precalc_box import precalc_box
 from plotly_utils.precalc_violin import precalc_violin
 from socketio_thread import SocketIoThread
@@ -818,6 +818,12 @@ class Kernel:
             signal = signals[sid]
             signal._listeners = {x: nodes.get(x) for x in s_signal["listeners"]}
 
+        self.restored_nodes = nodes
+        self.restored_signals = signals
+
+        self.cell_rnodes = filter_items(s_depens["cell_rnodes"], nodes)
+        self.widget_signals = filter_items(s_depens["widget_signals"], signals)
+
         restored_globals = {}
         for k, s_v in s_depens["s_globals"].items():
             if "listeners" in s_v:
@@ -826,6 +832,8 @@ class Kernel:
                     sig = Signal.load(s_v)
                 restored_globals[k] = sig.serialize(short_val=True)
                 self.k_globals._direct_set(k, Signal(sig))
+            elif "_is_plots_faas_widget" in s_v:
+                load_widget_helper(s_v, self.widget_signals)
             else:
                 val = safe_unserialize_obj(s_v["value"])
                 if val is None:
@@ -840,12 +848,7 @@ class Kernel:
                     }
                     self.k_globals._direct_set(k, Signal(val))
 
-        self.restored_nodes = nodes
-        self.restored_signals = signals
         self.restored_globals = restored_globals
-
-        self.cell_rnodes = filter_items(s_depens["cell_rnodes"], nodes)
-        self.widget_signals = filter_items(s_depens["widget_signals"], signals)
 
         nodes_with_widgets = {}
         for x in s_depens["nodes_with_widgets"]:

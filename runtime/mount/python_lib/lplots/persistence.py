@@ -18,6 +18,7 @@ class SerializedWidget(TypedDict, Generic[_emit.WidgetType, _emit.WidgetValue]):
     signal_id: str
     state: _emit.WidgetState[_emit.WidgetType, _emit.WidgetValue]
     key: str
+    _is_plots_faas_widget: bool
 
 
 class SerializedNode(TypedDict):

@@ -83,6 +83,7 @@ class ButtonWidget(widget.BaseWidget):
             trigger_signal_id=self._trigger_signal.id,
             state=self._state,
             key=self._key,
+            _is_plots_faas_widget=True,
         )
 
     @classmethod
