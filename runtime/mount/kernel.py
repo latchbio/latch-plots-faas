@@ -37,6 +37,7 @@ from lplots.reactive import Node, Signal, ctx, live_nodes, live_signals
 from lplots.themes import graphpad_inspired_theme
 from lplots.utils.nothing import Nothing
 from lplots.widgets._emit import WidgetState
+from lplots.widgets.widget import BaseWidget
 from plotly_utils.precalc_box import precalc_box
 from plotly_utils.precalc_violin import precalc_violin
 from socketio_thread import SocketIoThread
@@ -753,11 +754,18 @@ class Kernel:
                 if sid not in s_signals:
                     s_signals[sid] = sig.serialize()
 
+        for sig in self.widget_signals.values():
+            if sig.id not in s_signals:
+                s_signals[sig.id] = sig.serialize()
+
         s_globals: dict[str, SerializedSignal | SerializedGlobal] = {}
         for k, val in self.k_globals.items():
             if k == "__builtins__":
                 continue
             if isinstance(val._value, Signal):
+                s_globals[k] = val._value.serialize()
+            elif isinstance(val._value, BaseWidget):
+                assert val._value._signal.id in s_signals
                 s_globals[k] = val._value.serialize()
             else:
                 s_val, msg = safe_serialize_obj(val._value)

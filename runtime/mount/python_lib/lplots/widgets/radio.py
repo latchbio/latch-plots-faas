@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from typing import Literal, NotRequired
 
 from ..reactive import Signal
-from . import _emit, _state
+from . import _emit, _state, widget
 from .shared import FormInputAppearance
 
 
@@ -18,7 +18,7 @@ class RadioGroupState(_emit.WidgetState[Literal["radio_group"], str]):
 
 
 @dataclass(frozen=True, kw_only=True)
-class RadioGroups:
+class RadioGroups(widget.BaseWidget):
     _key: str
     _state: RadioGroupState
     _signal: Signal[object | str]

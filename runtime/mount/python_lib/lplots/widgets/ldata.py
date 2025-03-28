@@ -4,7 +4,7 @@ from typing import Literal, NotRequired
 from latch.ldata.path import LPath
 
 from ..reactive import Signal
-from . import _emit, _state
+from . import _emit, _state, widget
 from .shared import FormInputAppearance
 
 
@@ -17,7 +17,7 @@ class LDataPickerState(_emit.WidgetState[Literal["ldata_picker"], str]):
 
 
 @dataclass(frozen=True, kw_only=True)
-class LDataPicker:
+class LDataPicker(widget.BaseWidget):
     _key: str
     _state: LDataPickerState
     _signal: Signal[object | LPath]

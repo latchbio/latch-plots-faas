@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Literal, NotRequired
 
 from ..reactive import Signal
-from . import _emit, _state
+from . import _emit, _state, widget
 from .shared import FormInputAppearance
 
 
@@ -18,7 +18,7 @@ class SelectState(_emit.WidgetState[Literal["select"], str]):
 
 
 @dataclass(frozen=True, kw_only=True)
-class Select:
+class Select(widget.BaseWidget):
     _key: str
     _state: SelectState
     _signal: Signal[object]

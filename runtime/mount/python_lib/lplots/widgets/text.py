@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import Literal, NotRequired, TypedDict
 
 from ..reactive import Signal
-from . import _emit, _state
+from . import _emit, _state, widget
 from .shared import FormInputAppearance
 
 
@@ -14,7 +14,7 @@ class TextInputWidgetState(_emit.WidgetState[Literal["text_input"], str]):
 
 
 @dataclass(frozen=True, kw_only=True)
-class TextInputWidget:
+class TextInputWidget(widget.BaseWidget):
     _key: str
     _state: TextInputWidgetState
     _signal: Signal[object | str]

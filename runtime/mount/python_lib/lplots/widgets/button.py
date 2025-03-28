@@ -3,8 +3,9 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Literal, TypedDict
 
+from ..persistence import SerializedWidget
 from ..reactive import Signal, ctx
-from . import _emit, _state
+from . import _emit, _state, widget
 
 
 class ButtonWidgetSignalValue(TypedDict):
@@ -16,6 +17,12 @@ class ButtonWidgetState(_emit.WidgetState[Literal["button"], str]):
     label: str
     readonly: bool
     default: ButtonWidgetSignalValue
+
+
+class SerializedButtonWidget(SerializedWidget):
+    trigger_signal_id: str
+    # state: _emit.WidgetState[Literal["button"], str]
+    state: ButtonWidgetState  # type: ignore[override]
 
 
 def parse_iso_strings(data: object) -> tuple[datetime, datetime] | None:
@@ -35,8 +42,8 @@ def parse_iso_strings(data: object) -> tuple[datetime, datetime] | None:
         return None
 
 
-@dataclass(kw_only=True)
-class ButtonWidget:
+@dataclass(frozen=True, kw_only=True)
+class ButtonWidget(widget.BaseWidget):
     _key: str
     _state: ButtonWidgetState
     _signal: Signal[object | ButtonWidgetSignalValue]
@@ -69,6 +76,28 @@ class ButtonWidget:
 
     async def _create_update_node(self) -> None:
         await ctx.run(self._update)
+
+    def serialize(self) -> "SerializedButtonWidget":  # type: ignore[override]
+        return SerializedButtonWidget(
+            signal_id=self._signal.id,
+            trigger_signal_id=self._trigger_signal.id,
+            state=self._state,
+            key=self._key,
+        )
+
+    @classmethod
+    def load(  # type: ignore[override]
+        cls, s_widget: SerializedButtonWidget, widget_sigs: dict[str, Signal]
+    ) -> "ButtonWidget":
+        sig = widget_sigs[s_widget["signal_id"]]
+        trigger_sig = widget_sigs[s_widget["trigger_signal_id"]]
+
+        return cls(
+            _signal=sig,
+            _trigger_signal=trigger_sig,
+            _state=s_widget["state"],
+            _key=s_widget["key"],
+        )
 
 
 def w_button(

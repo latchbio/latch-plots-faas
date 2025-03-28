@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import Literal, NotRequired
 
 from ..reactive import Signal
-from . import _emit, _state
+from . import _emit, _state, widget
 from .shared import FormInputAppearance
 
 
@@ -17,7 +17,7 @@ class RegistryTablePickerState(
 
 
 @dataclass(frozen=True, kw_only=True)
-class RegistryTablePicker:
+class RegistryTablePicker(widget.BaseWidget):
     _key: str
     _state: RegistryTablePickerState
     _signal: Signal[object | str]

@@ -1,7 +1,9 @@
 from base64 import b64decode, b64encode
-from typing import TypedDict
+from typing import Generic, TypedDict
 
 from dill import dumps, loads
+
+from .widgets import _emit
 
 
 class SerializedSignal(TypedDict):
@@ -10,6 +12,12 @@ class SerializedSignal(TypedDict):
     listeners: list[str]
     error_msg: str | None
     id: str
+
+
+class SerializedWidget(TypedDict, Generic[_emit.WidgetType, _emit.WidgetValue]):
+    signal_id: str
+    state: _emit.WidgetState[_emit.WidgetType, _emit.WidgetValue]
+    key: str
 
 
 class SerializedNode(TypedDict):

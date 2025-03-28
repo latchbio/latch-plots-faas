@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Literal, NotRequired
 
 from ..reactive import Signal
-from . import _emit, _state
+from . import _emit, _state, widget
 from .shared import FormInputAppearance
 
 
@@ -18,7 +18,7 @@ class MultiSelectState(_emit.WidgetState[Literal["multi_select"], str]):
 
 
 @dataclass(frozen=True, kw_only=True)
-class MultiSelect:
+class MultiSelect(widget.BaseWidget):
     _key: str
     _state: MultiSelectState
     _signal: Signal[object | list[str | int | float | bool | datetime]]
