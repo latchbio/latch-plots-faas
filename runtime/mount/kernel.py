@@ -833,7 +833,7 @@ class Kernel:
                 restored_globals[k] = sig.serialize(short_val=True)
                 self.k_globals._direct_set(k, Signal(sig))
             elif "_is_plots_faas_widget" in s_v:
-                widget = load_widget_helper(s_v, self.widget_signals)
+                widget = load_widget_helper(s_v, signals)
                 restored_globals[k] = widget.serialize()
                 self.k_globals._direct_set(k, Signal(widget))
             else:
