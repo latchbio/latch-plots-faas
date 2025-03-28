@@ -45,14 +45,14 @@ def parse_iso_strings(data: object) -> tuple[datetime, datetime] | None:
         return None
 
 
-@dataclass(kw_only=True)
+@dataclass(kw_only=True, frozen=True)
 class ButtonWidget(widget.BaseWidget):
     _key: str
     _state: ButtonWidgetState
     _signal: Signal[object | ButtonWidgetSignalValue]
     _trigger_signal: Signal[object]
 
-    _last_clicked_ref: None | datetime = field(default=None, repr=False)
+    _last_clicked_ref: list[None | datetime] = field(default=[None], repr=False)
 
     # @property
     # def value(self) -> bool:
@@ -70,10 +70,10 @@ class ButtonWidget(widget.BaseWidget):
         if parsed is None:
             return False
         clicked, last_clicked = parsed
-        if self._last_clicked_ref is None:
-            self._last_clicked_ref = last_clicked
+        if self._last_clicked_ref[0] is None:
+            self._last_clicked_ref[0] = last_clicked
 
-        if clicked > self._last_clicked_ref:
+        if clicked > self._last_clicked_ref[0]:
             # self._signal({"clicked": str(clicked), "last_clicked": str(last_clicked)})
             return True
 
