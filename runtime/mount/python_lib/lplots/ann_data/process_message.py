@@ -3,10 +3,11 @@ from typing import Any
 import anndata as ad  # type: ignore  # noqa: PGH003
 import numpy as np
 from numpy.typing import NDArray
+from matplotlib.path import Path
 
 from .. import _inject
 
-ann_data_ops = ["init_data", "get_obsm_options", "get_obsm", "get_obs_options", "get_obs", "get_counts_column"]
+ann_data_ops = ["init_data", "get_obsm_options", "get_obsm", "get_obs_options", "get_obs", "get_counts_column", "mutate_obs"]
 
 ann_data_object_cache: dict[str, ad.AnnData] = {}
 ann_data_index_cache: dict[str, NDArray[np.int64]] = {}
@@ -115,6 +116,20 @@ def get_var_index(
 
     ann_data_var_index_cache[obj_id] = var_index, var_names
     return var_index, var_names
+
+
+def mutate_obs(
+    adata: ad.AnnData,
+    obsm_key: str,
+    obs_key: str,
+    obs_value: str | float,
+    lasso_points: list[tuple[int, int]],
+) -> None:
+    embedding = adata.obsm[obsm_key][:, :2]  # type: ignore  # noqa: PGH003
+    polygon = Path(lasso_points)
+
+    mask = polygon.contains_points(embedding)
+    adata.obs.loc[mask, obs_key] = obs_value
 
 
 def handle_ann_data_widget_message(
@@ -325,6 +340,36 @@ def handle_ann_data_widget_message(
             "value": {"data": {
                 "fetched_for_key": msg["var_index"],
                 "values": gene_column.tolist(),
+            }},
+        }
+
+    if op == "mutate_obs":
+        if "obs_key" not in msg:
+            return {
+                "type": "ann_data",
+                "op": op,
+                "key": widget_key,
+                "value": {"error": "`obs_key` key missing from message"},
+            }
+
+        obs_key = msg["obs_key"]
+        if obs_key not in adata.obs:
+            adata.obs = adata.obs.reindex(columns=[*adata.obs.columns.tolist(), obs_key])
+
+        if "obs_value" in msg and "lasso_points" in msg and "obsm_key" in msg:
+            mutate_obs(adata, msg["obsm_key"], obs_key, msg["obs_value"], msg["lasso_points"])
+
+        obs, (unique_obs, counts), nrof_obs = get_obs(obj_id, adata, obs_key)
+        return {
+            "type": "ann_data",
+            "op": op,
+            "key": widget_key,
+            "value": {"data": {
+                "obs_key": obs_key,
+                "values": obs.tolist(),
+                "unique_values": unique_obs.tolist(),
+                "counts": counts.tolist(),
+                "nrof_values": nrof_obs,
             }},
         }
 
