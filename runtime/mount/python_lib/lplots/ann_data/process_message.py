@@ -353,11 +353,15 @@ def handle_ann_data_widget_message(
             }
 
         obs_key = msg["obs_key"]
+        created_for_key = None
         if obs_key not in adata.obs:
             adata.obs = adata.obs.reindex(columns=[*adata.obs.columns.tolist(), obs_key])
+            created_for_key = obs_key
 
+        mutated_for_key = None
         if "obs_value" in msg and "lasso_points" in msg and "obsm_key" in msg:
             mutate_obs(adata, msg["obsm_key"], obs_key, msg["obs_value"], msg["lasso_points"])
+            mutated_for_key = obs_key
 
         obs, (unique_obs, counts), nrof_obs = get_obs(obj_id, adata, obs_key)
 
@@ -368,6 +372,8 @@ def handle_ann_data_widget_message(
             "value": {
                 "data": {
                     "fetched_for_key": msg["obs_key"],
+                    "mutated_for_key": mutated_for_key,
+                    "created_for_key": created_for_key,
                     "values": obs.tolist(),
                     "unique_values": unique_obs.tolist(),
                     "counts": counts.tolist(),
