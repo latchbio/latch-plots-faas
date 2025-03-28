@@ -2,8 +2,9 @@ from typing import Any
 
 import anndata as ad  # type: ignore  # noqa: PGH003
 import numpy as np
-from numpy.typing import NDArray
+import pandas as pd
 from matplotlib.path import Path
+from numpy.typing import NDArray
 
 from .. import _inject
 
@@ -127,9 +128,11 @@ def mutate_obs(
 ) -> None:
     embedding = adata.obsm[obsm_key][:, :2]  # type: ignore  # noqa: PGH003
     polygon = Path(lasso_points)
-
     mask = polygon.contains_points(embedding)
-    adata.obs.loc[mask, obs_key] = obs_value
+
+    if isinstance(adata.obs[obs_key].dtype, pd.CategoricalDtype) and str(obs_value) not in adata.obs[obs_key].cat.categories:
+        adata.obs[obs_key] = adata.obs[obs_key].cat.add_categories(str(obs_value))
+    adata.obs.loc[mask, obs_key] = str(obs_value)
 
 
 def handle_ann_data_widget_message(
