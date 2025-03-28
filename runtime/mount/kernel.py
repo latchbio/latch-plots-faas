@@ -748,15 +748,23 @@ class Kernel:
 
         s_nodes = {}
         s_signals = {}
+
+        def add_and_check_listeners(sig: Signal):
+            for lid, lis in sig._listeners.items():
+                if lid not in s_nodes:
+                    s_nodes[lid] = lis.serialize()
+            if sid not in s_signals:
+                s_signals[sid] = sig.serialize()
+
         for node in self.cell_rnodes.values():
             s_nodes[node.id] = node.serialize()
             for sid, sig in node.signals.items():
-                if sid not in s_signals:
-                    s_signals[sid] = sig.serialize()
+                add_and_check_listeners(sig)
 
         for sig in self.widget_signals.values():
             if sig.id not in s_signals:
                 s_signals[sig.id] = sig.serialize()
+                add_and_check_listeners(sig)
 
         s_globals: dict[str, SerializedSignal | SerializedGlobal] = {}
         for k, val in self.k_globals.items():
