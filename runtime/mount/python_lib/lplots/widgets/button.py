@@ -140,7 +140,7 @@ def w_button(
     readonly: bool = False,
 ) -> ButtonWidget:
     key = _state.use_state_key(key=key)
-    trigger_key = _state.use_state_key(key=f"{key}#trigger")
+    # trigger_key = _state.use_state_key(key=f"{key}#trigger")
 
     if default is None:
         now = datetime.now(UTC).isoformat()
@@ -155,7 +155,7 @@ def w_button(
             "readonly": readonly,
         },
         _signal=_state.use_value_signal(key=key),
-        _trigger_signal=_state.use_value_signal(key=trigger_key),
+        #    _trigger_signal=_state.use_value_signal(key=trigger_key),
     )
     _emit.emit_widget(key, res._state)
 
