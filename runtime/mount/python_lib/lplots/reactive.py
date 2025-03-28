@@ -311,7 +311,10 @@ class RCtx:
             await _inject.kernel.on_tick_finished(tick_updated_signals)
             # await self.gc_signals()
             self.prev_updated_signals = {}
+            for sig in live_signals.values():
+                sig._ui_update = False
 
+    # todo(kenny): don't clean up widget signals, potentially others.
     # async def gc_signals(self) -> None:
     #     used_signals = {sid for node in live_nodes.values() for sid in node.signals}
     #     unused_signals = set(live_signal_ids) - used_signals
@@ -350,6 +353,8 @@ class Signal(Generic[T]):
 
     _updates: list[T | Updater[T]]
     _listeners: dict[str, Node]
+
+    _ui_update: bool = False
 
     def __init__(
         self, initial: T, *, name: str | None = None, _id: str | None = None
@@ -432,6 +437,8 @@ class Signal(Generic[T]):
         ctx.updated_signals[self.id] = self
         if not _ui_update:
             ctx.signals_updated_from_code[self.id] = self
+        else:
+            self._ui_update = True
 
         self._mark_listeners()
 

@@ -63,14 +63,14 @@ class ButtonWidget(widget.BaseWidget):
 
     @property
     def value(self) -> bool:
+        if not self._signal._ui_update:
+            return False
+
         res = self._signal()
 
         if not isinstance(res, dict) or not all(
             key in res for key in ButtonWidgetSignalValue.__annotations__
         ):
-            return False
-
-        if "_ui_update" not in res:
             return False
 
         parsed = parse_iso_strings(res)
