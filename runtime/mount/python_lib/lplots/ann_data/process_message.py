@@ -10,7 +10,6 @@ from .. import _inject
 
 ann_data_ops = ["init_data", "get_obsm_options", "get_obsm", "get_obs_options", "get_obs", "get_counts_column", "mutate_obs"]
 
-ann_data_object_cache: dict[str, ad.AnnData] = {}
 ann_data_index_cache: dict[str, NDArray[np.int64]] = {}
 ann_data_var_index_cache: dict[str, tuple[NDArray[np.str_], NDArray[np.str_] | None]] = {}
 
@@ -29,7 +28,7 @@ def get_obsm(
 
     n_cells = adata.n_obs
 
-    # todo(aidan): intelligent downsampling to preserve outliers / information in genera
+    # todo(aidan): intelligent downsampling to preserve outliers / information in general
     if n_cells > MAX_VISUALIZATION_CELLS:
         if obj_id not in ann_data_index_cache:
             idxs = RNG.choice(n_cells, size=MAX_VISUALIZATION_CELLS, replace=False)
