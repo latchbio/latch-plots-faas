@@ -623,7 +623,7 @@ class Kernel:
             tg.create_task(self.send_globals_summary())
 
     async def on_tick_finished(
-        self, updated_signals: dict[int, Signal[object]]
+        self, updated_signals: dict[int, Signal[object]], clear_status: bool = True
     ) -> None:
         # todo(maximsmol): this can be optimizied
         # 1. we can just update nodes that actually re-ran last tick instead of everything
@@ -677,7 +677,8 @@ class Kernel:
                 "updated_widgets": list(updated_widgets),
             })
 
-        await self.set_active_cell(None)
+        if clear_status:
+            await self.set_active_cell(None)
         self.cells_with_pending_widget_updates.clear()
 
         # fixme(rteqs): cleanup signals in some other way. the below does not work because widget signals
@@ -711,7 +712,7 @@ class Kernel:
             s._apply_updates()
 
         self.conn.call_fut(
-            self.on_tick_finished(ctx.signals_updated_from_code)
+            self.on_tick_finished(ctx.signals_updated_from_code, clear_status=False)
         ).result()
 
     def on_dispose(self, node: Node) -> None:
