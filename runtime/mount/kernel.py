@@ -799,6 +799,7 @@ class Kernel:
     async def load_kernel_snapshot(self) -> None:
         snapshot_f = snapshot_dir / snapshot_f_name
         if not snapshot_f.exists():
+            await self.send({"type": "load_kernel_snapshot", "status": "done"})
             return
         s_depens = orjson.loads(snapshot_f.read_text())
         s_nodes: dict[str, SerializedNode] = s_depens["s_nodes"]
@@ -1547,7 +1548,6 @@ class Kernel:
                         continue
 
                     async with ctx.transaction:
-                        print(f"[@#] updating: {w_key}")
                         self.widget_signals[w_key](
                             orjson.loads(payload), _ui_update=True
                         )
