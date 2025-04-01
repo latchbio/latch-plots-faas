@@ -93,7 +93,7 @@ def get_obs_vector(
     else:
         idxs = np.arange(n_cells)
 
-    return adata[idxs, var_index].to_df().iloc[:, 0:].to_numpy().ravel()
+    return np.asarray(adata[idxs, var_index].to_df().iloc[:, 0:].values.ravel())  # noqa: PD011
 
 
 def get_var_index(
