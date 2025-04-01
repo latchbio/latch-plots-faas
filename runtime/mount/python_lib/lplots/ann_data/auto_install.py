@@ -4,8 +4,6 @@ from typing import TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
     import anndata  # type: ignore  # noqa: PGH003
-else:
-    anndata = None
 
 
 def install_and_import_anndata() -> "anndata":  # type: ignore  # noqa: PGH003

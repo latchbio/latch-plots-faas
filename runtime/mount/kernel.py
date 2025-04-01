@@ -40,7 +40,6 @@ from socketio_thread import SocketIoThread
 from stdio_over_socket import SocketWriter, text_socket_writer
 
 ad = auto_install.ad
-AnnData = auto_install.AnnData
 
 sys.path.append(str(Path(__file__).parent.absolute()))
 from subsample import downsample_df, initialize_duckdb
