@@ -3,11 +3,9 @@ import sys
 from typing import TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
-    import anndata
-    from anndata import AnnData
+    import anndata  # type: ignore  # noqa: PGH003
 else:
     anndata = None
-    AnnData = None
 
 
 def install_and_import_anndata() -> "anndata":  # type: ignore  # noqa: PGH003
