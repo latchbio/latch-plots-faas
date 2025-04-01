@@ -10,7 +10,7 @@ from . import _emit, _state
 
 class AnnDataState(_emit.WidgetState[Literal["ann_data"], str]):
     obj_id: str
-    readonly: NotRequired[bool]
+    readonly: bool
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -20,9 +20,13 @@ class AnnData:
     _signal: Signal[object]
 
     def _value(self, val: object) -> ad.AnnData | None:
-        if not isinstance(val, ad.AnnData):
+        if not isinstance(val, str):
             return None
-        return val
+
+        if val not in _inject.kernel.ann_data_objects:
+            return None
+
+        return _inject.kernel.ann_data_objects[val]
 
     @property
     def value(self) -> ad.AnnData | None:

@@ -8,14 +8,12 @@ from numpy.typing import NDArray
 
 from .. import _inject
 
-ann_data_ops = ["init_data", "get_obsm_options", "get_obsm", "get_obs_options", "get_obs", "get_counts_column", "mutate_obs"]
-
 ann_data_index_cache: dict[str, NDArray[np.int64]] = {}
 ann_data_var_index_cache: dict[str, tuple[NDArray[np.str_], NDArray[np.str_] | None]] = {}
 
 
-MAX_VISUALIZATION_CELLS = 100000
-RNG = np.random.default_rng()
+max_visualization_cells = 100000
+rng = np.random.default_rng()
 
 
 def get_obsm(
@@ -29,9 +27,9 @@ def get_obsm(
     n_cells = adata.n_obs
 
     # todo(aidan): intelligent downsampling to preserve outliers / information in general
-    if n_cells > MAX_VISUALIZATION_CELLS:
+    if n_cells > max_visualization_cells:
         if obj_id not in ann_data_index_cache:
-            idxs = RNG.choice(n_cells, size=MAX_VISUALIZATION_CELLS, replace=False)
+            idxs = rng.choice(n_cells, size=max_visualization_cells, replace=False)
             ann_data_index_cache[obj_id] = idxs
         else:
             idxs = ann_data_index_cache[obj_id]
@@ -56,9 +54,9 @@ def get_obs(
     n_cells = adata.n_obs
 
     # todo(aidan): intelligent downsampling to preserve outliers / information in general
-    if n_cells > MAX_VISUALIZATION_CELLS:
+    if n_cells > max_visualization_cells:
         if obj_id not in ann_data_index_cache:
-            idxs = RNG.choice(n_cells, size=MAX_VISUALIZATION_CELLS, replace=False)
+            idxs = rng.choice(n_cells, size=max_visualization_cells, replace=False)
             ann_data_index_cache[obj_id] = idxs
         else:
             idxs = ann_data_index_cache[obj_id]
@@ -66,8 +64,8 @@ def get_obs(
         obs = obs[idxs]
 
         truncated_unique_obs = unique_obs
-        if len(unique_obs) > MAX_VISUALIZATION_CELLS:
-            sorted_indices = np.argsort(-counts)[:MAX_VISUALIZATION_CELLS]
+        if len(unique_obs) > max_visualization_cells:
+            sorted_indices = np.argsort(-counts)[:max_visualization_cells]
             truncated_unique_obs = unique_obs[sorted_indices]
             counts = counts[sorted_indices]
     else:
@@ -83,16 +81,16 @@ def get_obs_vector(
 ) -> NDArray[np.int64]:
     n_cells = adata.n_obs
 
-    if n_cells > MAX_VISUALIZATION_CELLS:
+    if n_cells > max_visualization_cells:
         if obj_id not in ann_data_index_cache:
-            idxs = RNG.choice(n_cells, size=MAX_VISUALIZATION_CELLS, replace=False)
+            idxs = rng.choice(n_cells, size=max_visualization_cells, replace=False)
             ann_data_index_cache[obj_id] = idxs
         else:
             idxs = ann_data_index_cache[obj_id]
     else:
         idxs = np.arange(n_cells)
 
-    return np.asarray(adata[idxs, var_index].to_df().iloc[:, 0:].values.ravel())
+    return adata[idxs, var_index].to_df().iloc[:, 0:].to_numpy().ravel()
 
 
 def get_var_index(
@@ -126,6 +124,10 @@ def mutate_obs(
     lasso_points: list[tuple[int, int]],
 ) -> None:
     embedding = adata.obsm[obsm_key][:, :2]  # type: ignore  # noqa: PGH003
+
+    if len(lasso_points) < 3:
+        return
+
     polygon = Path(lasso_points)
     mask = polygon.contains_points(embedding)
 
@@ -170,7 +172,7 @@ def handle_ann_data_widget_message(
 
     adata = _inject.kernel.ann_data_objects[obj_id]
 
-    if "op" not in msg or msg["op"] not in ann_data_ops:
+    if "op" not in msg or msg["op"] not in {"init_data", "get_obsm_options", "get_obsm", "get_obs_options", "get_obs", "get_counts_column", "mutate_obs"}:
         return {
             "type": "ann_data",
             "key": widget_key,
@@ -260,7 +262,7 @@ def handle_ann_data_widget_message(
                 "op": op,
                 "key": widget_key,
                 "value": {
-                    "error": f"Obsm {msg.get('obsm_key', '`obsm_key` key missing from message')} not found",
+                    "error": "Obsm not found" if "obsm_key" in msg else "`obsm_key` key missing from message"
                 },
             }
 
@@ -303,7 +305,7 @@ def handle_ann_data_widget_message(
                 "op": op,
                 "key": widget_key,
                 "value": {
-                    "error": f"Observation {msg.get('obs_key', '`obs_key` key missing from message')} not found",
+                    "error": "Observation not found" if "obs_key" in msg else "`obs_key` key missing from message"
                 },
             }
 
@@ -330,7 +332,9 @@ def handle_ann_data_widget_message(
                 "type": "ann_data",
                 "op": op,
                 "key": widget_key,
-                "value": {"error": f"Variable {msg.get('var_index', '`var_index` key missing from message')} not found"},
+                "value": {
+                    "error": "Variable not found" if "var_index" in msg else "`var_index` key missing from message"
+                },
             }
 
         gene_column = get_obs_vector(obj_id, adata, msg["var_index"])
