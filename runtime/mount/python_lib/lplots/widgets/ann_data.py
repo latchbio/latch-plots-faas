@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Literal, NotRequired
+from typing import Literal
 
 import anndata as ad  # type: ignore  # noqa: PGH003
 
