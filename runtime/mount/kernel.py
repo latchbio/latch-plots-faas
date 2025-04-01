@@ -15,7 +15,6 @@ from traceback import format_exc
 from types import FrameType
 from typing import TYPE_CHECKING, Any, Literal, TypedDict, TypeVar
 
-import anndata as ad  # type: ignore  # noqa: PGH003
 import numpy as np
 import orjson
 import pandas as pd
@@ -25,6 +24,7 @@ from duckdb import DuckDBPyConnection
 from latch.ldata.path import LPath
 from latch.registry.table import Table
 from lplots import _inject
+from lplots.ann_data import auto_install
 from lplots.ann_data.process_message import handle_ann_data_widget_message
 from lplots.reactive import Node, Signal, ctx
 from lplots.themes import graphpad_inspired_theme
@@ -38,6 +38,9 @@ from plotly_utils.precalc_box import precalc_box
 from plotly_utils.precalc_violin import precalc_violin
 from socketio_thread import SocketIoThread
 from stdio_over_socket import SocketWriter, text_socket_writer
+
+ad = auto_install.ad
+AnnData = auto_install.AnnData
 
 sys.path.append(str(Path(__file__).parent.absolute()))
 from subsample import downsample_df, initialize_duckdb

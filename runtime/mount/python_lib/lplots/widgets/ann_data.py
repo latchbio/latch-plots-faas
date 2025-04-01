@@ -1,11 +1,13 @@
 from dataclasses import dataclass
 from typing import Literal
 
-import anndata as ad  # type: ignore  # noqa: PGH003
+from lplots.ann_data import auto_install
 
 from .. import _inject
 from ..reactive import Signal
 from . import _emit, _state
+
+ad = auto_install.ad
 
 
 class AnnDataState(_emit.WidgetState[Literal["ann_data"], str]):

@@ -1,12 +1,15 @@
 from typing import Any
 
-import anndata as ad  # type: ignore  # noqa: PGH003
 import numpy as np
 import pandas as pd
 from matplotlib.path import Path
 from numpy.typing import NDArray
 
+from lplots.ann_data import auto_install
+
 from .. import _inject
+
+ad = auto_install.ad
 
 ann_data_index_cache: dict[str, NDArray[np.int64]] = {}
 ann_data_var_index_cache: dict[str, tuple[NDArray[np.str_], NDArray[np.str_] | None]] = {}
