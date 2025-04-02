@@ -86,13 +86,11 @@ class PlotsContextManager:
     async def broadcast_users(self) -> None:
         # todo(rteqs): get rid of extra decode
         await self.broadcast_message(
-            orjson.dumps(
-                {
-                    "type": "users",
-                    "users": list(self.unique_users),
-                    "session_owner": self.session_owner,
-                }
-            ).decode()
+            orjson.dumps({
+                "type": "users",
+                "users": list(self.unique_users),
+                "session_owner": self.session_owner,
+            }).decode()
         )
 
     async def override_session_owner(self, user_key: str) -> None:

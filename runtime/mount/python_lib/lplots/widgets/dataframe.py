@@ -12,6 +12,10 @@ class DataframePicker:
     _select: Select
 
     @property
+    def _key(self) -> str:
+        return self._select._key
+
+    @property
     def key(self) -> str | None:
         res = self._select.value
         assert isinstance(res, str)

@@ -8,6 +8,7 @@ import socket
 import sys
 import traceback
 from collections import defaultdict
+from copy import copy
 from dataclasses import asdict, dataclass, field
 from io import TextIOWrapper
 from pathlib import Path
@@ -417,16 +418,16 @@ def paginate(*, df: DataFrame, pagination_settings: PaginationSettings) -> DataF
 
     if hasattr(df, "compute"):
         # to support Dask and similar datasets which cannot index on rows
-        data = df.iloc[:, x : x + w].head(w)
+        data = df.iloc[:, x : x + w].head(y + h, npartitions=-1)[y:]
     else:
         data = df.iloc[y : y + h, x : x + w]
 
     return data
 
 
-def pagination_settings_dict_factory() -> (
-    defaultdict[str, defaultdict[str, PaginationSettings]]
-):
+def pagination_settings_dict_factory() -> defaultdict[
+    str, defaultdict[str, PaginationSettings]
+]:
     return defaultdict(lambda: defaultdict(PaginationSettings))
 
 
@@ -474,7 +475,7 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
 class Kernel:
     conn: SocketIoThread
 
-    cell_seq = 0
+    cell_seq: int = 0
     cell_rnodes: dict[str, Node] = field(default_factory=dict)
     k_globals: TracedDict = field(init=False)
     cell_status: dict[str, str] = field(default_factory=dict)
@@ -483,6 +484,8 @@ class Kernel:
 
     widget_signals: dict[str, Signal[Any]] = field(default_factory=dict)
     nodes_with_widgets: dict[int, Node] = field(default_factory=dict)
+
+    cells_with_pending_widget_updates: set[str] = field(default_factory=set)
 
     cell_output_selections: dict[str, str] = field(default_factory=dict)
     viewer_cell_selections: dict[str, tuple[str, KeyType]] = field(default_factory=dict)
@@ -550,22 +553,32 @@ class Kernel:
             "plot_configs": self.plot_configs,
         }
 
-    async def set_active_cell(self, cell_id: str) -> None:
-        self.active_cell = cell_id
-
-        # todo(maximsmol): huge hack to make sure runtime has time to read
-        # our std streams before we ask for active cell to be switched
+    # note(maximsmol): called by the reactive context
+    async def set_active_cell(self, cell_id: str | None) -> None:
+        # todo(maximsmol): I still believe this is correct
+        # but we need to deal with the frontend clearing logs in weird ways
+        # e.g. a button should maybe clear the logs if it triggered its own cell
+        # but a subnode should probably not clear logs?
         #
-        # we need to instead overwrite stdout/stderr with a thing that appends
-        # headers indicating the active cell
+        # right now we rely on start_cell to clear logs each time anything in a cell runs
+
+        # if self.active_cell == cell_id:
+        #     return
+
+        # note(maximsmol): stdio_over_socket will fetch the active cell id
+        # synchronously in `.write` (which will be called by the buffered writers' `.flush`)
         sys.stdout.flush()
         sys.stderr.flush()
-        await asyncio.sleep(0.1)
+
+        if cell_id is not None:
+            self.active_cell = cell_id
 
         self.cell_seq += 1
-        await self.send(
-            {"type": "start_cell", "cell_id": cell_id, "run_sequencer": self.cell_seq}
-        )
+        await self.send({
+            "type": "start_cell",
+            "cell_id": cell_id,
+            "run_sequencer": self.cell_seq,
+        })
 
     async def send_global_updates(self) -> None:
         async with asyncio.TaskGroup() as tg:
@@ -615,10 +628,14 @@ class Kernel:
 
             tg.create_task(self.send_globals_summary())
 
-    async def on_tick_finished(self, updated_signals: dict[int, Signal]) -> None:
+    async def on_tick_finished(
+        self, updated_signals: dict[int, Signal[object]], clear_status: bool = True
+    ) -> None:
         # todo(maximsmol): this can be optimizied
         # 1. we can just update nodes that actually re-ran last tick instead of everything
         # 2. we can pre-compute nww_by_cell
+        # 3. we can batch together the update messages so the frontend does not
+        # need to spam GQL requests
 
         nww_by_cell = {
             cell_id: [
@@ -627,21 +644,21 @@ class Kernel:
             for cell_id in self.cell_rnodes
         }
 
-        updated_widgets: set[str] = set()
-
-        unused_signals: set[str] = set(self.widget_signals.keys())
         for cell_id in self.cell_rnodes:
-            res: dict[str, WidgetState] = {}
+            if self.cell_status[cell_id] == "error":
+                # skip errored cells to avoid clobbering widget state
+                continue
 
+            updated_widgets: set[str] = set()
+            res: dict[str, WidgetState[str, object]] = {}
             for n in nww_by_cell[cell_id]:
                 path = n.name_path()
                 for k, v in n.widget_states.items():
                     abs_k = f"{path}/{k}"
-                    res[abs_k] = {**v}
+                    res[abs_k] = copy(v)
 
                     if abs_k not in self.widget_signals:
                         continue
-                    unused_signals.remove(abs_k)
 
                     sig = self.widget_signals[abs_k]
                     if id(sig) in updated_signals:
@@ -652,20 +669,23 @@ class Kernel:
                         continue
 
                     res[abs_k]["value"] = val
-            if self.cell_status[cell_id] == "error":
-                # skip errored cells to avoid clobbering widget state
-                # must be here so that we update unused_signals properly
-                # todo(maximsmol): optimize
+
+            if (
+                len(updated_widgets) == 0
+                and cell_id not in self.cells_with_pending_widget_updates
+            ):
                 continue
 
-            await self.send(
-                {
-                    "type": "cell_widgets",
-                    "cell_id": cell_id,
-                    "widget_state": res,
-                    "updated_widgets": list(updated_widgets),
-                }
-            )
+            await self.send({
+                "type": "cell_widgets",
+                "cell_id": cell_id,
+                "widget_state": res,
+                "updated_widgets": list(updated_widgets),
+            })
+
+        if clear_status:
+            await self.set_active_cell(None)
+        self.cells_with_pending_widget_updates.clear()
 
         # fixme(rteqs): cleanup signals in some other way. the below does not work because widget signals
         # are restored on `init` but there are no corresponding `rnodes`
@@ -688,15 +708,25 @@ class Kernel:
         ctx.cur_comp.widget_states[key] = data
         self.nodes_with_widgets[id(ctx.cur_comp)] = ctx.cur_comp
 
+        # todo(maximsmol): I don't think this is actually nullable anymore
+        cell_id = ctx.cur_comp.cell_id
+        if cell_id is not None:
+            self.cells_with_pending_widget_updates.add(cell_id)
+
     def submit_widget_state(self) -> None:
         for s in ctx.updated_signals.values():
             s._apply_updates()
 
-        self.conn.call_fut(self.on_tick_finished(ctx.signals_update_from_code)).result()
+        self.conn.call_fut(
+            self.on_tick_finished(ctx.signals_updated_from_code, clear_status=False)
+        ).result()
 
     def on_dispose(self, node: Node) -> None:
         if id(node) not in self.nodes_with_widgets:
             return
+
+        if node.cell_id is not None:
+            self.cells_with_pending_widget_updates.add(node.cell_id)
 
         del self.nodes_with_widgets[id(node)]
 
@@ -754,6 +784,13 @@ class Kernel:
                 return
 
             async def x() -> None:
+                # fixme(maximsmol): a cell should also be considered running if a
+                # child reactive node is running
+                #
+                # the only complication is to tell when it has *finished*
+                # running so we can set the status & send results + flush logs
+                self.cell_status[cell_id] = "running"
+
                 try:
                     assert ctx.cur_comp is not None
 
@@ -782,9 +819,12 @@ class Kernel:
                     self.cell_status[cell_id] = "error"
                     await self.send_cell_result(cell_id)
 
+                finally:
+                    sys.stdout.flush()
+                    sys.stderr.flush()
+
             x.__name__ = filename
 
-            await self.set_active_cell(cell_id)
             await ctx.run(x, _cell_id=cell_id)
 
         except (KeyboardInterrupt, Exception):
@@ -794,7 +834,6 @@ class Kernel:
     async def send_cell_result(self, cell_id: str) -> None:
         await self.send_global_updates()
 
-        outputs = sorted(self.k_globals.available)
         outputs = self._cell_outputs()
 
         msg = {
@@ -825,26 +864,22 @@ class Kernel:
         res = self.k_globals[key]
 
         if isinstance(res, BaseFigure):
-            await self.send(
-                {
-                    "type": "plot_data",
-                    "plot_id": plot_id,
-                    "key": key,
-                    # todo(maximsmol): get rid of the json reload
-                    "plotly_json": serialize_plotly_figure(res),
-                }
-            )
+            await self.send({
+                "type": "plot_data",
+                "plot_id": plot_id,
+                "key": key,
+                # todo(maximsmol): get rid of the json reload
+                "plotly_json": serialize_plotly_figure(res),
+            })
             return
 
         if not hasattr(res, "iloc"):
-            await self.send(
-                {
-                    "type": "plot_data",
-                    "plot_id": plot_id,
-                    "key": key,
-                    "error": "not a dataframe",
-                }
-            )
+            await self.send({
+                "type": "plot_data",
+                "plot_id": plot_id,
+                "key": key,
+                "error": "not a dataframe",
+            })
             return
 
         if hasattr(res, "compute"):
@@ -859,7 +894,10 @@ class Kernel:
                 "type": "plot_data",
                 "plot_id": plot_id,
                 "key": key,
-                "dataframe_json": {"schema": build_table_schema(res, version=False)},
+                "dataframe_json": {
+                    "schema": build_table_schema(res, version=False),
+                    "type": "pandas",
+                },
             }
 
             df_size_mb = res.memory_usage(index=True, deep=True).sum() / 10**6
@@ -945,16 +983,14 @@ class Kernel:
         assert len(key_fields) == 1
 
         if isinstance(res, BaseFigure):
-            await self.send(
-                {
-                    "type": "output_value",
-                    **(id_fields),
-                    **(key_fields),
-                    "plotly_json": orjson.dumps(
-                        serialize_plotly_figure(res), option=orjson.OPT_SERIALIZE_NUMPY
-                    ).decode(),
-                }
-            )
+            await self.send({
+                "type": "output_value",
+                **(id_fields),
+                **(key_fields),
+                "plotly_json": orjson.dumps(
+                    serialize_plotly_figure(res), option=orjson.OPT_SERIALIZE_NUMPY
+                ).decode(),
+            })
             return
 
         if hasattr(res, "iloc"):
@@ -987,31 +1023,26 @@ class Kernel:
             # we don't want to repeat the column names
             # so we use the "split" format
             # but we still want the schema
-            await self.send(
-                {
-                    "type": "output_value",
-                    **(id_fields),
-                    **(key_fields),
-                    "dataframe_json": {
-                        "schema": build_table_schema(data, version=False),
-                        "data": data.to_dict(orient="split"),
-                        # todo(maximsmol): this seems useless?
-                        "num_pages": num_pages,
-                        "page_idx": page_idx,
-                        "page_size": h,
-                        **(
-                            {"sort_settings": sort_settings}
-                            if sort_settings is not None
-                            else {}
-                        ),
-                        **(
-                            {"row_filters": row_filters}
-                            if row_filters is not None
-                            else {}
-                        ),
-                    },
-                }
-            )
+            await self.send({
+                "type": "output_value",
+                **(id_fields),
+                **(key_fields),
+                "dataframe_json": {
+                    "type": "pandas" if not hasattr(res, "compute") else "dask",
+                    "schema": build_table_schema(data, version=False),
+                    "data": data.to_dict(orient="split"),
+                    # todo(maximsmol): this seems useless?
+                    "num_pages": num_pages,
+                    "page_idx": page_idx,
+                    "page_size": h,
+                    **(
+                        {"sort_settings": sort_settings}
+                        if sort_settings is not None
+                        else {}
+                    ),
+                    **({"row_filters": row_filters} if row_filters is not None else {}),
+                },
+            })
             return
 
         if hasattr(res, "__dataframe__"):
@@ -1026,36 +1057,35 @@ class Kernel:
 
             data = res.__dataframe__()
 
-            await self.send(
-                {
-                    "type": "output_value",
-                    **(id_fields),
-                    **(key_fields),
-                    "__dataframe__": {
-                        "num_columns": data.num_columns(),
-                        "num_rows": data.num_rows(),
-                    },
-                }
-            )
+            await self.send({
+                "type": "output_value",
+                **(id_fields),
+                **(key_fields),
+                "__dataframe__": {
+                    "num_columns": data.num_columns(),
+                    "num_rows": data.num_rows(),
+                },
+            })
             return
 
         if isinstance(res, Figure) or (
             hasattr(res, "figure") and isinstance(res.figure, Figure)
         ):
-            await self.send(
-                {"type": "output_value", **(id_fields), **(key_fields), "webp": res}
-            )
-            return
-
-        data = pprint.pformat(res)
-        await self.send(
-            {
+            await self.send({
                 "type": "output_value",
                 **(id_fields),
                 **(key_fields),
-                "string": data[:10000],
-            }
-        )
+                "webp": res,
+            })
+            return
+
+        data = pprint.pformat(res)
+        await self.send({
+            "type": "output_value",
+            **(id_fields),
+            **(key_fields),
+            "string": data[:10000],
+        })
 
     async def send_globals_summary(self) -> None:
         summary = {}
@@ -1404,6 +1434,13 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
+    if sys.platform == "linux":
+        from ctypes import CDLL
+
+        libc = CDLL("libc.so.6")
+        PR_SET_NAME = 15  # https://github.com/torvalds/linux/blob/2df0c02dab829dd89360d98a8a1abaa026ef5798/include/uapi/linux/prctl.h#L56
+        libc.prctl(PR_SET_NAME, b"kernel")
+
     import multiprocessing
 
     multiprocessing.set_start_method("forkserver")

@@ -9,7 +9,6 @@ from duckdb import ConstantExpression as Const
 from duckdb import DuckDBPyConnection, DuckDBPyRelation
 from duckdb import connect as duckdb_connect
 from pandas import DataFrame
-from plotly.basedatatypes import BaseFigure
 
 # todo(rteqs): get rid of this
 sys.path.append(str(Path(__file__).parent.absolute()))
@@ -373,35 +372,6 @@ async def downsample_ldata(
         {"columns": rel.columns, "data": rel.fetchall()}
         for rel in downsample(conn, f"ldata_{ldata_node_id}", config)
     ]
-
-
-async def downsample_fig(
-    conn: DuckDBPyConnection, key: str, fig: BaseFigure, cur_gen: int
-) -> BaseFigure:
-    table_name = f"in_memory_{key}"
-    is_latest, _ = await get_staleness_info(conn, table_name, cur_gen=cur_gen)
-    if not is_latest:
-        # todo(rteqs): figure out how to convert plotly fig to duckdb table
-        # df
-        # conn.register(key, df)
-        conn.execute(
-            """
-            insert into
-                plots_faas_catalog (name, in_memory_data_generation)
-            values
-                ($name, $in_memory_data_generation)
-            on conflict
-                (name)
-            do update
-            set
-                in_memory_data_generation = $in_memory_data_generation
-            """,
-            parameters={"name": table_name, "in_memory_data_generation": cur_gen},
-        )
-
-    # todo(rteqs): convert fig to downsample config
-    config: PlotConfig = {"traces": [{"x": "x", "y": "y"}]}
-    relations = downsample(conn, table_name, config)
 
 
 async def downsample_df(

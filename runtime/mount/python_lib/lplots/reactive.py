@@ -21,7 +21,7 @@ live_node_names: set[str] = set()
 def graphviz() -> None:
     from pathlib import Path
 
-    with Path("graph.dot").open("w") as f:
+    with Path("graph.dot").open("w", encoding="utf-8") as f:
         f.write("digraph G {\n")
 
         for n in live_nodes.values():
@@ -44,8 +44,8 @@ class Node:
     cell_id: str | None = None
     name: str | None = None
 
-    widget_states: dict[str, WidgetState] = field(default_factory=dict)
-    widget_state_idx = 0
+    widget_states: dict[str, WidgetState[str, object]] = field(default_factory=dict)
+    widget_state_idx: int = 0
 
     def __post_init__(self) -> None:
         live_nodes[id(self)] = self
@@ -59,10 +59,11 @@ class Node:
         if self.name is None:
             self.name = self.f.__name__
 
-        if self.name in live_node_names:
-            raise ValueError(f"reactive node name is not unique: {self.name!r}")
+        # todo(rteqs): fix bookkeeping
+        # if self.name in live_node_names:
+        #     raise ValueError(f"reactive node name is not unique: {self.name!r}")
 
-        live_node_names.add(self.name)
+        # live_node_names.add(self.name)
 
     def name_path(self) -> str:
         assert self.name is not None
@@ -115,8 +116,9 @@ class Node:
             cur.signals = {}
 
             del live_nodes[id(cur)]
-            if self.name is not None:
-                live_node_names.remove(self.name)
+
+            # if self.name is not None:
+            #     live_node_names.remove(self.name)
 
     def __repr__(self) -> str:
         stale_mark = "!" if self.stale else ""
@@ -160,14 +162,21 @@ class RCtx:
     cur_comp: Node | None = None
 
     updated_signals: dict[int, "Signal"] = field(default_factory=dict)
-    signals_update_from_code: dict[int, "Signal"] = field(default_factory=dict)
+    signals_updated_from_code: dict[int, "Signal"] = field(default_factory=dict)
     stale_nodes: dict[int, Node] = field(default_factory=dict)
+    prev_updated_signals: dict[int, "Signal"] = field(default_factory=dict)
 
     in_tx: bool = False
 
     async def run(
         self, f: Callable[..., Awaitable[R]], *, _cell_id: str | None = None
     ) -> R:
+        # note(maximsmol): we want this to happen for non-cell nodes too
+        # so it has to be inside `RCtx` which sees every ran node
+        # and not just the cell body in the kernel
+        if _cell_id is not None:
+            await _inject.kernel.set_active_cell(_cell_id)
+
         async with self.transaction:
             self.cur_comp = Node(f=f, parent=self.cur_comp, cell_id=_cell_id)
 
@@ -179,8 +188,8 @@ class RCtx:
                 self.cur_comp = self.cur_comp.parent
 
     async def _tick(self) -> None:
-        tick_updated_signals = self.signals_update_from_code
-        self.signals_update_from_code = {}
+        tick_updated_signals = self.signals_updated_from_code
+        self.signals_updated_from_code = {}
 
         try:
             stack_depth = 1
@@ -202,6 +211,7 @@ class RCtx:
             for s in self.updated_signals.values():
                 s._apply_updates()
 
+            self.prev_updated_signals = self.updated_signals
             self.updated_signals = {}
 
             to_dispose: dict[int, tuple[Node, Node | None]] = {}
@@ -223,24 +233,16 @@ class RCtx:
                 for n, p in to_dispose.values():
                     self.cur_comp = p
 
-                    # we do this here rather than in self.run
-                    # because the node is initialized by the cell function
-                    # therefor it would not have a cell_id set until before
-                    # self.run enters f()
-                    #
-                    # for this to work with top level nodes, the kernel calls
-                    # set_active_cell manually before calling ctx.run()
-                    if n.cell_id is not None:
-                        await _inject.kernel.set_active_cell(n.cell_id)
-
                     try:
                         await self.run(n.f, _cell_id=n.cell_id)
                     except Exception:
                         print_exc()
                     finally:
                         self.cur_comp = None
+
         finally:
             await _inject.kernel.on_tick_finished(tick_updated_signals)
+            self.prev_updated_signals = {}
 
     @property
     @asynccontextmanager
@@ -304,9 +306,9 @@ class Signal(Generic[T]):
         if upd is Nothing.x:
             assert ctx.cur_comp is not None
 
-            print(
-                # f"[@] {self} added listener {ctx.cur_comp.f.__name__} @ {id(ctx.cur_comp)}"
-            )
+            # print(
+            # f"[@] {self} added listener {ctx.cur_comp.f.__name__} @ {id(ctx.cur_comp)}"
+            # )
 
             self._listeners[id(ctx.cur_comp)] = ctx.cur_comp
             ctx.cur_comp.signals[id(self)] = self
@@ -315,9 +317,11 @@ class Signal(Generic[T]):
             return self._value
 
         self._updates.append(upd)
+        # name = ctx.cur_comp.name_path() if ctx.cur_comp is not None else "top level"
+        # print(f"[@] node={name}, signal={self} triggered update {upd}")
         ctx.updated_signals[id(self)] = self
         if not _ui_update:
-            ctx.signals_update_from_code[id(self)] = self
+            ctx.signals_updated_from_code[id(self)] = self
 
         self._mark_listeners()
 
@@ -344,23 +348,6 @@ class Signal(Generic[T]):
 
     def __repr__(self) -> str:
         return f"{self._name}@{id(self)}"
-
-
-K = TypeVar("K")
-V = TypeVar("V")
-
-
-class RDict(dict[K, Signal[V]]):
-    def __setitem__(self, k: K, v: V) -> None:
-        # print(f"SET {k} = {v}")
-        if k not in self:
-            super().__setitem__(k, Signal(v, name=str(k)))
-
-        super().__getitem__(k)(v)
-
-    def __getitem__(self, k: K) -> V:
-        # print(f"GET {k}")
-        return super().__getitem__(k)()
 
 
 def global_var_signal(key: str) -> Signal[object] | None:

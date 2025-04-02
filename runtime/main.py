@@ -1,3 +1,5 @@
+import sys
+
 from latch_o11y.o11y import setup as setup_o11y
 
 setup_o11y()
@@ -28,6 +30,13 @@ latch_server = LatchASGIServer(
 app = latch_server.raw_app
 
 if __name__ == "__main__":
+    if sys.platform == "linux":
+        from ctypes import CDLL
+
+        libc = CDLL("libc.so.6")
+        PR_SET_NAME = 15  # https://github.com/torvalds/linux/blob/2df0c02dab829dd89360d98a8a1abaa026ef5798/include/uapi/linux/prctl.h#L56
+        libc.prctl(PR_SET_NAME, b"latch-plots")
+
     import signal
 
     import uvloop

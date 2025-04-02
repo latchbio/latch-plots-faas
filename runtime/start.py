@@ -10,7 +10,7 @@ nucleus_url = (latch_p / "nucleus-url").read_text()
 domain = ".".join(nucleus_url.split(".")[-2:])
 
 pod_id = int((latch_p / "id").read_text())
-plots_faas_version = Path("/opt/latch/plots_faas_version").read_text()
+plots_faas_version = Path("/opt/latch/plots_faas_version").read_text(encoding="utf-8")
 dd_version = f"{pod_id}_{plots_faas_version}"
 
 host_ip_pattern = re.compile(rb"HOST_IP=([^\0]+)")

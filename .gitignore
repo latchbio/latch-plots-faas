@@ -5,3 +5,4 @@ __pycache__
 *.sw*
 .pdm-python
 /.envrc
+/.venv

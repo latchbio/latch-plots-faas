@@ -146,23 +146,28 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
 
             elif msg["type"] == "start_cell":
                 cell_id = msg["cell_id"]
-                active_cell = cell_id
-                cell_sequencers[cell_id] = msg["run_sequencer"]
-                cell_status[cell_id] = "running"
 
-                await gql_query(
-                    auth=auth,
-                    query="""
-                        mutation ClearCellMetadata($id: BigInt!) {
-                            updatePlotTransformInfo(
-                                input: { id: $id, patch: { logs: "", exception: null } }
-                            ) {
-                                clientMutationId
+                if cell_id is not None:
+                    # note: active_cell is set to None when on_tick_finished is called to tell console to mark all cells as ran.
+                    # active_cell is not overwritten here becuase kernel_stdio messages require an active_cell field,
+                    # if active_cell is None in kernel_stdio, console will display an error
+                    active_cell = cell_id
+                    cell_sequencers[cell_id] = msg["run_sequencer"]
+                    cell_status[cell_id] = "running"
+
+                    await gql_query(
+                        auth=auth,
+                        query="""
+                            mutation ClearCellMetadata($id: BigInt!) {
+                                updatePlotTransformInfo(
+                                    input: { id: $id, patch: { logs: "", exception: null } }
+                                ) {
+                                    clientMutationId
+                                }
                             }
-                        }
-                    """,
-                    variables={"id": msg["cell_id"]},
-                )
+                        """,
+                        variables={"id": msg["cell_id"]},
+                    )
 
                 msg = {
                     "type": msg["type"],
@@ -352,16 +357,14 @@ async def start_kernel_proc() -> None:
 
     await add_pod_event(auth=auth_token_sdk, event_type="runtime_ready")
     await ready_ev.wait()
-    await conn_k.send(
-        {
-            "type": "init",
-            "widget_states": k_state.widget_states,
-            "cell_output_selections": k_state.cell_output_selections,
-            "plot_data_selections": k_state.plot_data_selections,
-            "viewer_cell_data": k_state.viewer_cell_data,
-            "plot_configs": k_state.plot_configs,
-        }
-    )
+    await conn_k.send({
+        "type": "init",
+        "widget_states": k_state.widget_states,
+        "cell_output_selections": k_state.cell_output_selections,
+        "plot_data_selections": k_state.plot_data_selections,
+        "viewer_cell_data": k_state.viewer_cell_data,
+        "plot_configs": k_state.plot_configs,
+    })
 
 
 async def stop_kernel_proc() -> None:
