@@ -192,12 +192,13 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
             elif msg["type"] == "cell_result":
                 cell_id = msg["cell_id"]
                 cell_status[cell_id] = "ran" if "exception" not in msg else "error"
-                cell_last_run_outputs[cell_id] = {
+                outputs_data: CellOutputs = {
                     "outputs": msg["outputs"],
                     "dataframe_outputs": msg["dataframe_outputs"],
                     "figure_outputs": msg["figure_outputs"],
                     "static_figure_outputs": msg["static_figure_outputs"],
                 }
+                cell_last_run_outputs[cell_id] = outputs_data
 
                 exc = msg.get("exception")
                 if exc is not None:
@@ -208,23 +209,24 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                     query="""
                         mutation UpdateCellResult($id: BigInt!, $exception: String) {
                             updatePlotTransformInfo(
-                                input: { id: $id, patch: { exception: $exception } }
+                                input: { id: $id, patch: { exception: $exception, outputsData: $outputs_data } }
                             ) {
                                 clientMutationId
                             }
                         }
                     """,
-                    variables={"id": msg["cell_id"], "exception": exc},
+                    variables={
+                        "id": msg["cell_id"],
+                        "exception": exc,
+                        "outputs_data": orjson.dumps(outputs_data).decode(),
+                    },
                 )
 
                 msg = {
                     "type": msg["type"],
                     "cell_id": msg["cell_id"],
                     "has_exception": exc is not None,
-                    "outputs": msg.get("outputs"),
-                    "dataframe_outputs": msg.get("dataframe_outputs"),
-                    "figure_outputs": msg.get("figure_outputs"),
-                    "static_figure_outputs": msg.get("static_figure_outputs"),
+                    **outputs_data,
                 }
 
             elif msg["type"] == "cell_widgets":
