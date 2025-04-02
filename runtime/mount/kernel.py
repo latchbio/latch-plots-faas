@@ -486,7 +486,6 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
 
 
 snapshot_dir = Path.home() / ".cache" / "plots-faas"
-large_globals_dir = snapshot_dir / "large_globals"
 snapshot_f_name = "snapshot.json"
 
 
@@ -744,7 +743,6 @@ class Kernel:
 
     async def save_kernel_snapshot(self) -> None:
         snapshot_dir.mkdir(parents=True, exist_ok=True)
-        large_globals_dir.mkdir(parents=True, exist_ok=True)
 
         s_nodes = {}
         s_signals = {}
