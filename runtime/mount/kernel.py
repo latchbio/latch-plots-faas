@@ -1572,8 +1572,6 @@ class Kernel:
             return
 
         if msg["type"] == "save_kernel_snapshot":
-            with open("debug.txt", "w") as f:
-                f.write("something")
             await self.save_kernel_snapshot()
             return
 
