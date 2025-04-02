@@ -1,4 +1,3 @@
-import base64
 import inspect
 import sys
 import uuid
@@ -8,11 +7,9 @@ from dataclasses import dataclass, field
 from traceback import print_exc
 from typing import Any, Generic, Self, TextIO, TypeAlias, TypeVar, overload
 
-import dill
-
 from . import _inject
 from .persistence import (SerializedNode, SerializedSignal, safe_serialize_obj,
-                          safe_unserialize_obj)
+                          safe_unserialize_obj, un_unserial_symbol)
 from .utils.nothing import Nothing
 from .widgets._emit import WidgetState
 
@@ -356,8 +353,15 @@ class Signal(Generic[T]):
 
     _ui_update: bool = False
 
+    _load_error_msg: str | None
+
     def __init__(
-        self, initial: T, *, name: str | None = None, _id: str | None = None
+        self,
+        initial: T,
+        *,
+        name: str | None = None,
+        _id: str | None = None,
+        _load_error_msg: str | None = None,
     ) -> None:
         if _id is None:
             self._id = str(uuid.uuid4())
@@ -379,6 +383,8 @@ class Signal(Generic[T]):
         live_signals[self.id] = self
         live_signal_ids.add(self.id)
 
+        self._load_error_msg = _load_error_msg
+
     @property
     def id(self) -> str:
         assert self._id is not None
@@ -393,16 +399,22 @@ class Signal(Generic[T]):
             value=s_val,
             name=self._name,
             listeners=list(self._listeners.keys()),
-            error_msg="" if error_msg is None else error_msg,
+            dump_error_msg="" if error_msg is None else error_msg,
+            load_error_msg=self._load_error_msg,
             id=self.id,
         )
 
     @classmethod
     def load(cls, s_sig) -> "Signal[T]":
-        val = safe_unserialize_obj(s_sig["value"])
+        val, error_msg = safe_unserialize_obj(s_sig["value"])
 
-        if val is None:
-            sig = cls(Nothing.x, name=s_sig["name"], _id=s_sig["id"])
+        if val is None or val == un_unserial_symbol:
+            sig = cls(
+                Nothing.x,
+                name=s_sig["name"],
+                _id=s_sig["id"],
+                _load_error_msg=error_msg,
+            )
         else:
             sig = cls(val, name=s_sig["name"], _id=s_sig["id"])
 

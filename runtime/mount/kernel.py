@@ -843,7 +843,7 @@ class Kernel:
                 self.k_globals._direct_set(k, Signal(widget))
             else:
                 val, error_msg = safe_unserialize_obj(s_v["value"])
-                if val is un_unserial_symbol:
+                if val == un_unserial_symbol:
                     restored_globals[k] = {
                         "value": small_repr(val),
                         "msg": f"unserializable. stored err: {s_v['error_msg']}, unserial err: {error_msg}",

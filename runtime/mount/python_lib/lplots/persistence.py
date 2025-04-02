@@ -10,7 +10,8 @@ class SerializedSignal(TypedDict):
     value: str
     name: str
     listeners: list[str]
-    error_msg: str | None
+    dump_error_msg: str | None
+    load_error_msg: str | None
     id: str
 
 
