@@ -401,7 +401,7 @@ class Signal(Generic[T]):
     def load(cls, s_sig) -> "Signal[T]":
         val = safe_unserialize_obj(s_sig["value"])
 
-        if not isinstance(val, type(T)) or val is None:
+        if val is None:
             sig = cls(Nothing.x, name=s_sig["name"], _id=s_sig["id"])
         else:
             sig = cls(val, name=s_sig["name"], _id=s_sig["id"])

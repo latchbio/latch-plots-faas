@@ -32,7 +32,7 @@ from plotly.basedatatypes import BaseFigure
 from lplots import _inject
 from lplots.persistence import (SerializedNode, SerializedSignal,
                                 safe_serialize_obj, safe_unserialize_obj,
-                                small_repr, unserial_symbol)
+                                small_repr, un_unserial_symbol)
 from lplots.reactive import Node, Signal, ctx, live_nodes, live_signals
 from lplots.themes import graphpad_inspired_theme
 from lplots.utils.nothing import Nothing
@@ -842,11 +842,11 @@ class Kernel:
                 restored_globals[k] = widget.serialize()
                 self.k_globals._direct_set(k, Signal(widget))
             else:
-                val = safe_unserialize_obj(s_v["value"])
-                if val is None:
+                val, error_msg = safe_unserialize_obj(s_v["value"])
+                if val is un_unserial_symbol:
                     restored_globals[k] = {
                         "value": small_repr(val),
-                        "msg": f"unserializable. stored err: {s_v['error_msg']}",
+                        "msg": f"unserializable. stored err: {s_v['error_msg']}, unserial err: {error_msg}",
                     }
                 else:
                     restored_globals[k] = {

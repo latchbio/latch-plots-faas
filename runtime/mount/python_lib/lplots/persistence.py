@@ -1,5 +1,5 @@
 from base64 import b64decode, b64encode
-from typing import Generic, TypedDict
+from typing import Generic, Literal, TypedDict
 
 from dill import dumps, loads
 
@@ -34,6 +34,7 @@ class SerializedNode(TypedDict):
 
 
 unserial_symbol = "<<UNSERIALIZABLE>>"
+un_unserial_symbol: Literal["<<UN_UNSERIALIZABLE>>"] = "<<UN_UNSERIALIZABLE>>"
 
 MAX_SHORT_VAL_LEN = MAX_REPR_LEN = 100
 
@@ -51,13 +52,16 @@ def safe_serialize_obj(val: object, short: bool = False) -> (str, str | None):
     return s_val, error_msg
 
 
-def safe_unserialize_obj(s_val: str) -> object | None:
+def safe_unserialize_obj(
+    s_val: str,
+) -> (object | Literal["<<UN_UNSERIALIZABLE>>"], str | None):
     try:
         val = loads(b64decode(s_val.encode("utf-8")))
+        error_msg = None
     except Exception as e:
-        # todo(kenny): is it OK to collapse with actual None
-        val = None
-    return val
+        error_msg = f"Failed to unpickle: {e}"
+        val = un_unserial_symbol
+    return val, error_msg
 
 
 def small_repr(val: object) -> str:
