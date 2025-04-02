@@ -35,7 +35,13 @@ class SerializedNode(TypedDict):
 
 
 unserial_symbol = "<<UNSERIALIZABLE>>"
-un_unserial_symbol: Literal["<<UN_UNSERIALIZABLE>>"] = "<<UN_UNSERIALIZABLE>>"
+
+
+class UnUnserialSymbol:
+    ...
+
+
+un_unserial_symbol: UnUnserialSymbol = UnUnserialSymbol()
 
 MAX_SHORT_VAL_LEN = MAX_REPR_LEN = 100
 
@@ -55,7 +61,7 @@ def safe_serialize_obj(val: object, short: bool = False) -> (str, str | None):
 
 def safe_unserialize_obj(
     s_val: str,
-) -> (object | Literal["<<UN_UNSERIALIZABLE>>"], str | None):
+) -> (object | UnUnserialSymbol, str | None):
     try:
         val = loads(b64decode(s_val.encode("utf-8")))
         error_msg = None

@@ -408,7 +408,7 @@ class Signal(Generic[T]):
     def load(cls, s_sig) -> "Signal[T]":
         val, error_msg = safe_unserialize_obj(s_sig["value"])
 
-        if val is None or val == un_unserial_symbol:
+        if val is None or val is un_unserial_symbol:
             sig = cls(
                 Nothing.x,
                 name=s_sig["name"],
