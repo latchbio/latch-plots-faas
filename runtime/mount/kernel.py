@@ -25,6 +25,8 @@ from duckdb import DuckDBPyConnection
 from latch.ldata.path import LPath
 from latch.registry.table import Table
 from lplots import _inject
+from lplots.ann_data import auto_install
+from lplots.ann_data.process_message import handle_ann_data_widget_message
 from lplots.reactive import Node, Signal, ctx
 from lplots.themes import graphpad_inspired_theme
 from lplots.utils.nothing import Nothing
@@ -37,6 +39,8 @@ from plotly_utils.precalc_box import precalc_box
 from plotly_utils.precalc_violin import precalc_violin
 from socketio_thread import SocketIoThread
 from stdio_over_socket import SocketWriter, text_socket_writer
+
+ad = auto_install.ad
 
 sys.path.append(str(Path(__file__).parent.absolute()))
 from subsample import downsample_df, initialize_duckdb
@@ -490,6 +494,8 @@ class Kernel:
     ldata_dataframes: dict[str, DataFrame] = field(default_factory=dict)
     registry_dataframes: dict[str, DataFrame] = field(default_factory=dict)
     url_dataframes: dict[str, DataFrame] = field(default_factory=dict)
+
+    ann_data_objects: dict[str, ad.AnnData] = field(default_factory=dict)
 
     cell_pagination_settings: defaultdict[str, defaultdict[str, PaginationSettings]] = (
         field(default_factory=pagination_settings_dict_factory)
@@ -1361,6 +1367,10 @@ class Kernel:
             )
 
             await self.send({"type": "upload_ldata"})
+            return
+
+        if msg["type"] == "ann_data":
+            await self.send(handle_ann_data_widget_message(msg))
             return
 
 

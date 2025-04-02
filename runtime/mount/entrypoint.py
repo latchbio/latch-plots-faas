@@ -130,9 +130,12 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
     print("Starting kernel message listener")
     while True:
         msg = await conn_k.recv()
-        print(">", msg)
 
         try:
+            # note(aidan): ann data messages can be mbs and stuffing into journal fills the disc
+            if msg["type"] != "ann_data":
+                print(">", msg)
+
             if msg["type"] == "ready":
                 ready_ev.set()
                 await add_pod_event(auth=auth, event_type="kernel_ready")
