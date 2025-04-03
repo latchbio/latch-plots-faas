@@ -14,6 +14,7 @@ class LDataPickerState(_emit.WidgetState[Literal["ldata_picker"], str]):
     readonly: bool
     appearance: NotRequired[FormInputAppearance | None]
     required: bool
+    file_type: NotRequired[Literal["file", "dir", "any"]]
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -48,6 +49,7 @@ def w_ldata_picker(
     appearance: FormInputAppearance | None = None,
     default: str | None = None,
     required: bool = False,
+    file_type: Literal["file", "dir", "any"] = "any",
 ) -> LDataPicker:
     key = _state.use_state_key(key=key)
 
@@ -60,6 +62,7 @@ def w_ldata_picker(
             "default": default,
             "appearance": appearance,
             "required": required,
+            "file_type": file_type,
         },
         _signal=_state.use_value_signal(key=key),
     )
