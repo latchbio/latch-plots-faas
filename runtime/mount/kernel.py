@@ -31,6 +31,7 @@ import plotly.io._json as pio_json
 from duckdb import DuckDBPyConnection
 from latch.ldata.path import LPath
 from latch.registry.table import Table
+from latch_cli.utils import urljoins
 from lplots import _inject
 from lplots.ann_data import auto_install
 from lplots.ann_data.process_message import handle_ann_data_widget_message
@@ -1155,7 +1156,7 @@ class Kernel:
             raise RuntimeError("unable to save dataframe to csv")
 
         # todo(rteqs): stream directly to LData without temp file
-        LPath(dst).upload_from(local_path)
+        LPath(urljoins(dst, local_path.name)).upload_from(local_path)
 
     async def accept(self) -> None:
         # print("[kernel] accept")
