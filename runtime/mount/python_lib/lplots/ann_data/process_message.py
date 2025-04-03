@@ -173,9 +173,9 @@ def handle_ann_data_widget_message(
             },
         }
 
-    adata = _inject.kernel.ann_data_objects[obj_id]
+    adata: ad.AnnData = _inject.kernel.ann_data_objects[obj_id]
 
-    if "op" not in msg or msg["op"] not in {"init_data", "get_obsm_options", "get_obsm", "get_obs_options", "get_obs", "get_counts_column", "mutate_obs"}:
+    if "op" not in msg or msg["op"] not in {"init_data", "get_obsm_options", "get_obsm", "get_obs_options", "get_obs", "get_counts_column", "mutate_obs", "drop_obs", "drop_obs_value"}:
         return {
             "type": "ann_data",
             "key": widget_key,
@@ -383,6 +383,75 @@ def handle_ann_data_widget_message(
                     "fetched_for_key": msg["obs_key"],
                     "mutated_for_key": mutated_for_key,
                     "created_for_key": created_for_key,
+                    "values": obs.tolist(),
+                    "unique_values": unique_obs.tolist(),
+                    "counts": counts.tolist(),
+                    "nrof_values": nrof_obs
+                },
+            },
+        }
+
+    if op == "drop_obs":
+        if "obs_key" not in msg:
+            return {
+                "type": "ann_data",
+                "op": op,
+                "key": widget_key,
+                "value": {"error": "`obs_key` key missing from message"},
+            }
+
+        obs_key = msg["obs_key"]
+        if obs_key not in adata.obs:
+            return {
+                "type": "ann_data",
+                "op": op,
+                "key": widget_key,
+                "value": {"error": "Observation key not found"},
+            }
+
+        adata.obs = adata.obs.drop(columns=[obs_key])
+
+        return {
+            "type": "ann_data",
+            "op": op,
+            "key": widget_key,
+            "value": {"data": {
+                "dropped_key": obs_key,
+            }},
+        }
+
+    if op == "drop_obs_value":
+        if "obs_key" not in msg or "obs_value" not in msg:
+            return {
+                "type": "ann_data",
+                "op": op,
+                "key": widget_key,
+                "value": {"error": "`obs_key` or `obs_value` key missing from message"},
+            }
+
+        obs_key = msg["obs_key"]
+        obs_value = msg["obs_value"]
+        if obs_key not in adata.obs:
+            return {
+                "type": "ann_data",
+                "op": op,
+                "key": widget_key,
+                "value": {"error": "Observation key not found"},
+            }
+
+        adata.obs.loc[adata.obs[obs_key] == obs_value, obs_key] = None
+
+        obs, (unique_obs, counts), nrof_obs = get_obs(obj_id, adata, msg["obs_key"])
+
+        return {
+            "type": "ann_data",
+            "op": "get_obs",
+            "key": widget_key,
+            "value": {
+                "data": {
+                    "fetched_for_key": msg["obs_key"],
+                    "mutated_for_key": msg["obs_key"],
+                    "created_for_key": None,
                     "values": obs.tolist(),
                     "unique_values": unique_obs.tolist(),
                     "counts": counts.tolist(),
