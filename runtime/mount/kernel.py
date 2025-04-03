@@ -1156,7 +1156,7 @@ class Kernel:
             raise RuntimeError("unable to save dataframe to csv")
 
         # todo(rteqs): stream directly to LData without temp file
-        LPath(urljoins(dst, name)).upload_from(local_path)
+        LPath(urljoins(dst, local_path.name)).upload_from(local_path)
 
     async def accept(self) -> None:
         # print("[kernel] accept")
