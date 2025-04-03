@@ -29,7 +29,17 @@ class LDataPicker:
             if val is None:
                 return None
 
-        return LPath(val)
+        res = LPath(val)
+
+        if self._state.get("file_type") == "dir":
+            if not res.is_dir():
+                return None
+
+        elif self._state.get("file_type") == "file":
+            if res.is_dir():
+                return None
+
+        return res
 
     @property
     def value(self) -> LPath | None:
