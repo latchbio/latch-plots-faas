@@ -119,11 +119,36 @@ def get_var_index(
     return var_index, var_names
 
 
+def adapt_value_for_dtype(
+    value: str | float | int | bool | None,  # noqa: FBT001
+    dtype: pd.api.extensions.ExtensionDtype | np.dtype,
+) -> str | float | bool | None:
+    if value is None:
+        return value
+
+    if pd.api.types.is_numeric_dtype(dtype):
+        if "int" in str(dtype).lower():
+            return int(value)
+
+        return float(value)
+
+    if pd.api.types.is_bool_dtype(dtype):
+        if isinstance(value, str):
+            return value.lower().strip() in {"true", "1", "yes"}
+
+        return bool(value)
+
+    if pd.api.types.is_datetime64_any_dtype(dtype):
+        return str(pd.to_datetime(value, errors="coerce"))
+
+    return str(value)
+
+
 def mutate_obs_by_lasso(
     adata: ad.AnnData,
     obsm_key: str,
     obs_key: str,
-    obs_value: str | float | bool | None,  # noqa: FBT001
+    obs_value: str | float | int | bool | None,  # noqa: FBT001
     lasso_points: list[tuple[int, int]],
 ) -> None:
     embedding = adata.obsm[obsm_key][:, :2]  # type: ignore
@@ -134,32 +159,38 @@ def mutate_obs_by_lasso(
     polygon = Path(lasso_points)
     mask = polygon.contains_points(embedding)
 
-    if isinstance(adata.obs[obs_key].dtype, pd.CategoricalDtype) and obs_value not in adata.obs[obs_key].cat.categories:
-        adata.obs[obs_key] = adata.obs[obs_key].cat.add_categories(obs_value if obs_value is not None else "")
-    adata.obs.loc[mask, obs_key] = obs_value
+    coerced_obs_value = adapt_value_for_dtype(obs_value, adata.obs[obs_key].dtype)
+
+    if isinstance(adata.obs[obs_key].dtype, pd.CategoricalDtype) and coerced_obs_value not in adata.obs[obs_key].cat.categories and coerced_obs_value is not None:
+        adata.obs[obs_key] = adata.obs[obs_key].cat.add_categories(coerced_obs_value)
+    adata.obs.loc[mask, obs_key] = coerced_obs_value
 
 
 def mutate_obs_by_value(
     adata: ad.AnnData,
     obs_key: str,
-    old_obs_value: str | float | bool | None,  # noqa: FBT001
-    new_obs_value: str | float | bool | None,  # noqa: FBT001
+    old_obs_value: str | float | int | bool | None,  # noqa: FBT001
+    new_obs_value: str | float | int | bool | None,  # noqa: FBT001
 ) -> None:
-    if isinstance(adata.obs[obs_key].dtype, pd.CategoricalDtype) and new_obs_value not in adata.obs[obs_key].cat.categories:
-        adata.obs[obs_key] = adata.obs[obs_key].cat.add_categories(new_obs_value if new_obs_value is not None else "")
+    coerced_new_obs_value = adapt_value_for_dtype(new_obs_value, adata.obs[obs_key].dtype)
 
-    if old_obs_value is None:
+    if isinstance(adata.obs[obs_key].dtype, pd.CategoricalDtype) and coerced_new_obs_value not in adata.obs[obs_key].cat.categories and coerced_new_obs_value is not None:
+        adata.obs[obs_key] = adata.obs[obs_key].cat.add_categories(coerced_new_obs_value)
+
+    coerced_old_obs_value = adapt_value_for_dtype(old_obs_value, adata.obs[obs_key].dtype)
+
+    if coerced_old_obs_value is None:
         mask = adata.obs[obs_key].isna()
     else:
-        mask = adata.obs[obs_key] == old_obs_value
+        mask = adata.obs[obs_key] == coerced_old_obs_value
 
-    if new_obs_value is None:
+    if coerced_new_obs_value is None:
         adata.obs.loc[mask, obs_key] = None
     else:
-        adata.obs.loc[mask, obs_key] = new_obs_value
+        adata.obs.loc[mask, obs_key] = coerced_new_obs_value
 
-    if isinstance(adata.obs[obs_key].dtype, pd.CategoricalDtype) and old_obs_value in adata.obs[obs_key].cat.categories:
-        adata.obs[obs_key] = adata.obs[obs_key].cat.remove_categories(old_obs_value if old_obs_value is not None else "")
+    if isinstance(adata.obs[obs_key].dtype, pd.CategoricalDtype) and coerced_old_obs_value is not None and coerced_old_obs_value in adata.obs[obs_key].cat.categories:
+        adata.obs[obs_key] = adata.obs[obs_key].cat.remove_categories(coerced_old_obs_value)
 
 
 def handle_ann_data_widget_message(
