@@ -254,7 +254,7 @@ def handle_ann_data_widget_message(
 
                     # options
                     "possible_obs_keys": possible_obs_keys,
-                    "possible_obs_keys_types": [adata.obs[key].dtype for key in possible_obs_keys],
+                    "possible_obs_keys_types": [str(adata.obs[key].dtype) for key in possible_obs_keys],
                     "possible_obsm_keys": possible_obsm_keys,
 
                     # init state with these
