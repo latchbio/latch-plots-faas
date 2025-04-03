@@ -119,14 +119,14 @@ def get_var_index(
     return var_index, var_names
 
 
-def mutate_obs(
+def mutate_obs_by_lasso(
     adata: ad.AnnData,
     obsm_key: str,
     obs_key: str,
-    obs_value: str | float,
+    obs_value: str | float | bool | None,  # noqa: FBT001
     lasso_points: list[tuple[int, int]],
 ) -> None:
-    embedding = adata.obsm[obsm_key][:, :2]  # type: ignore  # noqa: PGH003
+    embedding = adata.obsm[obsm_key][:, :2]  # type: ignore
 
     if len(lasso_points) < 3:
         return
@@ -134,9 +134,32 @@ def mutate_obs(
     polygon = Path(lasso_points)
     mask = polygon.contains_points(embedding)
 
-    if isinstance(adata.obs[obs_key].dtype, pd.CategoricalDtype) and str(obs_value) not in adata.obs[obs_key].cat.categories:
-        adata.obs[obs_key] = adata.obs[obs_key].cat.add_categories(str(obs_value))
-    adata.obs.loc[mask, obs_key] = str(obs_value)
+    if isinstance(adata.obs[obs_key].dtype, pd.CategoricalDtype) and obs_value not in adata.obs[obs_key].cat.categories:
+        adata.obs[obs_key] = adata.obs[obs_key].cat.add_categories(obs_value if obs_value is not None else "")
+    adata.obs.loc[mask, obs_key] = obs_value
+
+
+def mutate_obs_by_value(
+    adata: ad.AnnData,
+    obs_key: str,
+    old_obs_value: str | float | bool | None,  # noqa: FBT001
+    new_obs_value: str | float | bool | None,  # noqa: FBT001
+) -> None:
+    if isinstance(adata.obs[obs_key].dtype, pd.CategoricalDtype) and new_obs_value not in adata.obs[obs_key].cat.categories:
+        adata.obs[obs_key] = adata.obs[obs_key].cat.add_categories(new_obs_value if new_obs_value is not None else "")
+
+    if old_obs_value is None:
+        mask = adata.obs[obs_key].isna()
+    else:
+        mask = adata.obs[obs_key] == old_obs_value
+
+    if new_obs_value is None:
+        adata.obs.loc[mask, obs_key] = None
+    else:
+        adata.obs.loc[mask, obs_key] = new_obs_value
+
+    if isinstance(adata.obs[obs_key].dtype, pd.CategoricalDtype) and old_obs_value in adata.obs[obs_key].cat.categories:
+        adata.obs[obs_key] = adata.obs[obs_key].cat.remove_categories(old_obs_value if old_obs_value is not None else "")
 
 
 def handle_ann_data_widget_message(
@@ -175,7 +198,7 @@ def handle_ann_data_widget_message(
 
     adata: ad.AnnData = _inject.kernel.ann_data_objects[obj_id]
 
-    if "op" not in msg or msg["op"] not in {"init_data", "get_obsm_options", "get_obsm", "get_obs_options", "get_obs", "get_counts_column", "mutate_obs", "drop_obs", "drop_obs_value"}:
+    if "op" not in msg or msg["op"] not in {"init_data", "get_obsm_options", "get_obsm", "get_obs_options", "get_obs", "get_counts_column", "mutate_obs", "drop_obs", "rename_obs"}:
         return {
             "type": "ann_data",
             "key": widget_key,
@@ -231,6 +254,7 @@ def handle_ann_data_widget_message(
 
                     # options
                     "possible_obs_keys": possible_obs_keys,
+                    "possible_obs_keys_types": [adata.obs[key].dtype for key in possible_obs_keys],
                     "possible_obsm_keys": possible_obsm_keys,
 
                     # init state with these
@@ -369,7 +393,11 @@ def handle_ann_data_widget_message(
 
         mutated_for_key = None
         if "obs_value" in msg and "lasso_points" in msg and "obsm_key" in msg:
-            mutate_obs(adata, msg["obsm_key"], obs_key, msg["obs_value"], msg["lasso_points"])
+            mutate_obs_by_lasso(adata, msg["obsm_key"], obs_key, msg["obs_value"], msg["lasso_points"])
+            mutated_for_key = obs_key
+
+        if "old_obs_value" in msg and "obs_value" in msg:
+            mutate_obs_by_value(adata, obs_key, msg["old_obs_value"], msg["new_obs_value"])
             mutated_for_key = obs_key
 
         obs, (unique_obs, counts), nrof_obs = get_obs(obj_id, adata, obs_key)
@@ -420,18 +448,19 @@ def handle_ann_data_widget_message(
             }},
         }
 
-    if op == "drop_obs_value":
-        if "obs_key" not in msg or "obs_value" not in msg:
+    if op == "rename_obs":
+        if "old_obs_key" not in msg or "new_obs_key" not in msg:
             return {
                 "type": "ann_data",
                 "op": op,
                 "key": widget_key,
-                "value": {"error": "`obs_key` or `obs_value` key missing from message"},
+                "value": {"error": "`old_obs_key` and `new_obs_key` keys missing from message"},
             }
 
-        obs_key = msg["obs_key"]
-        obs_value = msg["obs_value"]
-        if obs_key not in adata.obs:
+        old_obs_key = msg["old_obs_key"]
+        new_obs_key = msg["new_obs_key"]
+
+        if old_obs_key not in adata.obs:
             return {
                 "type": "ann_data",
                 "op": op,
@@ -439,25 +468,16 @@ def handle_ann_data_widget_message(
                 "value": {"error": "Observation key not found"},
             }
 
-        adata.obs.loc[adata.obs[obs_key] == obs_value, obs_key] = None
-
-        obs, (unique_obs, counts), nrof_obs = get_obs(obj_id, adata, msg["obs_key"])
+        adata.obs = adata.obs.rename(columns={old_obs_key: new_obs_key})
 
         return {
             "type": "ann_data",
-            "op": "get_obs",
+            "op": op,
             "key": widget_key,
-            "value": {
-                "data": {
-                    "fetched_for_key": msg["obs_key"],
-                    "mutated_for_key": msg["obs_key"],
-                    "created_for_key": None,
-                    "values": obs.tolist(),
-                    "unique_values": unique_obs.tolist(),
-                    "counts": counts.tolist(),
-                    "nrof_values": nrof_obs
-                },
-            },
+            "value": {"data": {
+                "old_key": old_obs_key,
+                "new_key": new_obs_key,
+            }},
         }
 
     raise ValueError(f"Invalid operation: {op}")
