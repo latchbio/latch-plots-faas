@@ -1,3 +1,10 @@
+if __name__ == "__main__":
+    # fixme(maximsmol): anndata calls multiprocessing.get_context
+    # so we have to do this BEFORE we import it indirectly
+    import multiprocessing
+
+    multiprocessing.set_start_method("forkserver")
+
 import ast
 import asyncio
 import math
@@ -1440,9 +1447,5 @@ if __name__ == "__main__":
         libc = CDLL("libc.so.6")
         PR_SET_NAME = 15  # https://github.com/torvalds/linux/blob/2df0c02dab829dd89360d98a8a1abaa026ef5798/include/uapi/linux/prctl.h#L56
         libc.prctl(PR_SET_NAME, b"kernel")
-
-    import multiprocessing
-
-    multiprocessing.set_start_method("forkserver")
 
     asyncio.run(main())
