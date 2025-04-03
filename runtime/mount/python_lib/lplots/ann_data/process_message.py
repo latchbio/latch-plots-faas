@@ -416,10 +416,21 @@ def handle_ann_data_widget_message(
                 "value": {"error": "`obs_key` key missing from message"},
             }
 
-        obs_key = msg["obs_key"]
+        obs_key = str(msg["obs_key"])
         created_for_key = None
         if obs_key not in adata.obs:
+            new_dtype = msg.get("new_dtype")
+            if new_dtype is not None and new_dtype not in {"category", "int64", "float64", "bool"}:
+                return {
+                    "type": "ann_data",
+                    "op": op,
+                    "key": widget_key,
+                    "value": {"error": f"Invalid dtype: {new_dtype}"},
+                }
+
             adata.obs = adata.obs.reindex(columns=[*adata.obs.columns.tolist(), obs_key])
+            adata.obs[obs_key] = adata.obs[obs_key].astype(str(new_dtype) if new_dtype is not None else "category")  # type: ignore
+
             created_for_key = obs_key
 
         mutated_for_key = None
@@ -442,6 +453,7 @@ def handle_ann_data_widget_message(
                     "fetched_for_key": msg["obs_key"],
                     "mutated_for_key": mutated_for_key,
                     "created_for_key": created_for_key,
+                    "created_for_key_dtype": str(adata.obs[str(obs_key)].dtype) if created_for_key is not None else None,
                     "values": obs.tolist(),
                     "unique_values": unique_obs.tolist(),
                     "counts": counts.tolist(),
