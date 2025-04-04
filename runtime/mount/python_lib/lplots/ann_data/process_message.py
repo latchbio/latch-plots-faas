@@ -93,6 +93,7 @@ def get_obs_vector(
     else:
         idxs = np.arange(n_cells)
 
+    # note(aidan): this is ~3+ times faster than using `.to_numpy()` in place of `.values`
     return np.asarray(adata[idxs, var_index].to_df().iloc[:, 0:].values.ravel())  # noqa: PD011
 
 
@@ -126,17 +127,18 @@ def adapt_value_for_dtype(
     if value is None:
         return value
 
-    if pd.api.types.is_numeric_dtype(dtype):
-        if "int" in str(dtype).lower():
-            return int(value)
-
-        return float(value)
-
+    # note(aidan): bools are also numeric dtypes so this needs to happen before the numeric check
     if pd.api.types.is_bool_dtype(dtype):
         if isinstance(value, str):
             return value.lower().strip() in {"true", "1", "yes"}
 
         return bool(value)
+
+    if pd.api.types.is_numeric_dtype(dtype):
+        if "int" in str(dtype).lower():
+            return int(value)
+
+        return float(value)
 
     if pd.api.types.is_datetime64_any_dtype(dtype):
         return str(pd.to_datetime(value, errors="coerce"))
