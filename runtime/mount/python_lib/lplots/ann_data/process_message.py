@@ -453,11 +453,11 @@ def handle_ann_data_widget_message(
                     "fetched_for_key": msg["obs_key"],
                     "mutated_for_key": mutated_for_key,
                     "created_for_key": created_for_key,
-                    "created_for_key_dtype": str(adata.obs[str(obs_key)].dtype) if created_for_key is not None else None,
                     "values": obs.tolist(),
                     "unique_values": unique_obs.tolist(),
                     "counts": counts.tolist(),
-                    "nrof_values": nrof_obs
+                    "nrof_values": nrof_obs,
+                    "dtype": str(adata.obs[str(obs_key)].dtype) if obs_key in adata.obs else None,
                 },
             },
         }
