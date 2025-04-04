@@ -429,7 +429,10 @@ def handle_ann_data_widget_message(
                 }
 
             adata.obs = adata.obs.reindex(columns=[*adata.obs.columns.tolist(), obs_key])
-            adata.obs[obs_key] = adata.obs[obs_key].astype(str(obs_dtype) if obs_dtype is not None else "category")  # type: ignore
+            if obs_dtype == "int64":
+                adata.obs[obs_key] = adata.obs[obs_key].fillna(0).astype("int64")
+            else:
+                adata.obs[obs_key] = adata.obs[obs_key].astype(str(obs_dtype) if obs_dtype is not None else "category")  # type: ignore
 
             created_for_key = obs_key
 
