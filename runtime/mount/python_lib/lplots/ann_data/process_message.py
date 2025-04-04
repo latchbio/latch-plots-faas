@@ -181,8 +181,6 @@ def mutate_obs_by_value(
 
     coerced_old_obs_value = adapt_value_for_dtype(old_obs_value, adata.obs[obs_key].dtype)
 
-    raise ValueError(f"coerced_old_obs_value: {coerced_old_obs_value}, coerced_new_obs_value: {coerced_new_obs_value}")
-
     if coerced_old_obs_value is None:
         mask = adata.obs[obs_key].isna()
     else:
@@ -445,7 +443,7 @@ def handle_ann_data_widget_message(
             mutate_obs_by_lasso(adata, msg["obsm_key"], obs_key, msg["obs_value"], msg["lasso_points"])
             mutated_for_key = obs_key
 
-        if "old_obs_value" in msg and "obs_value" in msg:
+        if "old_obs_value" in msg and "new_obs_value" in msg:
             mutate_obs_by_value(adata, obs_key, msg["old_obs_value"], msg["new_obs_value"])
             mutated_for_key = obs_key
 
