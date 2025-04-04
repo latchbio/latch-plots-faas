@@ -181,7 +181,7 @@ def mutate_obs_by_value(
 
     coerced_old_obs_value = adapt_value_for_dtype(old_obs_value, adata.obs[obs_key].dtype)
 
-    print(f"coerced_old_obs_value: {coerced_old_obs_value}, coerced_new_obs_value: {coerced_new_obs_value}")
+    raise ValueError(f"coerced_old_obs_value: {coerced_old_obs_value}, coerced_new_obs_value: {coerced_new_obs_value}")
 
     if coerced_old_obs_value is None:
         mask = adata.obs[obs_key].isna()
