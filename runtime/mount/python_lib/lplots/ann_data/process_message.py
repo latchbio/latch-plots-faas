@@ -64,7 +64,7 @@ def get_obs(
             idxs = ann_data_index_cache[obj_id]
         obs = obs[idxs]
 
-    value_counts = pd.Series(obs).value_counts()
+    value_counts = pd.Series(obs).value_counts(dropna=False)
     unique_obs = value_counts.index.to_numpy()
     counts = value_counts.values.astype(np.int64)  # noqa: PD011
 
