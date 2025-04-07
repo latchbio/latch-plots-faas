@@ -207,13 +207,13 @@ def handle_ann_data_widget_message(
             },
         }
 
-    widget_key = msg["key"]
+    widget_session_key = msg["key"]
     widget_state: dict[str, Any] = msg["state"]
 
     if "obj_id" not in widget_state:
         return {
             "type": "ann_data",
-            "key": widget_key,
+            "key": widget_session_key,
             "value": {
                 "error": "Widget state does not contain obj_id",
             },
@@ -223,7 +223,7 @@ def handle_ann_data_widget_message(
     if obj_id not in _inject.kernel.ann_data_objects:
         return {
             "type": "ann_data",
-            "key": widget_key,
+            "key": widget_session_key,
             "value": {
                 "error": f"AnnData object with ID {obj_id} not found in cache",
             },
@@ -234,7 +234,7 @@ def handle_ann_data_widget_message(
     if "op" not in msg or msg["op"] not in {"init_data", "get_obsm_options", "get_obsm", "get_obs_options", "get_obs", "get_counts_column", "mutate_obs", "drop_obs", "rename_obs"}:
         return {
             "type": "ann_data",
-            "key": widget_key,
+            "key": widget_session_key,
             "value": {
                 "error": f"Invalid operation: {msg.get('op', '`op` key missing from message')}",
             },
@@ -278,7 +278,7 @@ def handle_ann_data_widget_message(
         return {
             "type": "ann_data",
             "op": op,
-            "key": widget_key,
+            "key": widget_session_key,
             "value": {
                 "data": {
                     # display info
@@ -311,7 +311,7 @@ def handle_ann_data_widget_message(
         return {
             "type": "ann_data",
             "op": op,
-            "key": widget_key,
+            "key": widget_session_key,
             "value": {"data": list(adata.obsm.keys())},
         }
 
@@ -320,7 +320,7 @@ def handle_ann_data_widget_message(
             return {
                 "type": "ann_data",
                 "op": op,
-                "key": widget_key,
+                "key": widget_session_key,
                 "value": {
                     "error": "Obsm not found" if "obsm_key" in msg else "`obsm_key` key missing from message"
                 },
@@ -331,14 +331,14 @@ def handle_ann_data_widget_message(
             return {
                 "type": "ann_data",
                 "op": op,
-                "key": widget_key,
+                "key": widget_session_key,
                 "value": {"error": "Failed to get obsm"},
             }
 
         return {
             "type": "ann_data",
             "op": op,
-            "key": widget_key,
+            "key": widget_session_key,
             "value": {
                 "data": {
                     "fetched_for_key": msg["obsm_key"],
@@ -352,7 +352,7 @@ def handle_ann_data_widget_message(
         return {
             "type": "ann_data",
             "op": op,
-            "key": widget_key,
+            "key": widget_session_key,
             "value": {
                 "data": list(adata.obs.keys()),
             },
@@ -363,7 +363,7 @@ def handle_ann_data_widget_message(
             return {
                 "type": "ann_data",
                 "op": op,
-                "key": widget_key,
+                "key": widget_session_key,
                 "value": {
                     "error": "Observation not found" if "obs_key" in msg else "`obs_key` key missing from message"
                 },
@@ -374,7 +374,7 @@ def handle_ann_data_widget_message(
         return {
             "type": "ann_data",
             "op": op,
-            "key": widget_key,
+            "key": widget_session_key,
             "value": {
                 "data": {
                     "fetched_for_key": msg["obs_key"],
@@ -391,7 +391,7 @@ def handle_ann_data_widget_message(
             return {
                 "type": "ann_data",
                 "op": op,
-                "key": widget_key,
+                "key": widget_session_key,
                 "value": {
                     "error": "Variable not found" if "var_index" in msg else "`var_index` key missing from message"
                 },
@@ -402,7 +402,7 @@ def handle_ann_data_widget_message(
         return {
             "type": "ann_data",
             "op": op,
-            "key": widget_key,
+            "key": widget_session_key,
             "value": {"data": {
                 "fetched_for_key": msg["var_index"],
                 "values": gene_column.tolist(),
@@ -414,7 +414,7 @@ def handle_ann_data_widget_message(
             return {
                 "type": "ann_data",
                 "op": op,
-                "key": widget_key,
+                "key": widget_session_key,
                 "value": {"error": "`obs_key` key missing from message"},
             }
 
@@ -426,7 +426,7 @@ def handle_ann_data_widget_message(
                 return {
                     "type": "ann_data",
                     "op": op,
-                    "key": widget_key,
+                    "key": widget_session_key,
                     "value": {"error": f"Invalid dtype: {obs_dtype}"},
                 }
 
@@ -452,7 +452,7 @@ def handle_ann_data_widget_message(
         return {
             "type": "ann_data",
             "op": "get_obs",
-            "key": widget_key,
+            "key": widget_session_key,
             "value": {
                 "data": {
                     "fetched_for_key": msg["obs_key"],
@@ -472,7 +472,7 @@ def handle_ann_data_widget_message(
             return {
                 "type": "ann_data",
                 "op": op,
-                "key": widget_key,
+                "key": widget_session_key,
                 "value": {"error": "`obs_key` key missing from message"},
             }
 
@@ -481,7 +481,7 @@ def handle_ann_data_widget_message(
             return {
                 "type": "ann_data",
                 "op": op,
-                "key": widget_key,
+                "key": widget_session_key,
                 "value": {"error": "Observation key not found"},
             }
 
@@ -490,7 +490,7 @@ def handle_ann_data_widget_message(
         return {
             "type": "ann_data",
             "op": op,
-            "key": widget_key,
+            "key": widget_session_key,
             "value": {"data": {
                 "dropped_key": obs_key,
             }},
@@ -501,7 +501,7 @@ def handle_ann_data_widget_message(
             return {
                 "type": "ann_data",
                 "op": op,
-                "key": widget_key,
+                "key": widget_session_key,
                 "value": {"error": "`old_obs_key` and `new_obs_key` keys missing from message"},
             }
 
@@ -512,7 +512,7 @@ def handle_ann_data_widget_message(
             return {
                 "type": "ann_data",
                 "op": op,
-                "key": widget_key,
+                "key": widget_session_key,
                 "value": {"error": "Observation key not found"},
             }
 
@@ -521,7 +521,7 @@ def handle_ann_data_widget_message(
         return {
             "type": "ann_data",
             "op": op,
-            "key": widget_key,
+            "key": widget_session_key,
             "value": {"data": {
                 "old_key": old_obs_key,
                 "new_key": new_obs_key,
