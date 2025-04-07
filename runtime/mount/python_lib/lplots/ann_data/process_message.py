@@ -53,7 +53,6 @@ def get_obs(
     obs_key: str,
 ) -> tuple[NDArray[np.str_], tuple[NDArray[np.str_], NDArray[np.int64]], int]:
     obs = np.asarray(adata.obs[obs_key])
-    unique_obs, counts = np.unique(obs, return_counts=True)
     n_cells = adata.n_obs
 
     # todo(aidan): intelligent downsampling to preserve outliers / information in general
@@ -63,16 +62,18 @@ def get_obs(
             ann_data_index_cache[obj_id] = idxs
         else:
             idxs = ann_data_index_cache[obj_id]
-
         obs = obs[idxs]
 
-        truncated_unique_obs = unique_obs
-        if len(unique_obs) > max_visualization_cells:
-            sorted_indices = np.argsort(-counts)[:max_visualization_cells]
-            truncated_unique_obs = unique_obs[sorted_indices]
-            counts = counts[sorted_indices]
+    value_counts = pd.Series(obs).value_counts()
+    unique_obs = value_counts.index.to_numpy()
+    counts = value_counts.values.astype(np.int64)  # noqa: PD011
+
+    if len(unique_obs) > max_visualization_cells:
+        sorted_indices = np.argsort(counts)[::-1][:max_visualization_cells]
+        truncated_unique_obs = unique_obs[sorted_indices]
+        counts = counts[sorted_indices]
     else:
-        truncated_unique_obs, counts = np.unique(obs, return_counts=True)
+        truncated_unique_obs = unique_obs
 
     return obs, (truncated_unique_obs, counts), len(unique_obs)
 
