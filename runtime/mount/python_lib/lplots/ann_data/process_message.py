@@ -52,7 +52,7 @@ def get_obs(
     adata: ad.AnnData,
     obs_key: str,
 ) -> tuple[NDArray[np.str_], tuple[NDArray[np.str_], NDArray[np.int64]], int]:
-    obs = np.asarray(adata.obs[obs_key]).astype(str)
+    obs = np.asarray(adata.obs[obs_key])
     unique_obs, counts = np.unique(obs, return_counts=True)
     n_cells = adata.n_obs
 
