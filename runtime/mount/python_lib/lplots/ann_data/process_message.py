@@ -387,6 +387,21 @@ def handle_ann_data_widget_message(
                 "value": {"error": "Failed to get obsm"},
             }
 
+        obs = None
+        fetched_for_obs_key = None
+        unique_obs = None
+        counts = None
+        nrof_obs = None
+        gene_column = None
+        fetched_for_var_key = None
+        if "colored_by_type" in msg and "colored_by_key" in msg:
+            if msg["colored_by_type"] == "obs":
+                obs, (unique_obs, counts), nrof_obs = get_obs(obj_id, adata, msg["colored_by_key"])
+                fetched_for_obs_key = msg["colored_by_key"]
+            elif msg["colored_by_type"] == "var":
+                gene_column = get_obs_vector(obj_id, adata, msg["colored_by_key"])
+                fetched_for_var_key = msg["colored_by_key"]
+
         return {
             "type": "ann_data",
             "op": op,
@@ -397,6 +412,13 @@ def handle_ann_data_widget_message(
                     "obsm": obsm.tolist(),
                     "index": index.tolist(),
                     "recomputed_index": recomputed_index,
+                    "fetched_for_obs_key": fetched_for_obs_key,
+                    "fetched_for_var_key": fetched_for_var_key,
+                    "values": obs.tolist() if obs is not None else None,
+                    "unique_values": unique_obs.tolist() if unique_obs is not None else None,
+                    "counts": counts.tolist() if counts is not None else None,
+                    "nrof_values": nrof_obs,
+                    "var_values": gene_column.tolist() if gene_column is not None else None,
                 },
             },
         }
