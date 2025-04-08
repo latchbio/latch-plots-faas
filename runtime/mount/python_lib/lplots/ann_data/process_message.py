@@ -199,6 +199,7 @@ def mutate_obs_by_lasso(
     obs_key: str,
     obs_value: str | float | int | bool | None,  # noqa: FBT001
     lasso_points: list[tuple[int, int]],
+    filters: list[dict[str, Any]] | None = None,
 ) -> None:
     embedding = adata.obsm[obsm_key][:, :2]  # type: ignore
 
@@ -206,7 +207,7 @@ def mutate_obs_by_lasso(
         return
 
     polygon = Path(lasso_points)
-    mask = polygon.contains_points(embedding)
+    mask = polygon.contains_points(embedding) & generate_filter_mask(adata, filters if filters is not None else [])
 
     coerced_obs_value = adapt_value_for_dtype(obs_value, adata.obs[obs_key].dtype)
 
@@ -515,7 +516,7 @@ def handle_ann_data_widget_message(
 
         mutated_for_key = None
         if "obs_value" in msg and "lasso_points" in msg and "obsm_key" in msg:
-            mutate_obs_by_lasso(adata, msg["obsm_key"], obs_key, msg["obs_value"], msg["lasso_points"])
+            mutate_obs_by_lasso(adata, msg["obsm_key"], obs_key, msg["obs_value"], msg["lasso_points"], msg.get("filters"))
             mutated_for_key = obs_key
 
         if "old_obs_value" in msg and "new_obs_value" in msg:
