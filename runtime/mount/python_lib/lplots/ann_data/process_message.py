@@ -36,7 +36,10 @@ def generate_filter_mask(
             obs_values = adata.obs[key]
 
             if op["type"] == "neq":
-                mask &= obs_values != value
+                if value is None:
+                    mask &= ~pd.isna(obs_values)
+                else:
+                    mask &= obs_values != value
             elif op["type"] == "geq":
                 mask &= obs_values >= value
             elif op["type"] == "leq":
