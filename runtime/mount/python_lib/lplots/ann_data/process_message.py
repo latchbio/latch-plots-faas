@@ -19,25 +19,76 @@ max_visualization_cells = 100000
 rng = np.random.default_rng()
 
 
+def generate_filter_mask(
+    adata: ad.AnnData,
+    filters: list[dict[str, Any]],
+) -> NDArray[np.bool_]:
+    mask = np.ones(adata.n_obs, dtype=bool)
+
+    for f in filters:
+        if f["type"] == "obs":
+            key = f["key"]
+            if key not in adata.obs:
+                continue
+
+            op = f["operation"]
+            value = op["value"]
+            obs_values = adata.obs[key]
+
+            if op["type"] == "neq":
+                mask &= obs_values != value
+            elif op["type"] == "geq":
+                mask &= obs_values >= value
+            elif op["type"] == "leq":
+                mask &= obs_values <= value
+            elif op["type"] == "g":
+                mask &= obs_values > value
+            elif op["type"] == "l":
+                mask &= obs_values < value
+
+        elif f["type"] == "var":
+            key = f["key"]
+            if key not in adata.var_names:
+                continue
+
+            op = f["operation"]
+            value = op["value"]
+
+            # todo(aidan): likely too slow?
+            var_values = np.asarray(adata[:, key].to_df().iloc[:, 0:].values.ravel())  # noqa: PD011
+
+            if op["type"] == "geq":
+                mask &= var_values >= value
+            elif op["type"] == "leq":
+                mask &= var_values <= value
+            elif op["type"] == "g":
+                mask &= var_values > value
+            elif op["type"] == "l":
+                mask &= var_values < value
+
+    return mask
+
+
 def get_obsm(
     obj_id: str,
     adata: ad.AnnData,
     obsm_key: str,
+    filters: list[dict[str, Any]] | None = None,
 ) -> tuple[NDArray[np.float32], NDArray[np.str_]] | tuple[None, None]:
     if obsm_key not in adata.obsm:
         return None, None
 
-    n_cells = adata.n_obs
+    mask = generate_filter_mask(adata, filters if filters is not None else [])
+    filtered_n_cells = np.sum(mask)
 
     # todo(aidan): intelligent downsampling to preserve outliers / information in general
-    if n_cells > max_visualization_cells:
-        if obj_id not in ann_data_index_cache:
-            idxs = rng.choice(n_cells, size=max_visualization_cells, replace=False)
-            ann_data_index_cache[obj_id] = idxs
-        else:
-            idxs = ann_data_index_cache[obj_id]
+    if filtered_n_cells > max_visualization_cells:
+        filtered_indices = np.where(mask)[0]
+        idxs = rng.choice(filtered_indices, size=max_visualization_cells, replace=False)
+        ann_data_index_cache[obj_id] = idxs
     else:
-        idxs = np.arange(n_cells)
+        idxs = np.where(mask)[0]
+        ann_data_index_cache[obj_id] = idxs
 
     # todo(aidan): allow specifying dimensions to fetch (PCA components is an example where this is useful)
     # todo(aidan): support sparse data?
@@ -55,13 +106,8 @@ def get_obs(
     obs = np.asarray(adata.obs[obs_key])
     n_cells = adata.n_obs
 
-    # todo(aidan): intelligent downsampling to preserve outliers / information in general
     if n_cells > max_visualization_cells:
-        if obj_id not in ann_data_index_cache:
-            idxs = rng.choice(n_cells, size=max_visualization_cells, replace=False)
-            ann_data_index_cache[obj_id] = idxs
-        else:
-            idxs = ann_data_index_cache[obj_id]
+        idxs = ann_data_index_cache[obj_id]
         obs = obs[idxs]
 
     value_counts = pd.Series(obs).value_counts(dropna=False)
@@ -83,16 +129,7 @@ def get_obs_vector(
     adata: ad.AnnData,
     var_index: str,
 ) -> NDArray[np.int64]:
-    n_cells = adata.n_obs
-
-    if n_cells > max_visualization_cells:
-        if obj_id not in ann_data_index_cache:
-            idxs = rng.choice(n_cells, size=max_visualization_cells, replace=False)
-            ann_data_index_cache[obj_id] = idxs
-        else:
-            idxs = ann_data_index_cache[obj_id]
-    else:
-        idxs = np.arange(n_cells)
+    idxs = ann_data_index_cache[obj_id]
 
     # note(aidan): this is ~3+ times faster than using `.to_numpy()` in place of `.values`
     return np.asarray(adata[idxs, var_index].to_df().iloc[:, 0:].values.ravel())  # noqa: PD011
@@ -327,7 +364,8 @@ def handle_ann_data_widget_message(
                 },
             }
 
-        obsm, index = get_obsm(obj_id, adata, msg["obsm_key"])
+        filters = msg.get("filters")
+        obsm, index = get_obsm(obj_id, adata, msg["obsm_key"], filters)
         if obsm is None or index is None:
             return {
                 "type": "ann_data",
