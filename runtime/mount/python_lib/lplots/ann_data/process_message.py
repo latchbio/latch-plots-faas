@@ -115,11 +115,9 @@ def get_obs(
     obs_key: str,
 ) -> tuple[NDArray[np.str_], tuple[NDArray[np.str_], NDArray[np.int64]], int]:
     obs = np.asarray(adata.obs[obs_key])
-    n_cells = adata.n_obs
 
-    if n_cells > max_visualization_cells:
-        _, idxs = ann_data_index_cache[obj_id]
-        obs = obs[idxs]
+    _, idxs = ann_data_index_cache[obj_id]
+    obs = obs[idxs]
 
     value_counts = pd.Series(obs).value_counts(dropna=False)
     unique_obs = value_counts.index.to_numpy()
