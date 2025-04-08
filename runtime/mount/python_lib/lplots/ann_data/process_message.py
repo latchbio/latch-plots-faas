@@ -11,7 +11,7 @@ from .. import _inject
 
 ad = auto_install.ad
 
-ann_data_index_cache: dict[str, NDArray[np.int64]] = {}
+ann_data_index_cache: dict[str, tuple[NDArray[np.bool], NDArray[np.int64]]] = {}
 ann_data_var_index_cache: dict[str, tuple[NDArray[np.str_], NDArray[np.str_] | None]] = {}
 
 
@@ -74,28 +74,39 @@ def get_obsm(
     adata: ad.AnnData,
     obsm_key: str,
     filters: list[dict[str, Any]] | None = None,
-) -> tuple[NDArray[np.float32], NDArray[np.str_]] | tuple[None, None]:
+) -> tuple[NDArray[np.float32], NDArray[np.str_], bool] | tuple[None, None, bool]:
     if obsm_key not in adata.obsm:
-        return None, None
+        return None, None, False
 
     mask = generate_filter_mask(adata, filters if filters is not None else [])
     filtered_n_cells = np.sum(mask)
+    recomputed_index = False
 
     # todo(aidan): intelligent downsampling to preserve outliers / information in general
     if filtered_n_cells > max_visualization_cells:
         filtered_indices = np.where(mask)[0]
-        idxs = rng.choice(filtered_indices, size=max_visualization_cells, replace=False)
-        ann_data_index_cache[obj_id] = idxs
+        stored_mask, stored_idxs = ann_data_index_cache.get(obj_id, (None, None))
+        if stored_mask is None or stored_idxs is None or not np.array_equal(stored_mask, mask):
+            idxs = rng.choice(filtered_indices, size=max_visualization_cells, replace=False)
+            ann_data_index_cache[obj_id] = (mask, idxs)
+            recomputed_index = True
+        else:
+            idxs = stored_idxs
     else:
-        idxs = np.where(mask)[0]
-        ann_data_index_cache[obj_id] = idxs
+        stored_mask, stored_idxs = ann_data_index_cache.get(obj_id, (None, None))
+        if stored_mask is None or stored_idxs is None or not np.array_equal(stored_mask, mask):
+            idxs = np.where(mask)[0]
+            ann_data_index_cache[obj_id] = (mask, idxs)
+            recomputed_index = True
+        else:
+            idxs = stored_idxs
 
     # todo(aidan): allow specifying dimensions to fetch (PCA components is an example where this is useful)
     # todo(aidan): support sparse data?
-    obsm = np.asarray(adata.obsm[obsm_key][idxs, :2], dtype=np.float32)  # type: ignore  # noqa: PGH003
+    obsm = np.asarray(adata.obsm[obsm_key][idxs, :2], dtype=np.float32)  # type: ignore
     index = np.asarray(adata.obs_names[idxs])
 
-    return obsm, index
+    return obsm, index, recomputed_index
 
 
 def get_obs(
@@ -107,7 +118,7 @@ def get_obs(
     n_cells = adata.n_obs
 
     if n_cells > max_visualization_cells:
-        idxs = ann_data_index_cache[obj_id]
+        _, idxs = ann_data_index_cache[obj_id]
         obs = obs[idxs]
 
     value_counts = pd.Series(obs).value_counts(dropna=False)
@@ -129,7 +140,7 @@ def get_obs_vector(
     adata: ad.AnnData,
     var_index: str,
 ) -> NDArray[np.int64]:
-    idxs = ann_data_index_cache[obj_id]
+    _, idxs = ann_data_index_cache[obj_id]
 
     # note(aidan): this is ~3+ times faster than using `.to_numpy()` in place of `.values`
     return np.asarray(adata[idxs, var_index].to_df().iloc[:, 0:].values.ravel())  # noqa: PD011
@@ -301,8 +312,9 @@ def handle_ann_data_widget_message(
 
         obsm = None
         index = None
+        recomputed_index = False
         if init_obsm_key is not None:
-            obsm, index = get_obsm(obj_id, adata, init_obsm_key)
+            obsm, index, recomputed_index = get_obsm(obj_id, adata, init_obsm_key)
 
         obs = None
         unique_obs = None
@@ -331,6 +343,7 @@ def handle_ann_data_widget_message(
                     # init state with these
                     "init_obs_key": init_obs_key,
                     "init_obsm_key": init_obsm_key,
+                    "init_recomputed_index": recomputed_index,
                     "init_obsm_values": obsm.tolist() if obsm is not None else None,
                     "init_obsm_index": index.tolist() if index is not None else None,
                     "init_obs_values": obs.tolist() if obs is not None else None,
@@ -365,7 +378,7 @@ def handle_ann_data_widget_message(
             }
 
         filters = msg.get("filters")
-        obsm, index = get_obsm(obj_id, adata, msg["obsm_key"], filters)
+        obsm, index, recomputed_index = get_obsm(obj_id, adata, msg["obsm_key"], filters)
         if obsm is None or index is None:
             return {
                 "type": "ann_data",
@@ -383,6 +396,7 @@ def handle_ann_data_widget_message(
                     "fetched_for_key": msg["obsm_key"],
                     "obsm": obsm.tolist(),
                     "index": index.tolist(),
+                    "recomputed_index": recomputed_index,
                 },
             },
         }
