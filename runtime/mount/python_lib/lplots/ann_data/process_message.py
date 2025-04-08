@@ -116,9 +116,6 @@ def get_obs(
 ) -> tuple[NDArray[np.str_], tuple[NDArray[np.str_], NDArray[np.int64]], int]:
     obs = np.asarray(adata.obs[obs_key])
 
-    _, idxs = ann_data_index_cache[obj_id]
-    obs = obs[idxs]
-
     value_counts = pd.Series(obs).value_counts(dropna=False)
     unique_obs = value_counts.index.to_numpy()
     counts = value_counts.values.astype(np.int64)  # noqa: PD011
@@ -130,7 +127,9 @@ def get_obs(
     else:
         truncated_unique_obs = unique_obs
 
-    return obs, (truncated_unique_obs, counts), len(unique_obs)
+    _, idxs = ann_data_index_cache[obj_id]
+
+    return obs[idxs], (truncated_unique_obs, counts), len(unique_obs)
 
 
 def get_obs_vector(
