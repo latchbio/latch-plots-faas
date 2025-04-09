@@ -24,20 +24,24 @@ import plotly.io._json as pio_json
 from duckdb import DuckDBPyConnection
 from latch.ldata.path import LPath
 from latch.registry.table import Table
-from matplotlib.figure import Figure
-from pandas import DataFrame, Index, MultiIndex, Series
-from pandas.io.json._table_schema import build_table_schema
-from plotly.basedatatypes import BaseFigure
-
 from lplots import _inject
-from lplots.persistence import (SerializedNode, SerializedSignal,
-                                safe_serialize_obj, safe_unserialize_obj,
-                                small_repr, un_unserial_symbol)
+from lplots.persistence import (
+    SerializedNode,
+    SerializedSignal,
+    safe_serialize_obj,
+    safe_unserialize_obj,
+    small_repr,
+    un_unserial_symbol,
+)
 from lplots.reactive import Node, Signal, ctx, live_nodes, live_signals
 from lplots.themes import graphpad_inspired_theme
 from lplots.utils.nothing import Nothing
 from lplots.widgets._emit import WidgetState
 from lplots.widgets.widget import BaseWidget, load_widget_helper
+from matplotlib.figure import Figure
+from pandas import DataFrame, Index, MultiIndex, Series
+from pandas.io.json._table_schema import build_table_schema
+from plotly.basedatatypes import BaseFigure
 from plotly_utils.precalc_box import precalc_box
 from plotly_utils.precalc_violin import precalc_violin
 from socketio_thread import SocketIoThread

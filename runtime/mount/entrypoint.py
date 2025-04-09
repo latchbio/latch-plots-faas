@@ -11,6 +11,7 @@ from typing import Literal, TypedDict, TypeVar
 
 import orjson
 from latch_data_validation.data_validation import validate
+
 from runtime.mount.plots_context_manager import PlotsContextManager
 
 from .socketio import SocketIo

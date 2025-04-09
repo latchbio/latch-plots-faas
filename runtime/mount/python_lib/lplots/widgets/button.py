@@ -1,10 +1,9 @@
-import asyncio
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Literal, TypedDict
 
 from ..persistence import SerializedWidget
-from ..reactive import Signal, ctx
+from ..reactive import Signal
 from . import _emit, _state, widget
 
 
@@ -23,7 +22,6 @@ class ButtonWidgetState(_emit.WidgetState[button_type, str]):
 
 
 class SerializedButtonWidget(SerializedWidget):
-    # state: _emit.WidgetState[Literal["button"], str]
     state: ButtonWidgetState  # type: ignore[override]
 
 
@@ -73,10 +71,7 @@ class ButtonWidget(widget.BaseWidget):
         if self._last_clicked_ref[0] is None:
             self._last_clicked_ref[0] = last_clicked
 
-        if clicked > self._last_clicked_ref[0]:
-            return True
-
-        return False
+        return clicked > self._last_clicked_ref[0]
 
     def serialize(self) -> "SerializedButtonWidget":  # type: ignore[override]
         return SerializedButtonWidget(

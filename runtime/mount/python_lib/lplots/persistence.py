@@ -1,7 +1,7 @@
 from base64 import b64decode, b64encode
 from typing import Generic, Literal, TypedDict
 
-from dill import dumps, loads
+from dill import PicklingError, UnpicklingError, dumps, loads
 
 from .widgets import _emit
 
@@ -41,7 +41,7 @@ class UnUnserialSymbol:
     ...
 
 
-un_unserial_symbol: UnUnserialSymbol = UnUnserialSymbol()
+unable_to_unserialize_symbol: UnUnserialSymbol = UnUnserialSymbol()
 
 MAX_SHORT_VAL_LEN = MAX_REPR_LEN = 100
 
@@ -50,7 +50,7 @@ def safe_serialize_obj(val: object, short: bool = False) -> (str, str | None):
     try:
         s_val = dumps(val)
         error_msg = None
-    except Exception as e:
+    except PicklingError as e:
         s_val = dumps(unserial_symbol)
         error_msg = f"Failed to pickle: {e}"
     if short:
@@ -65,9 +65,9 @@ def safe_unserialize_obj(
     try:
         val = loads(b64decode(s_val.encode("utf-8")))
         error_msg = None
-    except Exception as e:
+    except UnpicklingError as e:
         error_msg = f"Failed to unpickle: {e}"
-        val = un_unserial_symbol
+        val = unable_to_unserialize_symbol
     return val, error_msg
 
 
