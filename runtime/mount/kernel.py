@@ -31,7 +31,7 @@ from lplots.persistence import (
     safe_serialize_obj,
     safe_unserialize_obj,
     small_repr,
-    un_unserial_symbol,
+    unable_to_unserialize_symbol,
 )
 from lplots.reactive import Node, Signal, ctx, live_nodes, live_signals
 from lplots.themes import graphpad_inspired_theme
@@ -847,7 +847,7 @@ class Kernel:
                 self.k_globals._direct_set(k, Signal(widget))
             else:
                 val, error_msg = safe_unserialize_obj(s_v["value"])
-                if val is un_unserial_symbol:
+                if val is unable_to_unserialize_symbol:
                     restored_globals[k] = {
                         "value": small_repr(val),
                         "msg": f"unserializable. stored err: {s_v['error_msg']}, unserial err: {error_msg}",

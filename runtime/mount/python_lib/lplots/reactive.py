@@ -8,8 +8,13 @@ from traceback import print_exc
 from typing import Any, Generic, Self, TextIO, TypeAlias, TypeVar, overload
 
 from . import _inject
-from .persistence import (SerializedNode, SerializedSignal, safe_serialize_obj,
-                          safe_unserialize_obj, un_unserial_symbol)
+from .persistence import (
+    SerializedNode,
+    SerializedSignal,
+    safe_serialize_obj,
+    safe_unserialize_obj,
+    unable_to_unserialize_symbol,
+)
 from .utils.nothing import Nothing
 from .widgets._emit import WidgetState
 
@@ -408,7 +413,7 @@ class Signal(Generic[T]):
     def load(cls, s_sig) -> "Signal[T]":
         val, error_msg = safe_unserialize_obj(s_sig["value"])
 
-        if val is None or val is un_unserial_symbol:
+        if val is None or val is unable_to_unserialize_symbol:
             sig = cls(
                 Nothing.x,
                 name=s_sig["name"],
