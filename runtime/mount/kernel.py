@@ -1,3 +1,10 @@
+if __name__ == "__main__":
+    # fixme(maximsmol): anndata calls multiprocessing.get_context
+    # so we have to do this BEFORE we import it indirectly
+    import multiprocessing
+
+    multiprocessing.set_start_method("forkserver")
+
 import ast
 import asyncio
 import math
@@ -24,7 +31,10 @@ import plotly.io._json as pio_json
 from duckdb import DuckDBPyConnection
 from latch.ldata.path import LPath
 from latch.registry.table import Table
+from latch_cli.utils import urljoins
 from lplots import _inject
+from lplots.ann_data import auto_install
+from lplots.ann_data.process_message import handle_ann_data_widget_message
 from lplots.persistence import (
     SerializedNode,
     SerializedSignal,
@@ -46,6 +56,8 @@ from plotly_utils.precalc_box import precalc_box
 from plotly_utils.precalc_violin import precalc_violin
 from socketio_thread import SocketIoThread
 from stdio_over_socket import SocketWriter, text_socket_writer
+
+ad = auto_install.ad
 
 sys.path.append(str(Path(__file__).parent.absolute()))
 from subsample import downsample_df, initialize_duckdb
@@ -527,9 +539,11 @@ class Kernel:
     registry_dataframes: dict[str, DataFrame] = field(default_factory=dict)
     url_dataframes: dict[str, DataFrame] = field(default_factory=dict)
 
-    cell_pagination_settings: defaultdict[
-        str, defaultdict[str, PaginationSettings]
-    ] = field(default_factory=pagination_settings_dict_factory)
+    ann_data_objects: dict[str, ad.AnnData] = field(default_factory=dict)
+
+    cell_pagination_settings: defaultdict[str, defaultdict[str, PaginationSettings]] = (
+        field(default_factory=pagination_settings_dict_factory)
+    )
     viewer_pagination_settings: defaultdict[
         str, defaultdict[str, PaginationSettings]
     ] = field(default_factory=pagination_settings_dict_factory)
@@ -679,7 +693,7 @@ class Kernel:
             tg.create_task(self.send_globals_summary())
 
     async def on_tick_finished(
-        self, updated_signals: dict[int, Signal[object]]
+        self, updated_signals: dict[int, Signal[object]], clear_status: bool = True
     ) -> None:
         # todo(maximsmol): this can be optimizied
         # 1. we can just update nodes that actually re-ran last tick instead of everything
@@ -737,7 +751,8 @@ class Kernel:
                 }
             )
 
-        await self.set_active_cell(None)
+        if clear_status:
+            await self.set_active_cell(None)
         self.cells_with_pending_widget_updates.clear()
 
         # fixme(rteqs): cleanup signals in some other way. the below does not work because widget signals
@@ -897,7 +912,7 @@ class Kernel:
             s._apply_updates()
 
         self.conn.call_fut(
-            self.on_tick_finished(ctx.signals_updated_from_code)
+            self.on_tick_finished(ctx.signals_updated_from_code, clear_status=False)
         ).result()
 
     def on_dispose(self, node: Node) -> None:
@@ -1346,7 +1361,7 @@ class Kernel:
             raise RuntimeError("unable to save dataframe to csv")
 
         # todo(rteqs): stream directly to LData without temp file
-        LPath(dst).upload_from(local_path)
+        LPath(urljoins(dst, local_path.name)).upload_from(local_path)
 
     async def accept(self) -> None:
         # print("[kernel] accept")
@@ -1579,6 +1594,10 @@ class Kernel:
             await self.save_kernel_snapshot()
             return
 
+        if msg["type"] == "ann_data":
+            await self.send(handle_ann_data_widget_message(msg))
+            return
+
 
 loop: asyncio.AbstractEventLoop | None = None
 shutdown_requested = False
@@ -1646,9 +1665,5 @@ if __name__ == "__main__":
         libc = CDLL("libc.so.6")
         PR_SET_NAME = 15  # https://github.com/torvalds/linux/blob/2df0c02dab829dd89360d98a8a1abaa026ef5798/include/uapi/linux/prctl.h#L56
         libc.prctl(PR_SET_NAME, b"kernel")
-
-    import multiprocessing
-
-    multiprocessing.set_start_method("forkserver")
 
     asyncio.run(main())

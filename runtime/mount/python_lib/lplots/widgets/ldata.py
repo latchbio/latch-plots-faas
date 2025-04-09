@@ -16,6 +16,7 @@ class LDataPickerState(_emit.WidgetState[ldata_picker_type, str]):
     readonly: bool
     appearance: NotRequired[FormInputAppearance | None]
     required: bool
+    file_type: NotRequired[Literal["file", "dir", "any"]]
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -30,7 +31,17 @@ class LDataPicker(widget.BaseWidget):
             if val is None:
                 return None
 
-        return LPath(val)
+        res = LPath(val)
+
+        if self._state.get("file_type") == "dir":
+            if not res.is_dir():
+                return None
+
+        elif self._state.get("file_type") == "file":
+            if res.is_dir():
+                return None
+
+        return res
 
     @property
     def value(self) -> LPath | None:
@@ -53,6 +64,7 @@ def w_ldata_picker(
     appearance: FormInputAppearance | None = None,
     default: str | None = None,
     required: bool = False,
+    file_type: Literal["file", "dir", "any"] = "any",
 ) -> LDataPicker:
     key = _state.use_state_key(key=key)
 
@@ -65,6 +77,7 @@ def w_ldata_picker(
             "default": default,
             "appearance": appearance,
             "required": required,
+            "file_type": file_type,
         },
         _signal=_state.use_value_signal(key=key),
     )

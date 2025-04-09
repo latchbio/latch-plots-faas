@@ -21,6 +21,7 @@ dependencies = [
     "seaborn>=0.13.2",
     "pillow>=11.0.0",
     "dill>=0.3.9",
+    "anndata>=0.10.10",
 ]
 requires-python = "==3.11.*"
 readme = "README.md"
