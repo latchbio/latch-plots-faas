@@ -663,7 +663,7 @@ async def handle_ann_data_widget_message(
             "type": "ann_data",
             "op": op,
             "key": widget_session_key,
-            "value": {"data": {"image": image_uri, "fetched_for_node_id": msg.get("node_id")}},
+            "value": {"data": {"image": image_uri, "fetched_for_node_id": msg.get("node_id"), "fetched_for_x_flip": msg.get("x_flip", False), "fetched_for_y_flip": msg.get("y_flip", False)}},
         }
 
     raise ValueError(f"Invalid operation: {op}")
