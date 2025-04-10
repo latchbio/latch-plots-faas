@@ -30,10 +30,8 @@ pil_image_cache: dict[str, bytes] = {}
 async def fetch_and_process_image(
     node_id: str,
     s3_presigned_url: str,
-    x_flip: bool = False,  # noqa: FBT001, FBT002
-    y_flip: bool = False,  # noqa: FBT001, FBT002
-    max_width: int = 1024,
-    max_height: int = 1024,
+    max_width: int = 512,
+    max_height: int = 512,
 ) -> str:
     if node_id in pil_image_cache:
         data = pil_image_cache[node_id]
@@ -46,11 +44,6 @@ async def fetch_and_process_image(
 
     image_data = BytesIO(data)
     with Image.open(image_data) as img:
-        if x_flip:
-            img = img.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
-        if y_flip:
-            img = img.transpose(Image.Transpose.FLIP_TOP_BOTTOM)
-
         img.thumbnail((max_width, max_height))  # `thumbnail` maintains aspect ratio, `resize` does not
 
         output_buffer = BytesIO()
@@ -658,12 +651,12 @@ async def handle_ann_data_widget_message(
                 "value": {"error": "`s3_presigned_url` or `node_id` key missing from message"},
             }
 
-        image_uri = await fetch_and_process_image(msg["node_id"], msg["s3_presigned_url"], msg.get("x_flip", False), msg.get("y_flip", False))
+        image_uri = await fetch_and_process_image(msg["node_id"], msg["s3_presigned_url"])
         return {
             "type": "ann_data",
             "op": op,
             "key": widget_session_key,
-            "value": {"data": {"image": image_uri, "fetched_for_node_id": msg.get("node_id"), "fetched_for_x_flip": msg.get("x_flip", False), "fetched_for_y_flip": msg.get("y_flip", False)}},
+            "value": {"data": {"image": image_uri, "fetched_for_node_id": msg.get("node_id")}},
         }
 
     raise ValueError(f"Invalid operation: {op}")
