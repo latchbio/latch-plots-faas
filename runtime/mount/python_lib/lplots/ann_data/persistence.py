@@ -2,9 +2,7 @@ import uuid
 from pathlib import Path
 from typing import TypedDict
 
-from .auto_install import auto_install
-
-ad = auto_install.ad
+from .auto_install import ad
 
 
 class SerializedAnnData(TypedDict):
