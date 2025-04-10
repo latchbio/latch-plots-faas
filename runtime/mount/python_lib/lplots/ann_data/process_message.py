@@ -24,19 +24,33 @@ ann_data_var_index_cache: dict[str, tuple[NDArray[np.str_], NDArray[np.str_] | N
 max_visualization_cells = 100000
 rng = np.random.default_rng()
 
+pil_image_cache: dict[str, bytes] = {}
+
 
 async def fetch_and_process_image(
+    node_id: str,
     s3_presigned_url: str,
+    x_flip: bool = False,  # noqa: FBT001, FBT002
+    y_flip: bool = False,  # noqa: FBT001, FBT002
     max_width: int = 1024,
     max_height: int = 1024,
 ) -> str:
-    async with aiohttp.ClientSession() as session, session.get(s3_presigned_url) as response:
-        if response.status != 200:
-            raise ValueError(f"Failed to fetch image. Status: {response.status}")
-        data = await response.read()
+    if node_id in pil_image_cache:
+        data = pil_image_cache[node_id]
+    else:
+        async with aiohttp.ClientSession() as session, session.get(s3_presigned_url) as response:
+            if response.status != 200:
+                raise ValueError(f"Failed to fetch image. Status: {response.status}")
+            data = await response.read()
+            pil_image_cache[node_id] = data
 
     image_data = BytesIO(data)
     with Image.open(image_data) as img:
+        if x_flip:
+            img = img.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
+        if y_flip:
+            img = img.transpose(Image.Transpose.FLIP_TOP_BOTTOM)
+
         img.thumbnail((max_width, max_height))  # `thumbnail` maintains aspect ratio, `resize` does not
 
         output_buffer = BytesIO()
@@ -644,7 +658,7 @@ async def handle_ann_data_widget_message(
                 "value": {"error": "`s3_presigned_url` or `node_id` key missing from message"},
             }
 
-        image_uri = await fetch_and_process_image(msg["s3_presigned_url"])
+        image_uri = await fetch_and_process_image(msg["node_id"], msg["s3_presigned_url"], msg.get("x_flip", False), msg.get("y_flip", False))
         return {
             "type": "ann_data",
             "op": op,
