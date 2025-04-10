@@ -1,5 +1,5 @@
 from base64 import b64decode, b64encode
-from typing import Generic, Literal, TypedDict
+from typing import Generic, TypedDict
 
 from dill import PicklingError, UnpicklingError, dumps, loads
 

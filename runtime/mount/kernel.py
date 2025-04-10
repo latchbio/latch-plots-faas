@@ -34,6 +34,7 @@ from latch.registry.table import Table
 from latch_cli.utils import urljoins
 from lplots import _inject
 from lplots.ann_data import auto_install
+from lplots.ann_data.persistence import load_anndata, serialize_anndata
 from lplots.ann_data.process_message import handle_ann_data_widget_message
 from lplots.persistence import (
     SerializedNode,
@@ -790,9 +791,13 @@ class Kernel:
             elif isinstance(val._value, BaseWidget):
                 assert val._value._signal.id in s_signals
                 s_globals[k] = val._value.serialize()
+            elif isinstance(val._value, ad.AnnData):
+                s_globals[k] = serialize_anndata(val._value)
             else:
                 s_val, msg = safe_serialize_obj(val._value)
                 s_globals[k] = {"value": s_val, "error_msg": msg}
+
+        s_anndata = list(self.ann_data_objects.keys())
 
         s_depens = {
             "s_globals": s_globals,
@@ -801,6 +806,7 @@ class Kernel:
             "widget_signals": {k: v.id for k, v in self.widget_signals.items()},
             "nodes_with_widgets": list(self.nodes_with_widgets.keys()),
             "cell_rnodes": {k: v.id for k, v in self.cell_rnodes.items()},
+            "s_anndata": s_anndata,
             # todo(kenny): figure out what to do with these
             "ldata_dataframes": {},
             "registry_dataframes": {},
@@ -849,6 +855,7 @@ class Kernel:
         self.widget_signals = filter_items(s_depens["widget_signals"], signals)
 
         restored_globals = {}
+        self.ann_data_objects = {}
         for k, s_v in s_depens["s_globals"].items():
             if "listeners" in s_v:
                 sig = signals.get(s_v["id"])
@@ -860,6 +867,14 @@ class Kernel:
                 widget = load_widget_helper(s_v, signals)
                 restored_globals[k] = widget.serialize()
                 self.k_globals._direct_set(k, Signal(widget))
+            elif "_is_anndata" in s_v:
+                adata_key = s_v["key"]
+                if adata_key in self.ann_data_objects:
+                    adata = self.ann_data_objects[adata_key]
+                else:
+                    adata = load_anndata(s_v, snapshot_dir)
+                restored_globals[k] = s_v
+                self.k_globals._direct_set(k, adata)
             else:
                 val, error_msg = safe_unserialize_obj(s_v["value"])
                 if val is unable_to_unserialize_symbol:
