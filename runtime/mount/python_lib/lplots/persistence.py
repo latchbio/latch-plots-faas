@@ -1,7 +1,14 @@
+import subprocess
+import sys
 from base64 import b64decode, b64encode
 from typing import Generic, TypedDict
 
-from dill import PicklingError, UnpicklingError, dumps, loads
+# todo(kenny): remove when we add uv
+try:
+    from dill import PicklingError, UnpicklingError, dumps, loads
+except ImportError:
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "dill"])
+    from dill import PicklingError, UnpicklingError, dumps, loads
 
 from .widgets import _emit
 
