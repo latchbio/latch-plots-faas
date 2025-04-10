@@ -792,7 +792,7 @@ class Kernel:
                 assert val._value._signal.id in s_signals
                 s_globals[k] = val._value.serialize()
             elif isinstance(val._value, ad.AnnData):
-                s_globals[k] = serialize_anndata(val._value)
+                s_globals[k] = serialize_anndata(val._value, snapshot_dir)
             else:
                 s_val, msg = safe_serialize_obj(val._value)
                 s_globals[k] = {"value": s_val, "error_msg": msg}
