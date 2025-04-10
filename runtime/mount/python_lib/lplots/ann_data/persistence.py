@@ -33,7 +33,6 @@ def serialize_anndata(adata: ad.AnnData, snapshot_dir: Path) -> SerializedAnnDat
     return SerializedAnnData(key=key, fname=fname)
 
 
-def load_anndata(s_anndata: SerializedAnnData, snapshot_dir: Path) -> (str, ad.AnnData):
+def load_anndata(s_anndata: SerializedAnnData, snapshot_dir: Path) -> ad.AnnData:
     fname = s_anndata["fname"]
-    key = s_anndata["key"]
-    return key, ad.read_h5ad(snapshot_dir / fname)
+    return ad.read_h5ad(snapshot_dir / fname)
