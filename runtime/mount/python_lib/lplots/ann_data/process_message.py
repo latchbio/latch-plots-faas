@@ -13,6 +13,8 @@ from lplots.ann_data import auto_install
 
 from .. import _inject
 
+Image.MAX_IMAGE_PIXELS = None  # TIFFs can be huge, and PIL detects a decompression bomb on many ~400mb examples otherwise
+
 ad = auto_install.ad
 
 ann_data_index_cache: dict[str, tuple[NDArray[np.bool], NDArray[np.int64]]] = {}
