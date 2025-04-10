@@ -1,9 +1,13 @@
+import base64
+from io import BytesIO
 from typing import Any
 
+import aiohttp
 import numpy as np
 import pandas as pd
 from matplotlib.path import Path
 from numpy.typing import NDArray
+from PIL import Image
 
 from lplots.ann_data import auto_install
 
@@ -17,6 +21,29 @@ ann_data_var_index_cache: dict[str, tuple[NDArray[np.str_], NDArray[np.str_] | N
 
 max_visualization_cells = 100000
 rng = np.random.default_rng()
+
+
+async def fetch_and_process_image(
+    s3_presigned_url: str,
+    max_width: int = 1024,
+    max_height: int = 1024,
+) -> str:
+    async with aiohttp.ClientSession() as session, session.get(s3_presigned_url) as response:
+        if response.status != 200:
+            raise ValueError(f"Failed to fetch image. Status: {response.status}")
+        data = await response.read()
+
+    image_data = BytesIO(data)
+    with Image.open(image_data) as img:
+        img.thumbnail((max_width, max_height))  # `thumbnail` maintains aspect ratio, `resize` does not
+
+        output_buffer = BytesIO()
+        img.save(output_buffer, format="PNG")
+        output_buffer.seek(0)
+
+        base64_str = base64.b64encode(output_buffer.read()).decode("utf-8")
+
+    return f"data:image/png;base64,{base64_str}"
 
 
 def generate_filter_mask(
@@ -245,7 +272,7 @@ def mutate_obs_by_value(
         adata.obs[obs_key] = adata.obs[obs_key].cat.remove_categories(coerced_old_obs_value)
 
 
-def handle_ann_data_widget_message(
+async def handle_ann_data_widget_message(
     msg: dict[str, Any],
 ) -> dict[str, Any]:
     if msg["type"] != "ann_data" or "key" not in msg or "state" not in msg:
@@ -604,6 +631,23 @@ def handle_ann_data_widget_message(
                 "old_key": old_obs_key,
                 "new_key": new_obs_key,
             }},
+        }
+
+    if op == "fetch_and_process_image":
+        if "s3_presigned_url" not in msg:
+            return {
+                "type": "ann_data",
+                "op": op,
+                "key": widget_session_key,
+                "value": {"error": "`s3_presigned_url` key missing from message"},
+            }
+
+        image_uri = await fetch_and_process_image(msg["s3_presigned_url"])
+        return {
+            "type": "ann_data",
+            "op": op,
+            "key": widget_session_key,
+            "value": {"data": {"image": image_uri, "fetched_for_node_id": msg.get("node_id")}},
         }
 
     raise ValueError(f"Invalid operation: {op}")
