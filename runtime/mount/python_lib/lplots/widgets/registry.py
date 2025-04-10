@@ -2,13 +2,13 @@ from dataclasses import dataclass
 from typing import Literal, NotRequired
 
 from ..reactive import Signal
-from . import _emit, _state
+from . import _emit, _state, widget
 from .shared import FormInputAppearance
 
+registry_picker_type: Literal["registry_table_picker"] = "registry_table_picker"
 
-class RegistryTablePickerState(
-    _emit.WidgetState[Literal["registry_table_picker"], str]
-):
+
+class RegistryTablePickerState(_emit.WidgetState[registry_picker_type, str]):
     label: str
     readonly: bool
     default: NotRequired[str | None]
@@ -17,7 +17,7 @@ class RegistryTablePickerState(
 
 
 @dataclass(frozen=True, kw_only=True)
-class RegistryTablePicker:
+class RegistryTablePicker(widget.BaseWidget):
     _key: str
     _state: RegistryTablePickerState
     _signal: Signal[object | str]
@@ -40,6 +40,9 @@ class RegistryTablePicker:
         return self._value(res)
 
 
+_emit.widget_registry[registry_picker_type] = RegistryTablePicker
+
+
 def w_registry_table_picker(
     *,
     key: str | None = None,
@@ -54,7 +57,7 @@ def w_registry_table_picker(
     res = RegistryTablePicker(
         _key=key,
         _state={
-            "type": "registry_table_picker",
+            "type": registry_picker_type,
             "label": label,
             "readonly": readonly,
             "default": default,

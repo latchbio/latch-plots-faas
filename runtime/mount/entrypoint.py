@@ -7,7 +7,7 @@ import traceback
 from asyncio.subprocess import Process
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TypedDict, TypeVar
+from typing import Literal, TypedDict, TypeVar
 
 import orjson
 from latch_data_validation.data_validation import validate
@@ -42,6 +42,14 @@ class CellOutputs(TypedDict):
 cell_status: dict[str, str] = {}
 cell_sequencers: dict[str, int] = {}
 cell_last_run_outputs: dict[str, CellOutputs] = {}
+
+
+@dataclass
+class KernelSnapshotState:
+    status: Literal["done", "creating", "loading"] = "done"
+
+
+kernel_snapshot_state = KernelSnapshotState()
 
 async_tasks: list[asyncio.Task] = []
 
@@ -95,6 +103,16 @@ class PlotsNotebookKernelState:
 @dataclass(frozen=True)
 class PlotsNotebookKernelStateResp:
     data: PlotsNotebookKernelState
+
+
+@dataclass(frozen=True)
+class TmpPlotsNotebookKernelSnapshotMode:
+    tmpPlotsNotebookKernelSnapshotMode: bool
+
+
+@dataclass(frozen=True)
+class TmpPlotsNotebookKernelSnapshotModeResp:
+    data: TmpPlotsNotebookKernelSnapshotMode
 
 
 async def add_pod_event(*, auth: str, event_type: str) -> None:
@@ -178,12 +196,13 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
             elif msg["type"] == "cell_result":
                 cell_id = msg["cell_id"]
                 cell_status[cell_id] = "ran" if "exception" not in msg else "error"
-                cell_last_run_outputs[cell_id] = {
+                outputs_data: CellOutputs = {
                     "outputs": msg["outputs"],
                     "dataframe_outputs": msg["dataframe_outputs"],
                     "figure_outputs": msg["figure_outputs"],
                     "static_figure_outputs": msg["static_figure_outputs"],
                 }
+                cell_last_run_outputs[cell_id] = outputs_data
 
                 exc = msg.get("exception")
                 if exc is not None:
@@ -192,25 +211,26 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                 await gql_query(
                     auth=auth,
                     query="""
-                        mutation UpdateCellResult($id: BigInt!, $exception: String) {
+                        mutation UpdateCellResult($id: BigInt!, $exception: String,  $data: String) {
                             updatePlotTransformInfo(
-                                input: { id: $id, patch: { exception: $exception } }
+                                input: { id: $id, patch: { exception: $exception, outputsData: $data } }
                             ) {
                                 clientMutationId
                             }
                         }
                     """,
-                    variables={"id": msg["cell_id"], "exception": exc},
+                    variables={
+                        "id": msg["cell_id"],
+                        "exception": exc,
+                        "data": orjson.dumps(outputs_data).decode(),
+                    },
                 )
 
                 msg = {
                     "type": msg["type"],
                     "cell_id": msg["cell_id"],
                     "has_exception": exc is not None,
-                    "outputs": msg.get("outputs"),
-                    "dataframe_outputs": msg.get("dataframe_outputs"),
-                    "figure_outputs": msg.get("figure_outputs"),
-                    "static_figure_outputs": msg.get("static_figure_outputs"),
+                    **outputs_data,
                 }
 
             elif msg["type"] == "cell_widgets":
@@ -309,6 +329,9 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
 
                 msg = {"type": msg["type"], "plot_id": msg["plot_id"]}
 
+            elif msg["type"] in {"load_kernel_snapshot", "save_kernel_snapshot"}:
+                kernel_snapshot_state.status = msg["status"]
+
             await plots_ctx_manager.broadcast_message(orjson.dumps(msg).decode())
 
         except Exception:
@@ -355,16 +378,41 @@ async def start_kernel_proc() -> None:
     if k_state is None:
         return
 
+    # todo(kenny): separate query for backwards compatability. Pull into main
+    # fn when "snapshot mode" merged and works well
+    try:
+        resp = await gql_query(
+            auth=auth_token_sdk,
+            query="""
+                query tmpPlotsNotebookKernelSnapshotMode($pod_id: BigInt!) {
+                    tmpPlotsNotebookKernelSnapshotMode(argPodId: $pod_id)
+                }
+            """,
+            variables={"pod_id": pod_id},
+        )
+
+        data = validate(resp, TmpPlotsNotebookKernelSnapshotModeResp)
+        session_snapshot_mode = data.data.tmpPlotsNotebookKernelSnapshotMode
+        if session_snapshot_mode:
+            kernel_snapshot_state.status = "loading"
+    except Exception:
+        err_msg = {"type": "error", "data": traceback.format_exc()}
+        await plots_ctx_manager.broadcast_message(orjson.dumps(err_msg).decode())
+        session_snapshot_mode = False
+
     await add_pod_event(auth=auth_token_sdk, event_type="runtime_ready")
     await ready_ev.wait()
-    await conn_k.send({
-        "type": "init",
-        "widget_states": k_state.widget_states,
-        "cell_output_selections": k_state.cell_output_selections,
-        "plot_data_selections": k_state.plot_data_selections,
-        "viewer_cell_data": k_state.viewer_cell_data,
-        "plot_configs": k_state.plot_configs,
-    })
+    await conn_k.send(
+        {
+            "type": "init",
+            "widget_states": k_state.widget_states,
+            "cell_output_selections": k_state.cell_output_selections,
+            "plot_data_selections": k_state.plot_data_selections,
+            "viewer_cell_data": k_state.viewer_cell_data,
+            "plot_configs": k_state.plot_configs,
+            "session_snapshot_mode": session_snapshot_mode,
+        }
+    )
 
 
 async def stop_kernel_proc() -> None:

@@ -1,10 +1,10 @@
-import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Literal, TypedDict
 
-from ..reactive import Signal, ctx
-from . import _emit, _state
+from ..persistence import SerializedWidget
+from ..reactive import Signal
+from . import _emit, _state, widget
 
 
 class ButtonWidgetSignalValue(TypedDict):
@@ -12,10 +12,17 @@ class ButtonWidgetSignalValue(TypedDict):
     last_clicked: str
 
 
-class ButtonWidgetState(_emit.WidgetState[Literal["button"], str]):
+button_type: Literal["button"] = "button"
+
+
+class ButtonWidgetState(_emit.WidgetState[button_type, str]):
     label: str
     readonly: bool
     default: ButtonWidgetSignalValue
+
+
+class SerializedButtonWidget(SerializedWidget):
+    state: ButtonWidgetState  # type: ignore[override]
 
 
 def parse_iso_strings(data: object) -> tuple[datetime, datetime] | None:
@@ -35,40 +42,59 @@ def parse_iso_strings(data: object) -> tuple[datetime, datetime] | None:
         return None
 
 
-@dataclass(kw_only=True)
-class ButtonWidget:
+@dataclass(kw_only=True, frozen=True)
+class ButtonWidget(widget.BaseWidget):
     _key: str
     _state: ButtonWidgetState
     _signal: Signal[object | ButtonWidgetSignalValue]
-    _trigger_signal: Signal[object]
+
+    _last_clicked_ref: list[None | datetime] = field(
+        default_factory=lambda: [None], repr=False
+    )
 
     @property
     def value(self) -> bool:
-        self._trigger_signal()
-        return id(self._trigger_signal) in ctx.prev_updated_signals
-
-    def _update(self) -> None:
         res = self._signal()
+
+        if not self._signal._ui_update:
+            return False
 
         if not isinstance(res, dict) or not all(
             key in res for key in ButtonWidgetSignalValue.__annotations__
         ):
-            return
+            return False
 
         parsed = parse_iso_strings(res)
         if parsed is None:
-            return
-
+            return False
         clicked, last_clicked = parsed
+        if self._last_clicked_ref[0] is None:
+            self._last_clicked_ref[0] = last_clicked
 
-        if clicked <= last_clicked:
-            return
+        return clicked > self._last_clicked_ref[0]
 
-        self._signal({**res, "last_clicked": str(clicked)})
-        self._trigger_signal(None)
+    def serialize(self) -> "SerializedButtonWidget":  # type: ignore[override]
+        return SerializedButtonWidget(
+            signal_id=self._signal.id,
+            state=self._state,
+            key=self._key,
+            _is_plots_faas_widget=True,
+        )
 
-    async def _create_update_node(self) -> None:
-        await ctx.run(self._update)
+    @classmethod
+    def load(  # type: ignore[override]
+        cls, s_widget: SerializedButtonWidget, widget_sigs: dict[str, Signal]
+    ) -> "ButtonWidget":
+        sig = widget_sigs[s_widget["signal_id"]]
+
+        return cls(
+            _signal=sig,
+            _state=s_widget["state"],
+            _key=s_widget["key"],
+        )
+
+
+_emit.widget_registry[button_type] = ButtonWidget
 
 
 def w_button(
@@ -79,7 +105,6 @@ def w_button(
     readonly: bool = False,
 ) -> ButtonWidget:
     key = _state.use_state_key(key=key)
-    trigger_key = _state.use_state_key(key=f"{key}#trigger")
 
     if default is None:
         now = datetime.now(UTC).isoformat()
@@ -88,19 +113,13 @@ def w_button(
     res = ButtonWidget(
         _key=key,
         _state={
-            "type": "button",
+            "type": button_type,
             "label": label,
             "default": default,
             "readonly": readonly,
         },
         _signal=_state.use_value_signal(key=key),
-        _trigger_signal=_state.use_value_signal(key=trigger_key),
     )
     _emit.emit_widget(key, res._state)
-
-    # todo(rteqs): this can deadlock. either we make w_button async or figure something out
-    asyncio.run_coroutine_threadsafe(
-        res._create_update_node(), asyncio.get_running_loop()
-    )
 
     return res

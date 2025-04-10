@@ -7,7 +7,7 @@ from latch.registry.table import Table
 
 from .. import _inject
 from ..reactive import Signal
-from . import _emit, _state
+from . import _emit, _state, widget
 from .shared import FormInputAppearance
 
 DataSourceType = Literal["ldata", "dataframe", "viewer", "registry"]
@@ -38,9 +38,10 @@ DataSourceValue = (
 )
 
 
-class DataSourceSelectState(
-    _emit.WidgetState[Literal["tabular_datasource_select"], DataSourceValue]
-):
+datasource_type: Literal["tabular_datasource_select"] = "tabular_datasource_select"
+
+
+class DataSourceSelectState(_emit.WidgetState[datasource_type, DataSourceValue]):
     label: str
     readonly: bool
     default: NotRequired[DataSourceValue | None]
@@ -86,7 +87,7 @@ def get_registry_df(table_id: Any) -> pd.DataFrame | None:
 
 
 @dataclass(frozen=True, kw_only=True)
-class TabularDatasourcePicker:
+class TabularDatasourcePicker(widget.BaseWidget):
     _key: str
     _state: DataSourceSelectState
     _signal: Signal[object | DataSourceValue]
@@ -141,6 +142,9 @@ class TabularDatasourcePicker:
         return self._value(val)
 
 
+_emit.widget_registry[datasource_type] = TabularDatasourcePicker
+
+
 def w_datasource_picker(
     *,
     key: str | None = None,
@@ -155,7 +159,7 @@ def w_datasource_picker(
     res = TabularDatasourcePicker(
         _key=key,
         _state={
-            "type": "tabular_datasource_select",
+            "type": datasource_type,
             "label": label,
             "readonly": readonly,
             "default": default,
