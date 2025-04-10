@@ -308,7 +308,7 @@ async def handle_ann_data_widget_message(
 
     adata: ad.AnnData = _inject.kernel.ann_data_objects[obj_id]
 
-    if "op" not in msg or msg["op"] not in {"init_data", "get_obsm_options", "get_obsm", "get_obs_options", "get_obs", "get_counts_column", "mutate_obs", "drop_obs", "rename_obs"}:
+    if "op" not in msg or msg["op"] not in {"init_data", "get_obsm_options", "get_obsm", "get_obs_options", "get_obs", "get_counts_column", "mutate_obs", "drop_obs", "rename_obs", "fetch_and_process_image"}:
         return {
             "type": "ann_data",
             "key": widget_session_key,
@@ -634,12 +634,12 @@ async def handle_ann_data_widget_message(
         }
 
     if op == "fetch_and_process_image":
-        if "s3_presigned_url" not in msg:
+        if "s3_presigned_url" not in msg or "node_id" not in msg:
             return {
                 "type": "ann_data",
                 "op": op,
                 "key": widget_session_key,
-                "value": {"error": "`s3_presigned_url` key missing from message"},
+                "value": {"error": "`s3_presigned_url` or `node_id` key missing from message"},
             }
 
         image_uri = await fetch_and_process_image(msg["s3_presigned_url"])
