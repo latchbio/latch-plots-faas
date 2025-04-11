@@ -329,7 +329,7 @@ async def handle_ann_data_widget_message(
     op = msg["op"]
 
     if op == "init_data":
-        init_obsm_key = msg.get("init_obsm_key", None)
+        init_obsm_key = msg.get("obsm_key", None)
         possible_obsm_keys = adata.obsm_keys()
         if init_obsm_key is None:
             for key in possible_obsm_keys:
@@ -341,8 +341,8 @@ async def handle_ann_data_widget_message(
 
         possible_obs_keys = adata.obs_keys()
 
-        init_obs_key = msg.get("init_obs_key", None)
-        init_var_key = msg.get("init_var_key", None)
+        init_obs_key = msg.get("obs_key", None)
+        init_var_key = msg.get("var_key", None)
         if init_obs_key is None and init_var_key is None:
             for key in possible_obs_keys:
                 if "cell" in key.lower() and "type" in key.lower():
