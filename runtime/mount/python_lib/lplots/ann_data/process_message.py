@@ -355,8 +355,10 @@ async def handle_ann_data_widget_message(
         obsm = None
         index = None
         recomputed_index = False
+        filters = None
         if init_obsm_key is not None:
-            obsm, index, recomputed_index = get_obsm(obj_id, adata, init_obsm_key)
+            filters = msg.get("filters")
+            obsm, index, recomputed_index = get_obsm(obj_id, adata, init_obsm_key, filters)
 
         obs = None
         unique_obs = None
@@ -392,7 +394,7 @@ async def handle_ann_data_widget_message(
                     "init_recomputed_index": recomputed_index,
                     "init_obsm_values": obsm.tolist() if obsm is not None else None,
                     "init_obsm_index": index.tolist() if index is not None else None,
-                    "init_obsm_filters": [],
+                    "init_obsm_filters": filters,
                     "init_obs_values": obs.tolist() if obs is not None else None,
                     "init_obs_unique_values": unique_obs.tolist() if unique_obs is not None else None,
                     "init_obs_counts": counts.tolist() if counts is not None else None,
