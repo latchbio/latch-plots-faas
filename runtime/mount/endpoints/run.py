@@ -22,6 +22,7 @@ from ..entrypoint import (
     cell_sequencers,
     cell_status,
     k_proc,
+    kernel_snapshot_state,
     plots_ctx_manager,
     pod_id,
     pod_session_id,
@@ -159,6 +160,7 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
                     "cell_status": cell_status,
                     "cell_sequencers": cell_sequencers,
                     "cell_outputs": cell_last_run_outputs,
+                    "kernel_snapshot_status": kernel_snapshot_state.status,
                 }
             ).decode()
         )

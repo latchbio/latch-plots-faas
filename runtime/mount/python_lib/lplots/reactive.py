@@ -1,5 +1,6 @@
 import inspect
 import sys
+import uuid
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
@@ -7,6 +8,13 @@ from traceback import print_exc
 from typing import Any, Generic, Self, TextIO, TypeAlias, TypeVar, overload
 
 from . import _inject
+from .persistence import (
+    SerializedNode,
+    SerializedSignal,
+    safe_serialize_obj,
+    safe_unserialize_obj,
+    unable_to_unserialize_symbol,
+)
 from .utils.nothing import Nothing
 from .widgets._emit import WidgetState
 
@@ -14,8 +22,13 @@ T = TypeVar("T")
 R = TypeVar("R")
 Computation: TypeAlias = Callable[..., R]
 
-live_nodes: dict[int, "Node"] = {}
-live_node_names: set[str] = set()
+live_nodes: dict[str, "Node"] = {}
+live_node_ids: set[str] = set()
+
+live_signals: dict[str, "Signal[object]"] = {}
+live_signal_ids: set[str] = set()
+
+stub_node_noop = lambda: None
 
 
 def graphviz() -> None:
@@ -33,25 +46,35 @@ def graphviz() -> None:
 @dataclass(kw_only=True)
 class Node:
     f: Computation[Any]
+    code: str
     stale: bool = False
     disposed: bool = False
 
     parent: Self | None
-    children: dict[int, Self] = field(default_factory=dict)
+    children: dict[str, Self] = field(default_factory=dict)
 
-    signals: dict[int, "Signal"] = field(default_factory=dict)
+    signals: dict[str, "Signal"] = field(default_factory=dict)
 
     cell_id: str | None = None
     name: str | None = None
+    _id: str | None
+
+    _is_stub: bool = False
 
     widget_states: dict[str, WidgetState[str, object]] = field(default_factory=dict)
     widget_state_idx: int = 0
 
+    @property
+    def id(self) -> str:
+        assert self._id is not None
+        return self._id
+
     def __post_init__(self) -> None:
-        live_nodes[id(self)] = self
+        if self._id is None:
+            self._id = str(uuid.uuid4())
 
         if self.parent is not None:
-            self.parent.children[id(self)] = self
+            self.parent.children[self.id] = self
             self.cell_id = self.parent.cell_id
         elif self.name is None:
             self.name = self.cell_id
@@ -59,11 +82,40 @@ class Node:
         if self.name is None:
             self.name = self.f.__name__
 
-        # todo(rteqs): fix bookkeeping
-        # if self.name in live_node_names:
-        #     raise ValueError(f"reactive node name is not unique: {self.name!r}")
+        if self.id in live_node_ids:
+            raise ValueError(f"reactive node id is not unique: {self.id!r}")
 
-        # live_node_names.add(self.name)
+        live_nodes[self.id] = self
+        live_node_ids.add(self.id)
+
+    def serialize(self) -> SerializedNode:
+        return SerializedNode(
+            code=self.code,
+            stale=self.stale,
+            signals=list(self.signals.keys()),
+            cell_id=self.cell_id,
+            name=self.name,
+            parent=(self.parent.id if self.parent else None),
+            id=self.id,
+            widget_state_idx=self.widget_state_idx,
+            widget_states=self.widget_states,
+        )
+
+    @classmethod
+    def load(cls, s_node) -> "Node":
+        return cls(
+            f=stub_node_noop,
+            code=s_node["code"],
+            stale=s_node["stale"],
+            signals={},
+            cell_id=s_node["cell_id"],
+            name=s_node["name"],
+            parent=None,
+            widget_state_idx=s_node["widget_state_idx"],
+            widget_states=s_node["widget_states"],
+            _id=s_node["id"],
+            _is_stub=True,
+        )
 
     def name_path(self) -> str:
         assert self.name is not None
@@ -103,7 +155,7 @@ class Node:
             cur.disposed = True
 
             if cur.parent is not None:
-                del cur.parent.children[id(cur)]
+                del cur.parent.children[cur.id]
             cur.parent = None
 
             stack.extend(cur.children.values())
@@ -112,17 +164,14 @@ class Node:
             # which is not itself being disposed
 
             for s in cur.signals.values():
-                del s._listeners[id(cur)]
+                del s._listeners[cur.id]
             cur.signals = {}
 
-            del live_nodes[id(cur)]
-
-            # if self.name is not None:
-            #     live_node_names.remove(self.name)
+            del live_nodes[cur.id]
 
     def __repr__(self) -> str:
         stale_mark = "!" if self.stale else ""
-        return f"{stale_mark}{self.name}#{self.cell_id}@{id(self)}<{self.parent}"
+        return f"{stale_mark}{self.name}#{self.cell_id}@{self.id}<{self.parent}"
 
     def debug_state(self, *, no_parent: bool = False) -> dict[str, object]:
         return {
@@ -149,28 +198,37 @@ class Node:
         sig_list = [x._name for x in self.signals.values()]
 
         name = self.f.__name__.replace("<", "&lt;").replace(">", "&gt;")
-        label_str = "<BR />".join([f"{name} @ {id(self)}", ", ".join(sig_list)])
+        label_str = "<BR />".join([f"{name} @ {self.id}", ", ".join(sig_list)])
 
-        f.write(f"{id(self)}[label=<{label_str}>];\n")
+        f.write(f"{self.id}[label=<{label_str}>];\n")
 
         if self.parent is not None:
-            f.write(f"{id(self.parent)} -> {id(self)};\n")
+            f.write(f"{self.parent.id} -> {self.id};\n")
 
 
 @dataclass
 class RCtx:
     cur_comp: Node | None = None
 
-    updated_signals: dict[int, "Signal"] = field(default_factory=dict)
-    signals_updated_from_code: dict[int, "Signal"] = field(default_factory=dict)
-    stale_nodes: dict[int, Node] = field(default_factory=dict)
-    prev_updated_signals: dict[int, "Signal"] = field(default_factory=dict)
+    updated_signals: dict[str, "Signal"] = field(default_factory=dict)
+    signals_updated_from_code: dict[str, "Signal"] = field(default_factory=dict)
+    stale_nodes: dict[str, Node] = field(default_factory=dict)
+    prev_updated_signals: dict[str, "Signal"] = field(default_factory=dict)
 
     in_tx: bool = False
 
     async def run(
-        self, f: Callable[..., Awaitable[R]], *, _cell_id: str | None = None
+        self,
+        f: Callable[..., Awaitable[R]],
+        code: str | None = None,
+        *,
+        _cell_id: str | None = None,
     ) -> R:
+        # note(kenny): it is only safe to call without code if the node is a
+        # child and can be reconstructed by the parent. Otherwise not possible
+        # to serialize when snapshot requested.
+        assert code is not None or self.cur_comp is not None
+
         # note(maximsmol): we want this to happen for non-cell nodes too
         # so it has to be inside `RCtx` which sees every ran node
         # and not just the cell body in the kernel
@@ -178,7 +236,9 @@ class RCtx:
             await _inject.kernel.set_active_cell(_cell_id)
 
         async with self.transaction:
-            self.cur_comp = Node(f=f, parent=self.cur_comp, cell_id=_cell_id)
+            self.cur_comp = Node(
+                f=f, parent=self.cur_comp, cell_id=_cell_id, _id=None, code=code
+            )
 
             try:
                 if inspect.iscoroutinefunction(f):
@@ -214,7 +274,7 @@ class RCtx:
             self.prev_updated_signals = self.updated_signals
             self.updated_signals = {}
 
-            to_dispose: dict[int, tuple[Node, Node | None]] = {}
+            to_dispose: dict[str, tuple[Node, Node | None]] = {}
             for n in self.stale_nodes.values():
                 if n.disposed:
                     continue
@@ -222,7 +282,7 @@ class RCtx:
                 fsa = n.farthest_stale_ancestor()
                 assert fsa is not None
 
-                to_dispose[id(fsa)] = (fsa, fsa.parent)
+                to_dispose[fsa.id] = (fsa, fsa.parent)
 
             self.stale_nodes = {}
 
@@ -234,7 +294,16 @@ class RCtx:
                     self.cur_comp = p
 
                     try:
-                        await self.run(n.f, _cell_id=n.cell_id)
+                        if n._is_stub:
+                            n._is_stub = False
+                            assert n.cell_id is not None
+                            # reconstruct the function with globals
+                            await _inject.kernel.exec(
+                                cell_id=n.cell_id, code=n.code, _from_stub=True
+                            )
+                        else:
+                            await self.run(n.f, n.code, _cell_id=n.cell_id)
+
                     except Exception:
                         print_exc()
                     finally:
@@ -242,7 +311,19 @@ class RCtx:
 
         finally:
             await _inject.kernel.on_tick_finished(tick_updated_signals)
+            # await self.gc_signals()
             self.prev_updated_signals = {}
+            for sig in live_signals.values():
+                sig._ui_update = False
+
+    # todo(kenny): don't clean up widget signals, potentially others.
+    # async def gc_signals(self) -> None:
+    #     used_signals = {sid for node in live_nodes.values() for sid in node.signals}
+    #     unused_signals = set(live_signal_ids) - used_signals
+
+    #     for sid in unused_signals:
+    #         del live_signals[sid]
+    #         live_signal_ids.remove(sid)
 
     @property
     @asynccontextmanager
@@ -270,13 +351,30 @@ class Updater(Generic[T]):
 class Signal(Generic[T]):
     _value: T
     _name: str
+    _id: str
 
     _updates: list[T | Updater[T]]
-    _listeners: dict[int, Node]
+    _listeners: dict[str, Node]
 
-    def __init__(self, initial: T, *, name: str | None = None) -> None:
+    _ui_update: bool = False
+
+    _load_error_msg: str | None
+
+    def __init__(
+        self,
+        initial: T,
+        *,
+        name: str | None = None,
+        _id: str | None = None,
+        _load_error_msg: str | None = None,
+    ) -> None:
+        if _id is None:
+            self._id = str(uuid.uuid4())
+        else:
+            self._id = _id
+
         if name is None:
-            name = f"Signal@{id(self)}"
+            name = f"Signal@{self.id}"
 
         self._value = initial
         self._name = name
@@ -284,44 +382,80 @@ class Signal(Generic[T]):
         self._updates = []
         self._listeners = {}
 
+        if self.id in live_signal_ids:
+            raise ValueError(f"signal id is not unique: {self.id!r}")
+
+        live_signals[self.id] = self
+        live_signal_ids.add(self.id)
+
+        self._load_error_msg = _load_error_msg
+
+    @property
+    def id(self) -> str:
+        assert self._id is not None
+        return self._id
+
     def sample(self) -> T:
         return self._value
 
-    @overload
-    def __call__(self, /) -> T: ...
+    def serialize(self, short_val: bool = False) -> SerializedSignal:
+        s_val, error_msg = safe_serialize_obj(self._value, short=short_val)
+        return SerializedSignal(
+            value=s_val,
+            name=self._name,
+            listeners=list(self._listeners.keys()),
+            dump_error_msg="" if error_msg is None else error_msg,
+            load_error_msg=self._load_error_msg,
+            id=self.id,
+        )
+
+    @classmethod
+    def load(cls, s_sig) -> "Signal[T]":
+        val, error_msg = safe_unserialize_obj(s_sig["value"])
+
+        if val is None or val is unable_to_unserialize_symbol:
+            sig = cls(
+                Nothing.x,
+                name=s_sig["name"],
+                _id=s_sig["id"],
+                _load_error_msg=error_msg,
+            )
+        else:
+            sig = cls(val, name=s_sig["name"], _id=s_sig["id"])
+
+        return sig
 
     @overload
-    def __call__(self, /, upd: T, *, _ui_update: bool = False) -> None: ...
+    def __call__(self, /) -> T:
+        ...
 
     @overload
-    def __call__(self, /, upd: Updater[T], *, _ui_update: bool = False) -> None: ...
+    def __call__(self, /, upd: T, *, _ui_update: bool = False) -> None:
+        ...
+
+    @overload
+    def __call__(self, /, upd: Updater[T], *, _ui_update: bool = False) -> None:
+        ...
 
     def __call__(
         self, /, upd: T | Updater[T] | Nothing = Nothing.x, *, _ui_update: bool = False
     ) -> T | None:
         assert ctx.in_tx
 
-        # print(f"[@] {self}({upd}, _ui_update={_ui_update}): {self._listeners}")
-
         if upd is Nothing.x:
             assert ctx.cur_comp is not None
 
-            # print(
-            # f"[@] {self} added listener {ctx.cur_comp.f.__name__} @ {id(ctx.cur_comp)}"
-            # )
+            self._listeners[ctx.cur_comp.id] = ctx.cur_comp
+            ctx.cur_comp.signals[self.id] = self
 
-            self._listeners[id(ctx.cur_comp)] = ctx.cur_comp
-            ctx.cur_comp.signals[id(self)] = self
-
-            # print(f"[@] {self} has listeners: {self._listeners}")
             return self._value
 
         self._updates.append(upd)
-        # name = ctx.cur_comp.name_path() if ctx.cur_comp is not None else "top level"
-        # print(f"[@] node={name}, signal={self} triggered update {upd}")
-        ctx.updated_signals[id(self)] = self
+        ctx.updated_signals[self.id] = self
         if not _ui_update:
-            ctx.signals_updated_from_code[id(self)] = self
+            ctx.signals_updated_from_code[self.id] = self
+        else:
+            self._ui_update = True
 
         self._mark_listeners()
 
@@ -329,10 +463,8 @@ class Signal(Generic[T]):
 
     def _mark_listeners(self) -> None:
         for x in self._listeners.values():
-            # print(f"[@] {self} marked {x.f.__name__} @ {id(x)}")
-
             x.stale = True
-            ctx.stale_nodes[id(x)] = x
+            ctx.stale_nodes[x.id] = x
 
     def _apply_updates(self) -> None:
         for upd in self._updates:
@@ -344,10 +476,8 @@ class Signal(Generic[T]):
 
         self._updates = []
 
-    # todo(maximsmol): dispose of signals too to avoid memory leaks
-
     def __repr__(self) -> str:
-        return f"{self._name}@{id(self)}"
+        return f"{self._name}@{self.id}"
 
 
 def global_var_signal(key: str) -> Signal[object] | None:

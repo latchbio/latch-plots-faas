@@ -4,11 +4,13 @@ from datetime import datetime
 from typing import Literal, NotRequired
 
 from ..reactive import Signal
-from . import _emit, _state
+from . import _emit, _state, widget
 from .shared import FormInputAppearance
 
+select_widget_type: Literal["select"] = "select"
 
-class SelectState(_emit.WidgetState[Literal["select"], str]):
+
+class SelectState(_emit.WidgetState[select_widget_type, str]):
     label: str
     readonly: bool
     options: list[str | int | float | bool | datetime]
@@ -18,7 +20,7 @@ class SelectState(_emit.WidgetState[Literal["select"], str]):
 
 
 @dataclass(frozen=True, kw_only=True)
-class Select:
+class Select(widget.BaseWidget):
     _key: str
     _state: SelectState
     _signal: Signal[object]
@@ -41,6 +43,9 @@ class Select:
         return self._value(res)
 
 
+_emit.widget_registry[select_widget_type] = Select
+
+
 def w_select(
     *,
     key: str | None = None,
@@ -56,7 +61,7 @@ def w_select(
     res = Select(
         _key=key,
         _state={
-            "type": "select",
+            "type": select_widget_type,
             "label": label,
             "readonly": readonly,
             "options": list(options),

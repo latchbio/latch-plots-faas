@@ -2,13 +2,13 @@ from dataclasses import dataclass
 from typing import Any
 
 from .. import _inject
-from . import _emit, _state
+from . import _emit, _state, widget
 from .select import Select, w_select
 from .shared import FormInputAppearance
 
 
 @dataclass(frozen=True, kw_only=True)
-class DataframePicker:
+class DataframePicker(widget.BaseWidget):
     _select: Select
 
     @property

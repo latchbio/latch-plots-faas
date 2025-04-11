@@ -2,11 +2,13 @@ from dataclasses import dataclass
 from typing import Literal, NotRequired, TypedDict
 
 from ..reactive import Signal
-from . import _emit, _state
+from . import _emit, _state, widget
 from .shared import FormInputAppearance
 
+text_widget_type: Literal["text_input"] = "text_input"
 
-class TextInputWidgetState(_emit.WidgetState[Literal["text_input"], str]):
+
+class TextInputWidgetState(_emit.WidgetState[text_widget_type, str]):
     label: str
     readonly: bool
     default: NotRequired[str | None]
@@ -14,7 +16,7 @@ class TextInputWidgetState(_emit.WidgetState[Literal["text_input"], str]):
 
 
 @dataclass(frozen=True, kw_only=True)
-class TextInputWidget:
+class TextInputWidget(widget.BaseWidget):
     _key: str
     _state: TextInputWidgetState
     _signal: Signal[object | str]
@@ -39,6 +41,9 @@ class TextInputWidget:
         return self._value(res)
 
 
+_emit.widget_registry[text_widget_type] = TextInputWidget
+
+
 def w_text_input(
     *,
     key: str | None = None,
@@ -52,7 +57,7 @@ def w_text_input(
     res = TextInputWidget(
         _key=key,
         _state={
-            "type": "text_input",
+            "type": text_widget_type,
             "label": label,
             "default": default,
             "readonly": readonly,
