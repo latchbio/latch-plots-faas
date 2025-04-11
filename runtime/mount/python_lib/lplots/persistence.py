@@ -57,7 +57,7 @@ def safe_serialize_obj(val: object, short: bool = False) -> (str, str | None):
     try:
         s_val = dumps(val)
         error_msg = None
-    except PicklingError as e:
+    except (PicklingError, TypeError) as e:
         s_val = dumps(unserial_symbol)
         error_msg = f"Failed to pickle: {e}"
     if short:
