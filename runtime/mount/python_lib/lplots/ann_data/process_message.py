@@ -338,13 +338,16 @@ async def handle_ann_data_widget_message(
         if init_obsm_key is None and len(possible_obsm_keys) > 0:
             init_obsm_key = possible_obsm_keys[0]
 
-        init_obs_key = None
-        possible_obs_keys = adata.obs_keys()
-        for key in possible_obs_keys:
-            if "cell" in key.lower() and "type" in key.lower():
-                init_obs_key = key
-                break
-        if init_obs_key is None and len(possible_obs_keys) > 0:
+        init_obs_key = msg.get("init_obs_key", None)
+        init_var_key = msg.get("init_var_key", None)
+        if init_obs_key is None and init_var_key is None:
+            possible_obs_keys = adata.obs_keys()
+            for key in possible_obs_keys:
+                if "cell" in key.lower() and "type" in key.lower():
+                    init_obs_key = key
+                    break
+
+        if init_obs_key is None and init_var_key is None and len(possible_obs_keys) > 0:
             init_obs_key = possible_obs_keys[0]
 
         obsm = None
@@ -357,8 +360,12 @@ async def handle_ann_data_widget_message(
         unique_obs = None
         nrof_obs = None
         counts = None
-        if init_obs_key is not None:
+        if init_obs_key is not None and init_obs_key in adata.obs:
             obs, (unique_obs, counts), nrof_obs = get_obs(obj_id, adata, init_obs_key)
+
+        gene_column = None
+        if init_var_key is not None and init_obs_key is None and init_var_key in adata.var_names:
+            gene_column = get_obs_vector(obj_id, adata, init_var_key)
 
         var_index, var_names = get_var_index(obj_id, adata)
 
@@ -392,6 +399,10 @@ async def handle_ann_data_widget_message(
                     # var info
                     "init_var_index": var_index.tolist(),
                     "init_var_names": var_names.tolist() if var_names is not None else None,
+
+                    # var color by info
+                    "init_var_values": gene_column.tolist() if gene_column is not None else None,
+                    "init_var_key": init_var_key if init_var_key is not None else None,
                 }
             },
         }
