@@ -329,12 +329,13 @@ async def handle_ann_data_widget_message(
     op = msg["op"]
 
     if op == "init_data":
-        init_obsm_key = None
+        init_obsm_key = msg.get("init_obsm_key", None)
         possible_obsm_keys = adata.obsm_keys()
-        for key in possible_obsm_keys:
-            if "umap" in key.lower():
-                init_obsm_key = key
-                break
+        if init_obsm_key is None:
+            for key in possible_obsm_keys:
+                if "umap" in key.lower():
+                    init_obsm_key = key
+                    break
         if init_obsm_key is None and len(possible_obsm_keys) > 0:
             init_obsm_key = possible_obsm_keys[0]
 
