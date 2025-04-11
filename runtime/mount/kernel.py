@@ -1610,7 +1610,7 @@ class Kernel:
             return
 
         if msg["type"] == "ann_data":
-            await self.send(handle_ann_data_widget_message(msg))
+            await self.send(await handle_ann_data_widget_message(msg))
             return
 
 
