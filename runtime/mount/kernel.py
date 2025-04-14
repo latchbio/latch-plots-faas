@@ -305,7 +305,7 @@ def filter_dataframe(
     if opcode == "empty":
         return df[col_vals.notna() & (col_vals != "")]
 
-    mask: Series[bool] | NDArray[np.bool] | None = None
+    mask: Series[bool] | NDArray[np.bool_] | None = None
 
     if opcode == "=":
         if np.issubdtype(col_vals.dtype.type, np.floating):
@@ -359,7 +359,7 @@ def filter_dataframe(
 
 def filter_dataframe_by_selections(
     df: DataFrame, col: str, selections: list
-) -> "DataFrame | Series[bool] | NDArray[np.bool]":
+) -> "DataFrame | Series[bool] | NDArray[np.bool_]":
     if col not in df:
         return np.ones(len(df), dtype=bool)
 

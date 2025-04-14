@@ -17,7 +17,7 @@ Image.MAX_IMAGE_PIXELS = None  # TIFFs can be huge, and PIL detects a decompress
 
 ad = auto_install.ad
 
-ann_data_index_cache: dict[str, tuple[NDArray[np.bool], NDArray[np.int64]]] = {}
+ann_data_index_cache: dict[str, tuple[NDArray[np.bool_], NDArray[np.int64]]] = {}
 ann_data_var_index_cache: dict[str, tuple[NDArray[np.str_], NDArray[np.str_] | None]] = {}
 
 
