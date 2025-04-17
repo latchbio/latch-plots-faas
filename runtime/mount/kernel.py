@@ -930,7 +930,8 @@ class Kernel:
                     **res["data"],
                 )
 
-            loop.run_until_complete(f(ctx.cur_comp))
+            future = asyncio.run_coroutine_threadsafe(f(ctx.cur_comp), loop)
+            future.result()
 
         cell_id = ctx.cur_comp.cell_id
         if cell_id is not None:
