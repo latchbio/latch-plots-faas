@@ -930,38 +930,8 @@ class Kernel:
                     **res["data"],
                 )
 
-                nww = [x for x in self.nodes_with_widgets.values() if x.cell_id == node.cell_id]
+            loop.run_until_complete(f(ctx.cur_comp))
 
-                widget_state: dict[str, WidgetState[str, object]] = {}
-                for n in nww:
-                    path = n.name_path()
-                    for k, v in n.widget_states.items():
-                        abs_k = f"{path}/{k}"
-                        res[abs_k] = copy(v)
-
-                        if abs_k not in self.widget_signals:
-                            continue
-
-                        sig = self.widget_signals[abs_k]
-
-                        val = sig.sample()
-                        if val is Nothing.x:
-                            continue
-
-                        res[abs_k]["value"] = val
-
-                await self.send(
-                    {
-                        "type": "cell_widgets",
-                        "cell_id": node.cell_id,
-                        "widget_state": widget_state,
-                        "updated_widgets": [key],
-                    }
-                )
-
-            loop.create_task(f(ctx.cur_comp))
-
-        # todo(maximsmol): I don't think this is actually nullable anymore
         cell_id = ctx.cur_comp.cell_id
         if cell_id is not None:
             self.cells_with_pending_widget_updates.add(cell_id)
