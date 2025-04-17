@@ -55,7 +55,6 @@ from pandas.io.json._table_schema import build_table_schema
 from plotly.basedatatypes import BaseFigure
 from plotly_utils.precalc_box import precalc_box
 from plotly_utils.precalc_violin import precalc_violin
-from .python_lib.lplots.widgets.plot import PlotState
 from socketio_thread import SocketIoThread
 from stdio_over_socket import SocketWriter, text_socket_writer
 
