@@ -106,6 +106,21 @@ class PlotsNotebookKernelStateResp:
 
 
 @dataclass(frozen=True)
+class PlotCellValueViewer:
+    id: int
+
+
+@dataclass(frozen=True)
+class PlotCreateValueViewerData:
+    plotCellValueViewer: PlotCellValueViewer
+
+
+@dataclass(frozen=True)
+class PlotCreateValueViewerDataResp:
+    data: PlotCreateValueViewerData
+
+
+@dataclass(frozen=True)
 class TmpPlotsNotebookKernelSnapshotMode:
     tmpPlotsNotebookKernelSnapshotMode: bool
 
@@ -304,6 +319,46 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                 )
 
                 msg = {"type": msg["type"], "viewer_id": msg["viewer_id"]}
+
+            elif msg["type"] == "cell_value_viewer_init":
+                assert plots_ctx_manager.notebook_id is not None
+
+                value_viewer_res = await gql_query(
+                    auth=auth,
+                    query="""
+                        mutation PlotCreateValueViewerData(
+                            $notebookId: BigInt!
+                        ) {
+                            createPlotCellValueViewer(
+                                input: {
+                                    plotCellValueViewer: {
+                                        notebookId: $notebookId
+                                        viewerType: "value_viewer"
+                                    }
+                                }
+                            ) {
+                                plotCellValueViewer {
+                                    id
+                                }
+                            }
+                        }
+                    """,
+                    variables={
+                        "notebookId": plots_ctx_manager.notebook_id,
+                    },
+                )
+
+                data = validate(value_viewer_res, PlotCreateValueViewerDataResp)
+
+                await conn_k.send(
+                    {
+                        "type": "cell_value_viewer_init",
+                        "key": msg["key"],
+                        "data": {
+                            "value_viewer_id": data.data.plotCellValueViewer.id,
+                        },
+                    }
+                )
 
             elif msg["type"] == "plot_data":
                 await gql_query(

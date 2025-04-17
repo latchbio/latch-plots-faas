@@ -55,6 +55,7 @@ from pandas.io.json._table_schema import build_table_schema
 from plotly.basedatatypes import BaseFigure
 from plotly_utils.precalc_box import precalc_box
 from plotly_utils.precalc_violin import precalc_violin
+from .python_lib.lplots.widgets.plot import PlotState
 from socketio_thread import SocketIoThread
 from stdio_over_socket import SocketWriter, text_socket_writer
 
@@ -913,9 +914,13 @@ class Kernel:
 
     def emit_widget(self, key: str, data: WidgetState) -> None:
         assert ctx.cur_comp is not None
+        assert loop is not None
 
         ctx.cur_comp.widget_states[key] = data
         self.nodes_with_widgets[ctx.cur_comp.id] = ctx.cur_comp
+
+        if (data["type"] == "plot" or data["type"] == "table"):
+            loop.create_task(self.send({"type": "cell_value_viewer_init", "key": key}))
 
         # todo(maximsmol): I don't think this is actually nullable anymore
         cell_id = ctx.cur_comp.cell_id
@@ -1611,6 +1616,16 @@ class Kernel:
 
         if msg["type"] == "ann_data":
             await self.send(await handle_ann_data_widget_message(msg))
+            return
+
+        if msg["type"] == "cell_value_viewer_init":
+            assert ctx.cur_comp is not None
+
+            ctx.cur_comp.widget_states[msg["key"]] = WidgetState(
+                **ctx.cur_comp.widget_states[msg["key"]],
+                **msg["data"],
+            )
+
             return
 
 

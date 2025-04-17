@@ -28,6 +28,7 @@ class PlotsContextManager:
         self.session_count_by_user = defaultdict(lambda: 0)
         self.session_owner: str | None = None
         self.unique_users: set[UserProfile] = set()
+        self.notebook_id: str | None = None
 
     async def add_context(
         self,
