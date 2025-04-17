@@ -1410,9 +1410,9 @@ class Kernel:
         LPath(urljoins(dst, local_path.name)).upload_from(local_path)
 
     async def accept(self) -> None:
-        # print("[kernel] accept")
+        print("[kernel] accept")
         msg = await self.conn.recv()
-        # print("[kernel] <", msg)
+        print("[kernel] <", msg)
 
         if "msg_id" in msg and msg["msg_id"] in self.pending_responses:
             future = self.pending_responses.pop(msg["msg_id"])

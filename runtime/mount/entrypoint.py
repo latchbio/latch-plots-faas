@@ -172,7 +172,7 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
         msg_id: int | None = msg.get("msg_id", None)
         reply = conn_k.send
         if msg_id is not None:
-            async def r(data: dict, msg_id: int = msg_id) -> None:
+            async def r(data: dict) -> None:
                 await conn_k.send({"msg_id": msg_id, **data})
             reply = r
 
@@ -335,6 +335,8 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
             elif msg["type"] == "cell_value_viewer_init":
                 assert plots_ctx_manager.notebook_id is not None
 
+                print("[entrypoint] cell_value_viewer_init", msg)
+
                 value_viewer_res = await gql_query(
                     auth=auth,
                     query="""
@@ -362,14 +364,15 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
 
                 data = validate(value_viewer_res, PlotCreateValueViewerGQLResp)
 
-                await conn_k.send(
+                await reply(
                     {
                         "data": {
                             "id": data.data.createPlotCellValueViewer.plotCellValueViewer.id,
                         },
-                        "msg_id": msg_id
                     }
                 )
+
+                print("[entrypoint] cell_value_viewer_init done", msg)
                 continue
 
             elif msg["type"] == "plot_data":
