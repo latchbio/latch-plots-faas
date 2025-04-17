@@ -169,6 +169,13 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
     while True:
         msg = await conn_k.recv()
 
+        msg_id: int = msg.get("msg_id", None)
+        reply = conn_k.send
+        if msg_id is not None:
+            async def r(data: dict, msg_id: int = msg_id) -> None:
+                await conn_k.send({"msg_id": msg_id, **data})
+            reply = r
+
         try:
             # note(aidan): ann data messages can be mbs and stuffing into journal fills the disc
             if msg["type"] != "ann_data":
@@ -355,13 +362,11 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
 
                 data = validate(value_viewer_res, PlotCreateValueViewerGQLResp)
 
-                await conn_k.send(
+                await reply(
                     {
-                        "type": "cell_value_viewer_init",
-                        "key": msg["key"],
                         "data": {
-                            "value_viewer_id": data.data.createPlotCellValueViewer.plotCellValueViewer.id,
-                        },
+                            "id": data.data.createPlotCellValueViewer.plotCellValueViewer.id,
+                        }
                     }
                 )
 

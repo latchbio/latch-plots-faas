@@ -519,6 +519,8 @@ class RestoredGlobalInfo(TypedDict):
 @dataclass(kw_only=True)
 class Kernel:
     conn: SocketIoThread
+    last_msg_id: int = 0
+    pending_responses: dict[int, asyncio.Future] = field(default_factory=dict)
 
     cell_seq: int = 0
     cell_rnodes: dict[str, Node] = field(default_factory=dict)
@@ -919,7 +921,16 @@ class Kernel:
         self.nodes_with_widgets[ctx.cur_comp.id] = ctx.cur_comp
 
         if (data["type"] == "plot" or data["type"] == "table"):
-            loop.create_task(self.send({"type": "cell_value_viewer_init", "key": key}))
+            async def f(node: Node):
+                res = await self.send({"type": "cell_value_viewer_init", "key": key}, with_resp=True)
+                assert res is not None
+
+                node.widget_states[key] = WidgetState(
+                    **node.widget_states[key],
+                    **res["data"],
+                )
+
+            loop.create_task(f(ctx.cur_comp))
 
         # todo(maximsmol): I don't think this is actually nullable anymore
         cell_id = ctx.cur_comp.cell_id
@@ -1063,9 +1074,20 @@ class Kernel:
 
         await self.send(msg)
 
-    async def send(self, msg: object) -> None:
+    async def send(self, msg: dict, *, with_resp: bool = False) ->  dict[str, Any] | None:
         # print("[kernel] >", msg)
-        await self.conn.send(msg)
+        if not with_resp:
+            await self.conn.send(msg)
+            return None
+
+        future = asyncio.Future()
+
+        msg_id = self.last_msg_id
+        self.last_msg_id += 1
+
+        self.pending_responses[msg_id] = future
+        await self.conn.send({"msg_id": msg_id, **msg})
+        return await future
 
     async def send_plot_data(
         self, plot_id: str, key: str, config: PlotConfig | None = None
@@ -1387,6 +1409,12 @@ class Kernel:
         msg = await self.conn.recv()
         # print("[kernel] <", msg)
 
+        if "msg_id" in msg and msg["msg_id"] in self.pending_responses:
+            future = self.pending_responses.pop(msg["msg_id"])
+            if not future.done():
+                future.set_result(msg)
+            return
+
         if msg["type"] == "init":
             self.cell_output_selections = msg["cell_output_selections"]
             self.plot_data_selections = msg["plot_data_selections"]
@@ -1615,16 +1643,6 @@ class Kernel:
 
         if msg["type"] == "ann_data":
             await self.send(await handle_ann_data_widget_message(msg))
-            return
-
-        if msg["type"] == "cell_value_viewer_init":
-            assert ctx.cur_comp is not None
-
-            ctx.cur_comp.widget_states[msg["key"]] = WidgetState(
-                **ctx.cur_comp.widget_states[msg["key"]],
-                **msg["data"],
-            )
-
             return
 
 
