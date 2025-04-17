@@ -107,17 +107,22 @@ class PlotsNotebookKernelStateResp:
 
 @dataclass(frozen=True)
 class PlotCellValueViewer:
-    id: int
+    id: str
 
 
 @dataclass(frozen=True)
-class PlotCreateValueViewerData:
+class PlotCreateValueViewerCreateResp:
     plotCellValueViewer: PlotCellValueViewer
 
 
 @dataclass(frozen=True)
 class PlotCreateValueViewerDataResp:
-    data: PlotCreateValueViewerData
+    createPlotCellValueViewer: PlotCreateValueViewerCreateResp
+
+
+@dataclass(frozen=True)
+class PlotCreateValueViewerGQLResp:
+    data: PlotCreateValueViewerDataResp
 
 
 @dataclass(frozen=True)
@@ -348,14 +353,14 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                     },
                 )
 
-                data = validate(value_viewer_res, PlotCreateValueViewerDataResp)
+                data = validate(value_viewer_res, PlotCreateValueViewerGQLResp)
 
                 await conn_k.send(
                     {
                         "type": "cell_value_viewer_init",
                         "key": msg["key"],
                         "data": {
-                            "value_viewer_id": data.data.plotCellValueViewer.id,
+                            "value_viewer_id": data.data.createPlotCellValueViewer.plotCellValueViewer.id,
                         },
                     }
                 )
