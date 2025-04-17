@@ -709,6 +709,13 @@ class Kernel:
             with open("/root/pending_value_viewer_inits.txt", "a") as f:
                 f.write(f"{task}\n")
 
+        for task in self.pending_value_viewer_inits:
+            await task
+
+        with open("/root/pending_value_viewer_inits_done.txt", "a") as f:
+            f.write(f"yes\n")
+
+
         self.pending_value_viewer_inits.clear()
 
         nww_by_cell = {
