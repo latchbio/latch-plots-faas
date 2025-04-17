@@ -533,6 +533,7 @@ class Kernel:
     nodes_with_widgets: dict[str, Node] = field(default_factory=dict)
 
     cells_with_pending_widget_updates: set[str] = field(default_factory=set)
+    pending_value_viewer_inits: list[asyncio.Future] = field(default_factory=list)
 
     cell_output_selections: dict[str, str] = field(default_factory=dict)
     viewer_cell_selections: dict[str, tuple[str, KeyType]] = field(default_factory=dict)
@@ -703,6 +704,11 @@ class Kernel:
         # 2. we can pre-compute nww_by_cell
         # 3. we can batch together the update messages so the frontend does not
         # need to spam GQL requests
+
+        for task in self.pending_value_viewer_inits:
+            await task
+
+        self.pending_value_viewer_inits.clear()
 
         nww_by_cell = {
             cell_id: [
@@ -930,8 +936,7 @@ class Kernel:
                     **res["data"],
                 )
 
-            future = asyncio.run_coroutine_threadsafe(f(ctx.cur_comp), loop)
-            future.result()
+            self.pending_value_viewer_inits.append(loop.create_task(f(ctx.cur_comp)))
 
         cell_id = ctx.cur_comp.cell_id
         if cell_id is not None:
