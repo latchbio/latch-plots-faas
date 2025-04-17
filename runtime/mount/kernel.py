@@ -519,8 +519,6 @@ class RestoredGlobalInfo(TypedDict):
 @dataclass(kw_only=True)
 class Kernel:
     conn: SocketIoThread
-    last_msg_id: int = 0
-    pending_responses: dict[int, asyncio.Future] = field(default_factory=dict)
 
     cell_seq: int = 0
     cell_rnodes: dict[str, Node] = field(default_factory=dict)
@@ -533,7 +531,6 @@ class Kernel:
     nodes_with_widgets: dict[str, Node] = field(default_factory=dict)
 
     cells_with_pending_widget_updates: set[str] = field(default_factory=set)
-    pending_value_viewer_inits: list[asyncio.Future] = field(default_factory=list)
 
     cell_output_selections: dict[str, str] = field(default_factory=dict)
     viewer_cell_selections: dict[str, tuple[str, KeyType]] = field(default_factory=dict)
@@ -704,19 +701,6 @@ class Kernel:
         # 2. we can pre-compute nww_by_cell
         # 3. we can batch together the update messages so the frontend does not
         # need to spam GQL requests
-
-        for task in self.pending_value_viewer_inits:
-            with open("/root/pending_value_viewer_inits.txt", "a") as f:
-                f.write(f"{task}\n")
-
-        for task in self.pending_value_viewer_inits:
-            await task
-
-        with open("/root/pending_value_viewer_inits_done.txt", "a") as f:
-            f.write(f"yes\n")
-
-
-        self.pending_value_viewer_inits.clear()
 
         nww_by_cell = {
             cell_id: [
@@ -935,16 +919,7 @@ class Kernel:
         self.nodes_with_widgets[ctx.cur_comp.id] = ctx.cur_comp
 
         if (data["type"] == "plot" or data["type"] == "table"):
-            async def f(node: Node) -> None:
-                res = await self.send({"type": "cell_value_viewer_init", "key": key}, with_resp=True)
-                assert res is not None
-
-                node.widget_states[key] = WidgetState(
-                    **node.widget_states[key],
-                    **res["data"],
-                )
-
-            self.pending_value_viewer_inits.append(loop.create_task(f(ctx.cur_comp)))
+            loop.create_task(self.send({"type": "cell_value_viewer_init", "key": key, "connection_key": data["connection_key"]}))
 
         cell_id = ctx.cur_comp.cell_id
         if cell_id is not None:
@@ -1087,20 +1062,9 @@ class Kernel:
 
         await self.send(msg)
 
-    async def send(self, msg: dict, *, with_resp: bool = False) ->  dict[str, Any] | None:
+    async def send(self, msg: object) -> None:
         # print("[kernel] >", msg)
-        if not with_resp:
-            await self.conn.send(msg)
-            return None
-
-        future = asyncio.Future()
-
-        msg_id = self.last_msg_id
-        self.last_msg_id += 1
-
-        self.pending_responses[msg_id] = future
-        await self.conn.send({"msg_id": msg_id, **msg})
-        return await future
+        await self.conn.send(msg)
 
     async def send_plot_data(
         self, plot_id: str, key: str, config: PlotConfig | None = None
@@ -1421,19 +1385,6 @@ class Kernel:
         # print("[kernel] accept")
         msg = await self.conn.recv()
         # print("[kernel] <", msg)
-
-        if "msg_id" in msg:
-            with open("/root/messages.txt", "a") as f:
-                f.write(f"{msg}\n")
-
-            if msg["msg_id"] in self.pending_responses:
-                with open("/root/message_with_resp.txt", "a") as f:
-                    f.write(f"{msg}\n")
-
-                future = self.pending_responses.pop(msg["msg_id"])
-                if not future.done():
-                    future.set_result(msg)
-                return
 
         if msg["type"] == "init":
             self.cell_output_selections = msg["cell_output_selections"]

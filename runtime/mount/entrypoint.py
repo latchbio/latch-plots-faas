@@ -169,13 +169,6 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
     while True:
         msg = await conn_k.recv()
 
-        msg_id: int | None = msg.get("msg_id", None)
-        reply = conn_k.send
-        if msg_id is not None:
-            async def r(data: dict) -> None:
-                await conn_k.send({"msg_id": msg_id, **data})
-            reply = r
-
         try:
             # note(aidan): ann data messages can be mbs and stuffing into journal fills the disc
             if msg["type"] != "ann_data":
@@ -335,39 +328,27 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
             elif msg["type"] == "cell_value_viewer_init":
                 assert plots_ctx_manager.notebook_id is not None
 
-                value_viewer_res = await gql_query(
+                await gql_query(
                     auth=auth,
                     query="""
-                        mutation PlotCreateValueViewerData(
-                            $notebookId: BigInt!
+                        mutation UpsertPlotCellValueViewer(
+                            $notebookId: BigInt!,
+                            $widgetConnectionKey: String!
                         ) {
-                            createPlotCellValueViewer(
+                            upsertPlotCellValueViewer(
                                 input: {
-                                    plotCellValueViewer: {
-                                        notebookId: $notebookId
-                                        viewerType: "value_viewer"
-                                    }
+                                    argNotebookId: $notebookId,
+                                    argWidgetConnectionKey: $widgetConnectionKey
                                 }
                             ) {
-                                plotCellValueViewer {
-                                    id
-                                }
+                                clientMutationId
                             }
                         }
                     """,
                     variables={
                         "notebookId": plots_ctx_manager.notebook_id,
+                        "widgetConnectionKey": msg["connection_key"],
                     },
-                )
-
-                data = validate(value_viewer_res, PlotCreateValueViewerGQLResp)
-
-                await reply(
-                    {
-                        "data": {
-                            "id": data.data.createPlotCellValueViewer.plotCellValueViewer.id,
-                        },
-                    }
                 )
 
                 continue

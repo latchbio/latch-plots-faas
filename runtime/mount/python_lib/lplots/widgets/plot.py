@@ -1,3 +1,4 @@
+import uuid
 from dataclasses import dataclass
 from typing import Literal, NotRequired
 
@@ -9,7 +10,7 @@ plot_widget_type: Literal["plot"] = "plot"
 
 class PlotState(_emit.WidgetState[plot_widget_type, str]):
     label: str
-    value_viewer_id: NotRequired[str | None]
+    connection_key: NotRequired[str | None]
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -47,6 +48,7 @@ def w_plot(
         _state={
             "type": plot_widget_type,
             "label": label,
+            "connection_key": uuid.uuid4().hex,
         },
         _signal=_state.use_value_signal(key=key),
     )
