@@ -335,8 +335,6 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
             elif msg["type"] == "cell_value_viewer_init":
                 assert plots_ctx_manager.notebook_id is not None
 
-                print("[entrypoint] cell_value_viewer_init", msg)
-
                 value_viewer_res = await gql_query(
                     auth=auth,
                     query="""
@@ -372,7 +370,6 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                     }
                 )
 
-                print("[entrypoint] cell_value_viewer_init done", msg)
                 continue
 
             elif msg["type"] == "plot_data":

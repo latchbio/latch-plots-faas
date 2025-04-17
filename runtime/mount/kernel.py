@@ -706,7 +706,8 @@ class Kernel:
         # need to spam GQL requests
 
         for task in self.pending_value_viewer_inits:
-            await task
+            with open("/root/pending_value_viewer_inits.txt", "a") as f:
+                f.write(f"{task}\n")
 
         self.pending_value_viewer_inits.clear()
 
@@ -1410,15 +1411,22 @@ class Kernel:
         LPath(urljoins(dst, local_path.name)).upload_from(local_path)
 
     async def accept(self) -> None:
-        print("[kernel] accept")
+        # print("[kernel] accept")
         msg = await self.conn.recv()
-        print("[kernel] <", msg)
+        # print("[kernel] <", msg)
 
-        if "msg_id" in msg and msg["msg_id"] in self.pending_responses:
-            future = self.pending_responses.pop(msg["msg_id"])
-            if not future.done():
-                future.set_result(msg)
-            return
+        if "msg_id" in msg:
+            with open("/root/messages.txt", "a") as f:
+                f.write(f"{msg}\n")
+
+            if msg["msg_id"] in self.pending_responses:
+                with open("/root/message_with_resp.txt", "a") as f:
+                    f.write(f"{msg}\n")
+
+                future = self.pending_responses.pop(msg["msg_id"])
+                if not future.done():
+                    future.set_result(msg)
+                return
 
         if msg["type"] == "init":
             self.cell_output_selections = msg["cell_output_selections"]
