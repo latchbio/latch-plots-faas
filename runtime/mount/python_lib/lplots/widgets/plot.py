@@ -20,7 +20,7 @@ class Plot(widget.BaseWidget):
     _signal: Signal[object]
 
     def _value(self, val: object) -> None:
-        # todo(aidan,nathan): resolve to df
+        # todo(aidan,nathan): resolve to plot data
         return None
 
     @property
