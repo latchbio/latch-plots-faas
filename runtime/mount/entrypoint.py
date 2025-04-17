@@ -169,7 +169,7 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
     while True:
         msg = await conn_k.recv()
 
-        msg_id: int = msg.get("msg_id", None)
+        msg_id: int | None = msg.get("msg_id", None)
         reply = conn_k.send
         if msg_id is not None:
             async def r(data: dict, msg_id: int = msg_id) -> None:
@@ -362,11 +362,12 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
 
                 data = validate(value_viewer_res, PlotCreateValueViewerGQLResp)
 
-                await reply(
+                await conn_k.send(
                     {
                         "data": {
                             "id": data.data.createPlotCellValueViewer.plotCellValueViewer.id,
-                        }
+                        },
+                        "msg_id": msg_id
                     }
                 )
                 continue
