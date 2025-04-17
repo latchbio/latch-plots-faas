@@ -919,7 +919,7 @@ class Kernel:
         self.nodes_with_widgets[ctx.cur_comp.id] = ctx.cur_comp
 
         if (data["type"] == "plot" or data["type"] == "table"):
-            loop.create_task(self.send({"type": "cell_value_viewer_init", "key": key, "connection_key": data["connection_key"]}))
+            loop.create_task(self.send({"type": "cell_value_viewer_init", "key": key, "unique_key": data["unique_key"]}))
 
         cell_id = ctx.cur_comp.cell_id
         if cell_id is not None:

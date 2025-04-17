@@ -347,7 +347,7 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                     """,
                     variables={
                         "notebookId": plots_ctx_manager.notebook_id,
-                        "widgetConnectionKey": msg["connection_key"],
+                        "widgetConnectionKey": msg["unique_key"],
                     },
                 )
 

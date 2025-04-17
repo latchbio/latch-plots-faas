@@ -10,7 +10,7 @@ table_widget_type: Literal["table"] = "table"
 
 class TableState(_emit.WidgetState[table_widget_type, str]):
     label: str
-    connection_key: str
+    unique_key: str
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -40,6 +40,7 @@ def w_table(
     *,
     key: str | None = None,
     label: str,
+    unique_key: str,
 ) -> Table:
     key = _state.use_state_key(key=key)
 
@@ -48,7 +49,7 @@ def w_table(
         _state={
             "type": table_widget_type,
             "label": label,
-            "connection_key": uuid.uuid4().hex,
+            "unique_key": unique_key,
         },
         _signal=_state.use_value_signal(key=key),
     )
