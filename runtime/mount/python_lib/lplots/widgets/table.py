@@ -10,7 +10,7 @@ table_widget_type: Literal["table"] = "table"
 
 class TableState(_emit.WidgetState[table_widget_type, str]):
     label: str
-    connection_key: NotRequired[str | None]
+    connection_key: str
 
 
 @dataclass(frozen=True, kw_only=True)

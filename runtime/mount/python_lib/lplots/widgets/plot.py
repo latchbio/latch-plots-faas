@@ -10,7 +10,7 @@ plot_widget_type: Literal["plot"] = "plot"
 
 class PlotState(_emit.WidgetState[plot_widget_type, str]):
     label: str
-    connection_key: NotRequired[str | None]
+    connection_key: str
 
 
 @dataclass(frozen=True, kw_only=True)
