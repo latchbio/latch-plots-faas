@@ -148,6 +148,7 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
         picture_url=picture_url,
         name=name,
     )
+    # todo(aidan): set when the kernel first starts up
     plots_ctx_manager.notebook_id = notebook_id
 
     try:
