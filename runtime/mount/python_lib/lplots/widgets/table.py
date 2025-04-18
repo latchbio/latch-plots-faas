@@ -1,15 +1,19 @@
+import uuid
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, NotRequired
+from pandas import DataFrame
 
 from ..reactive import Signal
+from .. import _inject
 from . import _emit, _state, widget
 
 table_widget_type: Literal["table"] = "table"
 
 
 class TableState(_emit.WidgetState[table_widget_type, str]):
-    label: str
-    unique_key: str
+    label: NotRequired[str | None]
+    value_viewer_key: str
+    found: bool
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -38,17 +42,26 @@ _emit.widget_registry[table_widget_type] = Table
 def w_table(
     *,
     key: str | None = None,
-    label: str,
-    unique_key: str,
+    label: str | None = None,
+    source: DataFrame,
 ) -> Table:
     key = _state.use_state_key(key=key)
+
+    found = False
+    global_key = None
+    for k, v in _inject.kernel.k_globals:
+        if v == source:
+            global_key = k
+            found = True
+            break
 
     res = Table(
         _key=key,
         _state={
             "type": table_widget_type,
             "label": label,
-            "unique_key": unique_key,
+            "value_viewer_key": global_key if global_key is not None else uuid.uuid4().hex,
+            "found": found,
         },
         _signal=_state.use_value_signal(key=key),
     )
