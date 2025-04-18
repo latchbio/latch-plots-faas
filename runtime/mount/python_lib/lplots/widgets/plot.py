@@ -1,5 +1,4 @@
 
-import uuid
 from dataclasses import dataclass
 from typing import Literal, NotRequired
 
@@ -16,8 +15,7 @@ plot_widget_type: Literal["plot"] = "plot"
 
 class PlotState(_emit.WidgetState[plot_widget_type, str]):
     label: NotRequired[str | None]
-    value_viewer_key: str
-    found: bool
+    value_viewer_key: NotRequired[str | None]
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -51,7 +49,6 @@ def w_plot(
 ) -> Plot:
     key = _state.use_state_key(key=key)
 
-    found = False
     global_key = None
     for k, v in _inject.kernel.k_globals.items():
         if isinstance(v, Signal):
@@ -59,7 +56,6 @@ def w_plot(
 
         if id(v) == id(source):
             global_key = k
-            found = True
             break
 
     res = Plot(
@@ -67,8 +63,7 @@ def w_plot(
         _state={
             "type": plot_widget_type,
             "label": label,
-            "value_viewer_key": global_key if global_key is not None else uuid.uuid4().hex,
-            "found": found,
+            "value_viewer_key": global_key,
         },
         _signal=_state.use_value_signal(key=key),
     )

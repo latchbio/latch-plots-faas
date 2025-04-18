@@ -1,4 +1,3 @@
-import uuid
 from dataclasses import dataclass
 from typing import Literal, NotRequired
 
@@ -13,8 +12,7 @@ table_widget_type: Literal["table"] = "table"
 
 class TableState(_emit.WidgetState[table_widget_type, str]):
     label: NotRequired[str | None]
-    value_viewer_key: str
-    found: bool
+    value_viewer_key: NotRequired[str | None]
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -48,7 +46,6 @@ def w_table(
 ) -> Table:
     key = _state.use_state_key(key=key)
 
-    found = False
     global_key = None
     for k, v in _inject.kernel.k_globals.items():
         if isinstance(v, Signal):
@@ -56,7 +53,6 @@ def w_table(
 
         if id(v) == id(source):
             global_key = k
-            found = True
             break
 
     res = Table(
@@ -64,8 +60,7 @@ def w_table(
         _state={
             "type": table_widget_type,
             "label": label,
-            "value_viewer_key": global_key if global_key is not None else uuid.uuid4().hex,
-            "found": found,
+            "value_viewer_key": global_key,
         },
         _signal=_state.use_value_signal(key=key),
     )
