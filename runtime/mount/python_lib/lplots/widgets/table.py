@@ -1,6 +1,5 @@
-import uuid
 from dataclasses import dataclass
-from typing import Literal, NotRequired
+from typing import Literal
 
 from ..reactive import Signal
 from . import _emit, _state, widget
