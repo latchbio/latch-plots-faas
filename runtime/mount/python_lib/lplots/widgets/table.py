@@ -50,7 +50,10 @@ def w_table(
     found = False
     global_key = None
     for k, v in _inject.kernel.k_globals.items():
-        if id(v._value) == id(source):
+        if isinstance(v, Signal):
+            v = v.sample()
+
+        if id(v) == id(source):
             global_key = k
             found = True
             break
