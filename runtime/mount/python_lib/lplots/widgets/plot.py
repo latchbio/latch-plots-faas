@@ -3,7 +3,8 @@ import uuid
 from dataclasses import dataclass
 from typing import Literal, NotRequired
 
-from matplotlib.figure import Figure
+from matplotlib.axes import Axes
+from matplotlib.figure import Figure, SubFigure
 from plotly.basedatatypes import BaseFigure
 
 from .. import _inject
@@ -46,7 +47,7 @@ def w_plot(
     *,
     key: str | None = None,
     label: str | None = None,
-    source: Figure | BaseFigure,
+    source: Figure | SubFigure | Axes | BaseFigure,
 ) -> Plot:
     key = _state.use_state_key(key=key)
 

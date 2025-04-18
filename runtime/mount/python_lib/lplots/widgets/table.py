@@ -1,10 +1,11 @@
 import uuid
 from dataclasses import dataclass
 from typing import Literal, NotRequired
+
 from pandas import DataFrame
 
-from ..reactive import Signal
 from .. import _inject
+from ..reactive import Signal
 from . import _emit, _state, widget
 
 table_widget_type: Literal["table"] = "table"
