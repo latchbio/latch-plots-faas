@@ -53,7 +53,7 @@ def w_plot(
     found = False
     global_key = None
     for k, v in _inject.kernel.k_globals.items():
-        if v == source:
+        if id(v._value) == id(source):
             global_key = k
             found = True
             break
