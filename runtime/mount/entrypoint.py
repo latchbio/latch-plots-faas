@@ -106,6 +106,26 @@ class PlotsNotebookKernelStateResp:
 
 
 @dataclass(frozen=True)
+class PlotCellValueViewer:
+    id: str
+
+
+@dataclass(frozen=True)
+class PlotCreateValueViewerCreateResp:
+    plotCellValueViewer: PlotCellValueViewer
+
+
+@dataclass(frozen=True)
+class PlotCreateValueViewerDataResp:
+    createPlotCellValueViewer: PlotCreateValueViewerCreateResp
+
+
+@dataclass(frozen=True)
+class PlotCreateValueViewerGQLResp:
+    data: PlotCreateValueViewerDataResp
+
+
+@dataclass(frozen=True)
 class TmpPlotsNotebookKernelSnapshotMode:
     tmpPlotsNotebookKernelSnapshotMode: bool
 
@@ -304,6 +324,34 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                 )
 
                 msg = {"type": msg["type"], "viewer_id": msg["viewer_id"]}
+
+            elif msg["type"] == "cell_value_viewer_init":
+                assert plots_ctx_manager.notebook_id is not None
+
+                await gql_query(
+                    auth=auth,
+                    query="""
+                        mutation UpsertPlotCellValueViewer(
+                            $notebookId: BigInt!,
+                            $widgetConnectionKey: String!
+                        ) {
+                            upsertPlotCellValueViewer(
+                                input: {
+                                    argNotebookId: $notebookId,
+                                    argWidgetConnectionKey: $widgetConnectionKey
+                                }
+                            ) {
+                                clientMutationId
+                            }
+                        }
+                    """,
+                    variables={
+                        "notebookId": plots_ctx_manager.notebook_id,
+                        "widgetConnectionKey": msg["unique_key"],
+                    },
+                )
+
+                continue
 
             elif msg["type"] == "plot_data":
                 await gql_query(

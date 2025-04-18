@@ -913,9 +913,13 @@ class Kernel:
 
     def emit_widget(self, key: str, data: WidgetState) -> None:
         assert ctx.cur_comp is not None
+        assert loop is not None
 
         ctx.cur_comp.widget_states[key] = data
         self.nodes_with_widgets[ctx.cur_comp.id] = ctx.cur_comp
+
+        if (data["type"] == "plot" or data["type"] == "table"):
+            loop.create_task(self.send({"type": "cell_value_viewer_init", "key": key, "unique_key": data["unique_key"]}))
 
         # todo(maximsmol): I don't think this is actually nullable anymore
         cell_id = ctx.cur_comp.cell_id
