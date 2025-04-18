@@ -921,6 +921,7 @@ class Kernel:
         if (data["type"] == "plot" or data["type"] == "table"):
             loop.create_task(self.send({"type": "cell_value_viewer_init", "key": key, "unique_key": data["unique_key"]}))
 
+        # todo(maximsmol): I don't think this is actually nullable anymore
         cell_id = ctx.cur_comp.cell_id
         if cell_id is not None:
             self.cells_with_pending_widget_updates.add(cell_id)
