@@ -107,7 +107,7 @@ class PlotsNotebookKernelStateResp:
 
 @dataclass(frozen=True)
 class PlotUpsertValueViewerCreateResp:
-    bigInt: int
+    bigInt: str | None
 
 
 @dataclass(frozen=True)
@@ -347,14 +347,15 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                 )
 
                 data = validate(resp, PlotUpsertValueViewerGQLResp)
-
-                await conn_k.send(
-                    {
-                        "type": "get_global",
-                        "viewer_id": data.data.upsertPlotCellValueViewer.bigInt,
-                        "key": msg["unique_key"],
-                    }
-                )
+                viewer_id = data.data.upsertPlotCellValueViewer.bigInt
+                if viewer_id is not None:
+                    await conn_k.send(
+                        {
+                            "type": "get_global",
+                            "viewer_id": viewer_id,
+                            "key": msg["unique_key"],
+                        }
+                    )
 
                 continue
 
