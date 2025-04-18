@@ -106,23 +106,18 @@ class PlotsNotebookKernelStateResp:
 
 
 @dataclass(frozen=True)
-class PlotCellValueViewer:
-    id: str
+class PlotUpsertValueViewerCreateResp:
+    bigInt: int
 
 
 @dataclass(frozen=True)
-class PlotCreateValueViewerCreateResp:
-    plotCellValueViewer: PlotCellValueViewer
+class PlotUpsertValueViewerDataResp:
+    upsertPlotCellValueViewer: PlotUpsertValueViewerCreateResp
 
 
 @dataclass(frozen=True)
-class PlotCreateValueViewerDataResp:
-    createPlotCellValueViewer: PlotCreateValueViewerCreateResp
-
-
-@dataclass(frozen=True)
-class PlotCreateValueViewerGQLResp:
-    data: PlotCreateValueViewerDataResp
+class PlotUpsertValueViewerGQLResp:
+    data: PlotUpsertValueViewerDataResp
 
 
 @dataclass(frozen=True)
@@ -328,7 +323,7 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
             elif msg["type"] == "cell_value_viewer_init":
                 assert plots_ctx_manager.notebook_id is not None
 
-                await gql_query(
+                resp = await gql_query(
                     auth=auth,
                     query="""
                         mutation UpsertPlotCellValueViewer(
@@ -341,7 +336,7 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                                     argWidgetConnectionKey: $widgetConnectionKey
                                 }
                             ) {
-                                clientMutationId
+                                bigInt
                             }
                         }
                     """,
@@ -349,6 +344,16 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                         "notebookId": plots_ctx_manager.notebook_id,
                         "widgetConnectionKey": msg["unique_key"],
                     },
+                )
+
+                data = validate(resp, PlotUpsertValueViewerGQLResp)
+
+                await conn_k.send(
+                    {
+                        "type": "get_global",
+                        "viewer_id": data.data.upsertPlotCellValueViewer.bigInt,
+                        "key": msg["unique_key"],
+                    }
                 )
 
                 continue
