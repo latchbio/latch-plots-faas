@@ -15,6 +15,7 @@ plot_widget_type: Literal["plot"] = "plot"
 class PlotState(_emit.WidgetState[plot_widget_type, str]):
     label: NotRequired[str | None]
     value_viewer_key: NotRequired[str | None]
+    plot_title: NotRequired[str | None]
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -57,12 +58,21 @@ def w_plot(
             global_key = k
             break
 
+    plot_title: str | None = None
+    if isinstance(source, Figure) or isinstance(source, SubFigure):
+        plot_title = source.axes[0].get_title()
+    elif isinstance(source, Axes):
+        plot_title = source.get_title()
+    else:
+        plot_title = source.layout.title.text
+
     res = Plot(
         _key=key,
         _state={
             "type": plot_widget_type,
             "label": label,
             "value_viewer_key": global_key,
+            "plot_title": plot_title,
         },
         _signal=_state.use_value_signal(key=key),
     )
