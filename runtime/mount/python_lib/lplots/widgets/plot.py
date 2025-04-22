@@ -14,8 +14,9 @@ plot_widget_type: Literal["plot"] = "plot"
 
 class PlotState(_emit.WidgetState[plot_widget_type, str]):
     label: NotRequired[str | None]
-    value_viewer_key: NotRequired[str | None]
     plot_title: NotRequired[str | None]
+    value_viewer_key: str
+    global_key: str
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -66,13 +67,17 @@ def w_plot(
     else:
         plot_title = source.layout.title.text
 
+    if global_key is None:
+        raise ValueError("Could not find source in global variables")
+
     res = Plot(
         _key=key,
         _state={
             "type": plot_widget_type,
             "label": label,
-            "value_viewer_key": global_key,
             "plot_title": plot_title,
+            "value_viewer_key": f"{global_key}_{key}",
+            "global_key": global_key,
         },
         _signal=_state.use_value_signal(key=key),
     )
