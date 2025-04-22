@@ -353,7 +353,7 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                         {
                             "type": "get_global",
                             "viewer_id": viewer_id,
-                            "key": msg["value_viewer_key"],
+                            "key": msg["global_key"],
                         }
                     )
 
