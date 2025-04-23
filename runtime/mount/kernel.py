@@ -1029,17 +1029,24 @@ class Kernel:
                     self.cell_status[cell_id] = "ok"
                     await self.send_cell_result(cell_id)
 
+                    adata_del_keys = []
                     for adata_key in self.ann_data_objects:
-                        if adata_key not in self.k_globals.touched:
+                        val = self.k_globals.get(adata_key)
+                        if val is None:
+                            adata_del_keys.append(adata_key)
                             continue
 
-                        val = self.k_globals[adata_key]
                         if isinstance(val, Signal):
                             val = val.sample()
 
                         if isinstance(val, ad.AnnData):
                             self.ann_data_objects[adata_key] = val
                             continue
+
+                        adata_del_keys.append(adata_key)
+
+                    for adata_key in adata_del_keys:
+                        del self.ann_data_objects[adata_key]
 
                 except (KeyboardInterrupt, Exception):
                     self.cell_status[cell_id] = "error"
