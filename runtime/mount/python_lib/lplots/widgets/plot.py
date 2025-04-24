@@ -47,7 +47,16 @@ def w_plot(
     *,
     key: str | None = None,
     label: str | None = None,
-    source: Figure | SubFigure | Axes | BaseFigure | FacetGrid | PairGrid | JointGrid,
+    source: (
+        Figure
+        | SubFigure
+        | Axes
+        | BaseFigure
+        | FacetGrid
+        | PairGrid
+        | JointGrid
+        | tuple[Axes]
+    ),
 ) -> Plot:
     key = _state.use_state_key(key=key)
 
@@ -69,7 +78,7 @@ def w_plot(
         plot_title = source.figure.get_suptitle()
         if plot_title == "":
             plot_title = " | ".join(ax.get_title() for ax in source.figure.axes)
-    else:
+    elif isinstance(source, BaseFigure):
         plot_title = source.layout.title.text
 
     if global_key is None:
