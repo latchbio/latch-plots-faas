@@ -4,6 +4,7 @@ from typing import Literal, NotRequired
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure, SubFigure
 from plotly.basedatatypes import BaseFigure
+from seaborn import FacetGrid
 
 from .. import _inject
 from ..reactive import Signal
@@ -46,7 +47,7 @@ def w_plot(
     *,
     key: str | None = None,
     label: str | None = None,
-    source: Figure | SubFigure | Axes | BaseFigure,
+    source: Figure | SubFigure | Axes | BaseFigure | FacetGrid,
 ) -> Plot:
     key = _state.use_state_key(key=key)
 
@@ -64,7 +65,9 @@ def w_plot(
         plot_title = source.axes[0].get_title()
     elif isinstance(source, Axes):
         plot_title = source.get_title()
-    else:
+    elif isinstance(source, FacetGrid):
+        plot_title = source.axes[0].get_title()
+    elif hasattr(source, "layout") and hasattr(source.layout, "title"):
         plot_title = source.layout.title.text
 
     if global_key is None:
