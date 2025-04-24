@@ -68,9 +68,7 @@ def w_plot(
     elif isinstance(source, (FacetGrid, PairGrid, JointGrid)):
         plot_title = source.figure.get_suptitle()
         if plot_title == "":
-            plot_title = " | ".join(
-                ax.get_title() for ax in source.axes if ax.get_title() is not None
-            )
+            plot_title = " | ".join(ax.get_title() for ax in source.figure.axes)
     else:
         plot_title = source.layout.title.text
 
