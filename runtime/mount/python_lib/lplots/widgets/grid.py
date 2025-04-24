@@ -1,3 +1,6 @@
+import types
+from abc import ABC
+from dataclasses import dataclass
 from typing import Literal
 
 from . import _emit, _state
@@ -29,7 +32,12 @@ AllowedWidgets = (
     | Table
 )
 
-GridChunk = tuple[list[AllowedWidgets], int, int]
+
+# todo(manske): allow for custom css to define layout
+class GridChunk:
+    items: list[AllowedWidgets]
+    col_span: int
+    row_span: int
 
 
 class GridWidgetState(_emit.WidgetState[Literal["grid"], None]):
@@ -38,13 +46,21 @@ class GridWidgetState(_emit.WidgetState[Literal["grid"], None]):
     rows: int
 
 
-from dataclasses import dataclass
-
-
 @dataclass(frozen=True, kw_only=True)
-class Grid:
+class Grid(ABC):
     _key: str
     _state: GridWidgetState
+
+    def __enter__(self) -> "Grid":
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: types.TracebackType | None,
+    ) -> None:
+        pass
 
     def add(
         self,
@@ -52,15 +68,19 @@ class Grid:
         col_span: int = 6,
         row_span: int = 1,
     ) -> None:
+        grid_items = GridChunk()
         if isinstance(items, AllowedWidgets):
-            grid_items: GridChunk = ([items], col_span, row_span)
+            grid_items.items = [items]
         else:
-            grid_items: GridChunk = (list(items), col_span, row_span)
+            grid_items.items = list(items)
 
+        grid_items.col_span = col_span
+        grid_items.row_span = row_span
         return self._state["grid_items"].append(grid_items)
 
 
-def w_row(*, key: str | None = None, columns: int = 12, rows: int = 1) -> None:
+# todo(manske): allow for custom css to define layout
+def w_grid(*, key: str | None = None, columns: int = 12, rows: int = 1) -> Grid:
     key = _state.use_state_key(key=key)
 
     res = Grid(
@@ -74,3 +94,4 @@ def w_row(*, key: str | None = None, columns: int = 12, rows: int = 1) -> None:
     )
 
     _emit.emit_widget(key, res._state)
+    return res
