@@ -61,11 +61,11 @@ def w_plot(
             break
 
     plot_title: str | None = None
-    if isinstance(source, (Figure, SubFigure)):
+    if isinstance(source, SubFigure | Figure):
         plot_title = source.axes[0].get_title()
     elif isinstance(source, Axes):
         plot_title = source.get_title()
-    elif isinstance(source, (FacetGrid, PairGrid, JointGrid)):
+    elif isinstance(source, FacetGrid | PairGrid | JointGrid):
         plot_title = source.figure.get_suptitle()
         if plot_title == "":
             plot_title = " | ".join(ax.get_title() for ax in source.figure.axes)
