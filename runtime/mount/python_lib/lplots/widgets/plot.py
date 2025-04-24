@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Literal, NotRequired, Sequence
+from typing import Literal, NotRequired
 
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure, SubFigure
@@ -47,7 +47,16 @@ def w_plot(
     *,
     key: str | None = None,
     label: str | None = None,
-    source: Figure | SubFigure | Axes | BaseFigure | FacetGrid | PairGrid | JointGrid | Sequence[Axes],
+    source: (
+        Figure
+        | SubFigure
+        | Axes
+        | BaseFigure
+        | FacetGrid
+        | PairGrid
+        | JointGrid
+        | tuple[Axes]
+    ),
 ) -> Plot:
     key = _state.use_state_key(key=key)
 
