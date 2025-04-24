@@ -67,7 +67,7 @@ def w_plot(
         plot_title = source.get_title()
     elif isinstance(source, FacetGrid):
         plot_title = source.axes[0].get_title()
-    elif hasattr(source, "layout") and hasattr(source.layout, "title"):
+    else:
         plot_title = source.layout.title.text
 
     if global_key is None:
