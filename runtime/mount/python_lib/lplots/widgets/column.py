@@ -4,23 +4,25 @@ from typing import Literal, TypeAlias
 from . import _emit, _state
 from .shared import InteractiveWidget
 
+AllowedWidget: TypeAlias = InteractiveWidget
 
-class RowWidgetState(_emit.WidgetState[Literal["row"], None]):
+
+class ColumnWidgetState(_emit.WidgetState[Literal["column"], None]):
     items: list[str]
 
 
 @dataclass(frozen=True, kw_only=True)
-class Row:
+class Column:
     _key: str
-    _state: RowWidgetState
+    _state: ColumnWidgetState
 
 
-def w_row(*, key: str | None = None, items: list[InteractiveWidget]) -> Row:
+def w_column(*, key: str | None = None, items: list[AllowedWidget]) -> Column:
     key = _state.use_state_key(key=key)
 
-    res = Row(
+    res = Column(
         _key=key,
-        _state={"type": "row", "items": [i._key for i in items]},
+        _state={"type": "column", "items": [i._key for i in items]},
     )
 
     _emit.emit_widget(key, res._state)
