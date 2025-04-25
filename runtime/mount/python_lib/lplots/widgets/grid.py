@@ -60,7 +60,7 @@ class Grid:
 def w_grid(
     *,
     key: str | None = None,
-    columns: int = 2,
+    columns: int,
     rows: int | None = None,
 ) -> Grid:
     key = _state.use_state_key(key=key)
