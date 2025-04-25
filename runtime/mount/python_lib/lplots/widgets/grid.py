@@ -1,15 +1,11 @@
 import types
 from dataclasses import dataclass
-from typing import Literal, Self, TypeAlias
+from typing import Literal, Self
 
-from . import _emit, _state
-from .column import Column
-from .interactive_widgets import InteractiveWidget
-from .row import Row
+from . import _emit, _state, widget
+from .widget import BaseWidget
 
 grid_widget_type: Literal["grid"] = "grid"
-
-AllowedWidget: TypeAlias = InteractiveWidget | Row | Column
 
 
 # todo(manske): allow for custom css to define layout
@@ -20,13 +16,13 @@ class GridItem:
     row_span: int
 
 
-class GridWidgetState(_emit.WidgetState[Literal["grid"], None]):
+class GridWidgetState(_emit.WidgetState[grid_widget_type, None]):
     grid_items: list[GridItem]
     template: str
 
 
 @dataclass(frozen=True, kw_only=True)
-class Grid:
+class Grid(widget.BaseWidget):
     _key: str
     _state: GridWidgetState
 
@@ -43,7 +39,7 @@ class Grid:
 
     def add(
         self,
-        item: AllowedWidget | list[AllowedWidget],
+        item: BaseWidget,
         col_span: int = 1,
         row_span: int = 1,
     ) -> None:
@@ -76,7 +72,7 @@ def w_grid(
     res = Grid(
         _key=key,
         _state={
-            "type": grid_widget_type,
+            "type": "grid",
             "grid_items": [],
             "template": template,
         },

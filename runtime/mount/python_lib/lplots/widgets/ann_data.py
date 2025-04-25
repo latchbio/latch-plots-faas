@@ -10,8 +10,10 @@ from . import _emit, _state, widget
 
 ad = auto_install.ad
 
+ann_data_widget_type: Literal["ann_data"] = "ann_data"
 
-class AnnDataState(_emit.WidgetState[Literal["ann_data"], str]):
+
+class AnnDataState(_emit.WidgetState[ann_data_widget_type, str]):
     obj_id: str
     readonly: bool
 
@@ -55,7 +57,7 @@ def w_ann_data(
     res = AnnData(
         _key=key,
         _state={
-            "type": "ann_data",
+            "type": ann_data_widget_type,
             "obj_id": anndata_key,
             "readonly": readonly,
         },
