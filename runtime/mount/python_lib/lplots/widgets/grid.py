@@ -61,16 +61,24 @@ def w_grid(
     *,
     key: str | None = None,
     columns: int = 2,
-    rows: int = 1,
+    rows: int | None = None,
 ) -> Grid:
     key = _state.use_state_key(key=key)
+
+    column_template = f"repeat({columns}, 1fr)"
+
+    row_template = "none"
+    if rows is not None:
+        row_template = f"repeat({rows}, auto)"
+
+    template = f"{row_template} / {column_template}"
 
     res = Grid(
         _key=key,
         _state={
             "type": grid_widget_type,
             "grid_items": [],
-            "template": f"repeat({rows}, 1fr) / repeat({columns}, 1fr)",
+            "template": template,
         },
     )
 
