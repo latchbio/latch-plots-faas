@@ -4,8 +4,8 @@ from typing import Literal, Self, TypeAlias
 
 from . import _emit, _state
 from .column import Column
+from .interactive_widgets import InteractiveWidget
 from .row import Row
-from .shared import InteractiveWidget
 
 grid_widget_type: Literal["grid"] = "grid"
 

@@ -1,10 +1,8 @@
 from dataclasses import dataclass
-from typing import Literal, TypeAlias
+from typing import Literal
 
 from . import _emit, _state
-from .shared import InteractiveWidget
-
-AllowedWidget: TypeAlias = InteractiveWidget
+from .interactive_widgets import InteractiveWidget
 
 
 class ColumnWidgetState(_emit.WidgetState[Literal["column"], None]):
@@ -17,7 +15,7 @@ class Column:
     _state: ColumnWidgetState
 
 
-def w_column(*, key: str | None = None, items: list[AllowedWidget]) -> Column:
+def w_column(*, key: str | None = None, items: list[InteractiveWidget]) -> Column:
     key = _state.use_state_key(key=key)
 
     res = Column(

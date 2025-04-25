@@ -1,8 +1,8 @@
 from dataclasses import dataclass
-from typing import Literal, TypeAlias
+from typing import Literal
 
 from . import _emit, _state
-from .shared import InteractiveWidget
+from .interactive_widgets import InteractiveWidget
 
 
 class RowWidgetState(_emit.WidgetState[Literal["row"], None]):
