@@ -14,14 +14,14 @@ AllowedWidget: TypeAlias = InteractiveWidget | Row | Column
 
 # todo(manske): allow for custom css to define layout
 @dataclass(frozen=True, kw_only=True)
-class GridChunk:
+class GridItem:
     item: str
     col_span: int
     row_span: int
 
 
 class GridWidgetState(_emit.WidgetState[Literal["grid"], None]):
-    grid_items: list[GridChunk]
+    grid_items: list[GridItem]
     template: str
 
 
@@ -47,7 +47,7 @@ class Grid:
         col_span: int = 1,
         row_span: int = 1,
     ) -> None:
-        grid_item = GridChunk(
+        grid_item = GridItem(
             item=item._key,
             col_span=col_span,
             row_span=row_span,
