@@ -1,3 +1,4 @@
+from abc import ABC
 from dataclasses import dataclass, field
 
 from ..persistence import SerializedWidget
@@ -6,7 +7,7 @@ from . import _emit
 
 
 @dataclass(frozen=True, kw_only=True)
-class BaseWidget:
+class BaseWidget(ABC):
     _key: str
     _state: _emit.WidgetState
 
