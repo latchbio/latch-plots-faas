@@ -8,6 +8,7 @@ from plotly.basedatatypes import BaseFigure
 from .. import _inject
 from ..reactive import Signal
 from . import _emit, _state, widget
+from .shared import OutputAppearance
 
 plot_widget_type: Literal["plot"] = "plot"
 
@@ -17,6 +18,7 @@ class PlotState(_emit.WidgetState[plot_widget_type, str]):
     plot_title: NotRequired[str | None]
     value_viewer_key: str
     global_key: str
+    appearance: OutputAppearance | None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -46,7 +48,8 @@ def w_plot(
     *,
     key: str | None = None,
     label: str | None = None,
-    source: Figure | SubFigure | Axes | BaseFigure,
+    source: Figure | SubFigure | Axes | BaseFigure | None = None,
+    appearance: OutputAppearance | None = None,
 ) -> Plot:
     key = _state.use_state_key(key=key)
 
@@ -78,6 +81,7 @@ def w_plot(
             "plot_title": plot_title,
             "value_viewer_key": f"{global_key}_{key}",
             "global_key": global_key,
+            "appearance": appearance,
         },
         _signal=_state.use_value_signal(key=key),
     )

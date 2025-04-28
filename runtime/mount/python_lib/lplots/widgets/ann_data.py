@@ -7,6 +7,7 @@ from lplots.ann_data.persistence import use_anndata_key
 from .. import _inject
 from ..reactive import Signal
 from . import _emit, _state, widget
+from .shared import OutputAppearance
 
 ad = auto_install.ad
 
@@ -16,6 +17,7 @@ ann_data_widget_type: Literal["ann_data"] = "ann_data"
 class AnnDataState(_emit.WidgetState[ann_data_widget_type, str]):
     obj_id: str
     readonly: bool
+    appearance: OutputAppearance | None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -46,8 +48,9 @@ class AnnData(widget.BaseWidget):
 def w_ann_data(
     *,
     key: str | None = None,
-    ann_data: ad.AnnData,
+    ann_data: ad.AnnData | None = None,
     readonly: bool = False,
+    appearance: OutputAppearance | None = None,
 ) -> AnnData:
     key = _state.use_state_key(key=key)
     anndata_key = use_anndata_key(ann_data)
@@ -60,6 +63,7 @@ def w_ann_data(
             "type": ann_data_widget_type,
             "obj_id": anndata_key,
             "readonly": readonly,
+            "appearance": appearance,
         },
         _signal=_state.use_value_signal(key=key),
     )
