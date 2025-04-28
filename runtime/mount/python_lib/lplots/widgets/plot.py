@@ -67,7 +67,7 @@ def w_plot(
         plot_title = source.axes[0].get_title()
     elif isinstance(source, Axes):
         plot_title = source.get_title()
-    else:
+    elif isinstance(source, BaseFigure):
         plot_title = source.layout.title.text
 
     if global_key is None:
