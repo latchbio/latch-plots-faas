@@ -11,3 +11,4 @@ class FormInputAppearance(TypedDict, total=False):
 
 class OutputAppearance(TypedDict, total=False):
     placeholder: str | None
+    outline_label: str | None

@@ -15,7 +15,7 @@ ann_data_widget_type: Literal["ann_data"] = "ann_data"
 
 
 class AnnDataState(_emit.WidgetState[ann_data_widget_type, str]):
-    obj_id: str
+    obj_id: str | None
     readonly: bool
     appearance: OutputAppearance | None
 
@@ -53,9 +53,11 @@ def w_ann_data(
     appearance: OutputAppearance | None = None,
 ) -> AnnData:
     key = _state.use_state_key(key=key)
-    anndata_key = use_anndata_key(ann_data)
 
-    _inject.kernel.ann_data_objects[anndata_key] = ann_data
+    anndata_key: str | None = None
+    if ann_data is not None:
+        anndata_key = use_anndata_key(ann_data)
+        _inject.kernel.ann_data_objects[anndata_key] = ann_data
 
     res = AnnData(
         _key=key,
