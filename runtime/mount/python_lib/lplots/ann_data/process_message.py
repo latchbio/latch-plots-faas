@@ -448,10 +448,10 @@ async def handle_ann_data_widget_message(
         gene_column = None
         fetched_for_var_key = None
         if "colored_by_type" in msg and "colored_by_key" in msg:
-            if msg["colored_by_type"] == "obs":
+            if msg["colored_by_type"] == "obs" and msg["colored_by_key"] in adata.obs:
                 obs, (unique_obs, counts), nrof_obs = get_obs(obj_id, adata, msg["colored_by_key"])
                 fetched_for_obs_key = msg["colored_by_key"]
-            elif msg["colored_by_type"] == "var":
+            elif msg["colored_by_type"] == "var" and msg["colored_by_key"] in adata.var_names:
                 gene_column = get_obs_vector(obj_id, adata, msg["colored_by_key"])
                 fetched_for_var_key = msg["colored_by_key"]
 
