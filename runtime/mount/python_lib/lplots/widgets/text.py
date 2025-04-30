@@ -79,17 +79,28 @@ class TextOutputWidgetState(_emit.WidgetState[Literal["text_output"], None]):
     appearance: NotRequired[TextOutputAppearance | None]
 
 
+@dataclass(frozen=True, kw_only=True)
+class TextOutputWidget(widget.BaseWidget):
+    _key: str
+    _state: TextOutputWidgetState
+
+
 def w_text_output(
     *,
     key: str | None = None,
     content: str,
     appearance: TextOutputAppearance | None = None,
-) -> None:
+) -> TextOutputWidget:
     key = _state.use_state_key(key=key)
 
-    w: TextOutputWidgetState = {
-        "type": "text_output",
-        "content": content,
-        "appearance": appearance,
-    }
-    _emit.emit_widget(key, w)
+    res = TextOutputWidget(
+        _key=key,
+        _state={
+            "type": "text_output",
+            "content": content,
+            "appearance": appearance,
+        },
+    )
+    _emit.emit_widget(key, res._state)
+
+    return res

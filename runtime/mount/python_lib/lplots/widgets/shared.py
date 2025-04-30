@@ -7,3 +7,7 @@ class FormInputAppearance(TypedDict, total=False):
     help_text: str | None
     error_text: str | None
     description: str | None
+
+
+class OutputAppearance(TypedDict, total=False):
+    placeholder: str | None

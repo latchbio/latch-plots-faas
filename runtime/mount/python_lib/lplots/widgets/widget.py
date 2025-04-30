@@ -1,5 +1,5 @@
 from abc import ABC
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from ..persistence import SerializedWidget
 from ..reactive import Signal
@@ -10,7 +10,9 @@ from . import _emit
 class BaseWidget(ABC):
     _key: str
     _state: _emit.WidgetState
-    _signal: Signal
+
+    # todo(maximsmol): fix typing here and make signal fields optional without breaking serialization somehow
+    _signal: Signal = field(default_factory=lambda: Signal(None))
 
     def serialize(self) -> SerializedWidget:
         return SerializedWidget(
