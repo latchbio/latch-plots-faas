@@ -38,4 +38,3 @@ def load_widget_helper(
     w_cls = _emit.widget_registry.get(s_widget["state"]["type"])
     assert w_cls is not None
     return w_cls.load(s_widget, widget_sigs)
-    return w_cls.load(s_widget, widget_sigs)
