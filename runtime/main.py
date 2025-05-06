@@ -15,7 +15,7 @@ from .mount.endpoints import http_routes, websocket_routes
 from .mount.entrypoint import shutdown, start_kernel_proc
 
 cfg = HypercornConfig()
-cfg.bind = ["0.0.0.0:5000"]
+cfg.bind = ["[::]:5000"]
 cfg.use_reloader = config.auto_reload
 cfg.graceful_timeout = 0.1
 
