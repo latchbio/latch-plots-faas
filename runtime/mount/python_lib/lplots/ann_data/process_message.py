@@ -688,12 +688,13 @@ async def handle_ann_data_widget_message(
                 msg["points_I"],
                 msg["points_J"],
                 msg["alignment_method"],
-                image_bytes
+                image_bytes,
+                adata
         )
         return {
             "type": "ann_data",
             "op": op,
-            "key": aligned_obs_key,
+            "key": widget_session_key,
             "value": {"data": {"aligned_obs_key": aligned_obs_key}},
         }
 
