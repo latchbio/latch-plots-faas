@@ -7,7 +7,7 @@ from PIL import Image
 from scipy.linalg import lstsq
 
 ad = auto_install.ad
-torch, STalign = auto_install.stalign
+STalign, torch = auto_install.stalign
 
 
 class AlignmentMethod(Enum):
@@ -49,8 +49,9 @@ def align_image(scatter_data_key: str,
 
         X_aligned = np.column_stack([I[0], I[1]])  # (N,2)
 
-        adata.obsm["X_affine_aligned"] = X_aligned
-        return
+        k = "X_affine_aligned"
+        adata.obsm[k] = X_aligned
+        return k
 
     assert image_bytes is not None
 
@@ -102,5 +103,6 @@ def align_image(scatter_data_key: str,
     tpts = STalign.transform_points_source_to_target(
         out["xv"], out["v"], out["A"], pts_torch
     )
-    adata.obsm["X_staligned"] = tpts.cpu().numpy()
-    return
+    k = "X_staligned"
+    adata.obsm[k] = tpts.cpu().numpy()
+    return k
