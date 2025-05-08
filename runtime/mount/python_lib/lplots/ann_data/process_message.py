@@ -9,7 +9,7 @@ from matplotlib.path import Path
 from numpy.typing import NDArray
 from PIL import Image
 
-from lplots.ann_data import auto_install
+from lplots.ann_data import align_image, auto_install
 
 from .. import _inject
 
@@ -329,7 +329,7 @@ async def handle_ann_data_widget_message(
     op = msg["op"]
 
     if op == "init_data":
-        init_obsm_key = msg.get("obsm_key", None)
+        init_obsm_key = msg.get("obsm_key")
         possible_obsm_keys = adata.obsm_keys()
         if init_obsm_key is None:
             for key in possible_obsm_keys:
@@ -341,8 +341,8 @@ async def handle_ann_data_widget_message(
 
         possible_obs_keys = adata.obs_keys()
 
-        init_obs_key = msg.get("obs_key", None)
-        init_var_key = msg.get("var_key", None)
+        init_obs_key = msg.get("obs_key")
+        init_var_key = msg.get("var_key")
         if init_obs_key is None and init_var_key is None:
             for key in possible_obs_keys:
                 if "cell" in key.lower() and "type" in key.lower():
@@ -672,6 +672,29 @@ async def handle_ann_data_widget_message(
             "op": op,
             "key": widget_session_key,
             "value": {"data": {"image": image_uri, "fetched_for_node_id": msg.get("node_id")}},
+        }
+
+    if op == "align_image":
+        try:
+            image_bytes = pil_image_cache[msg["node_id"]]
+        except KeyError:
+            return {
+                "type": "ann_data",
+                "op": op,
+                "key": widget_session_key,
+                "value": {"error": {f"attempting to align image from an unprocessed node (nid: {msg['node_id']})"}},
+            }
+        aligned_obs_key = align_image(
+                msg["points_I"],
+                msg["points_J"],
+                msg["alignment_method"],
+                image_bytes
+        )
+        return {
+            "type": "ann_data",
+            "op": op,
+            "key": aligned_obs_key,
+            "value": {"data": {"aligned_obs_key": aligned_obs_key}},
         }
 
     raise ValueError(f"Invalid operation: {op}")
