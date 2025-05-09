@@ -318,7 +318,13 @@ async def handle_ann_data_widget_message(
 
     adata: ad.AnnData = _inject.kernel.ann_data_objects[obj_id]
 
-    if "op" not in msg or msg["op"] not in {"init_data", "get_obsm_options", "get_obsm", "get_obs_options", "get_obs", "get_counts_column", "mutate_obs", "drop_obs", "rename_obs", "fetch_and_process_image"}:
+    if "op" not in msg or msg["op"] not in {"init_data", "get_obsm_options",
+                                            "get_obsm", "get_obs_options",
+                                            "get_obs", "get_counts_column",
+                                            "mutate_obs", "drop_obs",
+                                            "rename_obs",
+                                            "fetch_and_process_image",
+                                            "align_image"}:
         return {
             "type": "ann_data",
             "key": widget_session_key,
