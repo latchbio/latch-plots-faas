@@ -25,6 +25,7 @@ ad = install_and_import_anndata()
 def install_and_import_stalign_and_torch() -> tuple["STalign", "torch"]:  # type: ignore
     try:
         import STalign  # type: ignore  # noqa: PLC0415
+        import torch  # type: ignore  # noqa: PLC0415
     except ImportError:
 
         # note(kenny): author's dumped pip freeze into build requirements in
