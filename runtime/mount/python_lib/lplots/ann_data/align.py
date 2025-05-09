@@ -42,7 +42,7 @@ def align_image(
     X_data = adata.obsm[scatter_data_key]            # (N,2) x,y
     xs, ys = X_data.T
 
-    if alignment_method == AlignmentMethod.affine:
+    if alignment_method == AlignmentMethod.affine.value:
         J = np.vstack([xs, ys])             # (2,N)
 
         I = (L @ J + T[:, None])            # (2,N)
