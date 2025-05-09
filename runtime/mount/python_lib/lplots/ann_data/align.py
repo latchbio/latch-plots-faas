@@ -1,4 +1,5 @@
 from enum import Enum
+from io import BytesIO
 
 import numpy as np
 from lplots.ann_data import auto_install
@@ -54,7 +55,7 @@ def align_image(
 
     assert image_bytes is not None
 
-    V = np.array(Image.open(io.BytesIO(image_bytes))) / 255.0
+    V = np.array(Image.open(BytesIO(image_bytes))) / 255.0
     I_img = STalign.normalize(V).transpose(2, 0, 1)
     I_y = np.arange(I_img.shape[1])
     I_x = np.arange(I_img.shape[2])
