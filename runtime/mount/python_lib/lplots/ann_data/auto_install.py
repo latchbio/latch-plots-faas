@@ -4,10 +4,8 @@ from typing import TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
     import anndata  # type: ignore
-
-if TYPE_CHECKING:
     import STalign  # type: ignore
-    import torch
+    import torch  # type: ignore
 
 
 def install_and_import_anndata() -> "anndata":  # type: ignore
