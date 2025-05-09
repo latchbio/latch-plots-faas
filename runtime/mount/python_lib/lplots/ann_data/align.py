@@ -7,8 +7,6 @@ from PIL import Image
 from scipy.linalg import lstsq
 
 ad = auto_install.ad
-STalign = auto_install.stalign
-torch = auto_install.torch
 
 
 class AlignmentMethod(Enum):
@@ -24,6 +22,8 @@ def align_image(
         image_bytes: bytes | None,
         adata: ad.AnnData,
         ) -> str:
+
+    STalign, torch = auto_install.install_and_import_stalign_and_torch()
 
     # Each (k, 2)
     # k := # anchor points
