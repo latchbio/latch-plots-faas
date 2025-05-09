@@ -1,4 +1,3 @@
-import io
 from enum import Enum
 
 import numpy as np

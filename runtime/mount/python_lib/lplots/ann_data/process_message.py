@@ -5,10 +5,12 @@ from typing import Any
 import aiohttp
 import numpy as np
 import pandas as pd
-from lplots.ann_data import align_image, auto_install
 from matplotlib.path import Path
 from numpy.typing import NDArray
 from PIL import Image
+
+from lplots.ann_data import auto_install
+from lplots.ann_data.align import align_image
 
 from .. import _inject
 
