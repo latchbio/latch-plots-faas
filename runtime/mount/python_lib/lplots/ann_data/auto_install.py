@@ -22,7 +22,7 @@ def install_and_import_anndata() -> "anndata":  # type: ignore
 ad = install_and_import_anndata()
 
 
-def install_and_import_stalign() -> tuple["STalign", "torch"]:  # type: ignore
+def install_and_import_stalign_and_torch() -> tuple["STalign", "torch"]:  # type: ignore
     try:
         import STalign  # type: ignore  # noqa: PLC0415
     except ImportError:
@@ -45,4 +45,4 @@ def install_and_import_stalign() -> tuple["STalign", "torch"]:  # type: ignore
     return cast("STalign", STalign), cast("torch", torch)
 
 
-stalign = install_and_import_stalign()
+stalign, torch = install_and_import_stalign_and_torch()
