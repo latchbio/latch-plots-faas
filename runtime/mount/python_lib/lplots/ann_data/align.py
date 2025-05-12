@@ -23,8 +23,6 @@ def align_image(
         adata: ad.AnnData,
         ) -> str:
 
-    STalign, torch = auto_install.install_and_import_stalign_and_torch()
-
     # Each (k, 2)
     # k := # anchor points
     points_I = np.asarray(points_I, dtype=float)
@@ -54,6 +52,8 @@ def align_image(
         return k
 
     assert image_bytes is not None
+
+    STalign, torch = auto_install.install_and_import_stalign_and_torch()
 
     V = np.array(Image.open(BytesIO(image_bytes))) / 255.0
     I_img = STalign.normalize(V).transpose(2, 0, 1)
