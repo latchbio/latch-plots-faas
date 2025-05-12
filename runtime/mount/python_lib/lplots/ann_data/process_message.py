@@ -5,12 +5,11 @@ from typing import Any
 import aiohttp
 import numpy as np
 import pandas as pd
+from lplots.ann_data import auto_install
+from lplots.ann_data.align import align_image
 from matplotlib.path import Path
 from numpy.typing import NDArray
 from PIL import Image
-
-from lplots.ann_data import auto_install
-from lplots.ann_data.align import align_image
 
 from .. import _inject
 
@@ -689,8 +688,9 @@ async def handle_ann_data_widget_message(
                 "type": "ann_data",
                 "op": op,
                 "key": widget_session_key,
-                "value": {"error": {f"attempting to align image from an unprocessed node (nid: {msg['node_id']})"}},
+                "value": {"error": f"attempting to align image from an unprocessed node (nid: {msg['node_id']})"},
             }
+
         aligned_obs_key = align_image(
                 msg["scatter_data_key"],
                 msg["points_I"],
