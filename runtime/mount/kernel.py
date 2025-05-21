@@ -33,9 +33,9 @@ from latch.ldata.path import LPath
 from latch.registry.table import Table
 from latch_cli.utils import urljoins
 from lplots import _inject
-from lplots.h5 import auto_install
-from lplots.h5.persistence import load_anndata, serialize_anndata
-from lplots.h5.process_message import handle_ann_data_widget_message
+from runtime.mount.python_lib.lplots.h5.utils.persistence import load_anndata, serialize_anndata
+from runtime.mount.python_lib.lplots.h5.process_message import handle_h5_widget_message
+from runtime.mount.python_lib.lplots.h5.utils import auto_install
 from lplots.persistence import (
     SerializedNode,
     SerializedSignal,
@@ -1614,7 +1614,7 @@ class Kernel:
             return
 
         if msg["type"] == "ann_data":
-            await self.send(await handle_ann_data_widget_message(msg))
+            await self.send(await handle_h5_widget_message(msg))
             return
 
 
