@@ -21,7 +21,7 @@ from io import TextIOWrapper
 from pathlib import Path
 from traceback import format_exc
 from types import FrameType
-from typing import TYPE_CHECKING, Any, Literal, TypedDict, TypeVar
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, Literal, TypedDict, TypeVar
 
 import numpy as np
 import orjson
@@ -557,6 +557,8 @@ class Kernel:
     restored_nodes: dict[str, Node] = field(default_factory=dict)
     restored_signals: dict[str, Signal[object]] = field(default_factory=dict)
     restored_globals: dict[str, object] = field(default_factory=dict)
+
+    get_presigned_url: Callable[[str], Awaitable[str]] = field(default=get_presigned_url)
 
     def __post_init__(self) -> None:
         self.k_globals = TracedDict(self.duckdb)

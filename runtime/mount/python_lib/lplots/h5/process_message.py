@@ -1,7 +1,5 @@
 from typing import Any
 
-from mount.utils import get_presigned_url
-
 from lplots.h5.h5ad.process_message import process_h5ad_request
 from lplots.h5.h5spatial.process_message import (
     process_h5spatial_request,
@@ -68,7 +66,7 @@ async def handle_h5_widget_message(
                     cell_comp TEXT
                 )
             """)
-            presigned_url = await get_presigned_url(widget_state.transcript_path.path)
+            presigned_url = await _inject.kernel.get_presigned_url(widget_state.transcript_path.path)
             _inject.kernel.duckdb.execute(f"""
                 COPY {duckdb_table_name}
                 FROM '{presigned_url}'
