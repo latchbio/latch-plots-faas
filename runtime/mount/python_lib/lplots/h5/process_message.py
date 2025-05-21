@@ -43,7 +43,7 @@ async def handle_h5_widget_message(
         return await process_h5ad_request(msg, widget_session_key, adata, obj_id)
 
     if isinstance(widget_state, H5Spatial):
-        duckdb_table_name = f"h5_spatial_{widget_state.transcript_path.version_id()}"
+        duckdb_table_name = f"h5spatial_{widget_state.transcript_path.version_id()}"
 
         table_exists = _inject.kernel.duckdb.execute("""
             SELECT EXISTS (
