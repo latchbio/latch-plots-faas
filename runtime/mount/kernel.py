@@ -33,9 +33,9 @@ from latch.ldata.path import LPath
 from latch.registry.table import Table
 from latch_cli.utils import urljoins
 from lplots import _inject
-from lplots.ann_data import auto_install
-from lplots.ann_data.persistence import load_anndata, serialize_anndata
-from lplots.ann_data.process_message import handle_ann_data_widget_message
+from lplots.h5 import auto_install
+from lplots.h5.persistence import load_anndata, serialize_anndata
+from lplots.h5.process_message import handle_ann_data_widget_message
 from lplots.persistence import (
     SerializedNode,
     SerializedSignal,
