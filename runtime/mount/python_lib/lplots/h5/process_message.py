@@ -52,7 +52,9 @@ async def handle_h5_widget_message(
                 FROM information_schema.tables
                 WHERE table_name = ?
             )
-        """, [duckdb_table_name]).fetchone()[0]
+        """, [duckdb_table_name]).fetchone()
+        assert table_exists is not None
+        table_exists = table_exists[0]
 
         if not table_exists:
             _inject.kernel.duckdb.execute(f"""
