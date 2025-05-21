@@ -2,6 +2,9 @@ from typing import Any
 
 from lplots.widgets.h5 import H5AD, H5Spatial
 from runtime.mount.python_lib.lplots.h5.h5ad.process_message import process_h5ad_request
+from runtime.mount.python_lib.lplots.h5.h5spatial.process_message import (
+    process_h5spatial_request,
+)
 from runtime.mount.python_lib.lplots.h5.utils import auto_install
 from runtime.mount.utils import get_presigned_url
 
@@ -45,8 +48,8 @@ async def handle_h5_widget_message(
 
         table_exists = _inject.kernel.duckdb.execute("""
             SELECT EXISTS (
-                SELECT 1 
-                FROM information_schema.tables 
+                SELECT 1
+                FROM information_schema.tables
                 WHERE table_name = ?
             )
         """, [duckdb_table_name]).fetchone()[0]
@@ -69,12 +72,6 @@ async def handle_h5_widget_message(
                 (FORMAT 'PARQUET')
             """)
 
-        return {
-            "type": "ann_data",
-            "key": widget_session_key,
-            "value": {
-                "table_name": duckdb_table_name
-            }
-        }
+        return await process_h5spatial_request(msg, widget_session_key, duckdb_table_name)
 
     raise ValueError(f"Invalid H5 viewer message: {msg}")
