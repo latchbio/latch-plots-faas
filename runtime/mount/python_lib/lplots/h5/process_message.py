@@ -15,9 +15,9 @@ ad = auto_install.ad
 async def handle_h5_widget_message(
     msg: dict[str, Any],
 ) -> dict[str, Any]:
-    if msg["type"] != "ann_data" or "key" not in msg or "state" not in msg:
+    if msg["type"] != "h5" or "key" not in msg or "state" not in msg:
         return {
-            "type": "ann_data",
+            "type": "h5",
             "key": None,
             "value": {
                 "error": "Invalid message -- missing `key` or `state`",
@@ -31,7 +31,7 @@ async def handle_h5_widget_message(
         obj_id = widget_state.obj_id
         if obj_id is None or obj_id not in _inject.kernel.ann_data_objects:
             return {
-                "type": "ann_data",
+                "type": "h5",
                 "key": widget_session_key,
                 "value": {
                     "error": f"AnnData object with ID {obj_id} not found in cache",

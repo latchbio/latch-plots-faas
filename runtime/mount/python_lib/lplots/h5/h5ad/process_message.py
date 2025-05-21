@@ -31,7 +31,7 @@ async def process_h5ad_request(
                                             "fetch_and_process_image",
                                             "align_image"}:
         return {
-            "type": "ann_data",
+            "type": "h5",
             "key": widget_session_key,
             "value": {
                 "error": f"Invalid operation: {msg.get('op', '`op` key missing from message')}",
@@ -86,7 +86,7 @@ async def process_h5ad_request(
         var_index, var_names = get_var_index(obj_id, adata)
 
         return {
-            "type": "ann_data",
+            "type": "h5",
             "op": op,
             "key": widget_session_key,
             "value": {
@@ -125,7 +125,7 @@ async def process_h5ad_request(
 
     if op == "get_obsm_options":
         return {
-            "type": "ann_data",
+            "type": "h5",
             "op": op,
             "key": widget_session_key,
             "value": {"data": list(adata.obsm.keys())},
@@ -134,7 +134,7 @@ async def process_h5ad_request(
     if op == "get_obsm":
         if "obsm_key" not in msg or msg["obsm_key"] not in adata.obsm:
             return {
-                "type": "ann_data",
+                "type": "h5",
                 "op": op,
                 "key": widget_session_key,
                 "value": {
@@ -146,7 +146,7 @@ async def process_h5ad_request(
         obsm, index, recomputed_index = get_obsm(obj_id, adata, msg["obsm_key"], filters)
         if obsm is None or index is None:
             return {
-                "type": "ann_data",
+                "type": "h5",
                 "op": op,
                 "key": widget_session_key,
                 "value": {"error": "Failed to get obsm"},
@@ -168,7 +168,7 @@ async def process_h5ad_request(
                 fetched_for_var_key = msg["colored_by_key"]
 
         return {
-            "type": "ann_data",
+            "type": "h5",
             "op": op,
             "key": widget_session_key,
             "value": {
@@ -191,7 +191,7 @@ async def process_h5ad_request(
 
     if op == "get_obs_options":
         return {
-            "type": "ann_data",
+            "type": "h5",
             "op": op,
             "key": widget_session_key,
             "value": {
@@ -202,7 +202,7 @@ async def process_h5ad_request(
     if op == "get_obs":
         if "obs_key" not in msg or msg["obs_key"] not in adata.obs:
             return {
-                "type": "ann_data",
+                "type": "h5",
                 "op": op,
                 "key": widget_session_key,
                 "value": {
@@ -213,7 +213,7 @@ async def process_h5ad_request(
         obs, (unique_obs, counts), nrof_obs = get_obs(obj_id, adata, msg["obs_key"])
 
         return {
-            "type": "ann_data",
+            "type": "h5",
             "op": op,
             "key": widget_session_key,
             "value": {
@@ -230,7 +230,7 @@ async def process_h5ad_request(
     if op == "get_counts_column":
         if "var_index" not in msg or msg["var_index"] not in adata.var_names:
             return {
-                "type": "ann_data",
+                "type": "h5",
                 "op": op,
                 "key": widget_session_key,
                 "value": {
@@ -241,7 +241,7 @@ async def process_h5ad_request(
         gene_column = get_obs_vector(obj_id, adata, msg["var_index"])
 
         return {
-            "type": "ann_data",
+            "type": "h5",
             "op": op,
             "key": widget_session_key,
             "value": {"data": {
@@ -253,7 +253,7 @@ async def process_h5ad_request(
     if op == "mutate_obs":
         if "obs_key" not in msg:
             return {
-                "type": "ann_data",
+                "type": "h5",
                 "op": op,
                 "key": widget_session_key,
                 "value": {"error": "`obs_key` key missing from message"},
@@ -265,7 +265,7 @@ async def process_h5ad_request(
             obs_dtype = msg.get("obs_dtype")
             if obs_dtype is not None and obs_dtype not in {"category", "int64", "float64", "bool"}:
                 return {
-                    "type": "ann_data",
+                    "type": "h5",
                     "op": op,
                     "key": widget_session_key,
                     "value": {"error": f"Invalid dtype: {obs_dtype}"},
@@ -291,7 +291,7 @@ async def process_h5ad_request(
         obs, (unique_obs, counts), nrof_obs = get_obs(obj_id, adata, obs_key)
 
         return {
-            "type": "ann_data",
+            "type": "h5",
             "op": "get_obs",
             "key": widget_session_key,
             "value": {
@@ -311,7 +311,7 @@ async def process_h5ad_request(
     if op == "drop_obs":
         if "obs_key" not in msg:
             return {
-                "type": "ann_data",
+                "type": "h5",
                 "op": op,
                 "key": widget_session_key,
                 "value": {"error": "`obs_key` key missing from message"},
@@ -320,7 +320,7 @@ async def process_h5ad_request(
         obs_key = msg["obs_key"]
         if obs_key not in adata.obs:
             return {
-                "type": "ann_data",
+                "type": "h5",
                 "op": op,
                 "key": widget_session_key,
                 "value": {"error": "Observation key not found"},
@@ -329,7 +329,7 @@ async def process_h5ad_request(
         adata.obs = adata.obs.drop(columns=[obs_key])
 
         return {
-            "type": "ann_data",
+            "type": "h5",
             "op": op,
             "key": widget_session_key,
             "value": {"data": {
@@ -340,7 +340,7 @@ async def process_h5ad_request(
     if op == "rename_obs":
         if "old_obs_key" not in msg or "new_obs_key" not in msg:
             return {
-                "type": "ann_data",
+                "type": "h5",
                 "op": op,
                 "key": widget_session_key,
                 "value": {"error": "`old_obs_key` and `new_obs_key` keys missing from message"},
@@ -351,7 +351,7 @@ async def process_h5ad_request(
 
         if old_obs_key not in adata.obs:
             return {
-                "type": "ann_data",
+                "type": "h5",
                 "op": op,
                 "key": widget_session_key,
                 "value": {"error": "Observation key not found"},
@@ -360,7 +360,7 @@ async def process_h5ad_request(
         adata.obs = adata.obs.rename(columns={old_obs_key: new_obs_key})
 
         return {
-            "type": "ann_data",
+            "type": "h5",
             "op": op,
             "key": widget_session_key,
             "value": {"data": {
@@ -372,7 +372,7 @@ async def process_h5ad_request(
     if op == "fetch_and_process_image":
         if "s3_presigned_url" not in msg or "node_id" not in msg:
             return {
-                "type": "ann_data",
+                "type": "h5",
                 "op": op,
                 "key": widget_session_key,
                 "value": {"error": "`s3_presigned_url` or `node_id` key missing from message"},
@@ -380,7 +380,7 @@ async def process_h5ad_request(
 
         image_uri = await fetch_and_process_image(msg["node_id"], msg["s3_presigned_url"])
         return {
-            "type": "ann_data",
+            "type": "h5",
             "op": op,
             "key": widget_session_key,
             "value": {"data": {"image": image_uri, "fetched_for_node_id": msg.get("node_id")}},
@@ -391,7 +391,7 @@ async def process_h5ad_request(
             image_bytes = pil_image_cache[msg["node_id"]]
         except KeyError:
             return {
-                "type": "ann_data",
+                "type": "h5",
                 "op": op,
                 "key": widget_session_key,
                 "value": {"error": f"attempting to align image from an unprocessed node (nid: {msg['node_id']})"},
@@ -406,7 +406,7 @@ async def process_h5ad_request(
                 adata
         )
         return {
-            "type": "ann_data",
+            "type": "h5",
             "op": op,
             "key": widget_session_key,
             "value": {"data": {"aligned_obs_key": aligned_obs_key}},

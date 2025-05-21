@@ -1615,7 +1615,7 @@ class Kernel:
             await self.save_kernel_snapshot()
             return
 
-        if msg["type"] == "ann_data":
+        if msg["type"] == "h5":
             await self.send(await handle_h5_widget_message(msg))
             return
 

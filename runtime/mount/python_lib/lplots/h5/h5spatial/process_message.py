@@ -65,7 +65,7 @@ async def process_h5spatial_request(  # noqa: RUF029
 ) -> dict[str, Any]:
     if "op" not in msg or msg["op"] not in {"init_data"}:  # noqa: FURB171
         return {
-            "type": "ann_data",
+            "type": "h5",
             "key": widget_session_key,
             "value": {
                 "error": f"Invalid h5spatial operation: {msg.get('op', '`op` key missing from message')}",
@@ -88,7 +88,7 @@ async def process_h5spatial_request(  # noqa: RUF029
         data = sampled_data.fetchall()
 
         return {
-            "type": "ann_data",
+            "type": "h5",
             "op": op,
             "key": widget_session_key,
             "value": {
@@ -100,7 +100,7 @@ async def process_h5spatial_request(  # noqa: RUF029
         }
 
     return {
-        "type": "ann_data",
+        "type": "h5",
         "key": widget_session_key,
         "value": {
             "error": f"Unsupported operation: {op}",
