@@ -3,8 +3,8 @@ from typing import Literal
 
 from latch.ldata.path import LPath
 
-from runtime.mount.python_lib.lplots.h5.utils import auto_install
-from runtime.mount.python_lib.lplots.h5.utils.persistence import use_anndata_key
+from lplots.h5.utils import auto_install
+from lplots.h5.utils.persistence import use_anndata_key
 
 from .. import _inject
 from ..reactive import Signal

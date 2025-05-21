@@ -2,7 +2,7 @@ import uuid
 from pathlib import Path
 from typing import TypedDict
 
-from runtime.mount.python_lib.lplots.h5.utils import auto_install
+from lplots.h5.utils import auto_install
 
 ad = auto_install.ad
 

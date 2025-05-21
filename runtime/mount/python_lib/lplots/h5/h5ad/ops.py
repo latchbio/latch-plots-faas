@@ -9,7 +9,7 @@ from matplotlib.path import Path
 from numpy.typing import NDArray
 from PIL import Image
 
-from runtime.mount.python_lib.lplots.h5.utils import auto_install
+from lplots.h5.utils import auto_install
 
 Image.MAX_IMAGE_PIXELS = None  # TIFFs can be huge, and PIL detects a decompression bomb on many ~400mb examples otherwise
 

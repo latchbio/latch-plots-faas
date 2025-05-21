@@ -1,6 +1,6 @@
 from typing import Any
 
-from runtime.mount.python_lib.lplots.h5.h5ad.ops import (
+from lplots.h5.h5ad.ops import (
     fetch_and_process_image,
     get_obs,
     get_obs_vector,
@@ -10,8 +10,8 @@ from runtime.mount.python_lib.lplots.h5.h5ad.ops import (
     mutate_obs_by_value,
     pil_image_cache,
 )
-from runtime.mount.python_lib.lplots.h5.utils import auto_install
-from runtime.mount.python_lib.lplots.h5.utils.align import align_image
+from lplots.h5.utils import auto_install
+from lplots.h5.utils.align import align_image
 
 ad = auto_install.ad
 

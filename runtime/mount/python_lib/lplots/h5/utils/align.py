@@ -5,7 +5,7 @@ import numpy as np
 from PIL import Image
 from scipy.linalg import lstsq
 
-from runtime.mount.python_lib.lplots.h5.utils import auto_install
+from lplots.h5.utils import auto_install
 
 ad = auto_install.ad
 

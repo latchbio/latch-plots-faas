@@ -1,12 +1,13 @@
 from typing import Any
 
-from lplots.widgets.h5 import H5AD, H5Spatial
-from runtime.mount.python_lib.lplots.h5.h5ad.process_message import process_h5ad_request
-from runtime.mount.python_lib.lplots.h5.h5spatial.process_message import (
+from mount.utils import get_presigned_url
+
+from lplots.h5.h5ad.process_message import process_h5ad_request
+from lplots.h5.h5spatial.process_message import (
     process_h5spatial_request,
 )
-from runtime.mount.python_lib.lplots.h5.utils import auto_install
-from runtime.mount.utils import get_presigned_url
+from lplots.h5.utils import auto_install
+from lplots.widgets.h5 import H5AD, H5Spatial
 
 from .. import _inject
 
