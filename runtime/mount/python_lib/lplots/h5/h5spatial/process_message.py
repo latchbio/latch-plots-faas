@@ -1,7 +1,6 @@
 from typing import Any
 
 import duckdb
-from duckdb import DuckDBPyRelation
 
 from ... import _inject
 
@@ -14,53 +13,27 @@ def get_spatial_sample(
     x_max: float,
     y_max: float,
     max_points: int = 100000,
-) -> tuple[DuckDBPyRelation, int, int]:
+) -> tuple[duckdb.DuckDBPyRelation, int, int]:
     points_in_scope_q = conn.sql(f"""
-        SELECT COUNT(*) as cnt
+        SELECT COUNT(*) AS cnt
         FROM {table_name}
         WHERE global_x >= {x_min} AND global_x <= {x_max}
-            AND global_y >= {y_min} AND global_y <= {y_max}
+          AND global_y >= {y_min} AND global_y <= {y_max}
     """).fetchone()  # noqa: S608
     points_in_scope = 0 if points_in_scope_q is None else points_in_scope_q[0]
 
-    total_points_q = conn.sql(f"""
-        SELECT COUNT(*) as cnt
-        FROM {table_name}
-    """).fetchone()  # noqa: S608
+    total_points_q = conn.sql(f"""SELECT COUNT(*) AS cnt FROM {table_name}""").fetchone()  # noqa: S608
     total_points = 0 if total_points_q is None else total_points_q[0]
 
-    if points_in_scope <= max_points:
-        return conn.sql(f"""
-            SELECT *
-            FROM {table_name}
-            WHERE global_x >= {x_min} AND global_x <= {x_max}
-                AND global_y >= {y_min} AND global_y <= {y_max}
-        """), points_in_scope, total_points  # noqa: S608
-
-    max_occupancy = 2
-    total_cells = max_points // max_occupancy
-
-    viewport_width = x_max - x_min
-    viewport_height = y_max - y_min
-
-    cells_x = int((total_cells * viewport_width / viewport_height) ** 0.5)
-    cells_y = total_cells // cells_x
-
-    spatial_data = conn.sql(f"""
-        SELECT
-            *,
-            row_number() OVER (
-                PARTITION BY
-                    floor(({cells_x} * (global_x - {x_min}) / {viewport_width}) +
-                    {cells_x} * floor({cells_y} * (global_y - {y_min}) / {viewport_height}))
-            ) as row_num
+    sampled_rel = conn.sql(f"""
+        SELECT *
         FROM {table_name}
         WHERE global_x >= {x_min} AND global_x <= {x_max}
-            AND global_y >= {y_min} AND global_y <= {y_max}
+          AND global_y >= {y_min} AND global_y <= {y_max}
+        LIMIT {max_points}
     """)  # noqa: S608
 
-    filtered_data = spatial_data.filter(f"row_num <= {max_occupancy}")
-    return filtered_data.order("random()").limit(max_points), points_in_scope, total_points
+    return sampled_rel, points_in_scope, total_points
 
 
 async def process_h5spatial_request(  # noqa: RUF029
