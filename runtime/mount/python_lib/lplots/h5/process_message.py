@@ -1,3 +1,4 @@
+import time
 from typing import Any
 
 from latch.ldata.path import LPath
@@ -57,7 +58,9 @@ async def handle_h5_widget_message(
         assert table_exists is not None
         table_exists = table_exists[0]
 
+        create_table_time = 0
         if not table_exists:
+            start_time = time.time()
             _inject.kernel.duckdb.execute(f"""
                 CREATE TABLE {duckdb_table_name} (
                     fov INTEGER,
@@ -74,7 +77,8 @@ async def handle_h5_widget_message(
                 FROM '{presigned_url}'
                 (FORMAT 'PARQUET')
             """)
+            create_table_time = round(time.time() - start_time, 2)
 
-        return await process_h5spatial_request(msg, widget_session_key, duckdb_table_name)
+        return await process_h5spatial_request(msg, widget_session_key, duckdb_table_name, create_table_time)
 
     raise ValueError(f"Invalid H5 viewer message: {msg}")

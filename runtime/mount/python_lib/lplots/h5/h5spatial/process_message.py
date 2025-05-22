@@ -1,3 +1,4 @@
+import time
 from typing import Any
 
 import duckdb
@@ -40,6 +41,7 @@ async def process_h5spatial_request(  # noqa: RUF029
     msg: dict[str, Any],
     widget_session_key: str,
     duckdb_table_name: str,
+    create_table_time: float,
 ) -> dict[str, Any]:
     if "op" not in msg or msg["op"] not in {"init_data"}:  # noqa: FURB171
         return {
@@ -53,6 +55,7 @@ async def process_h5spatial_request(  # noqa: RUF029
     op = msg["op"]
 
     if op == "init_data":
+        start_time = time.time()
         sampled_data, points_in_scope, total_points = get_spatial_sample(
             _inject.kernel.duckdb,
             duckdb_table_name,
@@ -75,6 +78,8 @@ async def process_h5spatial_request(  # noqa: RUF029
                     "transcripts": data,
                     "points_in_scope": points_in_scope,
                     "total_points": total_points,
+                    "time_taken": round(time.time() - start_time, 2),
+                    "create_table_time": create_table_time,
                 }
             },
         }
