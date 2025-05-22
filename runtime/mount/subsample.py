@@ -18,6 +18,10 @@ from utils import PlotConfig, auth_token_sdk, get_presigned_url, gql_query
 def initialize_duckdb() -> DuckDBPyConnection:
     conn = duckdb_connect(database=":memory:plots-faas", read_only=False)
 
+    duckdb_home = "/tmp/duckdb_home"  # noqa: S108
+    Path(duckdb_home).mkdir(parents=True, exist_ok=True)
+    conn.execute(f"SET home_directory='{duckdb_home}'")
+
     conn.execute(
         """
         create table plots_faas_catalog (
