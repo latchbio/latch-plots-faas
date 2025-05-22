@@ -35,7 +35,7 @@ def get_spatial_sample(
             FROM {table_name}
             WHERE global_x >= {x_min} AND global_x <= {x_max}
                 AND global_y >= {y_min} AND global_y <= {y_max}
-        """)  # noqa: S608
+        """), points_in_scope, total_points  # noqa: S608
 
     max_occupancy = 2
     total_cells = max_points // max_occupancy
