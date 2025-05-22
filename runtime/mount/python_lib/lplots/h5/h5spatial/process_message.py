@@ -31,6 +31,7 @@ def get_spatial_sample(
         FROM {table_name}
         WHERE global_x >= {x_min} AND global_x <= {x_max}
           AND global_y >= {y_min} AND global_y <= {y_max}
+        ORDER BY RANDOM()
         LIMIT {max_points}
     """)  # noqa: S608
 
