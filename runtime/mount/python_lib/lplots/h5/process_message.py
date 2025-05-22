@@ -62,7 +62,7 @@ async def handle_h5_widget_message(
             duckdb_home = "/tmp/duckdb_home"  # noqa: S108
             Path(duckdb_home).mkdir(parents=True, exist_ok=True)
             _inject.kernel.duckdb.execute(f"SET home_directory='{duckdb_home}'")
-            _inject.kernel.duckdb.execute("INSTALL httpfs'")
+            _inject.kernel.duckdb.execute("INSTALL httpfs")
 
             _inject.kernel.duckdb.execute(f"""
                 CREATE TABLE {duckdb_table_name} (
