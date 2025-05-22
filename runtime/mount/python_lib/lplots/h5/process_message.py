@@ -1,11 +1,12 @@
 from typing import Any
 
+from latch.ldata.path import LPath
+
 from lplots.h5.h5ad.process_message import process_h5ad_request
 from lplots.h5.h5spatial.process_message import (
     process_h5spatial_request,
 )
 from lplots.h5.utils import auto_install
-from lplots.widgets.h5 import H5AD, H5Spatial
 
 from .. import _inject
 
@@ -25,10 +26,10 @@ async def handle_h5_widget_message(
         }
 
     widget_session_key = msg["key"]
-    widget_state: H5AD | H5Spatial | Any = msg["state"]["data"]
+    widget_state: dict[str, Any] = msg["state"]["data"]
 
-    if isinstance(widget_state, H5AD):
-        obj_id = widget_state.obj_id
+    if "obj_id" in widget_state:
+        obj_id = widget_state["obj_id"]
         if obj_id is None or obj_id not in _inject.kernel.ann_data_objects:
             return {
                 "type": "h5",
@@ -42,8 +43,9 @@ async def handle_h5_widget_message(
 
         return await process_h5ad_request(msg, widget_session_key, adata, obj_id)
 
-    if isinstance(widget_state, H5Spatial):
-        duckdb_table_name = f"h5spatial_{widget_state.transcript_path.version_id()}"
+    if "transcript_path" in widget_state:
+        transcript_path = LPath(widget_state["transcript_path"]["path"])
+        duckdb_table_name = f"h5spatial_{transcript_path.version_id()}"
 
         table_exists = _inject.kernel.duckdb.execute("""
             SELECT EXISTS (
@@ -66,7 +68,7 @@ async def handle_h5_widget_message(
                     cell_comp TEXT
                 )
             """)
-            presigned_url = await _inject.kernel.get_presigned_url(widget_state.transcript_path.path)
+            presigned_url = await _inject.kernel.get_presigned_url(transcript_path.path)
             _inject.kernel.duckdb.execute(f"""
                 COPY {duckdb_table_name}
                 FROM '{presigned_url}'
