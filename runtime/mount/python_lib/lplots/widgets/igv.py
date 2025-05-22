@@ -10,34 +10,13 @@ igv_type: Literal["igv"] = "igv"
 
 
 class IGVState(_emit.WidgetState[igv_type, str]):
-    default: NotRequired[str | None]
-    readonly: bool
-    required: bool
+    lpath: LPath
 
 
 @dataclass(frozen=True, kw_only=True)
 class IGV(widget.BaseWidget):
     _key: str
     _state: IGVState
-    _signal: Signal[object]
-
-    def _value(self, val: object) -> LPath | None:
-        if not isinstance(val, str) or not val.startswith("latch://"):
-            val = self._state.get("default")
-            if val is None:
-                return None
-
-        return LPath(val)
-
-    @property
-    def value(self) -> LPath | None:
-        res = self._signal()
-        return self._value(res)
-
-    def sample(self) -> LPath | None:
-        res = self._signal.sample()
-        return self._value(res)
-
 
 _emit.widget_registry[igv_type] = IGV
 
@@ -45,9 +24,7 @@ _emit.widget_registry[igv_type] = IGV
 def w_igv(
     *,
     key: str | None = None,
-    label: str,
-    readonly: bool = False,
-    required: bool = False,
+    lpath: LPath,
 ) -> IGV:
     key = _state.use_state_key(key=key)
 
@@ -55,9 +32,7 @@ def w_igv(
         _key=key,
         _state={
             "type": igv_type,
-            "label": label,
-            "readonly": readonly,
-            "required": required,
+            "lpath": lpath,
         },
         _signal=_state.use_value_signal(key=key),
     )
