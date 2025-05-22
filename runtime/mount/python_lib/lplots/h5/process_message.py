@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Any
 
 from latch.ldata.path import LPath
@@ -58,6 +59,10 @@ async def handle_h5_widget_message(
         table_exists = table_exists[0]
 
         if not table_exists:
+            duckdb_home = "/tmp/duckdb_home"  # noqa: S108
+            Path(duckdb_home).mkdir(parents=True, exist_ok=True)
+            _inject.kernel.duckdb.execute(f"SET home_directory='{duckdb_home}'")
+
             _inject.kernel.duckdb.execute(f"""
                 CREATE TABLE {duckdb_table_name} (
                     fov INTEGER,

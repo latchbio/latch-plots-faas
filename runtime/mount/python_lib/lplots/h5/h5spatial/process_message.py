@@ -14,17 +14,22 @@ def get_spatial_sample(
     x_max: float,
     y_max: float,
     max_points: int = 100000,
-) -> DuckDBPyRelation:
-    count_result = conn.sql(f"""
+) -> tuple[DuckDBPyRelation, int, int]:
+    points_in_scope_q = conn.sql(f"""
         SELECT COUNT(*) as cnt
         FROM {table_name}
         WHERE global_x >= {x_min} AND global_x <= {x_max}
             AND global_y >= {y_min} AND global_y <= {y_max}
     """).fetchone()  # noqa: S608
+    points_in_scope = 0 if points_in_scope_q is None else points_in_scope_q[0]
 
-    total_points = 0 if count_result is None else count_result[0]
+    total_points_q = conn.sql(f"""
+        SELECT COUNT(*) as cnt
+        FROM {table_name}
+    """).fetchone()  # noqa: S608
+    total_points = 0 if total_points_q is None else total_points_q[0]
 
-    if total_points <= max_points:
+    if points_in_scope <= max_points:
         return conn.sql(f"""
             SELECT *
             FROM {table_name}
@@ -55,7 +60,7 @@ def get_spatial_sample(
     """)  # noqa: S608
 
     filtered_data = spatial_data.filter(f"row_num <= {max_occupancy}")
-    return filtered_data.order("random()").limit(max_points)
+    return filtered_data.order("random()").limit(max_points), points_in_scope, total_points
 
 
 async def process_h5spatial_request(  # noqa: RUF029
@@ -75,7 +80,7 @@ async def process_h5spatial_request(  # noqa: RUF029
     op = msg["op"]
 
     if op == "init_data":
-        sampled_data = get_spatial_sample(
+        sampled_data, points_in_scope, total_points = get_spatial_sample(
             _inject.kernel.duckdb,
             duckdb_table_name,
             x_min=float(msg["x_min"]),
@@ -95,6 +100,8 @@ async def process_h5spatial_request(  # noqa: RUF029
                 "data": {
                     "columns": columns,
                     "transcripts": data,
+                    "points_in_scope": points_in_scope,
+                    "total_points": total_points,
                 }
             },
         }
