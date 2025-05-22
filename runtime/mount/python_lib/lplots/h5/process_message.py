@@ -62,10 +62,10 @@ async def handle_h5_widget_message(
                 CREATE TABLE {duckdb_table_name} (
                     fov INTEGER,
                     cell_id INTEGER,
-                    global_x DOUBLE,
-                    global_y DOUBLE,
                     target TEXT,
-                    cell_comp TEXT
+                    cell_comp TEXT,
+                    global_x DOUBLE,
+                    global_y DOUBLE
                 )
             """)
             presigned_url = await _inject.kernel.get_presigned_url(transcript_path.path)
