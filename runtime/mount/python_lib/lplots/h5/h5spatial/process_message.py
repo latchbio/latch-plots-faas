@@ -18,8 +18,8 @@ def get_spatial_sample(
     count_result = conn.sql(f"""
         SELECT COUNT(*) as cnt
         FROM {table_name}
-        WHERE x >= {x_min} AND x <= {x_max}
-            AND y >= {y_min} AND y <= {y_max}
+        WHERE global_x >= {x_min} AND global_x <= {x_max}
+            AND global_y >= {y_min} AND global_y <= {y_max}
     """).fetchone()  # noqa: S608
 
     total_points = 0 if count_result is None else count_result[0]
@@ -28,8 +28,8 @@ def get_spatial_sample(
         return conn.sql(f"""
             SELECT *
             FROM {table_name}
-            WHERE x >= {x_min} AND x <= {x_max}
-                AND y >= {y_min} AND y <= {y_max}
+            WHERE global_x >= {x_min} AND global_x <= {x_max}
+                AND global_y >= {y_min} AND global_y <= {y_max}
         """)  # noqa: S608
 
     max_occupancy = 2
@@ -46,12 +46,12 @@ def get_spatial_sample(
             *,
             row_number() OVER (
                 PARTITION BY
-                    floor(({cells_x} * (x - {x_min}) / {viewport_width}) +
-                    {cells_x} * floor({cells_y} * (y - {y_min}) / {viewport_height}))
+                    floor(({cells_x} * (global_x - {x_min}) / {viewport_width}) +
+                    {cells_x} * floor({cells_y} * (global_y - {y_min}) / {viewport_height}))
             ) as row_num
         FROM {table_name}
-        WHERE x >= {x_min} AND x <= {x_max}
-            AND y >= {y_min} AND y <= {y_max}
+        WHERE global_x >= {x_min} AND global_x <= {x_max}
+            AND global_y >= {y_min} AND global_y <= {y_max}
     """)  # noqa: S608
 
     filtered_data = spatial_data.filter(f"row_num <= {max_occupancy}")

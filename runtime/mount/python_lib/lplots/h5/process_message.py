@@ -62,8 +62,8 @@ async def handle_h5_widget_message(
                 CREATE TABLE {duckdb_table_name} (
                     fov INTEGER,
                     cell_id INTEGER,
-                    x DOUBLE,
-                    y DOUBLE,
+                    global_x DOUBLE,
+                    global_y DOUBLE,
                     target TEXT,
                     cell_comp TEXT
                 )
