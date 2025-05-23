@@ -693,6 +693,7 @@ async def handle_ann_data_widget_message(
 
         aligned_obs_key = align_image(
                 msg["scatter_data_key"],
+                msg["new_scatter_data_key"],
                 msg["points_I"],
                 msg["points_J"],
                 msg["alignment_method"],
