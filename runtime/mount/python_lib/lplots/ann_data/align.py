@@ -28,7 +28,8 @@ def align_image(
     points_I = np.asarray(points_I, dtype=float)
     points_J = np.asarray(points_J, dtype=float)
 
-    ones = np.ones((points_J.shape[0], 1))
+    k = points_J.shape[0]
+    ones = np.ones((k, 1))
     A = np.hstack([points_J, ones])              # (k,3)
     B = points_I                                 # (k,2)
 
