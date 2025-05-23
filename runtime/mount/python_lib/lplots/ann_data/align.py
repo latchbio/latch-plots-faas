@@ -16,6 +16,7 @@ class AlignmentMethod(Enum):
 
 def align_image(
         scatter_data_key: str,
+        new_scatter_data_key: str,
         points_I: list[list[float]],
         points_J: list[list[float]],
         alignment_method: AlignmentMethod,
@@ -48,8 +49,7 @@ def align_image(
 
         X_aligned = np.column_stack([I[0], I[1]])  # (N,2)
 
-        k = "X_affine_aligned"
-        adata.obsm[k] = X_aligned
+        adata.obsm[new_scatter_data_key] = X_aligned
         return k
 
     assert image_bytes is not None
@@ -104,6 +104,5 @@ def align_image(
     tpts = STalign.transform_points_source_to_target(
         out["xv"], out["v"], out["A"], pts_torch
     )
-    k = "X_staligned"
-    adata.obsm[k] = tpts.cpu().numpy()
+    adata.obsm[new_scatter_data_key] = tpts.cpu().numpy()
     return k
