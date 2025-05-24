@@ -13,7 +13,7 @@ def get_spatial_sample(
     y_min: float,
     x_max: float,
     y_max: float,
-    max_points: int = 500000,
+    max_points: int = 100000,
 ) -> tuple[duckdb.DuckDBPyRelation, int, int]:
     points_in_scope_q = conn.sql(f"""
         SELECT COUNT(*) AS cnt
