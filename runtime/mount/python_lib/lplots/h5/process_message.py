@@ -28,7 +28,7 @@ async def handle_h5_widget_message(
 
     widget_session_key = msg["key"]
     data_type: Literal["h5ad", "transcripts"] | Any = msg.get("data_type", "h5ad")
-    widget_state: dict[str, Any] = msg["state"]["data"]
+    widget_state: dict[str, Any] = msg["state"]
 
     if data_type == "h5ad":
         obj_id = widget_state["obj_id"]
