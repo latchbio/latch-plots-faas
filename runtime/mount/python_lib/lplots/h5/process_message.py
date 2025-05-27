@@ -1,11 +1,11 @@
 import time
-from typing import Any
+from typing import Any, Literal
 
 from latch.ldata.path import LPath
 
 from lplots.h5.h5ad.process_message import process_h5ad_request
 from lplots.h5.h5spatial.process_message import (
-    process_h5spatial_request,
+    process_spatial_request,
 )
 from lplots.h5.utils import auto_install
 
@@ -27,9 +27,10 @@ async def handle_h5_widget_message(
         }
 
     widget_session_key = msg["key"]
+    data_type: Literal["h5ad", "transcripts"] | Any = msg.get("data_type", "h5ad")
     widget_state: dict[str, Any] = msg["state"]["data"]
 
-    if "obj_id" in widget_state:
+    if data_type == "h5ad":
         obj_id = widget_state["obj_id"]
         if obj_id is None or obj_id not in _inject.kernel.ann_data_objects:
             return {
@@ -44,8 +45,33 @@ async def handle_h5_widget_message(
 
         return await process_h5ad_request(msg, widget_session_key, adata, obj_id)
 
-    if "transcript_path" in widget_state:
-        transcript_path = LPath(widget_state["transcript_path"]["path"])
+    if data_type == "transcripts":
+        if "spatial_dir" not in widget_state:
+            return {
+                "type": "h5",
+                "key": widget_session_key,
+                "value": {
+                    "error": "Invalid message -- missing `spatial_dir`",
+                },
+            }
+
+        spatial_dir = LPath(widget_state["spatial_dir"]["path"])
+        transcript_path = None
+        for f in spatial_dir.iterdir():
+            name = f.name()
+            if name is not None and name.endswith(".parquet"):
+                transcript_path = f
+                break
+
+        if transcript_path is None:
+            return {
+                "type": "h5",
+                "key": widget_session_key,
+                "value": {
+                    "error": "Invalid message -- no parquet files found in spatial directory",
+                },
+            }
+
         duckdb_table_name = f"h5spatial_{transcript_path.version_id()}"
 
         table_exists = _inject.kernel.duckdb.execute("""
@@ -79,6 +105,6 @@ async def handle_h5_widget_message(
             """)
             create_table_time = round(time.time() - start_time, 2)
 
-        return await process_h5spatial_request(msg, widget_session_key, duckdb_table_name, create_table_time)
+        return await process_spatial_request(msg, widget_session_key, duckdb_table_name, create_table_time)
 
     raise ValueError(f"Invalid H5 viewer message: {msg}")

@@ -38,7 +38,7 @@ def get_spatial_sample(
     return sampled_rel, points_in_scope, total_points
 
 
-async def process_h5spatial_request(  # noqa: RUF029
+async def process_spatial_request(  # noqa: RUF029
     msg: dict[str, Any],
     widget_session_key: str,
     duckdb_table_name: str,
