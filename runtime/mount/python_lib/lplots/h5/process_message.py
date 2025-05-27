@@ -35,6 +35,7 @@ async def handle_h5_widget_message(
         if obj_id is None or obj_id not in _inject.kernel.ann_data_objects:
             return {
                 "type": "h5",
+                "data_type": "h5ad",
                 "key": widget_session_key,
                 "value": {
                     "error": f"AnnData object with ID {obj_id} not found in cache",
@@ -49,6 +50,7 @@ async def handle_h5_widget_message(
         if "spatial_dir" not in widget_state:
             return {
                 "type": "h5",
+                "data_type": "transcripts",
                 "key": widget_session_key,
                 "value": {
                     "error": "Invalid message -- missing `spatial_dir`",
@@ -66,6 +68,7 @@ async def handle_h5_widget_message(
         if transcript_path is None:
             return {
                 "type": "h5",
+                "data_type": "transcripts",
                 "key": widget_session_key,
                 "value": {
                     "error": "Invalid message -- no parquet files found in spatial directory",

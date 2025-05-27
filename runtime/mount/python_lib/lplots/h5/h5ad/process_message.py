@@ -88,6 +88,7 @@ async def process_h5ad_request(
         return {
             "type": "h5",
             "op": op,
+            "data_type": "h5ad",
             "key": widget_session_key,
             "value": {
                 "data": {
@@ -127,6 +128,7 @@ async def process_h5ad_request(
         return {
             "type": "h5",
             "op": op,
+            "data_type": "h5ad",
             "key": widget_session_key,
             "value": {"data": list(adata.obsm.keys())},
         }
@@ -136,6 +138,7 @@ async def process_h5ad_request(
             return {
                 "type": "h5",
                 "op": op,
+                "data_type": "h5ad",
                 "key": widget_session_key,
                 "value": {
                     "error": "Obsm not found" if "obsm_key" in msg else "`obsm_key` key missing from message"
@@ -148,6 +151,7 @@ async def process_h5ad_request(
             return {
                 "type": "h5",
                 "op": op,
+                "data_type": "h5ad",
                 "key": widget_session_key,
                 "value": {"error": "Failed to get obsm"},
             }
@@ -170,6 +174,7 @@ async def process_h5ad_request(
         return {
             "type": "h5",
             "op": op,
+            "data_type": "h5ad",
             "key": widget_session_key,
             "value": {
                 "data": {
@@ -193,6 +198,7 @@ async def process_h5ad_request(
         return {
             "type": "h5",
             "op": op,
+            "data_type": "h5ad",
             "key": widget_session_key,
             "value": {
                 "data": list(adata.obs.keys()),
@@ -204,6 +210,7 @@ async def process_h5ad_request(
             return {
                 "type": "h5",
                 "op": op,
+                "data_type": "h5ad",
                 "key": widget_session_key,
                 "value": {
                     "error": "Observation not found" if "obs_key" in msg else "`obs_key` key missing from message"
@@ -215,6 +222,7 @@ async def process_h5ad_request(
         return {
             "type": "h5",
             "op": op,
+            "data_type": "h5ad",
             "key": widget_session_key,
             "value": {
                 "data": {
@@ -255,6 +263,7 @@ async def process_h5ad_request(
             return {
                 "type": "h5",
                 "op": op,
+                "data_type": "h5ad",
                 "key": widget_session_key,
                 "value": {"error": "`obs_key` key missing from message"},
             }
@@ -293,6 +302,7 @@ async def process_h5ad_request(
         return {
             "type": "h5",
             "op": "get_obs",
+            "data_type": "h5ad",
             "key": widget_session_key,
             "value": {
                 "data": {
@@ -313,6 +323,7 @@ async def process_h5ad_request(
             return {
                 "type": "h5",
                 "op": op,
+                "data_type": "h5ad",
                 "key": widget_session_key,
                 "value": {"error": "`obs_key` key missing from message"},
             }
@@ -322,6 +333,7 @@ async def process_h5ad_request(
             return {
                 "type": "h5",
                 "op": op,
+                "data_type": "h5ad",
                 "key": widget_session_key,
                 "value": {"error": "Observation key not found"},
             }
@@ -331,6 +343,7 @@ async def process_h5ad_request(
         return {
             "type": "h5",
             "op": op,
+            "data_type": "h5ad",
             "key": widget_session_key,
             "value": {"data": {
                 "dropped_key": obs_key,
@@ -342,6 +355,7 @@ async def process_h5ad_request(
             return {
                 "type": "h5",
                 "op": op,
+                "data_type": "h5ad",
                 "key": widget_session_key,
                 "value": {"error": "`old_obs_key` and `new_obs_key` keys missing from message"},
             }
@@ -353,6 +367,7 @@ async def process_h5ad_request(
             return {
                 "type": "h5",
                 "op": op,
+                "data_type": "h5ad",
                 "key": widget_session_key,
                 "value": {"error": "Observation key not found"},
             }
@@ -362,6 +377,7 @@ async def process_h5ad_request(
         return {
             "type": "h5",
             "op": op,
+            "data_type": "h5ad",
             "key": widget_session_key,
             "value": {"data": {
                 "old_key": old_obs_key,
@@ -374,6 +390,7 @@ async def process_h5ad_request(
             return {
                 "type": "h5",
                 "op": op,
+                "data_type": "h5ad",
                 "key": widget_session_key,
                 "value": {"error": "`s3_presigned_url` or `node_id` key missing from message"},
             }
@@ -382,6 +399,7 @@ async def process_h5ad_request(
         return {
             "type": "h5",
             "op": op,
+            "data_type": "h5ad",
             "key": widget_session_key,
             "value": {"data": {"image": image_uri, "fetched_for_node_id": msg.get("node_id")}},
         }
@@ -393,6 +411,7 @@ async def process_h5ad_request(
             return {
                 "type": "h5",
                 "op": op,
+                "data_type": "h5ad",
                 "key": widget_session_key,
                 "value": {"error": f"attempting to align image from an unprocessed node (nid: {msg['node_id']})"},
             }
@@ -408,6 +427,7 @@ async def process_h5ad_request(
         return {
             "type": "h5",
             "op": op,
+            "data_type": "h5ad",
             "key": widget_session_key,
             "value": {"data": {"aligned_obs_key": aligned_obs_key}},
         }

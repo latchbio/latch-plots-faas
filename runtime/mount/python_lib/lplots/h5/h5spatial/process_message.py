@@ -48,8 +48,9 @@ async def process_spatial_request(  # noqa: RUF029
         return {
             "type": "h5",
             "key": widget_session_key,
+            "data_type": "transcripts",
             "value": {
-                "error": f"Invalid h5spatial operation: {msg.get('op', '`op` key missing from message')}",
+                "error": f"Invalid transcripts operation: {msg.get('op', '`op` key missing from message')}",
             },
         }
 
@@ -72,6 +73,7 @@ async def process_spatial_request(  # noqa: RUF029
         return {
             "type": "h5",
             "op": op,
+            "data_type": "transcripts",
             "key": widget_session_key,
             "value": {
                 "data": {
@@ -87,8 +89,9 @@ async def process_spatial_request(  # noqa: RUF029
 
     return {
         "type": "h5",
+        "data_type": "transcripts",
         "key": widget_session_key,
         "value": {
-            "error": f"Unsupported operation: {op}",
+            "error": f"Unsupported transcripts operation: {op}",
         },
     }
