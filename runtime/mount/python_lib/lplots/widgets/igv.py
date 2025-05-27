@@ -129,7 +129,6 @@ class SearchOptions(TypedDict):
     endField: NotRequired[str]
 
 
-# todo(rahul): finish properly typing this
 class IGVOptions(TypedDict):
     genome: NotRequired[str]
     reference: NotRequired[ReferenceOptions]
