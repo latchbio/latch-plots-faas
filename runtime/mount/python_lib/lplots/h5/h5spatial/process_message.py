@@ -57,6 +57,8 @@ async def process_spatial_request(  # noqa: RUF029
 
     op = msg["op"]
 
+    max_points = int(msg.get("max_points", 100000))
+
     if op == "get":
         start_time = time.time()
         sampled_data, points_in_scope, total_points = get_spatial_sample(
@@ -66,7 +68,7 @@ async def process_spatial_request(  # noqa: RUF029
             y_min=float(msg["y_min"]),
             x_max=float(msg["x_max"]),
             y_max=float(msg["y_max"]),
-            max_points=int(msg.get("max_points", 100000)),
+            max_points=max_points,
         )
 
         columns = sampled_data.columns
@@ -85,6 +87,11 @@ async def process_spatial_request(  # noqa: RUF029
                     "total_points": total_points,
                     "time_taken": round(time.time() - start_time, 2),
                     "create_table_time": create_table_time,
+                    "fetched_for_max_points": max_points,
+                    "fetched_for_x_min": float(msg["x_min"]),
+                    "fetched_for_x_max": float(msg["x_max"]),
+                    "fetched_for_y_min": float(msg["y_min"]),
+                    "fetched_for_y_max": float(msg["y_max"]),
                 }
             },
         }
