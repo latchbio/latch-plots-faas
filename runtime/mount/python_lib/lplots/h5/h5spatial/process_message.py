@@ -28,12 +28,11 @@ def get_spatial_sample(
 
     sampled_rel = conn.sql(f"""
         SELECT *
-        FROM (
-            SELECT *
-            FROM {table_name}
-            WHERE global_x BETWEEN {x_min} AND {x_max}
-              AND global_y BETWEEN {y_min} AND {y_max}
-        ) USING SAMPLE reservoir({max_transcripts} ROWS)
+        FROM {table_name}
+        WHERE global_x BETWEEN {x_min} AND {x_max}
+            AND global_y BETWEEN {y_min} AND {y_max}
+        ORDER BY RANDOM()
+        LIMIT {max_transcripts}
     """)  # noqa: S608
 
     return sampled_rel, points_in_scope, total_points
