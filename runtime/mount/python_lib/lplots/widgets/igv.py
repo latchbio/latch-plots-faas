@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Any, Literal, NotRequired, TypedDict
+from typing import Any, Literal, Required, TypedDict
 
 from . import _emit, _state, widget
 
@@ -7,154 +7,152 @@ igv_type: Literal["igv"] = "igv"
 
 
 # note(rahul): see https://igv.org/doc/igvjs/#tracks/Tracks
-class BaseTrackOptions(TypedDict):
-    type: NotRequired[str]
-    sourceType: NotRequired[str]
-    format: NotRequired[str]
+class BaseTrackOptions(TypedDict, total=False):
+    type: str
+    sourceType: str
+    format: str
     name: str
-    url: NotRequired[str]
-    indexURL: NotRequired[str]
-    indexed: NotRequired[bool]
-    order: NotRequired[int]
-    color: NotRequired[str]
-    height: NotRequired[int]
-    minHeight: NotRequired[int]
-    maxHeight: NotRequired[int]
-    visibilityWindow: NotRequired[int]
-    removable: NotRequired[bool]
-    headers: NotRequired[dict[str, str]]
-    oathToken: NotRequired[str]
+    url: str
+    indexURL: str
+    indexed: bool
+    order: int
+    color: str
+    height: int
+    minHeight: int
+    maxHeight: int
+    visibilityWindow: int
+    removable: bool
+    headers: dict[str, str]
+    oathToken: str
 
 
-class AnnotationTrackOptions(BaseTrackOptions):
-    type: Literal["annotation"]
-    displayMode: NotRequired[Literal["SQUISHED", "EXPANDED", "COLLAPSED"]]
-    expandedRowHeight: NotRequired[int]
-    squishedRowHeight: NotRequired[int]
-    nameField: NotRequired[str]
-    maxRows: NotRequired[int]
-    searchable: NotRequired[bool]
-    searchableFields: NotRequired[list[str]]
-    filterTypes: NotRequired[list[str]]
-    color: NotRequired[str]
-    altColor: NotRequired[str]
-    colorBy: NotRequired[str]
-    colorTable: NotRequired[dict[str, str]]
+class AnnotationTrackOptions(BaseTrackOptions, total=False):
+    type: Required[Literal["annotation"]]
+    displayMode: Literal["SQUISHED", "EXPANDED", "COLLAPSED"]
+    expandedRowHeight: int
+    squishedRowHeight: int
+    nameField: str
+    maxRows: int
+    searchable: bool
+    searchableFields: list[str]
+    filterTypes: list[str]
+    color: str
+    altColor: str
+    colorBy: str
+    colorTable: dict[str, str]
 
 
-class AlignmentSortOptions(TypedDict):
-    chr: NotRequired[str]
-    position: NotRequired[int]
-    option: NotRequired[
-        Literal["BASE", "STRAND", "INSERT_SIZE", "MATE_CHR", "MQ", "TAG"]
-    ]
-    tag: NotRequired[str]
-    direction: NotRequired[Literal["ASC", "DESC"]]
+class AlignmentSortOptions(TypedDict, total=False):
+    chr: str
+    position: int
+    option: Literal["BASE", "STRAND", "INSERT_SIZE", "MATE_CHR", "MQ", "TAG"]
+    tag: str
+    direction: Literal["ASC", "DESC"]
 
 
-class AlignmentFilterOptions(TypedDict):
-    vendorFailed: NotRequired[bool]
-    duplicates: NotRequired[bool]
-    secondary: NotRequired[bool]
-    supplementary: NotRequired[bool]
-    mq: NotRequired[int]
-    readgroups: NotRequired[list[str]]
+class AlignmentFilterOptions(TypedDict, total=False):
+    vendorFailed: bool
+    duplicates: bool
+    secondary: bool
+    supplementary: bool
+    mq: int
+    readgroups: list[str]
 
 
-class AlignmentTrackOptions(BaseTrackOptions):
-    type: Literal["alignment"]
-    showCoverage: NotRequired[bool]
-    showAlignment: NotRequired[bool]
-    viewAsPairs: NotRequired[bool]
-    pairsSupported: NotRequired[bool]
-    color: NotRequired[str]
-    deletionColor: NotRequired[str]
-    skippedColor: NotRequired[str]
-    insertionColor: NotRequired[str]
-    negStrandColor: NotRequired[str]
-    posStrandColor: NotRequired[str]
-    pairConnectorColor: NotRequired[str]
-    colorBy: NotRequired[str]
-    groupBy: NotRequired[str]
-    samplingWindowSize: NotRequired[int]
-    sampleDepth: NotRequired[int]
-    alignmentRowHeight: NotRequired[int]
-    readGroup: NotRequired[str]
-    sort: NotRequired[AlignmentSortOptions]
-    filter: NotRequired[AlignmentFilterOptions]
-    showSoftClips: NotRequired[bool]
-    showMismatches: NotRequired[bool]
-    showAllBases: NotRequired[bool]
-    showInsertionText: NotRequired[bool]
-    insertionTextColor: NotRequired[str]
-    deletionTextColor: NotRequired[str]
-    displayMode: NotRequired[Literal["SQUISHED", "EXPANDED", "FULL"]]
-    alignmentRowHeight: NotRequired[int]
-    squishedRowHeight: NotRequired[int]
-    coverageColor: NotRequired[str]
-    coverageTrackHeight: NotRequired[int]
-    autoscale: NotRequired[bool]
+class AlignmentTrackOptions(BaseTrackOptions, total=False):
+    type: Required[Literal["alignment"]]
+    showCoverage: bool
+    showAlignment: bool
+    viewAsPairs: bool
+    pairsSupported: bool
+    color: str
+    deletionColor: str
+    skippedColor: str
+    insertionColor: str
+    negStrandColor: str
+    posStrandColor: str
+    pairConnectorColor: str
+    colorBy: str
+    groupBy: str
+    samplingWindowSize: int
+    sampleDepth: int
+    alignmentRowHeight: int
+    readGroup: str
+    sort: AlignmentSortOptions
+    filter: AlignmentFilterOptions
+    showSoftClips: bool
+    showMismatches: bool
+    showAllBases: bool
+    showInsertionText: bool
+    insertionTextColor: str
+    deletionTextColor: str
+    displayMode: Literal["SQUISHED", "EXPANDED", "FULL"]
+    alignmentRowHeight: int
+    squishedRowHeight: int
+    coverageColor: str
+    coverageTrackHeight: int
+    autoscale: bool
     autoscaleGroup: Any
-    min: NotRequired[int]
-    max: NotRequired[int]
+    min: int
+    max: int
 
 
 # todo(rahul): add more track types as needed
 TrackOptions = AnnotationTrackOptions | AlignmentTrackOptions | BaseTrackOptions
 
 
-class ReferenceOptions(TypedDict):
-    id: NotRequired[str]
-    name: NotRequired[str]
-    fastaURL: NotRequired[str]
-    indexURL: NotRequired[str]
-    compressedIndexURL: NotRequired[str]
-    twoBitURL: NotRequired[str]
-    cytobandURL: NotRequired[str]
-    aliasUrl: NotRequired[str]
-    chromSizesURL: NotRequired[str]
-    indexed: NotRequired[bool]
-    tracks: NotRequired[list[TrackOptions]]
-    chromosomeOrder: NotRequired[list[str]]
-    headers: NotRequired[dict[str, str]]
-    wholeGenome: NotRequired[bool]
+class ReferenceOptions(TypedDict, total=False):
+    id: str
+    name: str
+    fastaURL: str
+    indexURL: str
+    compressedIndexURL: str
+    twoBitURL: str
+    cytobandURL: str
+    aliasUrl: str
+    chromSizesURL: str
+    indexed: bool
+    tracks: list[TrackOptions]
+    chromosomeOrder: list[str]
+    headers: dict[str, str]
+    wholeGenome: bool
 
 
-class SearchOptions(TypedDict):
-    url: NotRequired[str]
-    resultsField: NotRequired[str]
-    coords: NotRequired[int]
-    chromosomeField: NotRequired[str]
-    startField: NotRequired[str]
-    endField: NotRequired[str]
+class SearchOptions(TypedDict, total=False):
+    url: str
+    resultsField: str
+    coords: int
+    chromosomeField: str
+    startField: str
+    endField: str
 
 
-class IGVOptions(TypedDict):
-    genome: NotRequired[str]
-    reference: NotRequired[ReferenceOptions]
-    flanking: NotRequired[int]
-    genomeList: NotRequired[str]
-    loadDefaultGenomes: NotRequired[bool]
-    locus: NotRequired[str | list[str]]
-    minimumBases: NotRequired[int]
-    queryParametersSupported: NotRequired[bool]
-    search: NotRequired[SearchOptions]
-    showAllChromosomes: NotRequired[bool]
-    showChromosomeWidget: NotRequired[bool]
-    showNavigation: NotRequired[bool]
-    showIdeogram: NotRequired[bool]
-    showSVGButton: NotRequired[bool]
-    showRuler: NotRequired[bool]
-    showCenterGuide: NotRequired[bool]
-    showCursorTrackingGuide: NotRequired[bool]
-    trackDefaults: NotRequired[dict[str, Any]]
-    tracks: NotRequired[list[TrackOptions]]
-    roi: NotRequired[list[Any]]
-    oauthToken: NotRequired[str]
-    apiKey: NotRequired[str]
-    clientId: NotRequired[str]
-    nucleotideColors: NotRequired[dict[Literal["A", "C", "G", "T", "N"], str]]
-    showSampleNames: NotRequired[bool]
+class IGVOptions(TypedDict, total=False):
+    genome: str
+    reference: ReferenceOptions
+    flanking: int
+    genomeList: str
+    loadDefaultGenomes: bool
+    locus: str | list[str]
+    minimumBases: int
+    queryParametersSupported: bool
+    search: SearchOptions
+    showAllChromosomes: bool
+    showChromosomeWidget: bool
+    showNavigation: bool
+    showIdeogram: bool
+    showSVGButton: bool
+    showRuler: bool
+    showCenterGuide: bool
+    showCursorTrackingGuide: bool
+    trackDefaults: dict[str, Any]
+    tracks: list[TrackOptions]
+    roi: list[Any]
+    oauthToken: str
+    apiKey: str
+    clientId: str
+    nucleotideColors: dict[Literal["A", "C", "G", "T", "N"], str]
+    showSampleNames: bool
 
 
 class IGVState(_emit.WidgetState[igv_type, str]):
