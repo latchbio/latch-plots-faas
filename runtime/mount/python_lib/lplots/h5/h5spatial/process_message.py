@@ -44,7 +44,7 @@ async def process_spatial_request(  # noqa: RUF029
     duckdb_table_name: str,
     create_table_time: float,
 ) -> dict[str, Any]:
-    if "op" not in msg or msg["op"] not in {"init_data"}:  # noqa: FURB171
+    if "op" not in msg or msg["op"] not in {"get"}:  # noqa: FURB171
         return {
             "type": "h5",
             "key": widget_session_key,
@@ -56,7 +56,7 @@ async def process_spatial_request(  # noqa: RUF029
 
     op = msg["op"]
 
-    if op == "init_data":
+    if op == "get":
         start_time = time.time()
         sampled_data, points_in_scope, total_points = get_spatial_sample(
             _inject.kernel.duckdb,
@@ -65,6 +65,7 @@ async def process_spatial_request(  # noqa: RUF029
             y_min=float(msg["y_min"]),
             x_max=float(msg["x_max"]),
             y_max=float(msg["y_max"]),
+            max_points=int(msg.get("max_points", 100000)),
         )
 
         columns = sampled_data.columns

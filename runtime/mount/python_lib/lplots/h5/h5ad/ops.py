@@ -15,11 +15,10 @@ Image.MAX_IMAGE_PIXELS = None  # TIFFs can be huge, and PIL detects a decompress
 
 ad = auto_install.ad
 
-ann_data_index_cache: dict[str, tuple[NDArray[np.bool_], NDArray[np.int64]]] = {}
+ann_data_index_cache: dict[str, tuple[int, NDArray[np.bool_], NDArray[np.int64]]] = {}
 ann_data_var_index_cache: dict[str, tuple[NDArray[np.str_], NDArray[np.str_] | None]] = {}
 
 
-max_visualization_cells = 100000
 rng = np.random.default_rng()
 
 pil_image_cache: dict[str, bytes] = {}
@@ -111,6 +110,7 @@ def get_obsm(
     adata: ad.AnnData,
     obsm_key: str,
     filters: list[dict[str, Any]] | None = None,
+    max_visualization_cells: int = 100000,
 ) -> tuple[NDArray[np.float32], NDArray[np.str_], bool] | tuple[None, None, bool]:
     if obsm_key not in adata.obsm:
         return None, None, False
@@ -122,18 +122,18 @@ def get_obsm(
     # todo(aidan): intelligent downsampling to preserve outliers / information in general
     if filtered_n_cells > max_visualization_cells:
         filtered_indices = np.where(mask)[0]
-        stored_mask, stored_idxs = ann_data_index_cache.get(obj_id, (None, None))
-        if stored_mask is None or stored_idxs is None or not np.array_equal(stored_mask, mask):
+        stored_for_max_cells, stored_mask, stored_idxs = ann_data_index_cache.get(obj_id, (None, None, None))
+        if stored_mask is None or stored_idxs is None or not np.array_equal(stored_mask, mask) or stored_for_max_cells != max_visualization_cells:
             idxs = rng.choice(filtered_indices, size=max_visualization_cells, replace=False)
-            ann_data_index_cache[obj_id] = (mask, idxs)
+            ann_data_index_cache[obj_id] = (max_visualization_cells, mask, idxs)
             recomputed_index = True
         else:
             idxs = stored_idxs
     else:
-        stored_mask, stored_idxs = ann_data_index_cache.get(obj_id, (None, None))
-        if stored_mask is None or stored_idxs is None or not np.array_equal(stored_mask, mask):
+        stored_for_max_cells, stored_mask, stored_idxs = ann_data_index_cache.get(obj_id, (None, None, None))
+        if stored_mask is None or stored_idxs is None or not np.array_equal(stored_mask, mask) or stored_for_max_cells != max_visualization_cells:
             idxs = np.where(mask)[0]
-            ann_data_index_cache[obj_id] = (mask, idxs)
+            ann_data_index_cache[obj_id] = (max_visualization_cells, mask, idxs)
             recomputed_index = True
         else:
             idxs = stored_idxs
@@ -150,6 +150,7 @@ def get_obs(
     obj_id: str,
     adata: ad.AnnData,
     obs_key: str,
+    max_visualization_cells: int = 100000,
 ) -> tuple[NDArray[np.str_], tuple[NDArray[np.str_], NDArray[np.int64]], int]:
     obs = np.asarray(adata.obs[obs_key])
 
@@ -164,7 +165,7 @@ def get_obs(
     else:
         truncated_unique_obs = unique_obs
 
-    _, idxs = ann_data_index_cache[obj_id]
+    _, _, idxs = ann_data_index_cache[obj_id]
 
     return obs[idxs], (truncated_unique_obs, counts), len(unique_obs)
 
@@ -174,7 +175,7 @@ def get_obs_vector(
     adata: ad.AnnData,
     var_index: str,
 ) -> NDArray[np.int64]:
-    _, idxs = ann_data_index_cache[obj_id]
+    _, _, idxs = ann_data_index_cache[obj_id]
 
     # note(aidan): this is ~3+ times faster than using `.to_numpy()` in place of `.values`
     return np.asarray(adata[idxs, var_index].to_df().iloc[:, 0:].values.ravel())  # noqa: PD011

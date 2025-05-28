@@ -40,6 +40,8 @@ async def process_h5ad_request(
 
     op = msg["op"]
 
+    max_visualization_cells = msg.get("max_visualization_cells", 100000)
+
     if op == "init_data":
         init_obsm_key = msg.get("obsm_key")
         possible_obsm_keys = adata.obsm_keys()
@@ -70,14 +72,14 @@ async def process_h5ad_request(
         filters = None
         if init_obsm_key is not None:
             filters = msg.get("filters")
-            obsm, index, recomputed_index = get_obsm(obj_id, adata, init_obsm_key, filters)
+            obsm, index, recomputed_index = get_obsm(obj_id, adata, init_obsm_key, filters, max_visualization_cells)
 
         obs = None
         unique_obs = None
         nrof_obs = None
         counts = None
         if init_obs_key is not None and init_obs_key in adata.obs:
-            obs, (unique_obs, counts), nrof_obs = get_obs(obj_id, adata, init_obs_key)
+            obs, (unique_obs, counts), nrof_obs = get_obs(obj_id, adata, init_obs_key, max_visualization_cells)
 
         gene_column = None
         if init_var_key is not None and init_obs_key is None and init_var_key in adata.var_names:
@@ -146,7 +148,7 @@ async def process_h5ad_request(
             }
 
         filters = msg.get("filters")
-        obsm, index, recomputed_index = get_obsm(obj_id, adata, msg["obsm_key"], filters)
+        obsm, index, recomputed_index = get_obsm(obj_id, adata, msg["obsm_key"], filters, max_visualization_cells)
         if obsm is None or index is None:
             return {
                 "type": "h5",
@@ -165,7 +167,7 @@ async def process_h5ad_request(
         fetched_for_var_key = None
         if "colored_by_type" in msg and "colored_by_key" in msg:
             if msg["colored_by_type"] == "obs" and msg["colored_by_key"] in adata.obs:
-                obs, (unique_obs, counts), nrof_obs = get_obs(obj_id, adata, msg["colored_by_key"])
+                obs, (unique_obs, counts), nrof_obs = get_obs(obj_id, adata, msg["colored_by_key"], max_visualization_cells)
                 fetched_for_obs_key = msg["colored_by_key"]
             elif msg["colored_by_type"] == "var" and msg["colored_by_key"] in adata.var_names:
                 gene_column = get_obs_vector(obj_id, adata, msg["colored_by_key"])
@@ -217,7 +219,7 @@ async def process_h5ad_request(
                 },
             }
 
-        obs, (unique_obs, counts), nrof_obs = get_obs(obj_id, adata, msg["obs_key"])
+        obs, (unique_obs, counts), nrof_obs = get_obs(obj_id, adata, msg["obs_key"], max_visualization_cells)
 
         return {
             "type": "h5",
@@ -297,7 +299,7 @@ async def process_h5ad_request(
             mutate_obs_by_value(adata, obs_key, msg["old_obs_value"], msg["new_obs_value"])
             mutated_for_key = obs_key
 
-        obs, (unique_obs, counts), nrof_obs = get_obs(obj_id, adata, obs_key)
+        obs, (unique_obs, counts), nrof_obs = get_obs(obj_id, adata, obs_key, max_visualization_cells)
 
         return {
             "type": "h5",
