@@ -106,6 +106,9 @@ async def handle_h5_widget_message(
                 FROM '{presigned_url}'
                 (FORMAT 'PARQUET')
             """)
+            _inject.kernel.duckdb.execute(f"""
+                CREATE INDEX idx_spatial_xy ON {duckdb_table_name} (global_x, global_y)
+            """)
             create_table_time = round(time.time() - start_time, 2)
 
         return await process_spatial_request(msg, widget_session_key, duckdb_table_name, create_table_time)
