@@ -13,7 +13,7 @@ def get_spatial_sample(
     y_min: float,
     x_max: float,
     y_max: float,
-    max_points: int = 100000,
+    max_transcripts: int = 100000,
 ) -> tuple[duckdb.DuckDBPyRelation, int, int]:
     points_in_scope_q = conn.sql(f"""
         SELECT COUNT(*) AS cnt
@@ -33,7 +33,7 @@ def get_spatial_sample(
             FROM {table_name}
             WHERE global_x BETWEEN {x_min} AND {x_max}
               AND global_y BETWEEN {y_min} AND {y_max}
-        ) USING SAMPLE reservoir({max_points} ROWS)
+        ) USING SAMPLE reservoir({max_transcripts} ROWS)
     """)  # noqa: S608
 
     return sampled_rel, points_in_scope, total_points
@@ -57,7 +57,7 @@ async def process_spatial_request(  # noqa: RUF029
 
     op = msg["op"]
 
-    max_points = int(msg.get("max_points", 100000))
+    max_transcripts = int(msg.get("max_transcripts", 100000))
 
     if op == "get":
         start_time = time.time()
@@ -68,7 +68,7 @@ async def process_spatial_request(  # noqa: RUF029
             y_min=float(msg["y_min"]),
             x_max=float(msg["x_max"]),
             y_max=float(msg["y_max"]),
-            max_points=max_points,
+            max_transcripts=max_transcripts,
         )
 
         columns = sampled_data.columns
@@ -87,7 +87,7 @@ async def process_spatial_request(  # noqa: RUF029
                     "total_points": total_points,
                     "time_taken": round(time.time() - start_time, 2),
                     "create_table_time": create_table_time,
-                    "fetched_for_max_points": max_points,
+                    "fetched_for_max_transcripts": max_transcripts,
                     "fetched_for_x_min": float(msg["x_min"]),
                     "fetched_for_x_max": float(msg["x_max"]),
                     "fetched_for_y_min": float(msg["y_min"]),
