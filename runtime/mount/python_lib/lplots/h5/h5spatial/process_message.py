@@ -14,7 +14,15 @@ def get_spatial_sample(
     x_max: float,
     y_max: float,
     max_transcripts: int = 100000,
+    genes_to_fetch: list[str] | None = None,
 ) -> tuple[duckdb.DuckDBPyRelation, int, int]:
+    # Build the gene filter condition
+    gene_filter = ""
+    if genes_to_fetch is not None and len(genes_to_fetch) > 0:
+        escaped_genes = [gene.replace("'", "''") for gene in genes_to_fetch]
+        genes_list = ", ".join(f"'{gene}'" for gene in escaped_genes)
+        gene_filter = f" and target in ({genes_list})"
+
     points_in_scope_q = conn.sql(f"""
         select
             count(*) as cnt
@@ -25,6 +33,7 @@ def get_spatial_sample(
             and global_x <= {x_max}
             and global_y >= {y_min}
             and global_y <= {y_max}
+            {gene_filter}
     """).fetchone()  # noqa: S608
     points_in_scope = 0 if points_in_scope_q is None else points_in_scope_q[0]
 
@@ -45,6 +54,7 @@ def get_spatial_sample(
             and global_x <= {x_max}
             and global_y >= {y_min}
             and global_y <= {y_max}
+            {gene_filter}
         order by
             random()
         limit
@@ -74,6 +84,8 @@ async def process_spatial_request(  # noqa: RUF029
 
     max_transcripts = int(msg.get("max_transcripts", 100000))
 
+    genes_to_fetch = msg.get("genes")
+
     if op == "get":
         start_time = time.time()
         sampled_data, points_in_scope, total_points = get_spatial_sample(
@@ -84,6 +96,7 @@ async def process_spatial_request(  # noqa: RUF029
             x_max=float(msg["x_max"]),
             y_max=float(msg["y_max"]),
             max_transcripts=max_transcripts,
+            genes_to_fetch=genes_to_fetch,
         )
 
         columns = sampled_data.columns
