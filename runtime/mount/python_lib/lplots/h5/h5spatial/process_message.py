@@ -15,41 +15,41 @@ def get_spatial_sample(
     y_max: float,
     max_transcripts: int = 100000,
 ) -> tuple[duckdb.DuckDBPyRelation, int, int]:
-    points_in_scope_q = conn.execute("""
+    points_in_scope_q = conn.sql(f"""
         select
             count(*) as cnt
         from
-            ?
+            {table_name}
         where
-            global_x >= ?
-            and global_x <= ?
-            and global_y >= ?
-            and global_y <= ?
-    """, [table_name, x_min, x_max, y_min, y_max]).fetchone()
+            global_x >= {x_min}
+            and global_x <= {x_max}
+            and global_y >= {y_min}
+            and global_y <= {y_max}
+    """).fetchone()  # noqa: S608
     points_in_scope = 0 if points_in_scope_q is None else points_in_scope_q[0]
 
-    total_points_q = conn.execute("""
+    total_points_q = conn.sql(f"""
         select
             count(*)
         from
-            ?
-    """, [table_name]).fetchone()
+            {table_name}
+    """).fetchone()  # noqa: S608
     total_points = 0 if total_points_q is None else total_points_q[0]
-    sampled_rel = conn.sql("""
+    sampled_rel = conn.sql(f"""
         select
             *
         from
-            ?
+            {table_name}
         where
-            global_x >= ?
-            and global_x <= ?
-            and global_y >= ?
-            and global_y <= ?
+            global_x >= {x_min}
+            and global_x <= {x_max}
+            and global_y >= {y_min}
+            and global_y <= {y_max}
         order by
             random()
         limit
-            ?
-    """, params=[table_name, x_min, x_max, y_min, y_max, max_transcripts])
+            {max_transcripts}
+    """)  # noqa: S608
 
     return sampled_rel, points_in_scope, total_points
 
