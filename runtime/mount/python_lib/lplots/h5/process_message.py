@@ -91,7 +91,7 @@ async def handle_h5_widget_message(
                         information_schema.tables
                     where
                         table_name = ?
-                        and schema_name = ?
+                        and table_schema = ?
                 )
         """, [table_name, schema_name]).fetchone()
         assert table_exists is not None
