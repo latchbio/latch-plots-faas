@@ -1,4 +1,5 @@
 import time
+from pathlib import Path
 from typing import Any, Literal
 
 from latch.ldata.path import LPath
@@ -61,7 +62,7 @@ async def handle_h5_widget_message(
         transcript_path = None
         for f in spatial_dir.iterdir():
             name = f.name()
-            if name is not None and name.endswith(".parquet"):
+            if name is not None and name.endswith(".duckdb"):
                 transcript_path = f
                 break
 
@@ -71,46 +72,38 @@ async def handle_h5_widget_message(
                 "data_type": "transcripts",
                 "key": widget_session_key,
                 "value": {
-                    "error": "Invalid message -- no parquet files found in spatial directory",
+                    "error": "Invalid message -- no duckdb files found in spatial directory",
                 },
             }
 
-        duckdb_table_name = f"h5spatial_{transcript_path.version_id()}"
+        local_transcript_path = Path("/tmp/transcripts.duckdb")  # noqa: S108
+        transcript_path.download(local_transcript_path, cache=True)
+
+        schema_name = "transcripts"
+        table_name = "final_transcripts"
 
         table_exists = _inject.kernel.duckdb.execute("""
-            SELECT EXISTS (
-                SELECT 1
-                FROM information_schema.tables
-                WHERE table_name = ?
-            )
-        """, [duckdb_table_name]).fetchone()
+            select
+                exists (
+                    select
+                        1
+                    from
+                        information_schema.tables
+                    where
+                        table_name = ?
+                        and schema_name = ?
+                )
+        """, [table_name, schema_name]).fetchone()
         assert table_exists is not None
         table_exists = table_exists[0]
 
         create_table_time = 0
         if not table_exists:
             start_time = time.time()
-            _inject.kernel.duckdb.execute(f"""
-                CREATE TABLE {duckdb_table_name} (
-                    fov INTEGER,
-                    cell_id INTEGER,
-                    target TEXT,
-                    cell_comp TEXT,
-                    global_x DOUBLE,
-                    global_y DOUBLE
-                )
-            """)
-            presigned_url = await _inject.kernel.get_presigned_url(transcript_path.path)
-            _inject.kernel.duckdb.execute(f"""
-                COPY {duckdb_table_name}
-                FROM '{presigned_url}'
-                (FORMAT 'PARQUET')
-            """)
-            _inject.kernel.duckdb.execute(f"""
-                CREATE INDEX idx_spatial_xy ON {duckdb_table_name} (global_x, global_y)
-            """)
+            _inject.kernel.duckdb.execute("attach ? as transcripts (read_only)", [local_transcript_path])
             create_table_time = round(time.time() - start_time, 2)
 
+        duckdb_table_name = f"{schema_name}.{table_name}"
         return await process_spatial_request(msg, widget_session_key, duckdb_table_name, create_table_time)
 
     raise ValueError(f"Invalid H5 viewer message: {msg}")
