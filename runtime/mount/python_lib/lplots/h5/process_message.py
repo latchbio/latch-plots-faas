@@ -76,9 +76,6 @@ async def handle_h5_widget_message(
                 },
             }
 
-        local_transcript_path = Path("/tmp/transcripts.duckdb")  # noqa: S108
-        transcript_path.download(local_transcript_path, cache=True)
-
         schema_name = "transcripts"
         table_name = "final_transcripts"
 
@@ -100,7 +97,10 @@ async def handle_h5_widget_message(
         create_table_time = 0
         if not table_exists:
             start_time = time.time()
-            _inject.kernel.duckdb.execute("attach ? as transcripts (read_only)", [local_transcript_path])
+            local_transcript_path = Path("/tmp/transcripts.duckdb")  # noqa: S108
+            transcript_path.download(local_transcript_path, cache=True)
+
+            _inject.kernel.duckdb.execute(f"attach '{local_transcript_path}' as transcripts (read_only)")
             create_table_time = round(time.time() - start_time, 2)
 
         duckdb_table_name = f"{schema_name}.{table_name}"
