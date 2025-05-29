@@ -120,6 +120,7 @@ async def process_spatial_request(  # noqa: RUF029
                     "fetched_for_x_max": float(msg["x_max"]),
                     "fetched_for_y_min": float(msg["y_min"]),
                     "fetched_for_y_max": float(msg["y_max"]),
+                    "fetched_for_genes": genes_to_fetch,
                 }
             },
         }
