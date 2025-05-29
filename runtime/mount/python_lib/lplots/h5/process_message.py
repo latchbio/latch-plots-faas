@@ -79,23 +79,18 @@ async def handle_h5_widget_message(
         schema_name = "transcripts"
         table_name = "final_transcripts"
 
-        table_exists = _inject.kernel.duckdb.execute("""
+        db_attached = _inject.kernel.duckdb.execute("""
             select
-                exists (
-                    select
-                        1
-                    from
-                        information_schema.tables
-                    where
-                        table_name = ?
-                        and table_schema = ?
-                )
-        """, [table_name, schema_name]).fetchone()
-        assert table_exists is not None
-        table_exists = table_exists[0]
+                count(*) > 0
+            from
+                duckdb_databases()
+            where
+                database_name = ?
+        """, [schema_name]).fetchone()
+        db_attached = db_attached[0]
 
         create_table_time = 0
-        if not table_exists:
+        if not db_attached:
             start_time = time.time()
             local_transcript_path = Path("/tmp/transcripts.duckdb")  # noqa: S108
             transcript_path.download(local_transcript_path, cache=True)
