@@ -31,7 +31,7 @@ async def handle_h5_widget_message(
             },
         }
 
-    widget_session_key = msg["key"]
+    widget_session_key: str = msg["key"]
     data_type: Literal["h5ad", "transcripts"] | Any = msg.get("data_type", "h5ad")
     widget_state: dict[str, Any] = msg["state"]
 
@@ -80,7 +80,8 @@ async def handle_h5_widget_message(
                 },
             }
 
-        schema_name = f"transcripts_{widget_session_key}"
+        sanitized_widget_session_key = widget_session_key.replace(":", "_").replace("/", "_").replace("-", "_")
+        schema_name = f"transcripts_{sanitized_widget_session_key}"
         table_name = "final_transcripts"
 
         db_databases_rel = _inject.kernel.duckdb.sql("select * from duckdb_databases()")
@@ -95,11 +96,10 @@ async def handle_h5_widget_message(
         if not db_attached:
             start_time = time.time()
 
-            local_transcript_path = Path(f"/tmp/transcripts_{widget_session_key}.duckdb")  # noqa: S108
-            local_transcript_path.parent.mkdir(parents=True, exist_ok=True)
+            local_transcript_path = Path(f"/tmp/transcripts_{sanitized_widget_session_key}.duckdb")  # noqa: S108
             transcript_path.download(local_transcript_path, cache=True)
 
-            _inject.kernel.duckdb.execute(f"attach '{local_transcript_path}' as '{schema_name}' (read_only)")
+            _inject.kernel.duckdb.execute(f"attach '{local_transcript_path}' as {schema_name} (read_only)")
             create_table_time = round(time.time() - start_time, 2)
 
         duckdb_table_name = f"{schema_name}.{table_name}"
