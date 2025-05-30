@@ -2,6 +2,10 @@ import time
 from typing import Any
 
 import duckdb
+from duckdb import (
+    ColumnExpression,
+    ConstantExpression,
+)
 
 from ... import _inject
 
@@ -16,49 +20,41 @@ def get_spatial_sample(
     max_transcripts: int = 100000,
     genes_to_fetch: list[str] | None = None,
 ) -> tuple[duckdb.DuckDBPyRelation, int, int]:
-    gene_filter = ""
+
+    table_rel = conn.table(table_name)
+
+    spatial_filter = (
+        (ColumnExpression("global_x") >= ConstantExpression(x_min)) &
+        (ColumnExpression("global_x") <= ConstantExpression(x_max)) &
+        (ColumnExpression("global_y") >= ConstantExpression(y_min)) &
+        (ColumnExpression("global_y") <= ConstantExpression(y_max))
+    )
+
     if genes_to_fetch is not None and len(genes_to_fetch) > 0:
-        escaped_genes = [gene.replace("'", "''") for gene in genes_to_fetch]
-        genes_list = ", ".join(f"'{gene}'" for gene in escaped_genes)
-        gene_filter = f" and target in ({genes_list})"
+        gene_expressions = [ConstantExpression(gene) for gene in genes_to_fetch]
+        gene_filter = ColumnExpression("target").isin(*gene_expressions)
+        filter_condition = spatial_filter & gene_filter
+    else:
+        filter_condition = spatial_filter
 
-    points_in_scope_q = conn.sql(f"""
-        select
-            count(*) as cnt
-        from
-            {table_name}
-        where
-            global_x >= {x_min}
-            and global_x <= {x_max}
-            and global_y >= {y_min}
-            and global_y <= {y_max}
-            {gene_filter}
-    """).fetchone()  # noqa: S608
-    points_in_scope = 0 if points_in_scope_q is None else points_in_scope_q[0]
+    points_in_scope_rel = table_rel.filter(filter_condition).aggregate(
+        "count(*) as cnt"
+    )
+    points_in_scope_result = points_in_scope_rel.fetchone()
+    points_in_scope = 0 if points_in_scope_result is None else points_in_scope_result[0]
 
-    total_points_q = conn.sql(f"""
-        select
-            count(*)
-        from
-            {table_name}
-    """).fetchone()  # noqa: S608
-    total_points = 0 if total_points_q is None else total_points_q[0]
-    sampled_rel = conn.sql(f"""
-        select
-            *
-        from
-            {table_name}
-        where
-            global_x >= {x_min}
-            and global_x <= {x_max}
-            and global_y >= {y_min}
-            and global_y <= {y_max}
-            {gene_filter}
-        order by
-            random()
-        limit
-            {max_transcripts}
-    """)  # noqa: S608
+    total_points_rel = table_rel.aggregate(
+        "count(*)"
+    )
+    total_points_result = total_points_rel.fetchone()
+    total_points = 0 if total_points_result is None else total_points_result[0]
+
+    sampled_rel = (
+        table_rel
+        .filter(filter_condition)
+        .order("random()")
+        .limit(max_transcripts)
+    )
 
     return sampled_rel, points_in_scope, total_points
 
@@ -69,7 +65,7 @@ async def process_spatial_request(  # noqa: RUF029
     duckdb_table_name: str,
     create_table_time: float,
 ) -> dict[str, Any]:
-    if "op" not in msg or msg["op"] not in {"get"}:  # noqa: FURB171
+    if "op" not in msg or msg["op"] not in {"get"}:
         return {
             "type": "h5",
             "key": widget_session_key,

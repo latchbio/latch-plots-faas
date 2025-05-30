@@ -2,6 +2,10 @@ import time
 from pathlib import Path
 from typing import Any, Literal
 
+from duckdb import (
+    ColumnExpression,
+    ConstantExpression,
+)
 from latch.ldata.path import LPath
 
 from lplots.h5.h5ad.process_message import process_h5ad_request
@@ -79,15 +83,13 @@ async def handle_h5_widget_message(
         schema_name = "transcripts"
         table_name = "final_transcripts"
 
-        db_attached = _inject.kernel.duckdb.execute("""
-            select
-                count(*) > 0
-            from
-                duckdb_databases()
-            where
-                database_name = ?
-        """, [schema_name]).fetchone()
-        db_attached = db_attached[0]
+        db_databases_rel = _inject.kernel.duckdb.sql("SELECT * FROM duckdb_databases()")
+        db_attached_rel = db_databases_rel.filter(
+            ColumnExpression("database_name") == ConstantExpression(schema_name)
+        ).aggregate("count(*) > 0 as is_attached")
+
+        db_attached_result = db_attached_rel.fetchone()
+        db_attached = db_attached_result[0] if db_attached_result else False
 
         create_table_time = 0
         if not db_attached:
