@@ -94,11 +94,12 @@ async def handle_h5_widget_message(
         create_table_time = 0
         if not db_attached:
             start_time = time.time()
+
             local_transcript_path = Path(f"/tmp/transcripts_{widget_session_key}.duckdb")  # noqa: S108
             local_transcript_path.parent.mkdir(parents=True, exist_ok=True)
             transcript_path.download(local_transcript_path, cache=True)
 
-            _inject.kernel.duckdb.execute(f"attach '{local_transcript_path}' as {schema_name} (read_only)")
+            _inject.kernel.duckdb.execute(f"attach '{local_transcript_path}' as '{schema_name}' (read_only)")
             create_table_time = round(time.time() - start_time, 2)
 
         duckdb_table_name = f"{schema_name}.{table_name}"
