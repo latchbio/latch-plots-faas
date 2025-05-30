@@ -17,9 +17,6 @@ from utils import PlotConfig, auth_token_sdk, get_presigned_url, gql_query
 
 def initialize_duckdb() -> DuckDBPyConnection:
     conn = duckdb_connect(database=":memory:plots-faas", read_only=False)
-    duckdb_extensions = "/tmp/duckdb_extensions"  # noqa: S108
-    Path(duckdb_extensions).mkdir(parents=True, exist_ok=True)
-    conn.execute(f"SET extension_directory='{duckdb_extensions}'")
 
     conn.execute(
         """
