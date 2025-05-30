@@ -1077,10 +1077,9 @@ version = "0.2.0"
 source = { virtual = "." }
 dependencies = [
     { name = "aiohttp" },
-    { name = "anndata" },
     { name = "dill" },
+    { name = "anndata" },
     { name = "duckdb" },
-    { name = "h5py" },
     { name = "latch" },
     { name = "latch-asgi" },
     { name = "latch-o11y" },
@@ -1104,10 +1103,9 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "aiohttp", specifier = ">=3.9.3" },
-    { name = "anndata", specifier = ">=0.10.10" },
     { name = "dill", specifier = ">=0.3.9" },
+    { name = "anndata", specifier = ">=0.10.10" },
     { name = "duckdb", specifier = ">=1.0.0" },
-    { name = "h5py", specifier = ">=3.13.0" },
     { name = "latch", specifier = ">=2.51.1" },
     { name = "latch-asgi", specifier = ">=1.0.1" },
     { name = "latch-o11y", specifier = ">=0.1.4" },
