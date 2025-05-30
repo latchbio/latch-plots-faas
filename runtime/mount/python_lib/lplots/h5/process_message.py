@@ -22,7 +22,7 @@ ad = auto_install.ad
 async def handle_h5_widget_message(
     msg: dict[str, Any],
 ) -> dict[str, Any]:
-    if msg["type"] != "h5" or msg["type"] != "ann_data" or "key" not in msg or "state" not in msg:
+    if msg["type"] != "h5" or "key" not in msg or "state" not in msg:
         return {
             "type": "h5",
             "key": None,
