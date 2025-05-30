@@ -20,8 +20,7 @@ def get_spatial_sample(
     max_transcripts: int = 100000,
     genes_to_fetch: list[str] | None = None,
 ) -> tuple[duckdb.DuckDBPyRelation, int, int]:
-
-    table_rel = conn.table(table_name)
+    table_rel = conn.sql(f"select * from {table_name}")  # noqa: S608
 
     spatial_filter = (
         (ColumnExpression("global_x") >= ConstantExpression(x_min)) &

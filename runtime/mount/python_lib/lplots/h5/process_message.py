@@ -80,10 +80,10 @@ async def handle_h5_widget_message(
                 },
             }
 
-        schema_name = "transcripts"
+        schema_name = f"transcripts_{widget_session_key}"
         table_name = "final_transcripts"
 
-        db_databases_rel = _inject.kernel.duckdb.sql("SELECT * FROM duckdb_databases()")
+        db_databases_rel = _inject.kernel.duckdb.sql("select * from duckdb_databases()")
         db_attached_rel = db_databases_rel.filter(
             ColumnExpression("database_name") == ConstantExpression(schema_name)
         ).aggregate("count(*) > 0 as is_attached")
@@ -94,10 +94,10 @@ async def handle_h5_widget_message(
         create_table_time = 0
         if not db_attached:
             start_time = time.time()
-            local_transcript_path = Path("/tmp/transcripts.duckdb")  # noqa: S108
+            local_transcript_path = Path(f"/tmp/transcripts_{widget_session_key}.duckdb")  # noqa: S108
             transcript_path.download(local_transcript_path, cache=True)
 
-            _inject.kernel.duckdb.execute(f"attach '{local_transcript_path}' as transcripts (read_only)")
+            _inject.kernel.duckdb.execute(f"attach '{local_transcript_path}' as {schema_name} (read_only)")
             create_table_time = round(time.time() - start_time, 2)
 
         duckdb_table_name = f"{schema_name}.{table_name}"
