@@ -2,9 +2,10 @@ from enum import Enum
 from io import BytesIO
 
 import numpy as np
-from lplots.ann_data import auto_install
 from PIL import Image
 from scipy.linalg import lstsq
+
+from lplots.h5.utils import auto_install
 
 ad = auto_install.ad
 

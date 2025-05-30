@@ -165,8 +165,8 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
         msg = await conn_k.recv()
 
         try:
-            # note(aidan): ann data messages can be mbs and stuffing into journal fills the disc
-            if msg["type"] != "ann_data":
+            # note(aidan): h5 messages can be mbs and stuffing into journal fills the disc
+            if msg["type"] != "h5":
                 print(">", msg)
 
             if msg["type"] == "ready":

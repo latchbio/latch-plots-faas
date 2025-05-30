@@ -2,7 +2,9 @@ import uuid
 from pathlib import Path
 from typing import TypedDict
 
-from .auto_install import ad
+from lplots.h5.utils import auto_install
+
+ad = auto_install.ad
 
 
 class SerializedAnnData(TypedDict):
