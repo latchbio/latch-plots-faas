@@ -95,6 +95,7 @@ async def handle_h5_widget_message(
         if not db_attached:
             start_time = time.time()
             local_transcript_path = Path(f"/tmp/transcripts_{widget_session_key}.duckdb")  # noqa: S108
+            local_transcript_path.parent.mkdir(parents=True, exist_ok=True)
             transcript_path.download(local_transcript_path, cache=True)
 
             _inject.kernel.duckdb.execute(f"attach '{local_transcript_path}' as {schema_name} (read_only)")
