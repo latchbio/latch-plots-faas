@@ -16,7 +16,6 @@ def get_spatial_sample(
     max_transcripts: int = 100000,
     genes_to_fetch: list[str] | None = None,
 ) -> tuple[duckdb.DuckDBPyRelation, int, int]:
-    # Build the gene filter condition
     gene_filter = ""
     if genes_to_fetch is not None and len(genes_to_fetch) > 0:
         escaped_genes = [gene.replace("'", "''") for gene in genes_to_fetch]
