@@ -27,23 +27,27 @@ class H5State(_emit.WidgetState[h5_widget_type, str | ad.AnnData | None]):
 class H5(widget.BaseWidget):
     _key: str
     _state: H5State
-    _signal: Signal[object | str]
+    _signal: Signal[object | list[tuple[float, float]]]
 
-    def _value(self, val: object) -> str | ad.AnnData | None:
-        if not isinstance(val, str):
+    def _value(self, val: object) -> list[tuple[float, float]] | None:
+        if not isinstance(val, list):
             return None
 
-        if val not in _inject.kernel.ann_data_objects:
-            return None
+        for item in val:
+            if not (isinstance(item, tuple) and
+                   len(item) == 2 and
+                   isinstance(item[0], float) and
+                   isinstance(item[1], float)):
+                return None
 
-        return _inject.kernel.ann_data_objects[val]
+        return val
 
     @property
-    def value(self) -> str | ad.AnnData | None:
+    def value(self) -> list[tuple[float, float]] | None:
         res = self._signal()
         return self._value(res)
 
-    def sample(self) -> str | ad.AnnData | None:
+    def sample(self) -> list[tuple[float, float]] | None:
         res = self._signal.sample()
         return self._value(res)
 
