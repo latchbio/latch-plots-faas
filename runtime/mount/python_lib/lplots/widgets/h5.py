@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, TypedDict
 
 from latch.ldata.path import LPath
 
@@ -23,31 +23,44 @@ class H5State(_emit.WidgetState[h5_widget_type, str | ad.AnnData | None]):
     appearance: OutputAppearance | None
 
 
+# note(aidan): typed dict to allow additional values
+class H5Value(TypedDict):
+    lasso_points: list[tuple[float, float]] | None
+
+
 @dataclass(frozen=True, kw_only=True)
 class H5(widget.BaseWidget):
     _key: str
     _state: H5State
-    _signal: Signal[object | list[tuple[float, float]]]
+    _signal: Signal[object | H5Value]
 
-    def _value(self, val: object) -> list[tuple[float, float]] | None:
-        if not isinstance(val, list):
-            return None
+    def _value(self, val: object) -> H5Value:
+        if not isinstance(val, dict):
+            return H5Value(lasso_points=None)
 
-        for item in val:
+        if "lasso_points" not in val:
+            return H5Value(lasso_points=None)
+
+        lasso_points = val["lasso_points"]
+
+        if not isinstance(lasso_points, list):
+            return H5Value(lasso_points=None)
+
+        for item in lasso_points:
             if not (isinstance(item, tuple) and
                    len(item) == 2 and
                    isinstance(item[0], float) and
                    isinstance(item[1], float)):
-                return None
+                return H5Value(lasso_points=None)
 
-        return val
+        return H5Value(lasso_points=lasso_points)
 
     @property
-    def value(self) -> list[tuple[float, float]] | None:
+    def value(self) -> H5Value:
         res = self._signal()
         return self._value(res)
 
-    def sample(self) -> list[tuple[float, float]] | None:
+    def sample(self) -> H5Value:
         res = self._signal.sample()
         return self._value(res)
 
