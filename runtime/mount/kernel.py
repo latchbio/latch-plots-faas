@@ -516,6 +516,10 @@ class RestoredGlobalInfo(TypedDict):
     msg: str
 
 
+SNAPSHOT_CHUNK = 64 * 2 ** 10
+SNAPSHOT_PROGRESS_INTERVAL = 10_000_000
+
+
 @dataclass(kw_only=True)
 class Kernel:
     conn: SocketIoThread
@@ -813,9 +817,27 @@ class Kernel:
             "url_dataframes": {},
         }
 
-        (snapshot_dir / snapshot_f_name).write_text(
-            orjson.dumps(s_depens).decode("utf-8")
-        )
+        data = orjson.dumps(s_depens)
+        total = len(data)
+        await self.send({"type": "save_kernel_snapshot",
+                         "status": "start",
+                         "total_bytes": total})
+
+        with Path(snapshot_dir / snapshot_f_name).open("wb") as f:
+            sent_since_last = 0
+            for start in range(0, total, SNAPSHOT_CHUNK):
+                end = min(start + SNAPSHOT_CHUNK, total)
+                await f.write(data[start:end])
+
+                sent_since_last += (end - start)
+                if sent_since_last >= SNAPSHOT_PROGRESS_INTERVAL or end == total:
+                    await self.send({
+                        "type": "save_kernel_snapshot",
+                        "status": "progress",
+                        "written_bytes": end,
+                        "total_bytes": total,
+                    })
+                    sent_since_last = 0
 
         await self.send({"type": "save_kernel_snapshot", "status": "done"})
 
@@ -824,7 +846,7 @@ class Kernel:
         if not snapshot_f.exists():
             await self.send({"type": "load_kernel_snapshot", "status": "done"})
             return
-        s_depens = orjson.loads(snapshot_f.read_text())
+        s_depens = orjson.loads(snapshot_f.decode("utf-8").read_text())
         s_nodes: dict[str, SerializedNode] = s_depens["s_nodes"]
         s_signals = s_depens["s_signals"]
 
