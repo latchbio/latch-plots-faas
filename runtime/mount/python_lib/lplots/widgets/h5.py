@@ -50,10 +50,10 @@ class H5(widget.BaseWidget):
             return H5Value(lasso_points=None)
 
         for item in lasso_points:
-            if not (isinstance(item, tuple) and
+            if not ((isinstance(item, (tuple, list))) and
                    len(item) == 2 and
-                   isinstance(item[0], float) and
-                   isinstance(item[1], float)):
+                   isinstance(item[0], (float, int)) and
+                   isinstance(item[1], (float, int))):
                 print(f"H5: lasso_points is not a list of tuples: {lasso_points}")
                 return H5Value(lasso_points=None)
 
