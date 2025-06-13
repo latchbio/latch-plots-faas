@@ -827,7 +827,7 @@ class Kernel:
             sent_since_last = 0
             for start in range(0, total, SNAPSHOT_CHUNK):
                 end = min(start + SNAPSHOT_CHUNK, total)
-                await f.write(data[start:end])
+                f.write(data[start:end])
 
                 sent_since_last += (end - start)
                 if sent_since_last >= SNAPSHOT_PROGRESS_INTERVAL or end == total:
