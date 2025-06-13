@@ -36,14 +36,17 @@ class H5(widget.BaseWidget):
 
     def _value(self, val: object) -> H5Value:
         if not isinstance(val, dict):
+            print(f"H5: value is not a dict: {val}")
             return H5Value(lasso_points=None)
 
         if "lasso_points" not in val:
+            print(f"H5: lasso_points not in value: {val}")
             return H5Value(lasso_points=None)
 
         lasso_points = val["lasso_points"]
 
         if not isinstance(lasso_points, list):
+            print(f"H5: lasso_points is not a list: {lasso_points}")
             return H5Value(lasso_points=None)
 
         for item in lasso_points:
@@ -51,8 +54,10 @@ class H5(widget.BaseWidget):
                    len(item) == 2 and
                    isinstance(item[0], float) and
                    isinstance(item[1], float)):
+                print(f"H5: lasso_points is not a list of tuples: {lasso_points}")
                 return H5Value(lasso_points=None)
 
+        print(f"H5: lasso_points is a list of tuples: {lasso_points}")
         return H5Value(lasso_points=lasso_points)
 
     @property
