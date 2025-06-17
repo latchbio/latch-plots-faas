@@ -25,7 +25,7 @@ class H5State(_emit.WidgetState[h5_widget_type, str | ad.AnnData | None]):
 
 # note(aidan): typed dict to allow additional values
 class H5Value(TypedDict):
-    lasso_points: list[tuple[float, float]] | None
+    lasso_points: list[list[tuple[float, float]]] | None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -47,11 +47,15 @@ class H5(widget.BaseWidget):
             return H5Value(lasso_points=None)
 
         for item in lasso_points:
-            if not ((isinstance(item, (tuple, list))) and
-                   len(item) == 2 and
-                   isinstance(item[0], (float, int)) and
-                   isinstance(item[1], (float, int))):
+            if not isinstance(item, list):
                 return H5Value(lasso_points=None)
+
+            for point in item:
+                if not ((isinstance(point, (tuple, list))) and
+                        len(point) == 2 and
+                        isinstance(point[0], (float, int)) and
+                        isinstance(point[1], (float, int))):
+                    return H5Value(lasso_points=None)
 
         return H5Value(lasso_points=lasso_points)
 
