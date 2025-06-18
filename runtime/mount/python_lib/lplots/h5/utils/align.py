@@ -110,7 +110,14 @@ async def align_image(
 
     # M shape (1, H_J, W_J) but dummy channel
     M2 = M.squeeze(0)
-    J_img = STalign.normalize(np.stack([M2] * 3))         # make RGB-like 3×H_J×W_J
+
+    J_img: np.ndarray | None = None
+
+    def normalize_work() -> None:
+        nonlocal J_img
+        J_img = STalign.normalize(np.stack([M2] * 3))         # make RGB-like 3×H_J×W_J
+
+    await capture_output(normalize_work, on_progress, "normalize")
 
     if torch.cuda.is_available():
         device = "cuda:0"
