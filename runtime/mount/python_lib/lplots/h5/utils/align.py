@@ -1,3 +1,4 @@
+import traceback
 from collections.abc import Awaitable, Callable
 from contextlib import redirect_stderr, redirect_stdout
 from enum import Enum
@@ -21,18 +22,27 @@ progress_msg_base = {"type": "h5", "op": "align_image", "progress": True}
 
 
 async def capture_output(blocking_work: Callable[[], None], on_progress:
-                         Callable[[object], Awaitable[None]], stage: str) -> None:
+                         Callable[[object], Awaitable[None]], stage: str) -> bool:
+    error_info: Exception | None = None
     buf_out, buf_err = StringIO(), StringIO()
     try:
         with redirect_stdout(buf_out), redirect_stderr(buf_err):
             blocking_work()
+            return False
+    except Exception as exc:
+        e = exc
+        error_info = traceback.format_exc()
+        return True
     finally:
         await on_progress(
                 {**progress_msg_base,
                  "stage": stage,
                  "stdout": buf_out.getvalue(),
                  "stderr": buf_err.getvalue(),
+                 "error": error_info,
                 })
+        if error_info is not None:
+            raise e
 
 
 async def align_image(
