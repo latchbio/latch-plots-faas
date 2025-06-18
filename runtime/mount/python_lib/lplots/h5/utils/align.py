@@ -2,12 +2,12 @@ from collections.abc import Awaitable, Callable
 from contextlib import redirect_stderr, redirect_stdout
 from enum import Enum
 from io import BytesIO, StringIO
+from types import ModuleType
 
 import numpy as np
+from lplots.h5.utils import auto_install
 from PIL import Image
 from scipy.linalg import lstsq
-
-from lplots.h5.utils import auto_install
 
 ad = auto_install.ad
 
@@ -17,7 +17,7 @@ class AlignmentMethod(Enum):
     stalign = "stalign"
 
 
-progress_msg_base = {"type": "h5", "op": "align_image"}
+progress_msg_base = {"type": "h5", "op": "align_image", "progress": True}
 
 
 async def capture_output(blocking_work: Callable[[], None], on_progress:
@@ -84,18 +84,29 @@ async def align_image(
 
     assert image_bytes is not None
 
-    await on_progress({**progress_msg_base, "stage": "install-and-import"})
+    STalign: ModuleType | None = None  # type: ignore
+    torch: ModuleType | None = None  # type: ignore
 
-    STalign, torch = auto_install.install_and_import_stalign_and_torch()
+    def install_and_import_work() -> None:
+        nonlocal STalign, torch
+        STalign, torch = auto_install.install_and_import_stalign_and_torch()
+
+    await capture_output(install_and_import_work, on_progress, "install-and-import")
 
     V = np.array(Image.open(BytesIO(image_bytes))) / 255.0
     I_img = STalign.normalize(V).transpose(2, 0, 1)
     I_y = np.arange(I_img.shape[1])
     I_x = np.arange(I_img.shape[2])
 
-    await on_progress({**progress_msg_base, "stage": "rasterize"})
+    J_x: np.ndarray | None = None      # (W_J,) grid coordinates
+    J_y: np.ndarray | None = None      # (H_J,) grid coordinates
+    M:   np.ndarray | None = None      # (1, H_J, W_J) marker image
 
-    J_x, J_y, M, _ = STalign.rasterize(xs, ys, dx=5)  # M is (H_J, W_J)
+    def rasterize_work() -> None:
+        nonlocal J_x, J_y, M
+        J_x, J_y, M, _ = STalign.rasterize(xs, ys, dx=5)
+
+    await capture_output(rasterize_work, on_progress, "rasterize")
 
     # M shape (1, H_J, W_J) but dummy channel
     M2 = M.squeeze(0)
@@ -121,13 +132,17 @@ async def align_image(
               "muA": torch.tensor([1, 1, 1])
     }
 
-    await on_progress({**progress_msg_base, "stage": "lddm"})
+    out: dict[str, any] | None = None
 
-    out = STalign.LDDMM(
-        [I_y, I_x], I_img,
-        [J_y, J_x], J_img,
-        **params
-    )
+    def lddmm_work() -> None:
+        nonlocal out
+        out = STalign.LDDMM(
+            [I_y, I_x], I_img,
+            [J_y, J_x], J_img,
+            **params
+        )
+
+    await capture_output(lddmm_work, on_progress, "lddmm")
 
     pts = np.stack([xs, ys], axis=1)  # (N,2) in J-coords
     dtype = out["A"].dtype
