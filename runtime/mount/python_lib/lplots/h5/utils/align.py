@@ -104,7 +104,15 @@ async def align_image(
     await capture_output(install_and_import_work, on_progress, "install-and-import")
 
     V = np.array(Image.open(BytesIO(image_bytes))) / 255.0
-    I_img = STalign.normalize(V).transpose(2, 0, 1)
+    I_img: np.ndarray | None = None        # (3, H_I, W_I) float32 in [0, 1]
+
+    def normalize_work() -> None:
+        nonlocal I_img
+
+        I_img = STalign.normalize(V).transpose(2, 0, 1)   # RGB → CHW
+
+    await capture_output(normalize_work, on_progress, "normalize")
+
     I_y = np.arange(I_img.shape[1])
     I_x = np.arange(I_img.shape[2])
 
