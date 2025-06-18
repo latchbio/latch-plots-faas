@@ -1,3 +1,4 @@
+from collections.abc import Awaitable, Callable
 from enum import Enum
 from io import BytesIO
 
@@ -15,7 +16,10 @@ class AlignmentMethod(Enum):
     stalign = "stalign"
 
 
-def align_image(
+progress_msg_base = {"type": "h5", "op": "align_image"}
+
+
+async def align_image(
         scatter_data_key: str,
         new_scatter_data_key: str,
         points_I: list[list[float]],
@@ -23,6 +27,7 @@ def align_image(
         alignment_method: AlignmentMethod,
         image_bytes: bytes | None,
         adata: ad.AnnData,
+        on_progress: Callable[[object], Awaitable[None]]
         ) -> None:
 
     # Each (k, 2)
@@ -34,6 +39,8 @@ def align_image(
     ones = np.ones((k, 1))
     A = np.hstack([points_J, ones])              # (k,3)
     B = points_I                                 # (k,2)
+
+    await on_progress({**progress_msg_base, "stage": "lstsq"})
 
     # Least-squares:  A · M ≈ B   where M (3, 2)
     M, *_ = lstsq(A, B)
@@ -51,9 +58,12 @@ def align_image(
         X_aligned = np.column_stack([I[0], I[1]])  # (N,2)
 
         adata.obsm[new_scatter_data_key] = X_aligned
+        await on_progress({**progress_msg_base, "stage": "done"})
         return
 
     assert image_bytes is not None
+
+    await on_progress({**progress_msg_base, "stage": "install-and-import"})
 
     STalign, torch = auto_install.install_and_import_stalign_and_torch()
 
@@ -61,6 +71,8 @@ def align_image(
     I_img = STalign.normalize(V).transpose(2, 0, 1)
     I_y = np.arange(I_img.shape[1])
     I_x = np.arange(I_img.shape[2])
+
+    await on_progress({**progress_msg_base, "stage": "rasterize"})
 
     J_x, J_y, M, _ = STalign.rasterize(xs, ys, dx=5)  # M is (H_J, W_J)
 
@@ -88,6 +100,8 @@ def align_image(
               "muA": torch.tensor([1, 1, 1])
     }
 
+    await on_progress({**progress_msg_base, "stage": "lddm"})
+
     out = STalign.LDDMM(
         [I_y, I_x], I_img,
         [J_y, J_x], J_img,
@@ -106,3 +120,5 @@ def align_image(
         out["xv"], out["v"], out["A"], pts_torch
     )
     adata.obsm[new_scatter_data_key] = tpts.cpu().numpy()
+
+    await on_progress({**progress_msg_base, "stage": "done"})
