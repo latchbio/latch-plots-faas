@@ -26,6 +26,7 @@ class H5State(_emit.WidgetState[h5_widget_type, str | ad.AnnData | None]):
 # note(aidan): typed dict to allow additional values
 class H5Value(TypedDict):
     lasso_points: list[list[tuple[float, float]]] | None
+    lasso_points_obsm: str | None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -36,28 +37,28 @@ class H5(widget.BaseWidget):
 
     def _value(self, val: object) -> H5Value:
         if not isinstance(val, dict):
-            return H5Value(lasso_points=None)
+            return H5Value(lasso_points=None, lasso_points_obsm=None)
 
         if "lasso_points" not in val:
-            return H5Value(lasso_points=None)
+            return H5Value(lasso_points=None, lasso_points_obsm=None)
 
         lasso_points = val["lasso_points"]
 
         if not isinstance(lasso_points, list):
-            return H5Value(lasso_points=None)
+            return H5Value(lasso_points=None, lasso_points_obsm=None)
 
         for item in lasso_points:
             if not isinstance(item, list):
-                return H5Value(lasso_points=None)
+                return H5Value(lasso_points=None, lasso_points_obsm=None)
 
             for point in item:
                 if not ((isinstance(point, (tuple, list))) and
                         len(point) == 2 and
                         isinstance(point[0], (float, int)) and
                         isinstance(point[1], (float, int))):
-                    return H5Value(lasso_points=None)
+                    return H5Value(lasso_points=None, lasso_points_obsm=None)
 
-        return H5Value(lasso_points=lasso_points)
+        return H5Value(lasso_points=lasso_points, lasso_points_obsm=val.get("lasso_points_obsm", None))
 
     @property
     def value(self) -> H5Value:
