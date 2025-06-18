@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from typing import Any
 
 from lplots.h5.h5ad.ops import (
@@ -21,6 +22,7 @@ async def process_h5ad_request(
     widget_session_key: str,
     adata: ad.AnnData,
     obj_id: str,
+    on_progress: Callable[object]
 ) -> dict[str, Any]:
 
     if "op" not in msg or msg["op"] not in {"init_data", "get_obsm_options",
@@ -427,6 +429,7 @@ async def process_h5ad_request(
                 image_bytes,
                 adata
         )
+        on_progress({"foo": "bar"})
         return {
             "type": "h5",
             "op": op,
