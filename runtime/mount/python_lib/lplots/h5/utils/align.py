@@ -20,7 +20,7 @@ class AlignmentMethod(Enum):
 progress_msg_base = {"type": "h5", "op": "align_image"}
 
 
-async def capture_output(blocking_work: Callable[any, None], on_progress:
+async def capture_output(blocking_work: Callable[[], None], on_progress:
                          Callable[[object], Awaitable[None]], stage: str) -> None:
     buf_out, buf_err = StringIO(), StringIO()
     try:
@@ -55,6 +55,9 @@ async def align_image(
     ones = np.ones((k, 1))
     A = np.hstack([points_J, ones])              # (k,3)
     B = points_I                                 # (k,2)
+
+    L: np.ndarray | None = None   # outer scope
+    T: np.ndarray | None = None
 
     # Least-squares:  A · M ≈ B   where M (3, 2)
     def lstsq_work() -> None:
