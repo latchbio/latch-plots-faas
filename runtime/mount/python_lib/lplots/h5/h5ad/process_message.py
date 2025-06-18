@@ -16,6 +16,8 @@ from lplots.h5.utils.align import align_image
 
 ad = auto_install.ad
 
+alignment_is_running = False
+
 
 async def process_h5ad_request(
     msg: dict[str, Any],
@@ -24,6 +26,8 @@ async def process_h5ad_request(
     obj_id: str,
     on_progress: Callable[[object], Awaitable[None]]
 ) -> dict[str, Any]:
+
+    global alignment_is_running
 
     if "op" not in msg or msg["op"] not in {"init_data", "get_obsm_options",
                                             "get_obsm", "get_obs_options",
@@ -89,6 +93,8 @@ async def process_h5ad_request(
 
         var_index, var_names = get_var_index(obj_id, adata)
 
+        global alignment_is_running
+
         return {
             "type": "h5",
             "op": op,
@@ -124,6 +130,9 @@ async def process_h5ad_request(
                     # var color by info
                     "init_var_values": gene_column.tolist() if gene_column is not None else None,
                     "init_var_key": init_var_key if init_var_key is not None else None,
+
+                    # alignment info
+                    "alignment_is_running": alignment_is_running,
                 }
             },
         }
@@ -409,33 +418,38 @@ async def process_h5ad_request(
         }
 
     if op == "align_image":
+        alignment_is_running = True
         try:
-            image_bytes = pil_image_cache[msg["node_id"]]
-        except KeyError:
+            try:
+                image_bytes = pil_image_cache[msg["node_id"]]
+            except KeyError:
+                return {
+                    "type": "h5",
+                    "op": op,
+                    "data_type": "h5ad",
+                    "key": widget_session_key,
+                    "value": {"error": f"attempting to align image from an unprocessed node (nid: {msg['node_id']})"},
+                }
+
+            await align_image(
+                    msg["scatter_data_key"],
+                    msg["new_scatter_data_key"],
+                    msg["points_I"],
+                    msg["points_J"],
+                    msg["alignment_method"],
+                    image_bytes,
+                    adata,
+                    on_progress
+            )
+            alignment_is_running = False
             return {
                 "type": "h5",
                 "op": op,
                 "data_type": "h5ad",
                 "key": widget_session_key,
-                "value": {"error": f"attempting to align image from an unprocessed node (nid: {msg['node_id']})"},
+                "value": {"data": {"aligned_obsm_key": msg["new_scatter_data_key"]}},
             }
-
-        await align_image(
-                msg["scatter_data_key"],
-                msg["new_scatter_data_key"],
-                msg["points_I"],
-                msg["points_J"],
-                msg["alignment_method"],
-                image_bytes,
-                adata,
-                on_progress
-        )
-        return {
-            "type": "h5",
-            "op": op,
-            "data_type": "h5ad",
-            "key": widget_session_key,
-            "value": {"data": {"aligned_obsm_key": msg["new_scatter_data_key"]}},
-        }
+        finally:
+            alignment_is_running = False
 
     raise ValueError(f"Invalid operation: {op}")
