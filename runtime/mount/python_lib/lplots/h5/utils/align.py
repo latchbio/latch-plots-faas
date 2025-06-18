@@ -1,6 +1,7 @@
 from collections.abc import Awaitable, Callable
+from contextlib import redirect_stderr, redirect_stdout
 from enum import Enum
-from io import BytesIO
+from io import BytesIO, StringIO
 
 import numpy as np
 from PIL import Image
@@ -17,6 +18,21 @@ class AlignmentMethod(Enum):
 
 
 progress_msg_base = {"type": "h5", "op": "align_image"}
+
+
+async def capture_output(blocking_work: Callable[any, None], on_progress:
+                         Callable[[object], Awaitable[None]], stage: str) -> None:
+    buf_out, buf_err = StringIO(), StringIO()
+    try:
+        with redirect_stdout(buf_out), redirect_stderr(buf_err):
+            blocking_work()
+    finally:
+        await on_progress(
+                {**progress_msg_base,
+                 "stage": stage,
+                 "stdout": buf_out.getvalue(),
+                 "stderr": buf_err.getvalue(),
+                })
 
 
 async def align_image(
@@ -40,12 +56,14 @@ async def align_image(
     A = np.hstack([points_J, ones])              # (k,3)
     B = points_I                                 # (k,2)
 
-    await on_progress({**progress_msg_base, "stage": "lstsq"})
-
     # Least-squares:  A · M ≈ B   where M (3, 2)
-    M, *_ = lstsq(A, B)
-    L = M[:2, :].T      # (2, 2) : linear transformation
-    T = M[2, :]         # (2,) : translation
+    def lstsq_work() -> None:
+        nonlocal L, T
+        M, *_ = lstsq(A, B)
+        L = M[:2, :].T      # (2, 2) : linear transformation
+        T = M[2, :]         # (2,) : translation
+
+    await capture_output(lstsq_work, on_progress, "lstsq")
 
     X_data = adata.obsm[scatter_data_key]            # (N,2) x,y
     xs, ys = X_data.T

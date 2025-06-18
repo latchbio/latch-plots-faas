@@ -420,7 +420,7 @@ async def process_h5ad_request(
                 "value": {"error": f"attempting to align image from an unprocessed node (nid: {msg['node_id']})"},
             }
 
-        align_image(
+        await align_image(
                 msg["scatter_data_key"],
                 msg["new_scatter_data_key"],
                 msg["points_I"],
