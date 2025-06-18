@@ -439,6 +439,7 @@ async def process_h5ad_request(
                     msg["alignment_method"],
                     image_bytes,
                     adata,
+                    widget_session_key,
                     on_progress
             )
             alignment_is_running = False

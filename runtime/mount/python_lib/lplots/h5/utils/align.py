@@ -18,11 +18,9 @@ class AlignmentMethod(Enum):
     stalign = "stalign"
 
 
-progress_msg_base = {"type": "h5", "op": "align_image", "progress": True}
-
-
 async def capture_output(blocking_work: Callable[[], None], on_progress:
-                         Callable[[object], Awaitable[None]], stage: str) -> bool:
+                         Callable[[object], Awaitable[None]], stage: str,
+                         progress_msg_base: dict[str, any]) -> bool:
     error_info: Exception | None = None
     buf_out, buf_err = StringIO(), StringIO()
     try:
@@ -54,8 +52,12 @@ async def align_image(
         alignment_method: AlignmentMethod,
         image_bytes: bytes | None,
         adata: ad.AnnData,
+        widget_session_key: str,
         on_progress: Callable[[object], Awaitable[None]]
         ) -> None:
+
+    progress_msg_base = {"type": "h5", "op": "align_image", "progress": True,
+                         "key": widget_session_key}
 
     # Each (k, 2)
     # k := # anchor points
@@ -77,7 +79,7 @@ async def align_image(
         L = M[:2, :].T      # (2, 2) : linear transformation
         T = M[2, :]         # (2,) : translation
 
-    await capture_output(lstsq_work, on_progress, "lstsq")
+    await capture_output(lstsq_work, on_progress, "lstsq", progress_msg_base)
 
     X_data = adata.obsm[scatter_data_key]            # (N,2) x,y
     xs, ys = X_data.T
@@ -102,7 +104,8 @@ async def align_image(
         nonlocal STalign, torch
         STalign, torch = auto_install.install_and_import_stalign_and_torch()
 
-    await capture_output(install_and_import_work, on_progress, "install-and-import")
+    await capture_output(install_and_import_work, on_progress,
+                         "install-and-import", progress_msg_base)
 
     V = np.array(Image.open(BytesIO(image_bytes))) / 255.0
     I_img: np.ndarray | None = None        # (3, H_I, W_I) float32 in [0, 1]
@@ -112,7 +115,8 @@ async def align_image(
 
         I_img = STalign.normalize(V).transpose(2, 0, 1)   # RGB → CHW
 
-    await capture_output(normalize_work, on_progress, "normalize")
+    await capture_output(normalize_work, on_progress, "normalize",
+                         progress_msg_base)
 
     I_y = np.arange(I_img.shape[1])
     I_x = np.arange(I_img.shape[2])
@@ -125,7 +129,8 @@ async def align_image(
         nonlocal J_x, J_y, M
         J_x, J_y, M, _ = STalign.rasterize(xs, ys, dx=5)
 
-    await capture_output(rasterize_work, on_progress, "rasterize")
+    await capture_output(rasterize_work, on_progress, "rasterize",
+                         progress_msg_base)
 
     # M shape (1, H_J, W_J) but dummy channel
     M2 = M.squeeze(0)
@@ -136,7 +141,8 @@ async def align_image(
         nonlocal J_img
         J_img = STalign.normalize(np.stack([M2] * 3))         # make RGB-like 3×H_J×W_J
 
-    await capture_output(normalize_work, on_progress, "normalize")
+    await capture_output(normalize_work, on_progress, "normalize",
+                         progress_msg_base)
 
     if torch.cuda.is_available():
         device = "cuda:0"
@@ -168,7 +174,7 @@ async def align_image(
             **params
         )
 
-    await capture_output(lddmm_work, on_progress, "lddmm")
+    await capture_output(lddmm_work, on_progress, "lddmm", progress_msg_base)
 
     pts = np.stack([xs, ys], axis=1)  # (N,2) in J-coords
     dtype = out["A"].dtype
