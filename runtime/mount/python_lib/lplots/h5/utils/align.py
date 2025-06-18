@@ -92,7 +92,6 @@ async def align_image(
         X_aligned = np.column_stack([I[0], I[1]])  # (N,2)
 
         adata.obsm[new_scatter_data_key] = X_aligned
-        await on_progress({**progress_msg_base, "stage": "done"})
         return
 
     assert image_bytes is not None
