@@ -427,9 +427,9 @@ async def process_h5ad_request(
                 msg["points_J"],
                 msg["alignment_method"],
                 image_bytes,
-                adata
+                adata,
+                on_progress
         )
-        await on_progress({"foo": "bar"})
         return {
             "type": "h5",
             "op": op,
