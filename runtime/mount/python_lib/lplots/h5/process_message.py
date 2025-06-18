@@ -1,5 +1,5 @@
 import time
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any, Literal
 
@@ -21,7 +21,7 @@ ad = auto_install.ad
 
 async def handle_h5_widget_message(
     msg: dict[str, Any],
-    on_progress: Callable[object]
+    on_progress: Callable[[object], Awaitable[None]]
 ) -> dict[str, Any]:
     if msg["type"] != "h5" or "key" not in msg or "state" not in msg:
         return {
