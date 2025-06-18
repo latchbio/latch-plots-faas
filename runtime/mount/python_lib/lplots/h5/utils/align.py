@@ -182,5 +182,3 @@ async def align_image(
         out["xv"], out["v"], out["A"], pts_torch
     )
     adata.obsm[new_scatter_data_key] = tpts.cpu().numpy()
-
-    await on_progress({**progress_msg_base, "stage": "done"})
