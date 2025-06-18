@@ -23,7 +23,7 @@ def align_image(
         alignment_method: AlignmentMethod,
         image_bytes: bytes | None,
         adata: ad.AnnData,
-        ) -> str:
+        ) -> None:
 
     # Each (k, 2)
     # k := # anchor points
@@ -51,7 +51,7 @@ def align_image(
         X_aligned = np.column_stack([I[0], I[1]])  # (N,2)
 
         adata.obsm[new_scatter_data_key] = X_aligned
-        return k
+        return
 
     assert image_bytes is not None
 
@@ -106,4 +106,3 @@ def align_image(
         out["xv"], out["v"], out["A"], pts_torch
     )
     adata.obsm[new_scatter_data_key] = tpts.cpu().numpy()
-    return k

@@ -418,7 +418,7 @@ async def process_h5ad_request(
                 "value": {"error": f"attempting to align image from an unprocessed node (nid: {msg['node_id']})"},
             }
 
-        aligned_obs_key = align_image(
+        align_image(
                 msg["scatter_data_key"],
                 msg["new_scatter_data_key"],
                 msg["points_I"],
@@ -432,7 +432,7 @@ async def process_h5ad_request(
             "op": op,
             "data_type": "h5ad",
             "key": widget_session_key,
-            "value": {"data": {"aligned_obs_key": aligned_obs_key}},
+            "value": {"data": {"aligned_obsm_key": msg["new_scatter_data_key"]}},
         }
 
     raise ValueError(f"Invalid operation: {op}")
