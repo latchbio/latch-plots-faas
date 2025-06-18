@@ -36,11 +36,12 @@ async def capture_output(blocking_work: Callable[[], None], on_progress:
     finally:
         await on_progress(
                 {**progress_msg_base,
+                 "value": {
                  "stage": stage,
                  "stdout": buf_out.getvalue(),
                  "stderr": buf_err.getvalue(),
                  "error": error_info,
-                })
+                }})
         if error_info is not None:
             raise e
 
