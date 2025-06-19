@@ -21,7 +21,7 @@ ad = auto_install.ad
 
 async def handle_h5_widget_message(
     msg: dict[str, Any],
-    on_progress: Callable[[object], Awaitable[None]]
+    send: Callable[[object], Awaitable[None]]
 ) -> dict[str, Any]:
     if msg["type"] != "h5" or "key" not in msg or "state" not in msg:
         return {
@@ -51,7 +51,7 @@ async def handle_h5_widget_message(
         adata: ad.AnnData = _inject.kernel.ann_data_objects[obj_id]
 
         return await process_h5ad_request(msg, widget_session_key, adata,
-                                          obj_id, on_progress)
+                                          obj_id, send)
 
     if data_type == "transcripts":
         if "spatial_dir" not in widget_state:

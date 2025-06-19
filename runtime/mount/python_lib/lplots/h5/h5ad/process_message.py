@@ -24,7 +24,7 @@ async def process_h5ad_request(
     widget_session_key: str,
     adata: ad.AnnData,
     obj_id: str,
-    on_progress: Callable[[object], Awaitable[None]]
+    send: Callable[[object], Awaitable[None]]
 ) -> dict[str, Any]:
 
     global alignment_is_running
@@ -440,7 +440,7 @@ async def process_h5ad_request(
                     image_bytes,
                     adata,
                     widget_session_key,
-                    on_progress
+                    send
             )
             alignment_is_running = False
             return {
