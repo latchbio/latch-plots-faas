@@ -106,7 +106,7 @@ async def align_image(
     await capture_output(install_and_import_work, on_progress,
                          "install-and-import", progress_msg_base)
 
-    V = np.array(Image.open(BytesIO(image_bytes))) / 255.0
+    V = np.array(Image.open(BytesIO(image_bytes)).convert("RGB")) / 255.0
     I_img: np.ndarray | None = None        # (3, H_I, W_I) float32 in [0, 1]
 
     def normalize_work() -> None:
