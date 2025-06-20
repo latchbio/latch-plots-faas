@@ -22,4 +22,4 @@ def use_value_signal(key: str) -> Signal[object]:
 
 
 def submit_widget_state() -> None:
-    _inject.kernel.submit_widget_state
+    _inject.kernel.submit_widget_state()
