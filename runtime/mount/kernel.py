@@ -8,6 +8,7 @@ if __name__ == "__main__":
 import ast
 import asyncio
 import math
+import os
 import pprint
 import re
 import signal
@@ -831,11 +832,12 @@ class Kernel:
                          "status": "start",
                          "data": {"total_bytes": total}})
 
-        with Path(snapshot_dir / snapshot_f_name).open("wb") as f:
+        with (snapshot_dir / snapshot_f_name).open("wb") as f:
             sent_since_last = 0
             for start in range(0, total, SNAPSHOT_CHUNK):
                 end = min(start + SNAPSHOT_CHUNK, total)
                 f.write(data[start:end])
+                os.fsync(f.fileno())
 
                 sent_since_last += (end - start)
                 if sent_since_last >= SNAPSHOT_PROGRESS_INTERVAL or end == total:
@@ -852,84 +854,121 @@ class Kernel:
         await self.send({"type": "save_kernel_snapshot", "status": "done"})
 
     async def load_kernel_snapshot(self) -> None:
+
         snapshot_f = snapshot_dir / snapshot_f_name
         if not snapshot_f.exists():
-            await self.send({"type": "load_kernel_snapshot", "status": "done"})
+            await self.send({"type": "load_kernel_snapshot", "status": "done",
+                             "data": None})
             return
-        s_depens = orjson.loads(snapshot_f.decode("utf-8").read_text())
-        s_nodes: dict[str, SerializedNode] = s_depens["s_nodes"]
-        s_signals = s_depens["s_signals"]
 
-        nodes: dict[str, Node] = {}
-        signals: dict[str, Signal[object]] = {}
+        total = snapshot_f.stat().st_size
+        await self.send({"type": "load_kernel_snapshot",
+                         "status": "start",
+                         "data": {"total_bytes": total}})
 
-        for nid, s_node in s_nodes.items():
-            nodes[nid] = Node.load(s_node)
+        data = bytearray()
+        read_since_last = 0
+        with snapshot_f.open("rb") as f:
+            while True:
+                chunk = f.read(SNAPSHOT_CHUNK)
+                if not chunk:
+                    break
 
-        for sid, s_sig in s_signals.items():
-            signals[sid] = Signal.load(s_sig)
+                data.extend(chunk)
+                read_since_last += len(chunk)
 
-        for nid, s_node in s_nodes.items():
-            node = nodes[nid]
+                if read_since_last >= SNAPSHOT_PROGRESS_INTERVAL or len(data) == total:
+                    await self.send({
+                        "type":   "load_kernel_snapshot",
+                        "status": "progress",
+                        "data":   {
+                            "read_bytes":  len(data),
+                            "total_bytes": total,
+                        }
+                    })
+                    read_since_last = 0
 
-            # note(kenny): node children will get constructed by parents when
-            # called so no need to build entire reactive tree
-            node.signals = {x: signals.get(x) for x in s_node["signals"]}
+        try:
+            s_depens = orjson.loads(data)
 
-        for sid, s_signal in s_signals.items():
-            signal = signals[sid]
-            signal._listeners = {x: nodes.get(x) for x in s_signal["listeners"]}
+            s_nodes: dict[str, SerializedNode] = s_depens["s_nodes"]
+            s_signals = s_depens["s_signals"]
 
-        self.restored_nodes = nodes
-        self.restored_signals = signals
+            nodes: dict[str, Node] = {}
+            signals: dict[str, Signal[object]] = {}
 
-        self.cell_rnodes = filter_items(s_depens["cell_rnodes"], nodes)
-        self.widget_signals = filter_items(s_depens["widget_signals"], signals)
+            for nid, s_node in s_nodes.items():
+                nodes[nid] = Node.load(s_node)
 
-        restored_globals = {}
-        self.ann_data_objects = {}
-        for k, s_v in s_depens["s_globals"].items():
-            if "listeners" in s_v:
-                sig = signals.get(s_v["id"])
-                if sig is None:
-                    sig = Signal.load(s_v)
-                restored_globals[k] = sig.serialize(short_val=True)
-                self.k_globals._direct_set(k, Signal(sig))
-            elif "_is_plots_faas_widget" in s_v:
-                widget = load_widget_helper(s_v, signals)
-                restored_globals[k] = widget.serialize()
-                self.k_globals._direct_set(k, Signal(widget))
-            elif "_is_anndata" in s_v:
-                adata_key = s_v["key"]
-                if adata_key in self.ann_data_objects:
-                    adata = self.ann_data_objects[adata_key]
+            for sid, s_sig in s_signals.items():
+                signals[sid] = Signal.load(s_sig)
+
+            for nid, s_node in s_nodes.items():
+                node = nodes[nid]
+
+                # note(kenny): node children will get constructed by parents when
+                # called so no need to build entire reactive tree
+                node.signals = {x: signals.get(x) for x in s_node["signals"]}
+
+            for sid, s_signal in s_signals.items():
+                signal = signals[sid]
+                signal._listeners = {x: nodes.get(x) for x in s_signal["listeners"]}
+
+            self.restored_nodes = nodes
+            self.restored_signals = signals
+
+            self.cell_rnodes = filter_items(s_depens["cell_rnodes"], nodes)
+            self.widget_signals = filter_items(s_depens["widget_signals"], signals)
+
+            restored_globals = {}
+            self.ann_data_objects = {}
+            for k, s_v in s_depens["s_globals"].items():
+                if "listeners" in s_v:
+                    sig = signals.get(s_v["id"])
+                    if sig is None:
+                        sig = Signal.load(s_v)
+                    restored_globals[k] = sig.serialize(short_val=True)
+                    self.k_globals._direct_set(k, Signal(sig))
+                elif "_is_plots_faas_widget" in s_v:
+                    widget = load_widget_helper(s_v, signals)
+                    restored_globals[k] = widget.serialize()
+                    self.k_globals._direct_set(k, Signal(widget))
+                elif "_is_anndata" in s_v:
+                    adata_key = s_v["key"]
+                    if adata_key in self.ann_data_objects:
+                        adata = self.ann_data_objects[adata_key]
+                    else:
+                        adata = load_anndata(s_v, snapshot_dir)
+                    restored_globals[k] = s_v
+                    self.k_globals._direct_set(k, adata)
                 else:
-                    adata = load_anndata(s_v, snapshot_dir)
-                restored_globals[k] = s_v
-                self.k_globals._direct_set(k, adata)
-            else:
-                val, error_msg = safe_unserialize_obj(s_v["value"])
-                if val is unable_to_unserialize_symbol:
-                    restored_globals[k] = {
-                        "value": small_repr(val),
-                        "msg": f"unserializable. stored err: {s_v['error_msg']}, unserial err: {error_msg}",
-                    }
-                else:
-                    restored_globals[k] = {
-                        "value": small_repr(val),
-                        "msg": f"stored error: {s_v['error_msg']}",
-                    }
-                    self.k_globals._direct_set(k, Signal(val))
+                    val, error_msg = safe_unserialize_obj(s_v["value"])
+                    if val is unable_to_unserialize_symbol:
+                        restored_globals[k] = {
+                            "value": small_repr(val),
+                            "msg": f"unserializable. stored err: {s_v['error_msg']}, unserial err: {error_msg}",
+                        }
+                    else:
+                        restored_globals[k] = {
+                            "value": small_repr(val),
+                            "msg": f"stored error: {s_v['error_msg']}",
+                        }
+                        self.k_globals._direct_set(k, Signal(val))
 
-        self.restored_globals = restored_globals
+            self.restored_globals = restored_globals
 
-        nodes_with_widgets = {}
-        for x in s_depens["nodes_with_widgets"]:
-            node = nodes.get(x)
-            if node is not None:
-                nodes_with_widgets[x] = node
+            nodes_with_widgets = {}
+            for x in s_depens["nodes_with_widgets"]:
+                node = nodes.get(x)
+                if node is not None:
+                    nodes_with_widgets[x] = node
 
-        self.nodes_with_widgets = nodes_with_widgets
+            self.nodes_with_widgets = nodes_with_widgets
+        except Exception:
+            await self.send({"type": "load_kernel_snapshot",
+                             "status": "error",
+                             "data": {"error_msg": traceback.format_exc()}})
+            return
 
         await self.send({"type": "load_kernel_snapshot", "status": "done"})
 
