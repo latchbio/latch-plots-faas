@@ -59,7 +59,7 @@ class WorkflowWidget(widget.BaseWidget):
 _emit.widget_registry[workflow_widget_type] = WorkflowWidget
 
 
-async def w_workflow(
+def w_workflow(
     *,
     key: str | None = None,
     label: str,
@@ -84,6 +84,6 @@ async def w_workflow(
         },
     )
 
-    _emit.emit_widget(key, button._state)
+    _emit.emit_widget(key, res)
 
     return res
