@@ -1,4 +1,5 @@
 import time
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any, Literal
 
@@ -7,7 +8,6 @@ from duckdb import (
     ConstantExpression,
 )
 from latch.ldata.path import LPath
-
 from lplots.h5.h5ad.process_message import process_h5ad_request
 from lplots.h5.h5spatial.process_message import (
     process_spatial_request,
@@ -21,6 +21,7 @@ ad = auto_install.ad
 
 async def handle_h5_widget_message(
     msg: dict[str, Any],
+    send: Callable[[object], Awaitable[None]]
 ) -> dict[str, Any]:
     if msg["type"] != "h5" or "key" not in msg or "state" not in msg:
         return {
@@ -49,7 +50,8 @@ async def handle_h5_widget_message(
 
         adata: ad.AnnData = _inject.kernel.ann_data_objects[obj_id]
 
-        return await process_h5ad_request(msg, widget_session_key, adata, obj_id)
+        return await process_h5ad_request(msg, widget_session_key, adata,
+                                          obj_id, send)
 
     if data_type == "transcripts":
         if "spatial_dir" not in widget_state:
