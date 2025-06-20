@@ -84,6 +84,6 @@ def w_workflow(
         },
     )
 
-    _emit.emit_widget(key, res)
+    _emit.emit_widget(key, res._state)
 
     return res
