@@ -938,7 +938,7 @@ class Kernel:
                     else:
                         adata = load_anndata(s_v, snapshot_dir)
                     restored_globals[k] = s_v
-                    self.k_globals._direct_set(k, adata)
+                    self.k_globals._direct_set(k, Signal(adata))
                 else:
                     val, error_msg = safe_unserialize_obj(s_v["value"])
                     if val is unable_to_unserialize_symbol:
