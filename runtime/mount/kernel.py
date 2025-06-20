@@ -857,8 +857,7 @@ class Kernel:
 
         snapshot_f = snapshot_dir / snapshot_f_name
         if not snapshot_f.exists():
-            await self.send({"type": "load_kernel_snapshot", "status": "done",
-                             "data": None})
+            await self.send({"type": "load_kernel_snapshot", "status": "done"})
             return
 
         total = snapshot_f.stat().st_size
