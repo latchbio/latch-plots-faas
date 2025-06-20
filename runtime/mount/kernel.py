@@ -822,7 +822,7 @@ class Kernel:
         except Exception:
             await self.send({"type": "save_kernel_snapshot",
                              "status": "error",
-                             "data": {"error_msg": traceback.format_exception()}})
+                             "data": {"error_msg": traceback.format_exc()}})
             return
 
         total = len(data)
