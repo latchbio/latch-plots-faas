@@ -8,7 +8,6 @@ if __name__ == "__main__":
 import ast
 import asyncio
 import math
-import os
 import pprint
 import re
 import signal
@@ -517,8 +516,8 @@ class RestoredGlobalInfo(TypedDict):
     msg: str
 
 
-SNAPSHOT_CHUNK = 64 * 2 ** 10
-SNAPSHOT_PROGRESS_INTERVAL = 10 * (2 ** 20)
+snapshot_chunk_bytes = 64 * 2 ** 10
+snapshot_progress_interval_bytes = 10 * (2 ** 20)
 
 
 @dataclass(kw_only=True)
@@ -792,14 +791,15 @@ class Kernel:
             for k, val in self.k_globals.items():
                 if k in {"__builtins__", "__warningregistry__"}:
                     continue
-                if isinstance(val._value, Signal):
+
+                if isinstance(val._value, ad.AnnData):
+                    s_globals[k] = serialize_anndata(val._value, snapshot_dir)
+                elif isinstance(val._value, Signal):
                     s_globals[k] = val._value.serialize()
                 elif isinstance(val._value, BaseWidget):
                     if val._value._has_signal:
                         assert val._value._signal.id in s_signals, f"missing {val._value._signal.id}"
                         s_globals[k] = val._value.serialize()
-                elif isinstance(val._value, ad.AnnData):
-                    s_globals[k] = serialize_anndata(val._value, snapshot_dir)
                 else:
                     s_val, msg = safe_serialize_obj(val._value)
                     s_globals[k] = {"value": s_val, "error_msg": msg}
@@ -833,14 +833,13 @@ class Kernel:
                          "data": {"total_bytes": total}})
 
         with (snapshot_dir / snapshot_f_name).open("wb") as f:
-            sent_since_last = 0
-            for start in range(0, total, SNAPSHOT_CHUNK):
-                end = min(start + SNAPSHOT_CHUNK, total)
+            saved_since_last = 0
+            for start in range(0, total, snapshot_chunk_bytes):
+                end = min(start + snapshot_chunk_bytes, total)
                 f.write(data[start:end])
-                os.fsync(f.fileno())
 
-                sent_since_last += (end - start)
-                if sent_since_last >= SNAPSHOT_PROGRESS_INTERVAL or end == total:
+                saved_since_last += (end - start)
+                if saved_since_last >= snapshot_progress_interval_bytes or end == total:
                     await self.send({
                         "type": "save_kernel_snapshot",
                         "status": "progress",
@@ -849,7 +848,7 @@ class Kernel:
                             "total_bytes": total,
                         }
                     })
-                    sent_since_last = 0
+                    saved_since_last = 0
 
         await self.send({"type": "save_kernel_snapshot", "status": "done"})
 
@@ -869,14 +868,14 @@ class Kernel:
         read_since_last = 0
         with snapshot_f.open("rb") as f:
             while True:
-                chunk = f.read(SNAPSHOT_CHUNK)
-                if not chunk:
+                chunk = f.read(snapshot_chunk_bytes)
+                if chunk == b"":
                     break
 
                 data.extend(chunk)
                 read_since_last += len(chunk)
 
-                if read_since_last >= SNAPSHOT_PROGRESS_INTERVAL or len(data) == total:
+                if read_since_last >= snapshot_progress_interval_bytes or len(data) == total:
                     await self.send({
                         "type":   "load_kernel_snapshot",
                         "status": "progress",
