@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Any, Literal, Required, TypedDict
+from typing import Any, Literal, NotRequired, Required, TypedDict
 
 from . import _emit, _state, widget
 
@@ -156,6 +156,7 @@ class IGVOptions(TypedDict, total=False):
 
 
 class IGVState(_emit.WidgetState[igv_type, str]):
+    label: NotRequired[str | None]
     options: IGVOptions
 
 
@@ -168,10 +169,19 @@ class IGV(widget.BaseWidget):
 _emit.widget_registry[igv_type] = IGV
 
 
-def w_igv(*, key: str | None = None, options: IGVOptions) -> IGV:
+def w_igv(
+    *, key: str | None = None, label: str | None = None, options: IGVOptions
+) -> IGV:
     key = _state.use_state_key(key=key)
 
-    res = IGV(_key=key, _state={"type": igv_type, "options": options})
+    res = IGV(
+        _key=key,
+        _state={
+            "type": igv_type,
+            "options": options,
+            "label": label,
+        },
+    )
     _emit.emit_widget(key, res._state)
 
     return res

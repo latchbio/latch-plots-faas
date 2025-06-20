@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, TypedDict
 
 from latch.ldata.path import LPath
 
@@ -23,27 +23,49 @@ class H5State(_emit.WidgetState[h5_widget_type, str | ad.AnnData | None]):
     appearance: OutputAppearance | None
 
 
+# note(aidan): typed dict to allow additional values
+class H5Value(TypedDict):
+    lasso_points: list[list[tuple[float, float]]] | None
+    lasso_points_obsm: str | None
+
+
 @dataclass(frozen=True, kw_only=True)
 class H5(widget.BaseWidget):
     _key: str
     _state: H5State
-    _signal: Signal[object | str]
+    _signal: Signal[object | H5Value]
 
-    def _value(self, val: object) -> str | ad.AnnData | None:
-        if not isinstance(val, str):
-            return None
+    def _value(self, val: object) -> H5Value:
+        if not isinstance(val, dict):
+            return H5Value(lasso_points=None, lasso_points_obsm=None)
 
-        if val not in _inject.kernel.ann_data_objects:
-            return None
+        if "lasso_points" not in val:
+            return H5Value(lasso_points=None, lasso_points_obsm=None)
 
-        return _inject.kernel.ann_data_objects[val]
+        lasso_points = val["lasso_points"]
+
+        if not isinstance(lasso_points, list):
+            return H5Value(lasso_points=None, lasso_points_obsm=None)
+
+        for item in lasso_points:
+            if not isinstance(item, list):
+                return H5Value(lasso_points=None, lasso_points_obsm=None)
+
+            for point in item:
+                if not ((isinstance(point, (tuple, list))) and
+                        len(point) == 2 and
+                        isinstance(point[0], (float, int)) and
+                        isinstance(point[1], (float, int))):
+                    return H5Value(lasso_points=None, lasso_points_obsm=None)
+
+        return H5Value(lasso_points=lasso_points, lasso_points_obsm=val.get("lasso_points_obsm", None))
 
     @property
-    def value(self) -> str | ad.AnnData | None:
+    def value(self) -> H5Value:
         res = self._signal()
         return self._value(res)
 
-    def sample(self) -> str | ad.AnnData | None:
+    def sample(self) -> H5Value:
         res = self._signal.sample()
         return self._value(res)
 

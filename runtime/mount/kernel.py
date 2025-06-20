@@ -1636,7 +1636,7 @@ class Kernel:
             return
 
         if msg["type"] == "h5":
-            await self.send(await handle_h5_widget_message(msg))
+            await self.send(await handle_h5_widget_message(msg, self.send))
             return
 
 
