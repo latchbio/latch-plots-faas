@@ -26,6 +26,8 @@ class Grid(widget.BaseWidget):
     _key: str
     _state: GridWidgetState
 
+    _has_signal = False
+
     def __enter__(self) -> Self:
         return self
 

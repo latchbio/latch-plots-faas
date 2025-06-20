@@ -794,8 +794,9 @@ class Kernel:
                 if isinstance(val._value, Signal):
                     s_globals[k] = val._value.serialize()
                 elif isinstance(val._value, BaseWidget):
-                    assert val._value._signal.id in s_signals, f"missing {val._value._signal.id}"
-                    s_globals[k] = val._value.serialize()
+                    if val._value._has_signal:
+                        assert val._value._signal.id in s_signals, f"missing {val._value._signal.id}"
+                        s_globals[k] = val._value.serialize()
                 elif isinstance(val._value, ad.AnnData):
                     s_globals[k] = serialize_anndata(val._value, snapshot_dir)
                 else:

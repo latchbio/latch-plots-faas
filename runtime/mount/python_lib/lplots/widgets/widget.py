@@ -13,6 +13,7 @@ class BaseWidget(ABC):
 
     # todo(maximsmol): fix typing here and make signal fields optional without breaking serialization somehow
     _signal: Signal = field(default_factory=lambda: Signal(None))
+    _has_signal: bool = True
 
     def serialize(self) -> SerializedWidget:
         return SerializedWidget(
