@@ -829,7 +829,7 @@ class Kernel:
         total = len(data)
         await self.send({"type": "save_kernel_snapshot",
                          "status": "start",
-                         "total_bytes": total})
+                         "data": {"total_bytes": total}})
 
         with Path(snapshot_dir / snapshot_f_name).open("wb") as f:
             sent_since_last = 0
