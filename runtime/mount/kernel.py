@@ -517,7 +517,7 @@ class RestoredGlobalInfo(TypedDict):
 
 
 SNAPSHOT_CHUNK = 64 * 2 ** 10
-SNAPSHOT_PROGRESS_INTERVAL = 10_000_000
+SNAPSHOT_PROGRESS_INTERVAL = 10 * (2 ** 20)
 
 
 @dataclass(kw_only=True)
@@ -771,53 +771,60 @@ class Kernel:
         s_nodes = {}
         s_signals = {}
 
-        def add_and_check_listeners(sig: Signal):
-            for lid, lis in sig._listeners.items():
-                if lid not in s_nodes:
-                    s_nodes[lid] = lis.serialize()
-            if sig.id not in s_signals:
-                s_signals[sig.id] = sig.serialize()
+        try:
+            def add_and_check_listeners(sig: Signal):
+                for lid, lis in sig._listeners.items():
+                    if lid not in s_nodes:
+                        s_nodes[lid] = lis.serialize()
+                if sig.id not in s_signals:
+                    s_signals[sig.id] = sig.serialize()
 
-        for node in self.cell_rnodes.values():
-            s_nodes[node.id] = node.serialize()
-            for sig in node.signals.values():
+            for node in self.cell_rnodes.values():
+                s_nodes[node.id] = node.serialize()
+                for sig in node.signals.values():
+                    add_and_check_listeners(sig)
+
+            for sig in self.widget_signals.values():
                 add_and_check_listeners(sig)
 
-        for sig in self.widget_signals.values():
-            add_and_check_listeners(sig)
+            s_globals: dict[str, SerializedSignal | SerializedGlobal] = {}
+            for k, val in self.k_globals.items():
+                if k in {"__builtins__", "__warningregistry__"}:
+                    continue
+                if isinstance(val._value, Signal):
+                    s_globals[k] = val._value.serialize()
+                elif isinstance(val._value, BaseWidget):
+                    assert val._value._signal.id in s_signals, f"missing {val._value._signal.id}"
+                    s_globals[k] = val._value.serialize()
+                elif isinstance(val._value, ad.AnnData):
+                    s_globals[k] = serialize_anndata(val._value, snapshot_dir)
+                else:
+                    s_val, msg = safe_serialize_obj(val._value)
+                    s_globals[k] = {"value": s_val, "error_msg": msg}
 
-        s_globals: dict[str, SerializedSignal | SerializedGlobal] = {}
-        for k, val in self.k_globals.items():
-            if k == "__builtins__":
-                continue
-            if isinstance(val._value, Signal):
-                s_globals[k] = val._value.serialize()
-            elif isinstance(val._value, BaseWidget):
-                assert val._value._signal.id in s_signals
-                s_globals[k] = val._value.serialize()
-            elif isinstance(val._value, ad.AnnData):
-                s_globals[k] = serialize_anndata(val._value, snapshot_dir)
-            else:
-                s_val, msg = safe_serialize_obj(val._value)
-                s_globals[k] = {"value": s_val, "error_msg": msg}
+            s_anndata = list(self.ann_data_objects.keys())
 
-        s_anndata = list(self.ann_data_objects.keys())
+            s_depens = {
+                "s_globals": s_globals,
+                "s_nodes": s_nodes,
+                "s_signals": s_signals,
+                "widget_signals": {k: v.id for k, v in self.widget_signals.items()},
+                "nodes_with_widgets": list(self.nodes_with_widgets.keys()),
+                "cell_rnodes": {k: v.id for k, v in self.cell_rnodes.items()},
+                "s_anndata": s_anndata,
+                # todo(kenny): figure out what to do with these
+                "ldata_dataframes": {},
+                "registry_dataframes": {},
+                "url_dataframes": {},
+            }
 
-        s_depens = {
-            "s_globals": s_globals,
-            "s_nodes": s_nodes,
-            "s_signals": s_signals,
-            "widget_signals": {k: v.id for k, v in self.widget_signals.items()},
-            "nodes_with_widgets": list(self.nodes_with_widgets.keys()),
-            "cell_rnodes": {k: v.id for k, v in self.cell_rnodes.items()},
-            "s_anndata": s_anndata,
-            # todo(kenny): figure out what to do with these
-            "ldata_dataframes": {},
-            "registry_dataframes": {},
-            "url_dataframes": {},
-        }
+            data = orjson.dumps(s_depens)
+        except Exception:
+            await self.send({"type": "save_kernel_snapshot",
+                             "status": "error",
+                             "data": {"error_msg": traceback.format_exception()}})
+            return
 
-        data = orjson.dumps(s_depens)
         total = len(data)
         await self.send({"type": "save_kernel_snapshot",
                          "status": "start",
@@ -834,8 +841,10 @@ class Kernel:
                     await self.send({
                         "type": "save_kernel_snapshot",
                         "status": "progress",
-                        "written_bytes": end,
-                        "total_bytes": total,
+                        "data": {
+                            "written_bytes": end,
+                            "total_bytes": total,
+                        }
                     })
                     sent_since_last = 0
 
