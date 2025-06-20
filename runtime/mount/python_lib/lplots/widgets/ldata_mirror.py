@@ -15,29 +15,20 @@ class LDataMirrorState(_emit.WidgetState[ldata_mirror_type, str]):
     readonly: bool
     appearance: NotRequired[FormInputAppearance | None]
     required: bool
-    dir: LPath | str
+    dir_node_id: str
 
 
 @dataclass(frozen=True, kw_only=True)
 class LDataMirror(widget.BaseWidget):
     _key: str
     _state: LDataMirrorState
+    _dir: LPath
     _signal: Signal[object | LPath]
 
     def _value(
         self,
     ) -> LPath | None:
-        dir = self._state.get("dir")
-
-        if isinstance(dir, str) and dir.startswith("latch://"):
-            lpath = LPath(dir)
-            # todo(manske): create the directory if it doesn't exist?
-            if lpath.is_dir():
-                return lpath
-        elif isinstance(dir, LPath) and dir.is_dir():
-            return dir
-
-        return None
+        return self._dir
 
     @property
     def value(self) -> LPath | None:
@@ -59,20 +50,33 @@ def w_ldata_mirror(
     dir: str | LPath,
     readonly: bool = False,
     appearance: FormInputAppearance | None = None,
-    default: str | None = None,
     required: bool = False,
 ) -> LDataMirror:
     key = _state.use_state_key(key=key)
 
+    dir_lpath: LPath | None = None
+    if isinstance(dir, str) and dir.startswith("latch://"):
+        dir_lpath = LPath(dir)
+    elif isinstance(dir, LPath):
+        dir_lpath = dir
+
+    if dir_lpath is None or not dir_lpath.is_dir():
+        raise ValueError("Invalid directory")
+
+    dir_node_id = dir_lpath.node_id()
+    if dir_node_id is None:
+        raise ValueError("Unable to get node id for directory")
+
     res = LDataMirror(
         _key=key,
+        _dir=dir_lpath,
         _state={
             "type": ldata_mirror_type,
             "readonly": readonly,
             "label": label,
             "appearance": appearance,
             "required": required,
-            "dir": dir,
+            "dir_node_id": dir_node_id,
         },
         _signal=_state.use_value_signal(key=key),
     )
