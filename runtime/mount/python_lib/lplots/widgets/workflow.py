@@ -17,8 +17,8 @@ class WorkflowWidgetState(_emit.WidgetState[workflow_widget_type, str]):
     wf_name: str
     params: dict[str, Any]
     version: str | None
-    _execution_id: NotRequired[str]
-    _completed_execution: NotRequired[CompletedExecution]
+    execution_id: NotRequired[str]
+    completed_execution: NotRequired[CompletedExecution]
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -35,11 +35,11 @@ class WorkflowWidget(widget.BaseWidget):
                 params=self._state.get("params"),
                 version=self._state.get("version"),
             )
-            self._state["_execution_id"] = execution.id
+            self._state["execution_id"] = execution.id
 
             _state.submit_widget_state()
             completed_execution = await execution.wait()
-            self._state["_completed_execution"] = completed_execution
+            self._state["completed_execution"] = completed_execution
 
             w_text_output(
                 content=f"{self._state.get('wf_name')} successfully ran",
@@ -49,10 +49,6 @@ class WorkflowWidget(widget.BaseWidget):
         return self._state.get("_completed_execution")
 
     def sample(self) -> str | None:
-        return self._state.get("_execution_id")
-
-    @property
-    def execution(self) -> CompletedExecution | None:
         return self._state.get("_completed_execution")
 
 
