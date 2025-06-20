@@ -30,7 +30,7 @@ def serialize_anndata(adata: ad.AnnData, snapshot_dir: Path) -> SerializedAnnDat
     adata_path = snapshot_dir / fname
     if not adata_path.exists():
         adata.write_h5ad(adata_path)
-    return SerializedAnnData(key=key, fname=fname)
+    return SerializedAnnData(key=key, fname=fname, _is_anndata=True)
 
 
 def load_anndata(s_anndata: SerializedAnnData, snapshot_dir: Path) -> ad.AnnData:

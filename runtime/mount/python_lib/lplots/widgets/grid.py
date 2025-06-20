@@ -1,5 +1,5 @@
 import types
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal, Self
 
 from . import _emit, _state, widget
@@ -25,6 +25,8 @@ class GridWidgetState(_emit.WidgetState[grid_widget_type, None]):
 class Grid(widget.BaseWidget):
     _key: str
     _state: GridWidgetState
+
+    _has_signal: bool = field(default=False, init=False)
 
     def __enter__(self) -> Self:
         return self
