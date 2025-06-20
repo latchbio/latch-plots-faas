@@ -1,4 +1,3 @@
-import asyncio
 from dataclasses import dataclass
 from typing import Any, Literal, NotRequired
 
@@ -6,7 +5,6 @@ from latch_cli.services.launch.launch_v2 import CompletedExecution, launch
 
 from . import _emit, _state, widget
 from .button import ButtonWidget, w_button
-from .text import w_text_output
 
 workflow_widget_type: Literal["workflow"] = "workflow"
 
@@ -38,13 +36,13 @@ class WorkflowWidget(widget.BaseWidget):
             self._state["_execution_id"] = execution.id
 
             _state.submit_widget_state()
-            completed_execution = asyncio.run(execution.wait())
-            self._state["_completed_execution"] = completed_execution
+            # completed_execution = asyncio.run(execution.wait())
+            # self._state["_completed_execution"] = completed_execution
 
-            w_text_output(
-                content=f"{self._state.get('wf_name')} successfully ran",
-                appearance={"message_box": "success"},
-            )
+            # w_text_output(
+            #     content=f"{self._state.get('wf_name')} successfully ran",
+            #     appearance={"message_box": "success"},
+            # )
 
         return self._state.get("_execution_id")
 
