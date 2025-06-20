@@ -26,8 +26,7 @@ class WorkflowWidget(widget.BaseWidget):
     _button: ButtonWidget
     _state: WorkflowWidgetState
 
-    @property
-    async def value(self) -> str | None:
+    async def value(self) -> CompletedExecution | None:
         if self._button.value:
             wf_name = self._state.get("wf_name")
             execution = launch(
@@ -36,6 +35,7 @@ class WorkflowWidget(widget.BaseWidget):
                 version=self._state.get("version"),
             )
             self._state["execution_id"] = execution.id
+            self._state["completed_execution"] = None
 
             _state.submit_widget_state()
             completed_execution = await execution.wait()
@@ -48,7 +48,7 @@ class WorkflowWidget(widget.BaseWidget):
 
         return self._state.get("_completed_execution")
 
-    def sample(self) -> str | None:
+    def sample(self) -> CompletedExecution | None:
         return self._state.get("_completed_execution")
 
 
