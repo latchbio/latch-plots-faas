@@ -11,7 +11,6 @@ ldata_mirror_type: Literal["ldata_mirror"] = "ldata_mirror"
 
 
 class LDataMirrorState(_emit.WidgetState[ldata_mirror_type, str]):
-    default: NotRequired[str | LPath | None]
     label: str
     readonly: bool
     appearance: NotRequired[FormInputAppearance | None]
@@ -25,25 +24,29 @@ class LDataMirror(widget.BaseWidget):
     _state: LDataMirrorState
     _signal: Signal[object | LPath]
 
-    def _value(self, val: object) -> LPath | None:
-        if isinstance(val, str) and val.startswith("latch://"):
-            lpath = LPath(val)
+    def _value(
+        self,
+    ) -> LPath | None:
+        dir = self._state.get("dir")
+
+        if isinstance(dir, str) and dir.startswith("latch://"):
+            lpath = LPath(dir)
             # todo(manske): create the directory if it doesn't exist?
             if lpath.is_dir():
                 return lpath
-        elif isinstance(val, LPath) and val.is_dir():
-            return val
+        elif isinstance(dir, LPath) and dir.is_dir():
+            return dir
 
         return None
 
     @property
     def value(self) -> LPath | None:
-        res = self._signal()
-        return self._value(res)
+        self._signal()
+        return self._value()
 
     def sample(self) -> LPath | None:
-        res = self._signal.sample()
-        return self._value(res)
+        self._signal.sample()
+        return self._value()
 
 
 _emit.widget_registry[ldata_mirror_type] = LDataMirror
@@ -67,7 +70,6 @@ def w_ldata_mirror(
             "type": ldata_mirror_type,
             "readonly": readonly,
             "label": label,
-            "default": default,
             "appearance": appearance,
             "required": required,
             "dir": dir,
