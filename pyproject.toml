@@ -15,7 +15,7 @@ dependencies = [
     "numpy>=1.26.4",
     "plotly>=5.22.0",
     "psycopg<3.2",
-    "latch>=2.51.1",
+    "latch>=2.65.1",
     "duckdb>=1.0.0",
     "matplotlib>=3.9.2",
     "seaborn>=0.13.2",

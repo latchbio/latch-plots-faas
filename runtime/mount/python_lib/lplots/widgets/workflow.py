@@ -1,9 +1,7 @@
 from dataclasses import dataclass
 from typing import Any, Literal, NotRequired
 
-from latch_cli.services.launch.launch_v2 import CompletedExecution, launch
-
-from lplots.widgets.text import w_text_output
+from latch_cli.services.launch.launch_v2 import Execution, launch
 
 from . import _emit, _state, widget
 from .button import ButtonWidget, w_button
@@ -17,8 +15,7 @@ class WorkflowWidgetState(_emit.WidgetState[workflow_widget_type, str]):
     wf_name: str
     params: dict[str, Any]
     version: str | None
-    execution_id: NotRequired[str]
-    completed_execution: NotRequired[CompletedExecution]
+    execution: NotRequired[Execution]
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -26,30 +23,19 @@ class WorkflowWidget(widget.BaseWidget):
     _button: ButtonWidget
     _state: WorkflowWidgetState
 
-    async def value(self) -> CompletedExecution | None:
+    async def value(self) -> Execution | None:
         if self._button.value:
             wf_name = self._state.get("wf_name")
-            execution = launch(
+            self._state["execution"] = launch(
                 wf_name=wf_name,
                 params=self._state.get("params"),
                 version=self._state.get("version"),
             )
-            self._state["execution_id"] = execution.id
-            self._state["completed_execution"] = None
 
-            _state.submit_widget_state()
-            completed_execution = await execution.wait()
-            self._state["completed_execution"] = completed_execution
+        return self._state.get("execution")
 
-            w_text_output(
-                content=f"{self._state.get('wf_name')} successfully ran",
-                appearance={"message_box": "success"},
-            )
-
-        return self._state.get("_completed_execution")
-
-    def sample(self) -> CompletedExecution | None:
-        return self._state.get("_completed_execution")
+    def sample(self) -> Execution | None:
+        return self._state.get("execution")
 
 
 _emit.widget_registry[workflow_widget_type] = WorkflowWidget
@@ -66,7 +52,7 @@ def w_workflow(
 ) -> WorkflowWidget:
     key = _state.use_state_key(key=key)
 
-    button = w_button(label=label, readonly=readonly)
+    button = w_button(key=f"{key}-button", label=label, readonly=readonly)
     res = WorkflowWidget(
         _key=key,
         _button=button,
