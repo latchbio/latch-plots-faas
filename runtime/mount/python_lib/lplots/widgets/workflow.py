@@ -23,7 +23,7 @@ class WorkflowWidget(widget.BaseWidget):
     _button: ButtonWidget
     _state: WorkflowWidgetState
 
-    async def value(self) -> Execution | None:
+    def value(self) -> Execution | None:
         if self._button.value:
             wf_name = self._state.get("wf_name")
             self._state["execution"] = launch(
