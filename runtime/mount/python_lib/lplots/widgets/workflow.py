@@ -31,6 +31,7 @@ class WorkflowWidget(widget.BaseWidget):
                 params=self._state.get("params"),
                 version=self._state.get("version"),
             )
+            _state.submit_widget_state()
 
         return self._state.get("execution")
 
