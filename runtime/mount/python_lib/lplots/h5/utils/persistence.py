@@ -1,4 +1,5 @@
 import uuid
+import warnings
 from pathlib import Path
 from typing import TypedDict
 
@@ -35,4 +36,6 @@ def serialize_anndata(adata: ad.AnnData, snapshot_dir: Path) -> SerializedAnnDat
 
 def load_anndata(s_anndata: SerializedAnnData, snapshot_dir: Path) -> ad.AnnData:
     fname = s_anndata["fname"]
-    return ad.read_h5ad(snapshot_dir / fname)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", FutureWarning)
+        return ad.read_h5ad(snapshot_dir / fname)
