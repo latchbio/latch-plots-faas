@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal
 
 from . import _emit, _state, widget
@@ -15,6 +15,8 @@ class ColumnWidgetState(_emit.WidgetState[Literal["column"], None]):
 class Column(widget.BaseWidget):
     _key: str
     _state: ColumnWidgetState
+
+    _has_signal: bool = field(default=False, init=False)
 
 
 def w_column(*, key: str | None = None, items: list[BaseWidget]) -> Column:
