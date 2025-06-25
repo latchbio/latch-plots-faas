@@ -8,6 +8,7 @@ from typing_extensions import override
 
 if TYPE_CHECKING:
     from _typeshed import ReadableBuffer
+    from entrypoint import kernel_snapshot_state
     from kernel import Kernel
 
 
@@ -40,6 +41,7 @@ class SocketWriter(RawIOBase):
         self.conn.send_fut({
             "type": "kernel_stdio",
             "active_cell": self.kernel.active_cell,
+            "snapshot_status": kernel_snapshot_state.status,
             "stream": self.name,
             # todo(maximsmol): this is a bit silly because we are going to have
             # a TextIOWrapper above that just encoded this for us
