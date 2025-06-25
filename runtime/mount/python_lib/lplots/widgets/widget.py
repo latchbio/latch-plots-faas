@@ -37,5 +37,5 @@ def load_widget_helper(
 ) -> "BaseWidget":
     # todo(kenny): unsure if we want to throw here if not in dict
     w_cls = _emit.widget_registry.get(s_widget["state"]["type"])
-    assert w_cls is not None
+    assert w_cls is not None, f"{s_widget['state']['type']} registry is None"
     return w_cls.load(s_widget, widget_sigs)

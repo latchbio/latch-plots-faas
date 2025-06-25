@@ -46,7 +46,7 @@ cell_last_run_outputs: dict[str, CellOutputs] = {}
 
 @dataclass
 class KernelSnapshotState:
-    status: Literal["done", "creating", "loading"] = "done"
+    status: Literal["done", "progress", "start", "error"] = "done"
 
 
 kernel_snapshot_state = KernelSnapshotState()
