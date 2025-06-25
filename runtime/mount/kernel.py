@@ -830,7 +830,7 @@ class Kernel:
         total = len(data)
         await self.send({"type": "save_kernel_snapshot",
                          "status": "start",
-                         "data": {"total_bytes": total}})
+                         "data": {"progress_bytes": 0, "total_bytes": total}})
 
         with (snapshot_dir / snapshot_f_name).open("wb") as f:
             saved_since_last = 0
@@ -844,7 +844,7 @@ class Kernel:
                         "type": "save_kernel_snapshot",
                         "status": "progress",
                         "data": {
-                            "written_bytes": end,
+                            "progress_bytes": end,
                             "total_bytes": total,
                         }
                     })
@@ -862,7 +862,7 @@ class Kernel:
         total = snapshot_f.stat().st_size
         await self.send({"type": "load_kernel_snapshot",
                          "status": "start",
-                         "data": {"total_bytes": total}})
+                         "data": {"progress_bytes": 0, "total_bytes": total}})
 
         data = bytearray()
         read_since_last = 0
@@ -880,7 +880,7 @@ class Kernel:
                         "type":   "load_kernel_snapshot",
                         "status": "progress",
                         "data":   {
-                            "read_bytes":  len(data),
+                            "progress_bytes":  len(data),
                             "total_bytes": total,
                         }
                     })
