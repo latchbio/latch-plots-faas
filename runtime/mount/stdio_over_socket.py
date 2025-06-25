@@ -3,9 +3,10 @@ from dataclasses import dataclass
 from io import BufferedWriter, RawIOBase, TextIOWrapper, UnsupportedOperation
 from typing import TYPE_CHECKING
 
-# from entrypoint import kernel_snapshot_state
 from socketio_thread import SocketIoThread
 from typing_extensions import override
+
+from runtime.mount.entrypoint import kernel_snapshot_state
 
 if TYPE_CHECKING:
     from _typeshed import ReadableBuffer
@@ -41,7 +42,7 @@ class SocketWriter(RawIOBase):
         self.conn.send_fut({
             "type": "kernel_stdio",
             "active_cell": self.kernel.active_cell,
-    #         "snapshot_status": kernel_snapshot_state.status,
+            "snapshot_status": kernel_snapshot_state.status,
             "stream": self.name,
             # todo(maximsmol): this is a bit silly because we are going to have
             # a TextIOWrapper above that just encoded this for us
