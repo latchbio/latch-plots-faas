@@ -3,9 +3,10 @@ from dataclasses import dataclass
 from io import BufferedWriter, RawIOBase, TextIOWrapper, UnsupportedOperation
 from typing import TYPE_CHECKING
 
-from entrypoint import kernel_snapshot_state
 from socketio_thread import SocketIoThread
 from typing_extensions import override
+
+from .entrypoint import kernel_snapshot_state
 
 if TYPE_CHECKING:
     from _typeshed import ReadableBuffer
