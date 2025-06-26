@@ -127,3 +127,132 @@ async def process_spatial_request(  # noqa: RUF029
             "error": f"Unsupported transcripts operation: {op}",
         },
     }
+
+
+def get_boundary_sample(
+    conn: duckdb.DuckDBPyConnection,
+    table_name: str,
+    x_min: float, y_min: float, x_max: float, y_max: float,
+    max_boundaries: int = 100_000,
+) -> duckdb.DuckDBPyRelation:
+    return conn.sql(f"""
+        select
+            EntityID,
+            st_astext(Geometry) as coords
+        from
+            {table_name}
+        where
+            ST_XMax(Geometry) >= {x_min} and ST_XMin(Geometry) <= {x_max} and
+            ST_YMax(Geometry) >= {y_min} and ST_YMin(Geometry) <= {y_max}
+        order by random()
+        limit {max_boundaries}
+    """)  # noqa: S608
+
+
+async def process_boundaries_request(  # noqa: RUF029
+    msg: dict[str, Any],
+    widget_session_key: str,
+    duckdb_table_name: str,
+    create_table_time: float,
+) -> dict[str, Any]:
+    if "op" not in msg or msg["op"] not in {"get"}:
+        return {
+            "type": "h5",
+            "key": widget_session_key,
+            "data_type": "boundaries",
+            "value": {
+                "error": f"Invalid boundaries operation: {msg.get('op', '`op` key missing from message')}",
+            },
+        }
+
+    op = msg["op"]
+
+    max_boundaries = int(msg.get("max_boundaries", 100_000))
+
+    if op == "get":
+        start_time = time.time()
+        sampled_data = get_boundary_sample(
+            _inject.kernel.duckdb,
+            duckdb_table_name,
+            x_min=float(msg["x_min"]),
+            y_min=float(msg["y_min"]),
+            x_max=float(msg["x_max"]),
+            y_max=float(msg["y_max"]),
+            max_boundaries=max_boundaries,
+        )
+
+        data = sampled_data.fetchall()
+
+        boundaries = []
+
+        for row in data:
+            wkt_coords: str | None = row[1]
+
+            if wkt_coords is None:
+                boundaries.append(None)
+                continue
+
+            try:
+                if "EMPTY" in wkt_coords:
+                    boundaries.append(None)
+                    continue
+                if wkt_coords.startswith("LINESTRING "):
+                    coords_str = wkt_coords[11:-1]
+                elif wkt_coords.startswith("POLYGON "):
+                    coords_str = wkt_coords[9:-2]
+                elif wkt_coords.startswith("MULTIPOLYGON "):
+                    start_idx = wkt_coords.find("(((") + 3
+                    paren_count = 0
+                    end_idx = start_idx
+                    for i, char in enumerate(wkt_coords[start_idx:], start_idx):
+                        if char == "(":
+                            paren_count += 1
+                        elif char == ")":
+                            paren_count -= 1
+                            if paren_count < 0:
+                                end_idx = i
+                                break
+                    coords_str = wkt_coords[start_idx:end_idx]
+                else:
+                    raise ValueError(f"Unhandled WKT: {wkt_coords}")
+
+                coord_pairs = []
+                for pair in coords_str.split(","):
+                    clean_pair = pair.strip().replace("(", "").replace(")", "")
+                    coords = clean_pair.split()
+                    if len(coords) < 2:
+                        continue
+                    x, y = round(float(coords[0]), 2), round(float(coords[1]), 2)
+                    coord_pairs.append([x, y])
+
+                boundaries.append(coord_pairs)
+            except Exception as e:
+                raise RuntimeError(f"Error parsing WKT: {wkt_coords}") from e
+
+        return {
+            "type": "h5",
+            "op": op,
+            "data_type": "boundaries",
+            "key": widget_session_key,
+            "value": {
+                "data": {
+                    "boundaries": boundaries,
+                    "time_taken": round(time.time() - start_time, 2),
+                    "create_table_time": create_table_time,
+                    "fetched_for_max_boundaries": max_boundaries,
+                    "fetched_for_x_min": float(msg["x_min"]),
+                    "fetched_for_x_max": float(msg["x_max"]),
+                    "fetched_for_y_min": float(msg["y_min"]),
+                    "fetched_for_y_max": float(msg["y_max"]),
+                }
+            },
+        }
+
+    return {
+        "type": "h5",
+        "data_type": "boundaries",
+        "key": widget_session_key,
+        "value": {
+            "error": f"Unsupported boundaries operation: {op}",
+        },
+    }
