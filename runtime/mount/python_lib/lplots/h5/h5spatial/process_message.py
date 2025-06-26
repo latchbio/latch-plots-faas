@@ -193,14 +193,20 @@ async def process_boundaries_request(  # noqa: RUF029
                 continue
 
             try:
-                # todo(aidan): handle empty?
-                if wkt_coords.startswith("LINESTRING("):
-                    coords_str = wkt_coords[11:-1]
-                elif wkt_coords.startswith("POLYGON(("):
-                    coords_str = wkt_coords[9:-2]
-                elif wkt_coords.startswith("MULTIPOLYGON((("):
-                    # todo(aidan): why is this a multipolygon? Do we need multiple boundaries per cell?
-                    inner = wkt_coords[15:-3]
+                # Handle empty geometries
+                if "EMPTY" in wkt_coords:
+                    boundaries.append(None)
+                    continue
+
+                wkt_coords_clean = wkt_coords.replace(" ", "")
+
+                if wkt_coords_clean.startswith("LINESTRING("):
+                    coords_str = wkt_coords_clean[11:-1]
+                elif wkt_coords_clean.startswith("POLYGON(("):
+                    coords_str = wkt_coords_clean[9:-2]
+                elif wkt_coords_clean.startswith("MULTIPOLYGON((("):
+                    # extract the first polygon's exterior ring
+                    inner = wkt_coords_clean[15:-3]
                     start = inner.find("(")
                     end = inner.rfind(")")
                     if start != -1 and end != -1:
@@ -218,10 +224,10 @@ async def process_boundaries_request(  # noqa: RUF029
                         continue
                     x, y = round(float(coords[0]), 2), round(float(coords[1]), 2)
                     coord_pairs.append([x, y])
+
+                boundaries.append(coord_pairs)
             except Exception as e:
                 raise RuntimeError(f"Error parsing WKT: {wkt_coords}") from e
-
-            boundaries.append(coord_pairs)
 
         return {
             "type": "h5",
