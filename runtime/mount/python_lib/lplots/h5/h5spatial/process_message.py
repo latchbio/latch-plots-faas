@@ -200,33 +200,36 @@ async def process_boundaries_request(  # noqa: RUF029
                 boundaries.append(None)
                 continue
 
-            if wkt_coords.startswith("LINESTRING("):
-                coords_str = wkt_coords[11:-1]
-            elif wkt_coords.startswith("POLYGON(("):
-                coords_str = wkt_coords[9:-2]
-            elif wkt_coords.startswith("MULTIPOLYGON((("):
-                # todo(aidan): why is this a multipolygon? Do we need multiple boundaries per cell?
-                inner = wkt_coords[15:-3]
-                start = inner.find("(")
-                end = inner.rfind(")")
-                if start != -1 and end != -1:
-                    coords_str = inner[start+1:end]
+            try:
+                if wkt_coords.startswith("LINESTRING("):
+                    coords_str = wkt_coords[11:-1]
+                elif wkt_coords.startswith("POLYGON(("):
+                    coords_str = wkt_coords[9:-2]
+                elif wkt_coords.startswith("MULTIPOLYGON((("):
+                    # todo(aidan): why is this a multipolygon? Do we need multiple boundaries per cell?
+                    inner = wkt_coords[15:-3]
+                    start = inner.find("(")
+                    end = inner.rfind(")")
+                    if start != -1 and end != -1:
+                        coords_str = inner[start+1:end]
+                    else:
+                        coords_str = inner
                 else:
-                    coords_str = inner
-            else:
-                start = wkt_coords.find("(")
-                if start != -1:
-                    coords_str = wkt_coords[start + 1:-1]
-                else:
-                    coords_str = wkt_coords
+                    start = wkt_coords.find("(")
+                    if start != -1:
+                        coords_str = wkt_coords[start + 1:-1]
+                    else:
+                        coords_str = wkt_coords
 
-            coord_pairs = []
-            for pair in coords_str.split(","):
-                coords = pair.strip().split()
-                if len(coords) < 2:
-                    continue
-                x, y = float(coords[0]), float(coords[1])
-                coord_pairs.append([x, y])
+                coord_pairs = []
+                for pair in coords_str.split(","):
+                    coords = pair.strip().split()
+                    if len(coords) < 2:
+                        continue
+                    x, y = float(coords[0]), float(coords[1])
+                    coord_pairs.append([x, y])
+            except Exception as e:
+                raise RuntimeError(f"Error parsing WKT: {wkt_coords}") from e
 
             boundaries.append(coord_pairs)
 
