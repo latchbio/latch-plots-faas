@@ -223,7 +223,8 @@ async def process_boundaries_request(  # noqa: RUF029
 
                 coord_pairs = []
                 for pair in coords_str.split(","):
-                    coords = pair.strip().split()
+                    clean_pair = pair.strip().replace("(", "").replace(")", "")
+                    coords = clean_pair.split()
                     if len(coords) < 2:
                         continue
                     x, y = float(coords[0]), float(coords[1])
