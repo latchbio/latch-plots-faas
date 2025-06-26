@@ -135,18 +135,15 @@ def get_boundary_sample(
     x_min: float, y_min: float, x_max: float, y_max: float,
     max_boundaries: int = 100_000,
 ) -> duckdb.DuckDBPyRelation:
-    rel = conn.sql(f"select ID, EntityID, Geometry from {table_name}")      # noqa: S608
-
-    viewport_polygon = f"ST_GeomFromText('POLYGON(({x_min} {y_min}, {x_max} {y_min}, {x_max} {y_max}, {x_min} {y_max}, {x_min} {y_min}))')"
-
-    bbox_filter = ColumnExpression(f"ST_Intersects(Geometry, {viewport_polygon})")
-
-    return (
-        rel
-        .filter(bbox_filter)
-        .order("random()")
-        .limit(max_boundaries)
-    )
+    return conn.sql(f"""
+        SELECT * FROM (
+            SELECT ID, EntityID, Geometry
+            FROM {table_name}
+            WHERE ST_Intersects(Geometry, ST_GeomFromText('POLYGON(({x_min} {y_min}, {x_max} {y_min}, {x_max} {y_max}, {x_min} {y_max}, {x_min} {y_min}))'))
+            ORDER BY random()
+            LIMIT {max_boundaries}
+        )
+    """)  # noqa: S608
 
 
 async def process_boundaries_request(  # noqa: RUF029
