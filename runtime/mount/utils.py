@@ -3,7 +3,7 @@ import io
 import sys
 from enum import Enum
 from pathlib import Path
-from typing import Any, NotRequired, TypedDict
+from typing import Any, Literal, NotRequired, TypedDict
 
 from aiohttp import ClientSession
 from latch.types.directory import LatchDir
@@ -22,6 +22,8 @@ auth_token_sdk = f"Latch-SDK-Token {sdk_token}"
 nucleus_url = (latch_p / "nucleus-url").read_text()
 
 sess: ClientSession | None = None
+
+KernelSnapshotStatus = Literal["done", "progress", "start", "error"]
 
 
 class Trace(TypedDict):
