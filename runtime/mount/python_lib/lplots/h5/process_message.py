@@ -71,7 +71,10 @@ async def handle_h5_widget_message(
         duckdb_file_path = None
         for f in spatial_dir.iterdir():
             name = f.name()
-            if name == "transcripts.duckdb":
+            if name == "transcripts.duckdb" and data_type == "transcripts":
+                duckdb_file_path = f
+                break
+            if name == "cell_boundaries.duckdb" and data_type == "boundaries":
                 duckdb_file_path = f
                 break
 
