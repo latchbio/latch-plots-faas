@@ -116,6 +116,7 @@ async def handle_h5_widget_message(
             return await process_spatial_request(msg, widget_session_key, duckdb_table_name, create_table_time)
 
         if data_type == "boundaries":
+            _inject.kernel.duckdb.execute("set home_directory='/tmp'")
             _inject.kernel.duckdb.execute("install spatial; load spatial;")
             return await process_boundaries_request(msg, widget_session_key, duckdb_table_name, create_table_time)
 
