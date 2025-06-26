@@ -136,13 +136,16 @@ def get_boundary_sample(
     max_boundaries: int = 100_000,
 ) -> duckdb.DuckDBPyRelation:
     return conn.sql(f"""
-        SELECT * FROM (
-            SELECT ID, EntityID, Geometry
-            FROM {table_name}
-            WHERE ST_Intersects(Geometry, ST_GeomFromText('POLYGON(({x_min} {y_min}, {x_max} {y_min}, {x_max} {y_max}, {x_min} {y_max}, {x_min} {y_min}))'))
-            ORDER BY random()
-            LIMIT {max_boundaries}
-        )
+        select
+            ID,
+            EntityID,
+            Geometry,
+        from
+            {table_name}
+        where
+            ST_Intersects(Geometry, ST_GeomFromText('POLYGON(({x_min} {y_min}, {x_max} {y_min}, {x_max} {y_max}, {x_min} {y_max}, {x_min} {y_min}))'))
+        order by random()
+        limit {max_boundaries}
     """)  # noqa: S608
 
 
@@ -197,12 +200,12 @@ async def process_boundaries_request(  # noqa: RUF029
                 coord_result = _inject.kernel.duckdb.execute("""
                     select
                         case
-                            when st_geometrytype(?) = 'POLYGON' then 
-                                st_astext(st_exteriorring(?))
-                            when st_geometrytype(?) = 'LINESTRING' then
-                                st_astext(?)
+                            when st_geometrytype(cast(? as geometry)) = 'POLYGON' then 
+                                st_astext(st_exteriorring(cast(? as geometry)))
+                            when st_geometrytype(cast(? as geometry)) = 'LINESTRING' then
+                                st_astext(cast(? as geometry))
                             else
-                                st_astext(?)
+                                st_astext(cast(? as geometry))
                         end as coords
                 """, [geometry, geometry, geometry, geometry, geometry]).fetchone()
 
