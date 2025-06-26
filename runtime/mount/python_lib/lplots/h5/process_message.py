@@ -8,8 +8,10 @@ from duckdb import (
     ConstantExpression,
 )
 from latch.ldata.path import LPath
+
 from lplots.h5.h5ad.process_message import process_h5ad_request
 from lplots.h5.h5spatial.process_message import (
+    process_boundaries_request,
     process_spatial_request,
 )
 from lplots.h5.utils import auto_install
@@ -33,7 +35,7 @@ async def handle_h5_widget_message(
         }
 
     widget_session_key: str = msg["key"]
-    data_type: Literal["h5ad", "transcripts"] | Any = msg.get("data_type", "h5ad")
+    data_type: Literal["h5ad", "transcripts", "boundaries"] | Any = msg.get("data_type", "h5ad")
     widget_state: dict[str, Any] = msg["state"]
 
     if data_type == "h5ad":
@@ -53,11 +55,11 @@ async def handle_h5_widget_message(
         return await process_h5ad_request(msg, widget_session_key, adata,
                                           obj_id, send)
 
-    if data_type == "transcripts":
+    if data_type in {"transcripts", "boundaries"}:
         if "spatial_dir" not in widget_state:
             return {
                 "type": "h5",
-                "data_type": "transcripts",
+                "data_type": data_type,
                 "key": widget_session_key,
                 "value": {
                     "error": "Invalid message -- missing `spatial_dir`",
@@ -65,26 +67,27 @@ async def handle_h5_widget_message(
             }
 
         spatial_dir = LPath(widget_state["spatial_dir"]["path"])
-        transcript_path = None
+
+        duckdb_file_path = None
         for f in spatial_dir.iterdir():
             name = f.name()
-            if name is not None and name.endswith(".duckdb"):
-                transcript_path = f
+            if name == "transcripts.duckdb":
+                duckdb_file_path = f
                 break
 
-        if transcript_path is None:
+        if duckdb_file_path is None:
             return {
                 "type": "h5",
-                "data_type": "transcripts",
+                "data_type": data_type,
                 "key": widget_session_key,
                 "value": {
-                    "error": "Invalid message -- no duckdb files found in spatial directory",
+                    "error": f"Invalid message -- no duckdb files found in spatial directory for {data_type}",
                 },
             }
 
         sanitized_widget_session_key = widget_session_key.replace(":", "_").replace("/", "_").replace("-", "_")
-        schema_name = f"transcripts_{sanitized_widget_session_key}"
-        table_name = "final_transcripts"
+        schema_name = f"{data_type}_{sanitized_widget_session_key}"
+        table_name = "final_transcripts" if data_type == "transcripts" else "cell_boundaries"
 
         db_databases_rel = _inject.kernel.duckdb.sql("select * from duckdb_databases()")
         db_attached_rel = db_databases_rel.filter(
@@ -98,13 +101,18 @@ async def handle_h5_widget_message(
         if not db_attached:
             start_time = time.time()
 
-            local_transcript_path = Path(f"/tmp/transcripts_{sanitized_widget_session_key}.duckdb")  # noqa: S108
-            transcript_path.download(local_transcript_path, cache=True)
+            local_duckdb_file_path = Path(f"/tmp/{data_type}_{sanitized_widget_session_key}.duckdb")  # noqa: S108
+            duckdb_file_path.download(local_duckdb_file_path, cache=True)
 
-            _inject.kernel.duckdb.execute(f"attach '{local_transcript_path}' as {schema_name} (read_only)")
+            _inject.kernel.duckdb.execute(f"attach '{local_duckdb_file_path}' as {schema_name} (read_only)")
             create_table_time = round(time.time() - start_time, 2)
 
         duckdb_table_name = f"{schema_name}.{table_name}"
-        return await process_spatial_request(msg, widget_session_key, duckdb_table_name, create_table_time)
+
+        if data_type == "transcripts":
+            return await process_spatial_request(msg, widget_session_key, duckdb_table_name, create_table_time)
+
+        if data_type == "boundaries":
+            return await process_boundaries_request(msg, widget_session_key, duckdb_table_name, create_table_time)
 
     raise ValueError(f"Invalid H5 viewer message: {msg}")

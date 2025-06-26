@@ -127,3 +127,103 @@ async def process_spatial_request(  # noqa: RUF029
             "error": f"Unsupported transcripts operation: {op}",
         },
     }
+
+
+def get_boundary_sample(
+    conn: duckdb.DuckDBPyConnection,
+    table_name: str,
+    x_min: float, y_min: float, x_max: float, y_max: float,
+    max_vertices: int = 100_000,
+) -> tuple[duckdb.DuckDBPyRelation, int, int]:
+    rel = conn.sql(f"select * from {table_name}")      # noqa: S608
+
+    bbox_filter = (
+        (ColumnExpression("ST_MaxX(geometry)") >= ConstantExpression(x_min)) &
+        (ColumnExpression("ST_MinX(geometry)") <= ConstantExpression(x_max)) &
+        (ColumnExpression("ST_MaxY(geometry)") >= ConstantExpression(y_min)) &
+        (ColumnExpression("ST_MinY(geometry)") <= ConstantExpression(y_max))
+    )
+
+    points_in_scope_rel = rel.filter(bbox_filter).aggregate("count(*) as cnt")
+    points_in_scope_result = points_in_scope_rel.fetchone()
+    points_in_scope = 0 if points_in_scope_result is None else points_in_scope_result[0]
+
+    total_points_rel = rel.aggregate("count(*)")
+    total_points_result = total_points_rel.fetchone()
+    total_points = 0 if total_points_result is None else total_points_result[0]
+
+    sampled_rel = (
+        rel
+        .filter(bbox_filter)
+        .order("random()")
+        .limit(max_vertices)
+    )
+
+    return sampled_rel, points_in_scope, total_points
+
+
+async def process_boundaries_request(  # noqa: RUF029
+    msg: dict[str, Any],
+    widget_session_key: str,
+    duckdb_table_name: str,
+    create_table_time: float,
+) -> dict[str, Any]:
+    if "op" not in msg or msg["op"] not in {"get"}:
+        return {
+            "type": "h5",
+            "key": widget_session_key,
+            "data_type": "boundaries",
+            "value": {
+                "error": f"Invalid boundaries operation: {msg.get('op', '`op` key missing from message')}",
+            },
+        }
+
+    op = msg["op"]
+
+    max_vertices = int(msg.get("max_vertices", 100_000))
+
+    if op == "get":
+        start_time = time.time()
+        sampled_data, points_in_scope, total_points = get_boundary_sample(
+            _inject.kernel.duckdb,
+            duckdb_table_name,
+            x_min=float(msg["x_min"]),
+            y_min=float(msg["y_min"]),
+            x_max=float(msg["x_max"]),
+            y_max=float(msg["y_max"]),
+            max_vertices=max_vertices,
+        )
+
+        columns = sampled_data.columns
+        data = sampled_data.fetchall()
+
+        return {
+            "type": "h5",
+            "op": op,
+            "data_type": "boundaries",
+            "key": widget_session_key,
+            "value": {
+                "data": {
+                    "columns": columns,
+                    "boundaries": data,
+                    "points_in_scope": points_in_scope,
+                    "total_points": total_points,
+                    "time_taken": round(time.time() - start_time, 2),
+                    "create_table_time": create_table_time,
+                    "fetched_for_max_vertices": max_vertices,
+                    "fetched_for_x_min": float(msg["x_min"]),
+                    "fetched_for_x_max": float(msg["x_max"]),
+                    "fetched_for_y_min": float(msg["y_min"]),
+                    "fetched_for_y_max": float(msg["y_max"]),
+                }
+            },
+        }
+
+    return {
+        "type": "h5",
+        "data_type": "boundaries",
+        "key": widget_session_key,
+        "value": {
+            "error": f"Unsupported boundaries operation: {op}",
+        },
+    }
