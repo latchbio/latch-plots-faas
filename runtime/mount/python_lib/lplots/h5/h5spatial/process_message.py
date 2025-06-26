@@ -138,11 +138,12 @@ def get_boundary_sample(
     return conn.sql(f"""
         select
             EntityID,
-            st_astext(Geometry) as coords
+            st_astext(st_simplify(Geometry, 1.0)) as coords
         from
             {table_name}
         where
-            ST_Intersects(Geometry, ST_GeomFromText('POLYGON(({x_min} {y_min}, {x_max} {y_min}, {x_max} {y_max}, {x_min} {y_max}, {x_min} {y_min}))'))
+            ST_MaxX(Geometry) >= {x_min} and ST_MinX(Geometry) <= {x_max}
+            and ST_MaxY(Geometry) >= {y_min} and ST_MinY(Geometry) <= {y_max}
         order by random()
         limit {max_boundaries}
     """)  # noqa: S608
@@ -182,14 +183,10 @@ async def process_boundaries_request(  # noqa: RUF029
 
         data = sampled_data.fetchall()
 
-        entity_ids = []
         boundaries = []
 
         for row in data:
-            entity_id: str = row[0]
             wkt_coords: str | None = row[1]
-
-            entity_ids.append(entity_id)
 
             if wkt_coords is None:
                 boundaries.append(None)
@@ -217,13 +214,21 @@ async def process_boundaries_request(  # noqa: RUF029
                         coords_str = wkt_coords
 
                 coord_pairs = []
+                coord_count = 0
+                max_coords = 500
+
                 for pair in coords_str.split(","):
+                    if coord_count >= max_coords:
+                        break
+
                     clean_pair = pair.strip().replace("(", "").replace(")", "")
                     coords = clean_pair.split()
                     if len(coords) < 2:
                         continue
-                    x, y = float(coords[0]), float(coords[1])
+
+                    x, y = round(float(coords[0]), 2), round(float(coords[1]), 2)
                     coord_pairs.append([x, y])
+                    coord_count += 1
             except Exception as e:
                 raise RuntimeError(f"Error parsing WKT: {wkt_coords}") from e
 
@@ -236,7 +241,6 @@ async def process_boundaries_request(  # noqa: RUF029
             "key": widget_session_key,
             "value": {
                 "data": {
-                    "entity_ids": entity_ids,
                     "boundaries": boundaries,
                     "time_taken": round(time.time() - start_time, 2),
                     "create_table_time": create_table_time,
