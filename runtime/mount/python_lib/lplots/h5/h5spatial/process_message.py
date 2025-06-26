@@ -138,12 +138,25 @@ def get_boundary_sample(
     return conn.sql(f"""
         select
             EntityID,
-            st_astext(st_simplify(Geometry, 1.0)) as coords
+            st_astext(
+                st_simplify(
+                    case
+                        when st_geometrytype(Geometry) = 'MULTIPOLYGON' then
+                            st_exteriorring(st_collect(Geometry))
+                        when st_geometrytype(Geometry) = 'POLYGON' then
+                            st_exteriorring(Geometry)
+                        else
+                            Geometry
+                    end,
+                    1.0
+                )
+            ) as coords
         from
             {table_name}
         where
-            ST_MaxX(Geometry) >= {x_min} and ST_MinX(Geometry) <= {x_max}
-            and ST_MaxY(Geometry) >= {y_min} and ST_MinY(Geometry) <= {y_max}
+            ST_XMax(Geometry) >= {x_min} and ST_XMin(Geometry) <= {x_max} and
+            ST_YMax(Geometry) >= {y_min} and ST_YMin(Geometry) <= {y_max} and
+            ST_Intersects(Geometry, ST_GeomFromText('POLYGON(({x_min} {y_min}, {x_max} {y_min}, {x_max} {y_max}, {x_min} {y_max}, {x_min} {y_min}))'))
         order by random()
         limit {max_boundaries}
     """)  # noqa: S608
