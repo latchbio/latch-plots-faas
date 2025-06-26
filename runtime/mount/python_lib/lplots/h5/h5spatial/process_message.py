@@ -203,7 +203,7 @@ async def process_boundaries_request(  # noqa: RUF029
                     start = inner.find("(")
                     end = inner.rfind(")")
                     if start != -1 and end != -1:
-                        coords_str = inner[start+1:end]
+                        coords_str = inner[start + 1:end]
                     else:
                         coords_str = inner
                 else:
