@@ -139,7 +139,14 @@ def get_boundary_sample(
         select
             ID,
             EntityID,
-            Geometry,
+            case
+                when st_geometrytype(Geometry) = 'POLYGON' then 
+                    st_astext(st_exteriorring(Geometry))
+                when st_geometrytype(Geometry) = 'LINESTRING' then
+                    st_astext(Geometry)
+                else
+                    st_astext(Geometry)
+            end as coords
         from
             {table_name}
         where
@@ -189,45 +196,30 @@ async def process_boundaries_request(  # noqa: RUF029
         boundaries = []
 
         for row in data:
-            row_id = row[0]
-            entity_id = row[1]
-            geometry = row[2]
+            row_id: str = row[0]
+            entity_id: str = row[1]
+            wkt_coords: str | None = row[2]
 
             entity_ids.append(entity_id)
             ids.append(row_id)
 
-            if geometry is not None:
-                coord_result = _inject.kernel.duckdb.execute("""
-                    select
-                        case
-                            when st_geometrytype(cast(? as geometry)) = 'POLYGON' then 
-                                st_astext(st_exteriorring(cast(? as geometry)))
-                            when st_geometrytype(cast(? as geometry)) = 'LINESTRING' then
-                                st_astext(cast(? as geometry))
-                            else
-                                st_astext(cast(? as geometry))
-                        end as coords
-                """, [geometry, geometry, geometry, geometry, geometry]).fetchone()
-
-                if coord_result is not None and coord_result[0] is not None:
-                    wkt_coords = coord_result[0]
-                    if wkt_coords.startswith("LINESTRING("):
-                        coords_str = wkt_coords[11:-1]
-                    elif wkt_coords.startswith("POLYGON(("):
-                        coords_str = wkt_coords[9:-2]
-                    else:
-                        coords_str = wkt_coords
-
-                    coord_pairs = []
-                    for pair in coords_str.split(","):
-                        x, y = pair.strip().split()
-                        coord_pairs.append([float(x), float(y)])
-
-                    boundaries.append(coord_pairs)
-                else:
-                    boundaries.append(None)
-            else:
+            if wkt_coords is None:
                 boundaries.append(None)
+                continue
+
+            if wkt_coords.startswith("LINESTRING("):
+                coords_str = wkt_coords[11:-1]
+            elif wkt_coords.startswith("POLYGON(("):
+                coords_str = wkt_coords[9:-2]  # Remove "POLYGON((" and "))"
+            else:
+                coords_str = wkt_coords
+
+            coord_pairs = []
+            for pair in coords_str.split(","):
+                x, y = pair.strip().split()
+                coord_pairs.append([float(x), float(y)])
+
+            boundaries.append(coord_pairs)
 
         return {
             "type": "h5",
