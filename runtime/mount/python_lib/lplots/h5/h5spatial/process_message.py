@@ -185,6 +185,7 @@ async def process_boundaries_request(  # noqa: RUF029
         )
 
         columns = sampled_data.columns
+        column_types = sampled_data.types
         data = sampled_data.fetchall()
 
         return {
@@ -195,7 +196,8 @@ async def process_boundaries_request(  # noqa: RUF029
             "value": {
                 "data": {
                     "columns": columns,
-                    "boundaries": data,
+                    "column_types": column_types,
+                    # "boundaries": data,
                     "time_taken": round(time.time() - start_time, 2),
                     "create_table_time": create_table_time,
                     "fetched_for_max_boundaries": max_boundaries,
