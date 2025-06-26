@@ -185,7 +185,7 @@ async def process_boundaries_request(  # noqa: RUF029
         )
 
         columns = sampled_data.columns
-        column_types = sampled_data.types
+        column_types = [str(t) for t in sampled_data.types]
         data = sampled_data.fetchall()
 
         return {
