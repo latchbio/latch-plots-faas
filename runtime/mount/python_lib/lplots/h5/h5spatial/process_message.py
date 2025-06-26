@@ -137,7 +137,6 @@ def get_boundary_sample(
 ) -> duckdb.DuckDBPyRelation:
     return conn.sql(f"""
         select
-            ID,
             EntityID,
             st_astext(Geometry) as coords
         from
@@ -181,20 +180,16 @@ async def process_boundaries_request(  # noqa: RUF029
             max_boundaries=max_boundaries,
         )
 
-        columns = sampled_data.columns
         data = sampled_data.fetchall()
 
         entity_ids = []
-        ids = []
         boundaries = []
 
         for row in data:
-            row_id: str = row[0]
-            entity_id: str = row[1]
-            wkt_coords: str | None = row[2]
+            entity_id: str = row[0]
+            wkt_coords: str | None = row[1]
 
             entity_ids.append(entity_id)
-            ids.append(row_id)
 
             if wkt_coords is None:
                 boundaries.append(None)
@@ -241,9 +236,7 @@ async def process_boundaries_request(  # noqa: RUF029
             "key": widget_session_key,
             "value": {
                 "data": {
-                    "columns": columns,
                     "entity_ids": entity_ids,
-                    "ids": ids,
                     "boundaries": boundaries,
                     "time_taken": round(time.time() - start_time, 2),
                     "create_table_time": create_table_time,
