@@ -138,13 +138,12 @@ def get_boundary_sample(
     return conn.sql(f"""
         select
             EntityID,
-            st_astext(st_simplify(Geometry, 1.0)) as coords
+            st_astext(Geometry) as coords
         from
             {table_name}
         where
             ST_XMax(Geometry) >= {x_min} and ST_XMin(Geometry) <= {x_max} and
-            ST_YMax(Geometry) >= {y_min} and ST_YMin(Geometry) <= {y_max} and
-            ST_Intersects(Geometry, ST_GeomFromText('POLYGON(({x_min} {y_min}, {x_max} {y_min}, {x_max} {y_max}, {x_min} {y_max}, {x_min} {y_min}))'))
+            ST_YMax(Geometry) >= {y_min} and ST_YMin(Geometry) <= {y_max}
         order by random()
         limit {max_boundaries}
     """)  # noqa: S608
@@ -215,21 +214,13 @@ async def process_boundaries_request(  # noqa: RUF029
                         coords_str = wkt_coords
 
                 coord_pairs = []
-                coord_count = 0
-                max_coords = 500
-
                 for pair in coords_str.split(","):
-                    if coord_count >= max_coords:
-                        break
-
                     clean_pair = pair.strip().replace("(", "").replace(")", "")
                     coords = clean_pair.split()
                     if len(coords) < 2:
                         continue
-
                     x, y = round(float(coords[0]), 2), round(float(coords[1]), 2)
                     coord_pairs.append([x, y])
-                    coord_count += 1
             except Exception as e:
                 raise RuntimeError(f"Error parsing WKT: {wkt_coords}") from e
 
