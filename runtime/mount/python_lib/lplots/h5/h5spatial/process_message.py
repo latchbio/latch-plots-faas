@@ -193,26 +193,26 @@ async def process_boundaries_request(  # noqa: RUF029
                 continue
 
             try:
-                # Handle empty geometries
                 if "EMPTY" in wkt_coords:
                     boundaries.append(None)
                     continue
-
-                wkt_coords_clean = wkt_coords.replace(" ", "")
-
-                if wkt_coords_clean.startswith("LINESTRING("):
-                    coords_str = wkt_coords_clean[11:-1]
-                elif wkt_coords_clean.startswith("POLYGON(("):
-                    coords_str = wkt_coords_clean[9:-2]
-                elif wkt_coords_clean.startswith("MULTIPOLYGON((("):
-                    # extract the first polygon's exterior ring
-                    inner = wkt_coords_clean[15:-3]
-                    start = inner.find("(")
-                    end = inner.rfind(")")
-                    if start != -1 and end != -1:
-                        coords_str = inner[start + 1:end]
-                    else:
-                        coords_str = inner
+                if wkt_coords.startswith("LINESTRING "):
+                    coords_str = wkt_coords[11:-1]
+                elif wkt_coords.startswith("POLYGON "):
+                    coords_str = wkt_coords[9:-2]
+                elif wkt_coords.startswith("MULTIPOLYGON "):
+                    start_idx = wkt_coords.find("(((") + 3
+                    paren_count = 0
+                    end_idx = start_idx
+                    for i, char in enumerate(wkt_coords[start_idx:], start_idx):
+                        if char == "(":
+                            paren_count += 1
+                        elif char == ")":
+                            paren_count -= 1
+                            if paren_count < 0:
+                                end_idx = i
+                                break
+                    coords_str = wkt_coords[start_idx:end_idx]
                 else:
                     raise ValueError(f"Unhandled WKT: {wkt_coords}")
 
