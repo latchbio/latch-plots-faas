@@ -139,16 +139,7 @@ def get_boundary_sample(
         select
             ID,
             EntityID,
-            case
-                when st_geometrytype(Geometry) = 'POLYGON' then 
-                    st_astext(st_exteriorring(Geometry))
-                when st_geometrytype(Geometry) = 'LINESTRING' then
-                    st_astext(Geometry)
-                when st_geometrytype(Geometry) = 'MULTIPOLYGON' then
-                    st_astext(st_exteriorring(st_geometryn(Geometry, 1)))
-                else
-                    st_astext(Geometry)
-            end as coords
+            st_astext(Geometry) as coords
         from
             {table_name}
         where
@@ -209,11 +200,25 @@ async def process_boundaries_request(  # noqa: RUF029
                 boundaries.append(None)
                 continue
 
-            start = wkt_coords.find("(")
-            if start != -1:
-                coords_str = wkt_coords[start + 1:-1]
+            if wkt_coords.startswith("LINESTRING("):
+                coords_str = wkt_coords[11:-1]
+            elif wkt_coords.startswith("POLYGON(("):
+                coords_str = wkt_coords[9:-2]
+            elif wkt_coords.startswith("MULTIPOLYGON((("):
+                # todo(aidan): why is this a multipolygon? Do we need multiple boundaries per cell?
+                inner = wkt_coords[15:-3]
+                start = inner.find("(")
+                end = inner.rfind(")")
+                if start != -1 and end != -1:
+                    coords_str = inner[start+1:end]
+                else:
+                    coords_str = inner
             else:
-                coords_str = wkt_coords
+                start = wkt_coords.find("(")
+                if start != -1:
+                    coords_str = wkt_coords[start + 1:-1]
+                else:
+                    coords_str = wkt_coords
 
             coord_pairs = []
             for pair in coords_str.split(","):
