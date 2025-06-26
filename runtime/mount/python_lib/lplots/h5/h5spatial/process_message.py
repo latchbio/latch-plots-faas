@@ -141,9 +141,7 @@ def get_boundary_sample(
             st_astext(
                 st_simplify(
                     case
-                        when st_geometrytype(Geometry) = 'MULTIPOLYGON' then
-                            st_exteriorring(st_collect(Geometry))
-                        when st_geometrytype(Geometry) = 'POLYGON' then
+                        when st_geometrytype(Geometry) = 'MULTIPOLYGON' or st_geometrytype(Geometry) = 'POLYGON' then
                             st_exteriorring(Geometry)
                         else
                             Geometry
