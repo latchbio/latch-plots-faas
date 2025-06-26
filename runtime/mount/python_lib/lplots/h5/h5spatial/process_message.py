@@ -193,6 +193,7 @@ async def process_boundaries_request(  # noqa: RUF029
                 continue
 
             try:
+                # todo(aidan): handle empty?
                 if wkt_coords.startswith("LINESTRING("):
                     coords_str = wkt_coords[11:-1]
                 elif wkt_coords.startswith("POLYGON(("):
@@ -207,11 +208,7 @@ async def process_boundaries_request(  # noqa: RUF029
                     else:
                         coords_str = inner
                 else:
-                    start = wkt_coords.find("(")
-                    if start != -1:
-                        coords_str = wkt_coords[start + 1:-1]
-                    else:
-                        coords_str = wkt_coords
+                    raise ValueError(f"Unhandled WKT: {wkt_coords}")
 
                 coord_pairs = []
                 for pair in coords_str.split(","):
