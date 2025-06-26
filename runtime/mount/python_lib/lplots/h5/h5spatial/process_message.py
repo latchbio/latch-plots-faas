@@ -137,16 +137,16 @@ def get_boundary_sample(
 ) -> duckdb.DuckDBPyRelation:
     rel = conn.sql(f"select * from {table_name}")      # noqa: S608
 
-    bbox_filter = (
-        (ColumnExpression("ST_MaxX(geometry)") >= ConstantExpression(x_min)) &
-        (ColumnExpression("ST_MinX(geometry)") <= ConstantExpression(x_max)) &
-        (ColumnExpression("ST_MaxY(geometry)") >= ConstantExpression(y_min)) &
-        (ColumnExpression("ST_MinY(geometry)") <= ConstantExpression(y_max))
-    )
+    # bbox_filter = (
+    #     (ColumnExpression("ST_MaxX(geometry)") >= ConstantExpression(x_min)) &
+    #     (ColumnExpression("ST_MinX(geometry)") <= ConstantExpression(x_max)) &
+    #     (ColumnExpression("ST_MaxY(geometry)") >= ConstantExpression(y_min)) &
+    #     (ColumnExpression("ST_MinY(geometry)") <= ConstantExpression(y_max))
+    # )
 
     return (
         rel
-        .filter(bbox_filter)
+        # .filter(bbox_filter)
         .order("random()")
         .limit(max_boundaries)
     )
