@@ -138,17 +138,7 @@ def get_boundary_sample(
     return conn.sql(f"""
         select
             EntityID,
-            st_astext(
-                st_simplify(
-                    case
-                        when st_geometrytype(Geometry) = 'MULTIPOLYGON' or st_geometrytype(Geometry) = 'POLYGON' then
-                            st_exteriorring(Geometry)
-                        else
-                            Geometry
-                    end,
-                    1.0
-                )
-            ) as coords
+            st_astext(st_simplify(Geometry, 1.0)) as coords
         from
             {table_name}
         where
