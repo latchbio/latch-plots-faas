@@ -135,18 +135,15 @@ def get_boundary_sample(
     x_min: float, y_min: float, x_max: float, y_max: float,
     max_boundaries: int = 100_000,
 ) -> duckdb.DuckDBPyRelation:
-    rel = conn.sql(f"select * from {table_name}")      # noqa: S608
+    rel = conn.sql(f"select ID, EntityID, Geometry from {table_name}")      # noqa: S608
 
-    # bbox_filter = (
-    #     (ColumnExpression("ST_MaxX(geometry)") >= ConstantExpression(x_min)) &
-    #     (ColumnExpression("ST_MinX(geometry)") <= ConstantExpression(x_max)) &
-    #     (ColumnExpression("ST_MaxY(geometry)") >= ConstantExpression(y_min)) &
-    #     (ColumnExpression("ST_MinY(geometry)") <= ConstantExpression(y_max))
-    # )
+    viewport_polygon = f"ST_GeomFromText('POLYGON(({x_min} {y_min}, {x_max} {y_min}, {x_max} {y_max}, {x_min} {y_max}, {x_min} {y_min}))')"
+
+    bbox_filter = ColumnExpression(f"ST_Intersects(Geometry, {viewport_polygon})")
 
     return (
         rel
-        # .filter(bbox_filter)
+        .filter(bbox_filter)
         .order("random()")
         .limit(max_boundaries)
     )
@@ -185,8 +182,52 @@ async def process_boundaries_request(  # noqa: RUF029
         )
 
         columns = sampled_data.columns
-        column_types = [str(t) for t in sampled_data.types]
         data = sampled_data.fetchall()
+
+        entity_ids = []
+        ids = []
+        boundaries = []
+
+        for row in data:
+            row_id = row[0]
+            entity_id = row[1]
+            geometry = row[2]
+
+            entity_ids.append(entity_id)
+            ids.append(row_id)
+
+            if geometry is not None:
+                coord_result = _inject.kernel.duckdb.execute("""
+                    select
+                        case
+                            when st_geometrytype(?) = 'POLYGON' then 
+                                st_astext(st_exteriorring(?))
+                            when st_geometrytype(?) = 'LINESTRING' then
+                                st_astext(?)
+                            else
+                                st_astext(?)
+                        end as coords
+                """, [geometry, geometry, geometry, geometry, geometry]).fetchone()
+
+                if coord_result is not None and coord_result[0] is not None:
+                    wkt_coords = coord_result[0]
+                    if wkt_coords.startswith("LINESTRING("):
+                        coords_str = wkt_coords[11:-1]
+                    elif wkt_coords.startswith("POLYGON(("):
+                        coords_str = wkt_coords[9:-2]
+                    else:
+                        coords_str = wkt_coords
+
+                    coord_pairs = []
+                    for pair in coords_str.split(","):
+                        x, y = pair.strip().split()
+                        coord_pairs.append([float(x), float(y)])
+
+                    boundaries.append(coord_pairs)
+                else:
+                    boundaries.append(None)
+            else:
+                boundaries.append(None)
 
         return {
             "type": "h5",
@@ -196,8 +237,9 @@ async def process_boundaries_request(  # noqa: RUF029
             "value": {
                 "data": {
                     "columns": columns,
-                    "column_types": column_types,
-                    # "boundaries": data,
+                    "entity_ids": entity_ids,
+                    "ids": ids,
+                    "boundaries": boundaries,
                     "time_taken": round(time.time() - start_time, 2),
                     "create_table_time": create_table_time,
                     "fetched_for_max_boundaries": max_boundaries,
