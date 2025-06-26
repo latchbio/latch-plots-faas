@@ -144,6 +144,8 @@ def get_boundary_sample(
                     st_astext(st_exteriorring(Geometry))
                 when st_geometrytype(Geometry) = 'LINESTRING' then
                     st_astext(Geometry)
+                when st_geometrytype(Geometry) = 'MULTIPOLYGON' then
+                    st_astext(st_exteriorring(st_geometryn(Geometry, 1)))
                 else
                     st_astext(Geometry)
             end as coords
@@ -207,16 +209,17 @@ async def process_boundaries_request(  # noqa: RUF029
                 boundaries.append(None)
                 continue
 
-            if wkt_coords.startswith("LINESTRING("):
-                coords_str = wkt_coords[11:-1]
-            elif wkt_coords.startswith("POLYGON(("):
-                coords_str = wkt_coords[9:-2]  # Remove "POLYGON((" and "))"
+            start = wkt_coords.find("(")
+            if start != -1:
+                coords_str = wkt_coords[start + 1:-1]
             else:
                 coords_str = wkt_coords
 
             coord_pairs = []
             for pair in coords_str.split(","):
                 coords = pair.strip().split()
+                if len(coords) < 2:
+                    continue
                 x, y = float(coords[0]), float(coords[1])
                 coord_pairs.append([x, y])
 
