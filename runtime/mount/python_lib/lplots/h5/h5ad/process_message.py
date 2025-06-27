@@ -41,6 +41,7 @@ async def process_h5ad_request(
         "rename_obs",
         "fetch_and_process_image",
         "align_image",
+        "store_views",
     }:
         return {
             "type": "h5",
@@ -152,6 +153,8 @@ async def process_h5ad_request(
                     "init_var_key": init_var_key if init_var_key is not None else None,
                     # alignment info
                     "alignment_is_running": alignment_is_running,
+                    # views info
+                    "init_views": adata.uns.get("latch_views", []),
                 }
             },
         }
@@ -539,5 +542,29 @@ async def process_h5ad_request(
             }
         finally:
             alignment_is_running = False
+
+    if op == "store_views":
+        if "views" not in msg:
+            return {
+                "type": "h5",
+                "op": op,
+                "data_type": "h5ad",
+                "key": widget_session_key,
+                "value": {"error": "`views` key missing from message"},
+            }
+
+        adata.uns["latch_views"] = msg["views"]
+
+        return {
+            "type": "h5",
+            "op": op,
+            "data_type": "h5ad",
+            "key": widget_session_key,
+            "value": {
+                "data": {
+                    "stored_views": adata.uns["latch_views"],
+                },
+            },
+        }
 
     raise ValueError(f"Invalid operation: {op}")
