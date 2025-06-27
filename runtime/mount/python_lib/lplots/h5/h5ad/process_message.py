@@ -44,9 +44,7 @@ async def process_h5ad_request(
         "get_uns_options",
         "get_uns",
         "set_uns",
-        "get_bg_images",
-        "set_bg_image",
-        "rm_bg_image",
+        "store_views",
     }:
         return {
             "type": "h5",
@@ -158,6 +156,8 @@ async def process_h5ad_request(
                     "init_var_key": init_var_key if init_var_key is not None else None,
                     # alignment info
                     "alignment_is_running": alignment_is_running,
+                    # views info
+                    "init_views": adata.uns.get("latch_views", []),
                 }
             },
         }
@@ -546,38 +546,17 @@ async def process_h5ad_request(
         finally:
             alignment_is_running = False
 
-    if op == "get_bg_images":
-        key_structure = "latch_bg_image."
-        uns_data = {
-            key: adata.uns[key]
-            for key in adata.uns
-            if key.startswith(key_structure)
-        }
-
-        return {
-            "type": "h5",
-            "op": op,
-            "data_type": "h5ad",
-            "key": widget_session_key,
-            "value": {
-                "data": {
-                    "keys": list(uns_data.keys()),
-                    "values": [uns_data[key] for key in uns_data],
-                },
-            },
-        }
-
-    if op == "set_bg_image":
-        if "img_id" not in msg or "img_value" not in msg:
+    if op == "store_views":
+        if "views" not in msg:
             return {
                 "type": "h5",
                 "op": op,
                 "data_type": "h5ad",
                 "key": widget_session_key,
-                "value": {"error": "`uns_key` and `uns_value` keys missing from message"},
+                "value": {"error": "`views` key missing from message"},
             }
 
-        adata.uns[f"latch_bg_image.{msg['img_id']}"] = msg["img_value"]
+        adata.uns["latch_views"] = msg["views"]
 
         return {
             "type": "h5",
@@ -586,32 +565,7 @@ async def process_h5ad_request(
             "key": widget_session_key,
             "value": {
                 "data": {
-                    "set_for_img_id": msg["img_id"],
-                    "set_for_img_value": msg["img_value"],
-                },
-            },
-        }
-
-    if op == "rm_bg_image":
-        if "img_id" not in msg:
-            return {
-                "type": "h5",
-                "op": op,
-                "data_type": "h5ad",
-                "key": widget_session_key,
-                "value": {"error": "`img_id` key missing from message"},
-            }
-
-        adata.uns.pop(f"latch_bg_image.{msg['img_id']}", None)
-
-        return {
-            "type": "h5",
-            "op": op,
-            "data_type": "h5ad",
-            "key": widget_session_key,
-            "value": {
-                "data": {
-                    "removed_img_id": msg["img_id"],
+                    "stored_views": adata.uns["latch_views"],
                 },
             },
         }
