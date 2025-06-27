@@ -766,7 +766,7 @@ class Kernel:
         # for x in unused_signals:
         #     del self.widget_signals[x]
 
-    async def update_kernel_snapshot_status(self, key: str, status: str, data: dict[str, int] | None) -> None:
+    async def update_kernel_snapshot_status(self, key: str, status: str, data: dict[str, int] | None = None) -> None:
         assert key in {"save_kernel_snapshot", "load_kernel_snapshot"}
         self.kernel_snapshot_status = status
         msg = {"type": key, "status": status}
