@@ -528,7 +528,7 @@ class Kernel:
     cell_rnodes: dict[str, Node] = field(default_factory=dict)
     k_globals: TracedDict = field(init=False)
     cell_status: dict[str, str] = field(default_factory=dict)
-    kernel_snapshot_status: KernelSnapshotStatus = "done"
+    snapshot_status: KernelSnapshotStatus = "done"
 
     active_cell: str | None = None
 
@@ -768,7 +768,7 @@ class Kernel:
 
     async def update_kernel_snapshot_status(self, key: str, status: str, data: dict[str, int] | None = None) -> None:
         assert key in {"save_kernel_snapshot", "load_kernel_snapshot"}
-        self.kernel_snapshot_status = status
+        self.snapshot_status = status
         msg = {"type": key, "status": status}
         if data is not None:
             msg["data"] = data
