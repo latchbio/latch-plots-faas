@@ -41,6 +41,9 @@ async def process_h5ad_request(
         "rename_obs",
         "fetch_and_process_image",
         "align_image",
+        "get_uns_options",
+        "get_uns",
+        "set_uns",
     }:
         return {
             "type": "h5",
@@ -539,5 +542,71 @@ async def process_h5ad_request(
             }
         finally:
             alignment_is_running = False
+
+    if op == "get_uns_options":
+        return {
+            "type": "h5",
+            "op": op,
+            "data_type": "h5ad",
+            "key": widget_session_key,
+            "value": {"data": list(adata.uns.keys())},
+        }
+
+    if op == "get_uns":
+        if "uns_key" not in msg or msg["uns_key"] not in adata.uns:
+            return {
+                "type": "h5",
+                "op": op,
+                "data_type": "h5ad",
+                "key": widget_session_key,
+                "value": {
+                    "error": (
+                        "Uns key not found"
+                        if "uns_key" in msg
+                        else "`uns_key` key missing from message"
+                    )
+                },
+            }
+
+        uns_data = adata.uns[msg["uns_key"]]
+        return {
+            "type": "h5",
+            "op": op,
+            "data_type": "h5ad",
+            "key": widget_session_key,
+            "value": {
+                "data": {
+                    "fetched_for_key": msg["uns_key"],
+                    "value": uns_data,
+                },
+            },
+        }
+
+    if op == "set_uns":
+        if "uns_key" not in msg or "uns_value" not in msg:
+            return {
+                "type": "h5",
+                "op": op,
+                "data_type": "h5ad",
+                "key": widget_session_key,
+                "value": {"error": "`uns_key` and `uns_value` keys missing from message"},
+            }
+
+        uns_key = msg["uns_key"]
+        uns_value = msg["uns_value"]
+        adata.uns[uns_key] = uns_value
+
+        return {
+            "type": "h5",
+            "op": op,
+            "data_type": "h5ad",
+            "key": widget_session_key,
+            "value": {
+                "data": {
+                    "set_for_key": uns_key,
+                    "value": uns_value,
+                },
+            },
+        }
 
     raise ValueError(f"Invalid operation: {op}")
