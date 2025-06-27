@@ -40,7 +40,7 @@ class SocketWriter(RawIOBase):
         self.conn.send_fut({
             "type": "kernel_stdio",
             "active_cell": self.kernel.active_cell,
-            "snapshot_status": self.kernel.snapshot_status,
+            # "snapshot_status": self.kernel.snapshot_status,
             "stream": self.name,
             # todo(maximsmol): this is a bit silly because we are going to have
             # a TextIOWrapper above that just encoded this for us
