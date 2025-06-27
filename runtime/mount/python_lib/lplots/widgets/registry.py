@@ -95,17 +95,17 @@ class RegistryTable(widget.BaseWidget):
     _state: RegistryTableState
     _signal: Signal[object | str]
 
-    def _value(self) -> Table | None:
+    def _value(self) -> RegistryTableValue:
         table_id = self._state.get("table_id")
 
-        return Table(id=table_id)
+        return RegistryTableValue(table=Table(id=table_id))
 
     @property
-    def value(self) -> Table | None:
+    def value(self) -> RegistryTableValue:
         self._signal()
         return self._value()
 
-    def sample(self) -> Table | None:
+    def sample(self) -> RegistryTableValue:
         return self._value()
 
 
