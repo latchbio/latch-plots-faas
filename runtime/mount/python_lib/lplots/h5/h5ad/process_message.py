@@ -543,7 +543,7 @@ async def process_h5ad_request(
         finally:
             alignment_is_running = False
 
-    if op == "get_stored_bg_images":
+    if op == "get_bg_images":
         key_structure = "latch_bg_image."
         uns_data = {
             key: adata.uns[key]
@@ -564,7 +564,7 @@ async def process_h5ad_request(
             },
         }
 
-    if op == "set_stored_bg_images":
+    if op == "set_bg_image":
         if "img_id" not in msg or "img_value" not in msg:
             return {
                 "type": "h5",
