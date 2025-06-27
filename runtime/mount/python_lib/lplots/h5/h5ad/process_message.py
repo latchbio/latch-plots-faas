@@ -41,9 +41,6 @@ async def process_h5ad_request(
         "rename_obs",
         "fetch_and_process_image",
         "align_image",
-        "get_uns_options",
-        "get_uns",
-        "set_uns",
         "store_views",
     }:
         return {
