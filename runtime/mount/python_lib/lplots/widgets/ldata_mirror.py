@@ -25,19 +25,13 @@ class LDataMirror(widget.BaseWidget):
     _dir: LPath
     _signal: Signal[object | LPath]
 
-    def _value(
-        self,
-    ) -> LPath | None:
-        return self._dir
-
     @property
     def value(self) -> LPath | None:
         self._signal()
-        return self._value()
+        return self._dir
 
     def sample(self) -> LPath | None:
-        self._signal.sample()
-        return self._value()
+        return self._dir
 
 
 _emit.widget_registry[ldata_mirror_type] = LDataMirror
@@ -55,13 +49,16 @@ def w_ldata_mirror(
     key = _state.use_state_key(key=key)
 
     dir_lpath: LPath | None = None
-    if isinstance(dir, str) and dir.startswith("latch://"):
+    if isinstance(dir, str):
         dir_lpath = LPath(dir)
     elif isinstance(dir, LPath):
         dir_lpath = dir
 
-    if dir_lpath is None or not dir_lpath.is_dir():
-        raise ValueError("Invalid directory")
+    if dir_lpath is None:
+        raise ValueError("Invalid argument `dir`: not an LPath object ")
+
+    if not dir_lpath.is_dir:
+        raise ValueError("Invalid argument `dir`: LPath object is not a directory")
 
     dir_node_id = dir_lpath.node_id()
     if dir_node_id is None:
