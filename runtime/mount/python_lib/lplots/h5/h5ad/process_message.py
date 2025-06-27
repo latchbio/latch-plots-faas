@@ -44,6 +44,9 @@ async def process_h5ad_request(
         "get_uns_options",
         "get_uns",
         "set_uns",
+        "get_bg_images",
+        "set_bg_image",
+        "rm_bg_image",
     }:
         return {
             "type": "h5",
@@ -585,6 +588,30 @@ async def process_h5ad_request(
                 "data": {
                     "set_for_img_id": msg["img_id"],
                     "set_for_img_value": msg["img_value"],
+                },
+            },
+        }
+
+    if op == "rm_bg_image":
+        if "img_id" not in msg:
+            return {
+                "type": "h5",
+                "op": op,
+                "data_type": "h5ad",
+                "key": widget_session_key,
+                "value": {"error": "`img_id` key missing from message"},
+            }
+
+        adata.uns.pop(f"latch_bg_image.{msg['img_id']}", None)
+
+        return {
+            "type": "h5",
+            "op": op,
+            "data_type": "h5ad",
+            "key": widget_session_key,
+            "value": {
+                "data": {
+                    "removed_img_id": msg["img_id"],
                 },
             },
         }
