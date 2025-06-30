@@ -39,6 +39,9 @@ os.system("git -C /opt/latch/plots-faas pull origin main")
 os.system("git -C /opt/latch/plots-faas rev-parse HEAD > /opt/latch/plots_faas_version")
 
 os.chdir("/opt/latch/plots-faas")
+
+os.system("/opt/mamba/envs/plots-faas/bin/pip install --upgrade latch")
+
 os.execle(
     "/usr/bin/nice",
     "-n",
