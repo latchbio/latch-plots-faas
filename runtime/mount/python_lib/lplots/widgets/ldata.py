@@ -116,7 +116,7 @@ class LDataMirror(widget.BaseWidget):
 _emit.widget_registry[ldata_mirror_type] = LDataMirror
 
 
-def w_file_browser(
+def w_ldata_browser(
     *,
     key: str | None = None,
     label: str,
