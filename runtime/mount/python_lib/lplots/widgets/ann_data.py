@@ -45,6 +45,9 @@ class AnnData(widget.BaseWidget):
         return self._value(res)
 
 
+_emit.widget_registry[ann_data_widget_type] = AnnData
+
+
 def w_ann_data(
     *,
     key: str | None = None,
