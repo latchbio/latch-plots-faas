@@ -62,7 +62,7 @@ ad = auto_install.ad
 
 sys.path.append(str(Path(__file__).parent.absolute()))
 from subsample import downsample_df, initialize_duckdb
-from utils import PlotConfig, get_presigned_url
+from utils import KernelSnapshotStatus, PlotConfig, get_presigned_url
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -528,6 +528,7 @@ class Kernel:
     cell_rnodes: dict[str, Node] = field(default_factory=dict)
     k_globals: TracedDict = field(init=False)
     cell_status: dict[str, str] = field(default_factory=dict)
+    snapshot_status: KernelSnapshotStatus = "done"
 
     active_cell: str | None = None
 
@@ -765,6 +766,14 @@ class Kernel:
         # for x in unused_signals:
         #     del self.widget_signals[x]
 
+    async def update_kernel_snapshot_status(self, key: str, status: str, data: dict[str, int] | None = None) -> None:
+        assert key in {"save_kernel_snapshot", "load_kernel_snapshot"}
+        self.snapshot_status = status
+        msg = {"type": key, "status": status}
+        if data is not None:
+            msg["data"] = data
+        await self.send(msg)
+
     async def save_kernel_snapshot(self) -> None:
         snapshot_dir.mkdir(parents=True, exist_ok=True)
 
@@ -822,15 +831,12 @@ class Kernel:
 
             data = orjson.dumps(s_depens)
         except Exception:
-            await self.send({"type": "save_kernel_snapshot",
-                             "status": "error",
-                             "data": {"error_msg": traceback.format_exc()}})
+            await self.update_kernel_snapshot_status("save_kernel_snapshot", "error", {"error_msg": traceback.format_exc()})
             return
 
         total = len(data)
-        await self.send({"type": "save_kernel_snapshot",
-                         "status": "start",
-                         "data": {"total_bytes": total}})
+
+        await self.update_kernel_snapshot_status("save_kernel_snapshot", "start", {"progress_bytes": 0, "total_bytes": total})
 
         with (snapshot_dir / snapshot_f_name).open("wb") as f:
             saved_since_last = 0
@@ -840,29 +846,20 @@ class Kernel:
 
                 saved_since_last += (end - start)
                 if saved_since_last >= snapshot_progress_interval_bytes or end == total:
-                    await self.send({
-                        "type": "save_kernel_snapshot",
-                        "status": "progress",
-                        "data": {
-                            "written_bytes": end,
-                            "total_bytes": total,
-                        }
-                    })
+                    await self.update_kernel_snapshot_status("save_kernel_snapshot", "progress", {"progress_bytes": end, "total_bytes": total})
                     saved_since_last = 0
 
-        await self.send({"type": "save_kernel_snapshot", "status": "done"})
+        await self.update_kernel_snapshot_status("save_kernel_snapshot", "done")
 
     async def load_kernel_snapshot(self) -> None:
 
         snapshot_f = snapshot_dir / snapshot_f_name
         if not snapshot_f.exists():
-            await self.send({"type": "load_kernel_snapshot", "status": "done"})
+            await self.update_kernel_snapshot_status("load_kernel_snapshot", "done")
             return
 
         total = snapshot_f.stat().st_size
-        await self.send({"type": "load_kernel_snapshot",
-                         "status": "start",
-                         "data": {"total_bytes": total}})
+        await self.update_kernel_snapshot_status("load_kernel_snapshot", "start", {"progress_bytes": 0, "total_bytes": total})
 
         data = bytearray()
         read_since_last = 0
@@ -876,14 +873,7 @@ class Kernel:
                 read_since_last += len(chunk)
 
                 if read_since_last >= snapshot_progress_interval_bytes or len(data) == total:
-                    await self.send({
-                        "type":   "load_kernel_snapshot",
-                        "status": "progress",
-                        "data":   {
-                            "read_bytes":  len(data),
-                            "total_bytes": total,
-                        }
-                    })
+                    await self.update_kernel_snapshot_status("load_kernel_snapshot", "progress", {"progress_bytes":  len(data), "total_bytes": total})
                     read_since_last = 0
 
         try:
@@ -963,12 +953,11 @@ class Kernel:
 
             self.nodes_with_widgets = nodes_with_widgets
         except Exception:
-            await self.send({"type": "load_kernel_snapshot",
-                             "status": "error",
-                             "data": {"error_msg": traceback.format_exc()}})
+
+            await self.update_kernel_snapshot_status("load_kernel_snapshot", "error", {"error_msg": traceback.format_exc()})
             return
 
-        await self.send({"type": "load_kernel_snapshot", "status": "done"})
+        await self.update_kernel_snapshot_status("load_kernel_snapshot", "done")
 
     def get_widget_value(self, key: str) -> Signal[object]:
         assert ctx.cur_comp is not None

@@ -10,6 +10,16 @@ if TYPE_CHECKING:
     from _typeshed import ReadableBuffer
     from kernel import Kernel
 
+# todo(kenny): without snapshot these warnings occurred before connection was
+# established. Snapshot load pushes warnings to after connection and cause
+# console to show errors. Actual fix is addressing root cause in each
+# dependency but this might break code for customers.
+warning_msgs = [
+        "/opt/mamba/envs/plots-faas/lib/python3.11/site-packages/dask/dataframe/__init__.py:31: FutureWarning:",
+        "/opt/mamba/envs/plots-faas/lib/python3.11/site-packages/numba/core/decorators.py:246: RuntimeWarning:",
+        "/opt/mamba/envs/plots-faas/lib/python3.11/site-packages/anndata/utils.py:429: FutureWarning:",
+        ]
+
 
 @dataclass(kw_only=True)
 class SocketWriter(RawIOBase):
@@ -37,13 +47,17 @@ class SocketWriter(RawIOBase):
     @override
     def write(self, __b: "ReadableBuffer") -> int | None:
         b = bytes(__b)
+        data = b.decode(errors="replace")
+        for x in warning_msgs:
+            if x in data:
+                return len(b)
         self.conn.send_fut({
             "type": "kernel_stdio",
             "active_cell": self.kernel.active_cell,
             "stream": self.name,
             # todo(maximsmol): this is a bit silly because we are going to have
             # a TextIOWrapper above that just encoded this for us
-            "data": b.decode(errors="replace"),
+            "data": data,
         }).result()
         return len(b)
 

@@ -7,7 +7,7 @@ import traceback
 from asyncio.subprocess import Process
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, TypedDict, TypeVar
+from typing import TypedDict, TypeVar
 
 import orjson
 from latch_data_validation.data_validation import validate
@@ -15,7 +15,13 @@ from latch_data_validation.data_validation import validate
 from runtime.mount.plots_context_manager import PlotsContextManager
 
 from .socketio import SocketIo
-from .utils import PlotConfig, get_global_http_sess, gql_query, orjson_encoder
+from .utils import (
+    KernelSnapshotStatus,
+    PlotConfig,
+    get_global_http_sess,
+    gql_query,
+    orjson_encoder,
+)
 
 dir_p = Path(__file__).parent
 
@@ -46,7 +52,7 @@ cell_last_run_outputs: dict[str, CellOutputs] = {}
 
 @dataclass
 class KernelSnapshotState:
-    status: Literal["done", "creating", "loading"] = "done"
+    status: KernelSnapshotStatus = "done"
 
 
 kernel_snapshot_state = KernelSnapshotState()
