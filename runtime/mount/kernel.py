@@ -927,6 +927,7 @@ class Kernel:
                         adata = self.ann_data_objects[adata_key]
                     else:
                         adata = load_anndata(s_v, snapshot_dir)
+                        self.ann_data_objects[adata_key] = adata
                     restored_globals[k] = s_v
                     self.k_globals._direct_set(k, Signal(adata))
                 else:
