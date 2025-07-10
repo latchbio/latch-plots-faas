@@ -42,6 +42,7 @@ async def process_h5ad_request(
         "fetch_and_process_image",
         "align_image",
         "store_views",
+        "store_images",
     }:
         return {
             "type": "h5",
@@ -155,6 +156,8 @@ async def process_h5ad_request(
                     "alignment_is_running": alignment_is_running,
                     # views info
                     "init_views": adata.uns.get("latch_views", []),
+                    # images
+                    "init_images": adata.uns.get("latch_images", []),
                 }
             },
         }
@@ -563,6 +566,30 @@ async def process_h5ad_request(
             "value": {
                 "data": {
                     "stored_views": adata.uns["latch_views"],
+                },
+            },
+        }
+
+    if op == "store_images":
+        if "images" not in msg:
+            return {
+                "type": "h5",
+                "op": op,
+                "data_type": "h5ad",
+                "key": widget_session_key,
+                "value": {"error": "`images` key missing from message"},
+            }
+
+        adata.uns["latch_images"] = msg["images"]
+
+        return {
+            "type": "h5",
+            "op": op,
+            "data_type": "h5ad",
+            "key": widget_session_key,
+            "value": {
+                "data": {
+                    "stored_images": adata.uns["latch_images"],
                 },
             },
         }
