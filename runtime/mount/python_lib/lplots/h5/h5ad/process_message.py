@@ -497,6 +497,9 @@ async def process_h5ad_request(
             msg["node_id"], msg["s3_presigned_url"]
         )
 
+        if adata.uns["latch_images"] is None:
+            adata.uns["latch_images"] = {}
+
         image_data = adata.uns["latch_images"][msg["node_id"]]
         if image_data is None:
             image_data = {}
