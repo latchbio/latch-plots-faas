@@ -485,9 +485,9 @@ async def process_h5ad_request(
         if (
             "s3_presigned_url" not in msg
             or "node_id" not in msg
+            or "id" not in msg
             or "name" not in msg
             or "transformations" not in msg
-            or "id" not in msg
         ):
             return {
                 "type": "h5",
@@ -504,13 +504,14 @@ async def process_h5ad_request(
         )
 
         images = adata.uns.get("latch_images", {})
-        image_data = images.get(msg["id"], {})
+        image_data = images.get(msg["node_id"], {})
 
         image_data["b64_image"] = image_uri
         image_data["node_id"] = msg["node_id"]
+        image_data["id"] = msg["id"]
         image_data["name"] = msg["name"]
         image_data["transformations"] = msg["transformations"]
-        images[msg["id"]] = image_data
+        images[msg["node_id"]] = image_data
         adata.uns["latch_images"] = images
 
         return {
@@ -521,7 +522,7 @@ async def process_h5ad_request(
             "value": {
                 "data": {
                     "image_data": image_data,
-                    "image_id": msg["id"],
+                    "image_id": msg["node_id"],
                     "fetched_for_node_id": msg.get("node_id"),
                 }
             },
@@ -571,7 +572,7 @@ async def process_h5ad_request(
             alignment_is_running = False
 
     if op == "store_image_transformation":
-        if "image_transformation" not in msg or "id" not in msg:
+        if "image_transformation" not in msg or "node_id" not in msg:
             return {
                 "type": "h5",
                 "op": op,
@@ -582,7 +583,7 @@ async def process_h5ad_request(
                 },
             }
 
-        image_data = adata.uns["latch_images"][msg["id"]]
+        image_data = adata.uns["latch_images"][msg["node_id"]]
 
         if image_data is None:
             return {
@@ -594,7 +595,7 @@ async def process_h5ad_request(
             }
 
         image_data["transformations"] = msg["image_transformation"]
-        adata.uns["latch_images"][msg["id"]] = image_data
+        adata.uns["latch_images"][msg["node_id"]] = image_data
 
         return {
             "type": "h5",
