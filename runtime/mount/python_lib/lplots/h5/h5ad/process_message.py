@@ -157,7 +157,7 @@ async def process_h5ad_request(
                     # views info
                     "init_views": adata.uns.get("latch_views", []),
                     # images
-                    "init_images": adata.uns.get("latch_images", []),
+                    "init_images": adata.uns.get("latch_images", {}),
                     "init_image_transformations": adata.uns.get(
                         "latch_image_transformations", []
                     ),
@@ -497,14 +497,12 @@ async def process_h5ad_request(
             msg["node_id"], msg["s3_presigned_url"]
         )
 
-        if adata.uns["latch_images"] is None:
-            adata.uns["latch_images"] = {}
+        images = adata.uns.get("latch_images", {})
+        image_data = images.get(msg["node_id"], {})
 
-        image_data = adata.uns["latch_images"][msg["node_id"]]
-        if image_data is None:
-            image_data = {}
         image_data["b64_image"] = image_uri
-        adata.uns["latch_images"][msg["node_id"]] = image_data
+        images[msg["node_id"]] = image_data
+        adata.uns["latch_images"] = images
 
         return {
             "type": "h5",
