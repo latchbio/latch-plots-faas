@@ -23,6 +23,7 @@ class WorkflowWidget(widget.BaseWidget):
     _button: ButtonWidget
     _state: WorkflowWidgetState
 
+    @property
     def value(self) -> Execution | None:
         if self._button.value:
             wf_name = self._state.get("wf_name")
