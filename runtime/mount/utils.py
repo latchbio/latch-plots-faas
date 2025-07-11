@@ -10,6 +10,7 @@ from latch.types.directory import LatchDir
 from latch.types.file import LatchFile
 from lplots.utils.nothing import _Nothing
 from matplotlib.figure import Figure, SubFigure
+from typing_extensions import _AnnotatedAlias
 from yarl import URL
 
 # todo(rteqs): get rid of this
@@ -128,14 +129,14 @@ def orjson_encoder(obj: object) -> str | None:
 
         return plot_to_webp_string(fig)
 
-    if isinstance(obj, LatchFile | LatchDir):
+    if isinstance(obj, (LatchFile, LatchDir)):
         return obj.remote_path
 
     if isinstance(obj, Enum):
         return obj.name
 
     # todo(rteqs): figure out what's going in orjson interanally when serializing pandas dataframes with Nothign.x
-    if isinstance(obj, _Nothing | type):
+    if isinstance(obj, _Nothing | type | _AnnotatedAlias):
         return str(obj)
 
     raise TypeError(f"Type {type(obj)} not serializable")
