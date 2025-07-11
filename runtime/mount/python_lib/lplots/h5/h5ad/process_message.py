@@ -482,7 +482,13 @@ async def process_h5ad_request(
         }
 
     if op == "fetch_and_process_image":
-        if "s3_presigned_url" not in msg or "node_id" not in msg:
+        if (
+            "s3_presigned_url" not in msg
+            or "node_id" not in msg
+            or "name" not in msg
+            or "transformations" not in msg
+            or "id" not in msg
+        ):
             return {
                 "type": "h5",
                 "op": op,
@@ -501,6 +507,9 @@ async def process_h5ad_request(
         image_data = images.get(msg["node_id"], {})
 
         image_data["b64_image"] = image_uri
+        image_data["node_id"] = msg["node_id"]
+        image_data["name"] = msg["name"]
+        image_data["transformations"] = msg["transformations"]
         images[msg["node_id"]] = image_data
         adata.uns["latch_images"] = images
 
@@ -561,20 +570,18 @@ async def process_h5ad_request(
             alignment_is_running = False
 
     if op == "store_image_transformation":
-        if "image_transformation" not in msg or "node_id" not in msg:
+        if "image_transformation" not in msg or "id" not in msg:
             return {
                 "type": "h5",
                 "op": op,
                 "data_type": "h5ad",
                 "key": widget_session_key,
                 "value": {
-                    "error": (
-                        "`image_transformation` or `node_id` key missing from message"
-                    )
+                    "error": "`image_transformation` or `id` key missing from message"
                 },
             }
 
-        image_data = adata.uns["latch_images"][msg["node_id"]]
+        image_data = adata.uns["latch_images"][msg["id"]]
 
         if image_data is None:
             return {
@@ -586,7 +593,7 @@ async def process_h5ad_request(
             }
 
         image_data["transformations"] = msg["image_transformation"]
-        adata.uns["latch_images"][msg["node_id"]] = image_data
+        adata.uns["latch_images"][msg["id"]] = image_data
 
         return {
             "type": "h5",
