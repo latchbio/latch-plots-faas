@@ -504,13 +504,13 @@ async def process_h5ad_request(
         )
 
         images = adata.uns.get("latch_images", {})
-        image_data = images.get(msg["node_id"], {})
+        image_data = images.get(msg["id"], {})
 
         image_data["b64_image"] = image_uri
         image_data["node_id"] = msg["node_id"]
         image_data["name"] = msg["name"]
         image_data["transformations"] = msg["transformations"]
-        images[msg["node_id"]] = image_data
+        images[msg["id"]] = image_data
         adata.uns["latch_images"] = images
 
         return {
@@ -521,6 +521,7 @@ async def process_h5ad_request(
             "value": {
                 "data": {
                     "image_data": image_data,
+                    "image_id": msg["id"],
                     "fetched_for_node_id": msg.get("node_id"),
                 }
             },
