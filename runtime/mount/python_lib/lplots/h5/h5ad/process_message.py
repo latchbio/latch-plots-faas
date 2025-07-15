@@ -503,15 +503,17 @@ async def process_h5ad_request(
             msg["node_id"], msg["s3_presigned_url"]
         )
 
+        id = msg["id"]
+
         images = adata.uns.get("latch_images", {})
-        image_data = images.get(msg["node_id"], {})
+        image_data = images.get(id, {})
 
         image_data["b64_image"] = image_uri
         image_data["node_id"] = msg["node_id"]
-        image_data["id"] = msg["id"]
+        image_data["id"] = id
         image_data["name"] = msg["name"]
         image_data["transformations"] = msg["transformations"]
-        images[msg["node_id"]] = image_data
+        images[id] = image_data
         adata.uns["latch_images"] = images
 
         return {
@@ -522,7 +524,7 @@ async def process_h5ad_request(
             "value": {
                 "data": {
                     "image_data": image_data,
-                    "image_id": msg["node_id"],
+                    "image_id": id,
                     "fetched_for_node_id": msg.get("node_id"),
                 }
             },
@@ -572,7 +574,7 @@ async def process_h5ad_request(
             alignment_is_running = False
 
     if op == "store_image_transformation":
-        if "image_transformation" not in msg or "node_id" not in msg:
+        if "image_transformation" not in msg or "id" not in msg:
             return {
                 "type": "h5",
                 "op": op,
@@ -583,7 +585,7 @@ async def process_h5ad_request(
                 },
             }
 
-        image_data = adata.uns["latch_images"][msg["node_id"]]
+        image_data = adata.uns["latch_images"][msg["id"]]
 
         if image_data is None:
             return {
@@ -595,7 +597,7 @@ async def process_h5ad_request(
             }
 
         image_data["transformations"] = msg["image_transformation"]
-        adata.uns["latch_images"][msg["node_id"]] = image_data
+        adata.uns["latch_images"][msg["id"]] = image_data
 
         return {
             "type": "h5",
@@ -604,14 +606,14 @@ async def process_h5ad_request(
             "key": widget_session_key,
             "value": {
                 "data": {
-                    "node_id": msg["node_id"],
+                    "id": msg["id"],
                     "stored_image_transformation": image_data["transformations"],
                 },
             },
         }
 
     if op == "remove_image":
-        if "node_id" not in msg:
+        if "id" not in msg:
             return {
                 "type": "h5",
                 "op": op,
@@ -620,7 +622,7 @@ async def process_h5ad_request(
                 "value": {"error": "`node_id` key missing from message"},
             }
 
-        adata.uns["latch_images"].pop(msg["node_id"], None)
+        adata.uns["latch_images"].pop(msg["id"], None)
 
     if op == "store_views":
         if "views" not in msg:
