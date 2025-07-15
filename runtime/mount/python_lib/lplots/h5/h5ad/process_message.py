@@ -42,7 +42,8 @@ async def process_h5ad_request(
         "fetch_and_process_image",
         "align_image",
         "store_views",
-        "store_images",
+        "store_image_transformation",
+        "remove_image",
     }:
         return {
             "type": "h5",
@@ -503,17 +504,17 @@ async def process_h5ad_request(
             msg["node_id"], msg["s3_presigned_url"]
         )
 
-        id = msg["id"]
+        image_id = msg["id"]
 
         images = adata.uns.get("latch_images", {})
-        image_data = images.get(id, {})
+        image_data = images.get(image_id, {})
 
         image_data["b64_image"] = image_uri
         image_data["node_id"] = msg["node_id"]
-        image_data["id"] = id
+        image_data["id"] = image_id
         image_data["name"] = msg["name"]
         image_data["transformations"] = msg["transformations"]
-        images[id] = image_data
+        images[image_id] = image_data
         adata.uns["latch_images"] = images
 
         return {
@@ -524,7 +525,7 @@ async def process_h5ad_request(
             "value": {
                 "data": {
                     "image_data": image_data,
-                    "image_id": id,
+                    "image_id": image_id,
                     "fetched_for_node_id": msg.get("node_id"),
                 }
             },
@@ -619,7 +620,7 @@ async def process_h5ad_request(
                 "op": op,
                 "data_type": "h5ad",
                 "key": widget_session_key,
-                "value": {"error": "`node_id` key missing from message"},
+                "value": {"error": "`id` key missing from message"},
             }
 
         adata.uns["latch_images"].pop(msg["id"], None)
