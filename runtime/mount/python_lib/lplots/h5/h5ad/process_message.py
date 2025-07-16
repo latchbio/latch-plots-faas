@@ -159,9 +159,6 @@ async def process_h5ad_request(
                     "init_views": adata.uns.get("latch_views", []),
                     # images
                     "init_images": adata.uns.get("latch_images", {}),
-                    "init_image_transformations": adata.uns.get(
-                        "latch_image_transformations", []
-                    ),
                 }
             },
         }
