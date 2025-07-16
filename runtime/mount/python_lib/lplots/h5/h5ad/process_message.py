@@ -522,8 +522,7 @@ async def process_h5ad_request(
             "value": {
                 "data": {
                     "image_data": image_data,
-                    "image_id": image_id,
-                    "fetched_for_node_id": msg.get("node_id"),
+                    "fetched_for_image_id": image_id,
                 }
             },
         }
@@ -583,7 +582,7 @@ async def process_h5ad_request(
                 },
             }
 
-        image_data = adata.uns["latch_images"][msg["id"]]
+        image_data = adata.uns.get("latch_images", {}).get(msg["id"])
 
         if image_data is None:
             return {
