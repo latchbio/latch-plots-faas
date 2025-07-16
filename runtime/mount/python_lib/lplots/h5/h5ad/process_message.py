@@ -625,6 +625,18 @@ async def process_h5ad_request(
 
         adata.uns["latch_images"].pop(msg["id"], None)
 
+        return {
+            "type": "h5",
+            "op": op,
+            "data_type": "h5ad",
+            "key": widget_session_key,
+            "value": {
+                "data": {
+                    "removed_image_id": msg["id"],
+                },
+            },
+        }
+
     if op == "store_views":
         if "views" not in msg:
             return {
