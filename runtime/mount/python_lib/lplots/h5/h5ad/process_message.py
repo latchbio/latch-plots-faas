@@ -216,6 +216,17 @@ async def process_h5ad_request(
             ):
                 gene_columns = [get_obs_vector(obj_id, adata, msg["colored_by_key"])]
                 fetched_for_var_keys = [msg["colored_by_key"]]
+            elif (
+                msg["colored_by_type"] == "multi_gene"
+                and isinstance(msg["colored_by_key"], (list, tuple))
+            ):
+                fetched_for_var_keys = [
+                        g for g in msg["colored_by_key"] if g in
+                        adata.var_names
+                ]
+                gene_columns = [
+                    get_obs_vector(obj_id, adata, g) for g in fetched_for_var_keys
+                ]
 
         return {
             "type": "h5",
