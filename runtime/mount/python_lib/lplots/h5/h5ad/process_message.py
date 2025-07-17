@@ -202,8 +202,8 @@ async def process_h5ad_request(
         unique_obs = None
         counts = None
         nrof_obs = None
-        gene_column = None
-        fetched_for_var_key = None
+        gene_columns: list[list[str]] | None = None
+        fetched_for_var_keys: list[str] | None = None
         if "colored_by_type" in msg and "colored_by_key" in msg:
             if msg["colored_by_type"] == "obs" and msg["colored_by_key"] in adata.obs:
                 obs, (unique_obs, counts), nrof_obs = get_obs(
@@ -214,8 +214,8 @@ async def process_h5ad_request(
                 msg["colored_by_type"] == "var"
                 and msg["colored_by_key"] in adata.var_names
             ):
-                gene_column = get_obs_vector(obj_id, adata, msg["colored_by_key"])
-                fetched_for_var_key = msg["colored_by_key"]
+                gene_columns = [get_obs_vector(obj_id, adata, msg["colored_by_key"])]
+                fetched_for_var_keys = [msg["colored_by_key"]]
 
         return {
             "type": "h5",
@@ -229,7 +229,7 @@ async def process_h5ad_request(
                     "index": index.tolist(),
                     "recomputed_index": recomputed_index,
                     "fetched_for_obs_key": fetched_for_obs_key,
-                    "fetched_for_var_key": fetched_for_var_key,
+                    "fetched_for_var_keys": fetched_for_var_keys,
                     "fetched_for_filters": filters,
                     "values": obs.tolist() if obs is not None else None,
                     "unique_values": (
@@ -237,9 +237,9 @@ async def process_h5ad_request(
                     ),
                     "counts": counts.tolist() if counts is not None else None,
                     "nrof_values": nrof_obs,
-                    "var_values": (
-                        gene_column.tolist() if gene_column is not None else None
-                    ),
+                    "var_values": [
+                        col.tolist() for col in gene_columns
+                    ] if gene_columns is not None else None,
                 },
             },
         }
