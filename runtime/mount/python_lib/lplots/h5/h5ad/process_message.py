@@ -210,10 +210,7 @@ async def process_h5ad_request(
                     obj_id, adata, msg["colored_by_key"], max_visualization_cells
                 )
                 fetched_for_obs_key = msg["colored_by_key"]
-            elif (
-                msg["colored_by_type"] == "var"
-                and msg["colored_by_key"] in adata.var_names
-            ):
+            elif (msg["colored_by_type"] == "var"):
                 fetched_for_var_keys = [
                         g for g in msg["colored_by_key"] if g in
                         adata.var_names
