@@ -1,3 +1,4 @@
+import asyncio
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -530,47 +531,68 @@ async def process_h5ad_request(
         }
 
     if op == "align_image":
+        global alignment_is_running
         alignment_is_running = True
-        try:
-            try:
-                image_bytes = pil_image_cache[msg["node_id"]]
-            except KeyError:
-                return {
-                    "type": "h5",
-                    "op": op,
-                    "data_type": "h5ad",
-                    "key": widget_session_key,
-                    "value": {
-                        "data": {
-                            "stage": "fetch_image",
-                            "error": (
-                                f"attempting to align image from an unprocessed node (nid: {msg['node_id']})"
-                            ),
-                        }
-                    },
-                }
 
-            await align_image(
-                msg["scatter_data_key"],
-                msg["new_scatter_data_key"],
-                msg["points_I"],
-                msg["points_J"],
-                msg["alignment_method"],
-                image_bytes,
-                adata,
-                widget_session_key,
-                send,
-            )
-            alignment_is_running = False
-            return {
-                "type": "h5",
-                "op": op,
-                "data_type": "h5ad",
-                "key": widget_session_key,
-                "value": {"data": {"aligned_obsm_key": msg["new_scatter_data_key"]}},
-            }
-        finally:
-            alignment_is_running = False
+        # async def run_alignment() -> None:
+        #     global alignment_is_running
+        #     try:
+        #         try:
+        #             image_bytes = pil_image_cache[msg["node_id"]]
+        #         except KeyError:
+        #             await send(
+        #                 {
+        #                     "type": "h5",
+        #                     "op": op,
+        #                     "data_type": "h5ad",
+        #                     "key": widget_session_key,
+        #                     "value": {
+        #                         "data": {
+        #                             "stage": "fetch_image",
+        #                             "error": (
+        #                                 f"attempting to align image from an unprocessed node (nid: {msg['node_id']})"
+        #                             ),
+        #                         }
+        #                     },
+        #                 }
+        #             )
+        #             return
+
+        #         await align_image(
+        #             msg["scatter_data_key"],
+        #             msg["new_scatter_data_key"],
+        #             msg["points_I"],
+        #             msg["points_J"],
+        #             msg["alignment_method"],
+        #             image_bytes,
+        #             adata,
+        #             widget_session_key,
+        #             send,
+        #         )
+
+        #         await send(
+        #             {
+        #                 "type": "h5",
+        #                 "op": op,
+        #                 "data_type": "h5ad",
+        #                 "key": widget_session_key,
+        #                 "value": {
+        #                     "data": {"aligned_obsm_key": msg["new_scatter_data_key"]}
+        #                 },
+        #             }
+        #         )
+        #     finally:
+        #         alignment_is_running = False
+
+        # asyncio.create_task(run_alignment())
+
+        return {
+            "type": "h5",
+            "op": op,
+            "data_type": "h5ad",
+            "key": widget_session_key,
+            "value": {"data": {"alignment_started": True}},
+        }
 
     if op == "store_image_transformation":
         if "image_transformation" not in msg or "id" not in msg:
