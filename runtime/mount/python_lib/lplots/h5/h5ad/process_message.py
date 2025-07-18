@@ -582,7 +582,7 @@ async def process_h5ad_request(
             finally:
                 alignment_is_running = False
 
-        asyncio.create_task(run_alignment())
+        # asyncio.create_task(run_alignment())
 
         return {
             "type": "h5",
