@@ -28,8 +28,6 @@ async def process_h5ad_request(
     send: Callable[[object], Awaitable[None]],
 ) -> dict[str, Any]:
 
-    global alignment_is_running
-
     if "op" not in msg or msg["op"] not in {
         "init_data",
         "get_obsm_options",
@@ -112,8 +110,6 @@ async def process_h5ad_request(
             gene_column = get_obs_vector(obj_id, adata, init_var_key)
 
         var_index, var_names = get_var_index(obj_id, adata)
-
-        global alignment_is_running
 
         return {
             "type": "h5",
@@ -529,11 +525,9 @@ async def process_h5ad_request(
         }
 
     if op == "align_image":
-        global alignment_is_running
         alignment_is_running = True
 
         # async def run_alignment() -> None:
-        #     global alignment_is_running
         #     try:
         #         try:
         #             image_bytes = pil_image_cache[msg["node_id"]]
