@@ -1,4 +1,5 @@
 import asyncio
+import time
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -581,7 +582,9 @@ async def process_h5ad_request(
             finally:
                 alignment_is_running = False
 
+        print(f"before run_alignment {time.time()}")
         asyncio.create_task(run_alignment())
+        print(f"after run_alignment {time.time()}")
 
         return {
             "type": "h5",
