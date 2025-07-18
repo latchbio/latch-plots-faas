@@ -28,6 +28,8 @@ async def process_h5ad_request(
     send: Callable[[object], Awaitable[None]],
 ) -> dict[str, Any]:
 
+    global alignment_is_running
+
     if "op" not in msg or msg["op"] not in {
         "init_data",
         "get_obsm_options",
@@ -110,6 +112,8 @@ async def process_h5ad_request(
             gene_column = get_obs_vector(obj_id, adata, init_var_key)
 
         var_index, var_names = get_var_index(obj_id, adata)
+
+        global alignment_is_running
 
         return {
             "type": "h5",
@@ -525,58 +529,60 @@ async def process_h5ad_request(
         }
 
     if op == "align_image":
+        global alignment_is_running
         alignment_is_running = True
 
-        # async def run_alignment() -> None:
-        #     try:
-        #         try:
-        #             image_bytes = pil_image_cache[msg["node_id"]]
-        #         except KeyError:
-        #             await send(
-        #                 {
-        #                     "type": "h5",
-        #                     "op": op,
-        #                     "data_type": "h5ad",
-        #                     "key": widget_session_key,
-        #                     "value": {
-        #                         "data": {
-        #                             "stage": "fetch_image",
-        #                             "error": (
-        #                                 f"attempting to align image from an unprocessed node (nid: {msg['node_id']})"
-        #                             ),
-        #                         }
-        #                     },
-        #                 }
-        #             )
-        #             return
+        async def run_alignment() -> None:
+            global alignment_is_running
+            try:
+                try:
+                    image_bytes = pil_image_cache[msg["node_id"]]
+                except KeyError:
+                    await send(
+                        {
+                            "type": "h5",
+                            "op": op,
+                            "data_type": "h5ad",
+                            "key": widget_session_key,
+                            "value": {
+                                "data": {
+                                    "stage": "fetch_image",
+                                    "error": (
+                                        f"attempting to align image from an unprocessed node (nid: {msg['node_id']})"
+                                    ),
+                                }
+                            },
+                        }
+                    )
+                    return
 
-        #         await align_image(
-        #             msg["scatter_data_key"],
-        #             msg["new_scatter_data_key"],
-        #             msg["points_I"],
-        #             msg["points_J"],
-        #             msg["alignment_method"],
-        #             image_bytes,
-        #             adata,
-        #             widget_session_key,
-        #             send,
-        #         )
+                await align_image(
+                    msg["scatter_data_key"],
+                    msg["new_scatter_data_key"],
+                    msg["points_I"],
+                    msg["points_J"],
+                    msg["alignment_method"],
+                    image_bytes,
+                    adata,
+                    widget_session_key,
+                    send,
+                )
 
-        #         await send(
-        #             {
-        #                 "type": "h5",
-        #                 "op": op,
-        #                 "data_type": "h5ad",
-        #                 "key": widget_session_key,
-        #                 "value": {
-        #                     "data": {"aligned_obsm_key": msg["new_scatter_data_key"]}
-        #                 },
-        #             }
-        #         )
-        #     finally:
-        #         alignment_is_running = False
+                await send(
+                    {
+                        "type": "h5",
+                        "op": op,
+                        "data_type": "h5ad",
+                        "key": widget_session_key,
+                        "value": {
+                            "data": {"aligned_obsm_key": msg["new_scatter_data_key"]}
+                        },
+                    }
+                )
+            finally:
+                alignment_is_running = False
 
-        # asyncio.create_task(run_alignment())
+        asyncio.create_task(run_alignment())
 
         return {
             "type": "h5",
