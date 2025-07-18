@@ -113,8 +113,6 @@ async def process_h5ad_request(
 
         var_index, var_names = get_var_index(obj_id, adata)
 
-        global alignment_is_running
-
         return {
             "type": "h5",
             "op": op,
@@ -529,12 +527,12 @@ async def process_h5ad_request(
         }
 
     if op == "align_image":
-        global alignment_is_running
         alignment_is_running = True
 
         async def run_alignment() -> None:
             global alignment_is_running
             try:
+
                 image_bytes = pil_image_cache.get(msg["node_id"])
                 if image_bytes is None:
                     await send(
