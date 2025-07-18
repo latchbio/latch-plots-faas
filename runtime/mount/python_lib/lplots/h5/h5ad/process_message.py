@@ -535,9 +535,8 @@ async def process_h5ad_request(
         async def run_alignment() -> None:
             global alignment_is_running
             try:
-                try:
-                    image_bytes = pil_image_cache[msg["node_id"]]
-                except KeyError:
+                image_bytes = pil_image_cache.get(msg["node_id"])
+                if image_bytes is None:
                     await send(
                         {
                             "type": "h5",
