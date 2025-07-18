@@ -239,8 +239,7 @@ class TracedDict(dict[str, Signal[object] | object]):
         return self.touched - self.removed
 
 
-class ExitException(Exception):
-    ...
+class ExitException(Exception): ...
 
 
 KeyType = Literal["key", "ldata_node_id", "registry_table_id", "url"]
@@ -1673,7 +1672,22 @@ class Kernel:
             return
 
         if msg["type"] == "h5":
-            await self.send(await handle_h5_widget_message(msg, self.send))
+            # Process H5 messages in background to avoid blocking other operations
+            async def process_h5_message():
+                try:
+                    result = await handle_h5_widget_message(msg, self.send)
+                    await self.send(result)
+                except Exception as e:
+                    # Send error response if processing fails
+                    await self.send(
+                        {
+                            "type": "h5",
+                            "key": msg.get("key"),
+                            "value": {"error": str(e)},
+                        }
+                    )
+
+            asyncio.create_task(process_h5_message())
             return
 
 
