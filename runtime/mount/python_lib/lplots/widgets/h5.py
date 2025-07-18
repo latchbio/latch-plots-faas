@@ -2,7 +2,6 @@ from dataclasses import dataclass
 from typing import Literal, TypedDict
 
 from latch.ldata.path import LPath
-
 from lplots.h5.utils import auto_install
 from lplots.h5.utils.persistence import use_anndata_key
 
@@ -75,6 +74,7 @@ def w_h5(
     key: str | None = None,
     ann_data: ad.AnnData | None = None,
     spatial_dir: LPath | None = None,
+    ann_tiles: LPath | None = None,
     readonly: bool = False,
     appearance: OutputAppearance | None = None,
 ) -> H5:
@@ -93,6 +93,7 @@ def w_h5(
             "type": h5_widget_type,
             "obj_id": obj_id,
             "spatial_dir": spatial_dir,
+            "ann_tiles": ann_tiles,
             "readonly": readonly,
             "appearance": appearance,
         },
