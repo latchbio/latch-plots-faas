@@ -515,8 +515,8 @@ class RestoredGlobalInfo(TypedDict):
     msg: str
 
 
-snapshot_chunk_bytes = 64 * 2 ** 10
-snapshot_progress_interval_bytes = 10 * (2 ** 20)
+snapshot_chunk_bytes = 64 * 2**10
+snapshot_progress_interval_bytes = 10 * (2**20)
 
 
 @dataclass(kw_only=True)
@@ -570,10 +570,12 @@ class Kernel:
 
         signal.signal(
             signal.SIGINT,
-            lambda signum, frame: cell_interrupt()
-            if self.active_cell is not None
-            and self.cell_status[self.active_cell] == "running"
-            else None,
+            lambda signum, frame: (
+                cell_interrupt()
+                if self.active_cell is not None
+                and self.cell_status[self.active_cell] == "running"
+                else None
+            ),
         )
 
     def debug_state(self) -> dict[str, object]:
@@ -765,7 +767,9 @@ class Kernel:
         # for x in unused_signals:
         #     del self.widget_signals[x]
 
-    async def update_kernel_snapshot_status(self, key: str, status: str, data: dict[str, int] | None = None) -> None:
+    async def update_kernel_snapshot_status(
+        self, key: str, status: str, data: dict[str, int] | None = None
+    ) -> None:
         assert key in {"save_kernel_snapshot", "load_kernel_snapshot"}
         self.snapshot_status = status
         msg = {"type": key, "status": status}
@@ -780,6 +784,7 @@ class Kernel:
         s_signals = {}
 
         try:
+
             def add_and_check_listeners(sig: Signal):
                 for lid, lis in sig._listeners.items():
                     if lid not in s_nodes:
@@ -806,7 +811,9 @@ class Kernel:
                     s_globals[k] = val._value.serialize()
                 elif isinstance(val._value, BaseWidget):
                     if val._value._has_signal:
-                        assert val._value._signal.id in s_signals, f"missing {val._value._signal.id}"
+                        assert (
+                            val._value._signal.id in s_signals
+                        ), f"missing {val._value._signal.id}"
                         s_globals[k] = val._value.serialize()
                 else:
                     s_val, msg = safe_serialize_obj(val._value)
@@ -830,12 +837,16 @@ class Kernel:
 
             data = orjson.dumps(s_depens)
         except Exception:
-            await self.update_kernel_snapshot_status("save_kernel_snapshot", "error", {"error_msg": traceback.format_exc()})
+            await self.update_kernel_snapshot_status(
+                "save_kernel_snapshot", "error", {"error_msg": traceback.format_exc()}
+            )
             return
 
         total = len(data)
 
-        await self.update_kernel_snapshot_status("save_kernel_snapshot", "start", {"progress_bytes": 0, "total_bytes": total})
+        await self.update_kernel_snapshot_status(
+            "save_kernel_snapshot", "start", {"progress_bytes": 0, "total_bytes": total}
+        )
 
         with (snapshot_dir / snapshot_f_name).open("wb") as f:
             saved_since_last = 0
@@ -843,9 +854,13 @@ class Kernel:
                 end = min(start + snapshot_chunk_bytes, total)
                 f.write(data[start:end])
 
-                saved_since_last += (end - start)
+                saved_since_last += end - start
                 if saved_since_last >= snapshot_progress_interval_bytes or end == total:
-                    await self.update_kernel_snapshot_status("save_kernel_snapshot", "progress", {"progress_bytes": end, "total_bytes": total})
+                    await self.update_kernel_snapshot_status(
+                        "save_kernel_snapshot",
+                        "progress",
+                        {"progress_bytes": end, "total_bytes": total},
+                    )
                     saved_since_last = 0
 
         await self.update_kernel_snapshot_status("save_kernel_snapshot", "done")
@@ -858,7 +873,9 @@ class Kernel:
             return
 
         total = snapshot_f.stat().st_size
-        await self.update_kernel_snapshot_status("load_kernel_snapshot", "start", {"progress_bytes": 0, "total_bytes": total})
+        await self.update_kernel_snapshot_status(
+            "load_kernel_snapshot", "start", {"progress_bytes": 0, "total_bytes": total}
+        )
 
         data = bytearray()
         read_since_last = 0
@@ -871,8 +888,15 @@ class Kernel:
                 data.extend(chunk)
                 read_since_last += len(chunk)
 
-                if read_since_last >= snapshot_progress_interval_bytes or len(data) == total:
-                    await self.update_kernel_snapshot_status("load_kernel_snapshot", "progress", {"progress_bytes":  len(data), "total_bytes": total})
+                if (
+                    read_since_last >= snapshot_progress_interval_bytes
+                    or len(data) == total
+                ):
+                    await self.update_kernel_snapshot_status(
+                        "load_kernel_snapshot",
+                        "progress",
+                        {"progress_bytes": len(data), "total_bytes": total},
+                    )
                     read_since_last = 0
 
         try:
@@ -934,7 +958,9 @@ class Kernel:
                     if val is unable_to_unserialize_symbol:
                         restored_globals[k] = {
                             "value": small_repr(val),
-                            "msg": f"unserializable. stored err: {s_v['error_msg']}, unserial err: {error_msg}",
+                            "msg": (
+                                f"unserializable. stored err: {s_v['error_msg']}, unserial err: {error_msg}"
+                            ),
                         }
                     else:
                         restored_globals[k] = {
@@ -954,7 +980,9 @@ class Kernel:
             self.nodes_with_widgets = nodes_with_widgets
         except Exception:
 
-            await self.update_kernel_snapshot_status("load_kernel_snapshot", "error", {"error_msg": traceback.format_exc()})
+            await self.update_kernel_snapshot_status(
+                "load_kernel_snapshot", "error", {"error_msg": traceback.format_exc()}
+            )
             return
 
         await self.update_kernel_snapshot_status("load_kernel_snapshot", "done")
@@ -976,8 +1004,17 @@ class Kernel:
         ctx.cur_comp.widget_states[key] = data
         self.nodes_with_widgets[ctx.cur_comp.id] = ctx.cur_comp
 
-        if (data["type"] == "plot" or data["type"] == "table"):
-            loop.create_task(self.send({"type": "cell_value_viewer_init", "key": key, "value_viewer_key": data["value_viewer_key"], "global_key": data["global_key"]}))
+        if data["type"] == "plot" or data["type"] == "table":
+            loop.create_task(
+                self.send(
+                    {
+                        "type": "cell_value_viewer_init",
+                        "key": key,
+                        "value_viewer_key": data["value_viewer_key"],
+                        "global_key": data["global_key"],
+                    }
+                )
+            )
 
         # todo(maximsmol): I don't think this is actually nullable anymore
         cell_id = ctx.cur_comp.cell_id
@@ -1264,9 +1301,12 @@ class Kernel:
                     "type": "output_value",
                     **(id_fields),
                     **(key_fields),
-                    "plotly_json": orjson.dumps(
-                        serialize_plotly_figure(res), option=orjson.OPT_SERIALIZE_NUMPY
-                    ).decode(),
+                    "plotly_json": (
+                        orjson.dumps(
+                            serialize_plotly_figure(res),
+                            option=orjson.OPT_SERIALIZE_NUMPY,
+                        ).decode()
+                    ),
                 }
             )
             return
@@ -1672,6 +1712,8 @@ class Kernel:
             return
 
         if msg["type"] == "h5":
+            print("accept msg == h5")
+
             # Process H5 messages in background to avoid blocking other operations
             async def process_h5_message():
                 try:

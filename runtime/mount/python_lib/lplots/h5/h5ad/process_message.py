@@ -28,6 +28,8 @@ async def process_h5ad_request(
     send: Callable[[object], Awaitable[None]],
 ) -> dict[str, Any]:
 
+    print("process_h5ad_request")
+
     global alignment_is_running
 
     if "op" not in msg or msg["op"] not in {
