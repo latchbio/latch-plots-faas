@@ -1,3 +1,4 @@
+import asyncio
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -548,16 +549,18 @@ async def process_h5ad_request(
                     },
                 }
 
-            await align_image(
-                msg["scatter_data_key"],
-                msg["new_scatter_data_key"],
-                msg["points_I"],
-                msg["points_J"],
-                msg["alignment_method"],
-                image_bytes,
-                adata,
-                widget_session_key,
-                send,
+            await asyncio.gather(
+                align_image(
+                    msg["scatter_data_key"],
+                    msg["new_scatter_data_key"],
+                    msg["points_I"],
+                    msg["points_J"],
+                    msg["alignment_method"],
+                    image_bytes,
+                    adata,
+                    widget_session_key,
+                    send,
+                )
             )
             alignment_is_running = False
             return {
