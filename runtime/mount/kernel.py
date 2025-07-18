@@ -13,6 +13,7 @@ import re
 import signal
 import socket
 import sys
+import time
 import traceback
 from collections import defaultdict
 from copy import copy
@@ -1729,7 +1730,9 @@ class Kernel:
                         }
                     )
 
+            print(f"msg[type] == h5: {time.time()}")
             asyncio.create_task(process_h5_message())
+            print(f"msg[type] == h5: {time.time()}")
             return
 
 
@@ -1778,7 +1781,9 @@ async def main() -> None:
 
         while not shutdown_requested:
             try:
+                print(f"before accept {time.time()}")
                 await k.accept()
+                print(f"after accept {time.time()}")
             except Exception:
                 traceback.print_exc()
                 continue

@@ -52,6 +52,8 @@ async def handle_h5_widget_message(
 
         adata: ad.AnnData = _inject.kernel.ann_data_objects[obj_id]
 
+        print(f"h5ad process_h5ad_request {time.time()}")
+
         return await process_h5ad_request(msg, widget_session_key, adata, obj_id, send)
 
     if data_type in {"transcripts", "boundaries"}:
