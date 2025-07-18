@@ -596,19 +596,6 @@ async def process_h5ad_request(
         image_data["transformations"] = msg["image_transformation"]
         adata.uns["latch_images"][msg["id"]] = image_data
 
-        return {
-            "type": "h5",
-            "op": op,
-            "data_type": "h5ad",
-            "key": widget_session_key,
-            "value": {
-                "data": {
-                    "id": msg["id"],
-                    "stored_image_transformation": image_data["transformations"],
-                },
-            },
-        }
-
     if op == "remove_image":
         if "id" not in msg:
             return {
