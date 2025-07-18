@@ -42,6 +42,8 @@ async def process_h5ad_request(
         "fetch_and_process_image",
         "align_image",
         "store_views",
+        "store_image_transformation",
+        "remove_image",
     }:
         return {
             "type": "h5",
@@ -155,6 +157,8 @@ async def process_h5ad_request(
                     "alignment_is_running": alignment_is_running,
                     # views info
                     "init_views": adata.uns.get("latch_views", []),
+                    # images
+                    "init_images": adata.uns.get("latch_images", {}),
                 }
             },
         }
@@ -476,7 +480,13 @@ async def process_h5ad_request(
         }
 
     if op == "fetch_and_process_image":
-        if "s3_presigned_url" not in msg or "node_id" not in msg:
+        if (
+            "s3_presigned_url" not in msg
+            or "node_id" not in msg
+            or "id" not in msg
+            or "name" not in msg
+            or "transformations" not in msg
+        ):
             return {
                 "type": "h5",
                 "op": op,
@@ -490,13 +500,30 @@ async def process_h5ad_request(
         image_uri = await fetch_and_process_image(
             msg["node_id"], msg["s3_presigned_url"]
         )
+
+        image_id = msg["id"]
+
+        images = adata.uns.get("latch_images", {})
+        image_data = images.get(image_id, {})
+
+        image_data["b64_image"] = image_uri
+        image_data["node_id"] = msg["node_id"]
+        image_data["id"] = image_id
+        image_data["name"] = msg["name"]
+        image_data["transformations"] = msg["transformations"]
+        images[image_id] = image_data
+        adata.uns["latch_images"] = images
+
         return {
             "type": "h5",
             "op": op,
             "data_type": "h5ad",
             "key": widget_session_key,
             "value": {
-                "data": {"image": image_uri, "fetched_for_node_id": msg.get("node_id")}
+                "data": {
+                    "image_data": image_data,
+                    "fetched_for_image_id": image_id,
+                }
             },
         }
 
@@ -542,6 +569,68 @@ async def process_h5ad_request(
             }
         finally:
             alignment_is_running = False
+
+    if op == "store_image_transformation":
+        if "image_transformation" not in msg or "id" not in msg:
+            return {
+                "type": "h5",
+                "op": op,
+                "data_type": "h5ad",
+                "key": widget_session_key,
+                "value": {
+                    "error": "`image_transformation` or `id` key missing from message"
+                },
+            }
+
+        image_data = adata.uns.get("latch_images", {}).get(msg["id"])
+
+        if image_data is None:
+            return {
+                "type": "h5",
+                "op": op,
+                "data_type": "h5ad",
+                "key": widget_session_key,
+                "value": {"error": "Image data not found"},
+            }
+
+        image_data["transformations"] = msg["image_transformation"]
+        adata.uns["latch_images"][msg["id"]] = image_data
+
+        return {
+            "type": "h5",
+            "op": op,
+            "data_type": "h5ad",
+            "key": widget_session_key,
+            "value": {
+                "data": {
+                    "updated_image_transformations_for_id": msg["id"],
+                },
+            },
+        }
+
+    if op == "remove_image":
+        if "id" not in msg:
+            return {
+                "type": "h5",
+                "op": op,
+                "data_type": "h5ad",
+                "key": widget_session_key,
+                "value": {"error": "`id` key missing from message"},
+            }
+
+        adata.uns["latch_images"].pop(msg["id"], None)
+
+        return {
+            "type": "h5",
+            "op": op,
+            "data_type": "h5ad",
+            "key": widget_session_key,
+            "value": {
+                "data": {
+                    "removed_image_id": msg["id"],
+                },
+            },
+        }
 
     if op == "store_views":
         if "views" not in msg:
