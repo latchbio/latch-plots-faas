@@ -2,6 +2,7 @@ import asyncio
 import base64
 import json
 import sys
+import tempfile
 import traceback
 from collections.abc import Awaitable, Callable
 from enum import Enum
@@ -62,70 +63,105 @@ async def align_image(
 
         subprocess_script = Path(__file__).parent / "align_subprocess.py"
 
-        process = await asyncio.create_subprocess_exec(
-            sys.executable,
-            str(subprocess_script),
-            json.dumps(subprocess_input),
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
-        )
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=True, encoding="utf-8") as temp_file:
+            json.dump(subprocess_input, temp_file)
+            temp_file_path = temp_file.name
 
-        aligned_coordinates = None
+            process = await asyncio.create_subprocess_exec(
+                sys.executable,
+                str(subprocess_script),
+                temp_file_path,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
 
-        async def monitor_stdout() -> None:
-            nonlocal aligned_coordinates
-            if process.stdout is None:
+            aligned_coordinates = None
+
+            async def monitor_stdout() -> None:
+                nonlocal aligned_coordinates
+                if process.stdout is None:
+                    return
+
+                while True:
+                    line = await process.stdout.readline()
+                    if not line:
+                        break
+
+                    try:
+                        message = json.loads(line.decode().strip())
+
+                        if message["type"] == "progress":
+                            await send({
+                                "type": "h5",
+                                "op": "align_image",
+                                "progress": True,
+                                "key": widget_session_key,
+                                "value": {
+                                    "data": {
+                                        "stage": message["stage"]
+                                    }
+                                }
+                            })
+                        elif message["type"] == "result":
+                            aligned_coordinates = message["aligned_coordinates"]
+                        elif message["type"] == "error":
+                            await send({
+                                "type": "h5",
+                                "op": "align_image",
+                                "progress": True,
+                                "key": widget_session_key,
+                                "value": {
+                                    "data": {
+                                        "stage": "subprocess_error",
+                                        "error": message["error"]
+                                    }
+                                }
+                            })
+
+                    except json.JSONDecodeError:
+                        continue
+
+            stdout_task = asyncio.create_task(monitor_stdout())
+
+            returncode = await process.wait()
+            await stdout_task
+
+            if returncode != 0:
+                stderr_output = ""
+                if process.stderr:
+                    stderr_bytes = await process.stderr.read()
+                    stderr_output = stderr_bytes.decode()
+
+                await send({
+                    "type": "h5",
+                    "op": "align_image",
+                    "progress": True,
+                    "key": widget_session_key,
+                    "value": {
+                        "data": {
+                            "stage": "subprocess_failed",
+                            "error": f"Subprocess failed with return code {returncode}. Stderr: {stderr_output}"
+                        }
+                    }
+                })
                 return
 
-            while True:
-                line = await process.stdout.readline()
-                if not line:
-                    break
+            if aligned_coordinates is None:
+                await send({
+                    "type": "h5",
+                    "op": "align_image",
+                    "progress": True,
+                    "key": widget_session_key,
+                    "value": {
+                        "data": {
+                            "stage": "no_result",
+                            "error": "Subprocess completed but no result was received"
+                        }
+                    }
+                })
+                return
 
-                try:
-                    message = json.loads(line.decode().strip())
-
-                    if message["type"] == "progress":
-                        await send({
-                            "type": "h5",
-                            "op": "align_image",
-                            "progress": True,
-                            "key": widget_session_key,
-                            "value": {
-                                "data": {
-                                    "stage": message["stage"]
-                                }
-                            }
-                        })
-                    elif message["type"] == "result":
-                        aligned_coordinates = message["aligned_coordinates"]
-                    elif message["type"] == "error":
-                        await send({
-                            "type": "h5",
-                            "op": "align_image",
-                            "progress": True,
-                            "key": widget_session_key,
-                            "value": {
-                                "data": {
-                                    "stage": "subprocess_error",
-                                    "error": message["error"]
-                                }
-                            }
-                        })
-
-                except json.JSONDecodeError:
-                    continue
-
-        stdout_task = asyncio.create_task(monitor_stdout())
-
-        returncode = await process.wait()
-        await stdout_task
-
-        if returncode != 0:
-            stderr_output = ""
-            if process.stderr:
-                stderr_bytes = await process.stderr.read()
-                stderr_output = stderr_bytes.decode()
+            adata.obsm[new_scatter_data_key] = np.array(aligned_coordinates, dtype=float)
 
             await send({
                 "type": "h5",
@@ -134,43 +170,11 @@ async def align_image(
                 "key": widget_session_key,
                 "value": {
                     "data": {
-                        "stage": "subprocess_failed",
-                        "error": f"Subprocess failed with return code {returncode}. Stderr: {stderr_output}"
+                        "stage": "completed",
+                        "success": True
                     }
                 }
             })
-            return
-
-        if aligned_coordinates is None:
-            await send({
-                "type": "h5",
-                "op": "align_image",
-                "progress": True,
-                "key": widget_session_key,
-                "value": {
-                    "data": {
-                        "stage": "no_result",
-                        "error": "Subprocess completed but no result was received"
-                    }
-                }
-            })
-            return
-
-        adata.obsm[new_scatter_data_key] = np.array(aligned_coordinates, dtype=float)
-
-        await send({
-            "type": "h5",
-            "op": "align_image",
-            "progress": True,
-            "key": widget_session_key,
-            "value": {
-                "data": {
-                    "stage": "completed",
-                    "success": True
-                }
-            }
-        })
-
     except Exception as e:
         error_msg = f"Alignment error: {e!s}\n{traceback.format_exc()}"
         await send({

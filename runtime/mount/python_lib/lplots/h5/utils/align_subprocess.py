@@ -6,6 +6,7 @@ import sys
 import traceback
 from enum import Enum
 from io import BytesIO
+from pathlib import Path
 
 import numpy as np
 from PIL import Image
@@ -145,11 +146,13 @@ def align_image_subprocess(
 
 def main() -> None:
     if len(sys.argv) != 2:
-        send_error("Usage: align_subprocess.py <json_input>")
+        send_error("Usage: align_subprocess.py <json_input_file>")
         sys.exit(1)
 
     try:
-        input_data = json.loads(sys.argv[1])
+        input_file_path = sys.argv[1]
+        with Path(input_file_path).open(encoding="utf-8") as f:
+            input_data = json.load(f)
 
         scatter_data = input_data["scatter_data"]
         points_i = input_data["points_i"]
