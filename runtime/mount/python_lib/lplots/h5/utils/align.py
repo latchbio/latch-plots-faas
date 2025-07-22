@@ -25,7 +25,7 @@ async def align_image(
         new_scatter_data_key: str,
         points_i: list[list[float]],
         points_j: list[list[float]],
-        alignment_method: AlignmentMethod,
+        alignment_method: str,
         image_bytes: bytes | None,
         adata: ad.AnnData,
         widget_session_key: str,
@@ -54,7 +54,7 @@ async def align_image(
             "scatter_data": scatter_data,
             "points_i": points_i,
             "points_j": points_j,
-            "alignment_method": alignment_method.value,
+            "alignment_method": alignment_method,
             "widget_session_key": widget_session_key
         }
 
