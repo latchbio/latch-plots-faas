@@ -12,6 +12,10 @@ import numpy as np
 from PIL import Image
 from scipy.linalg import lstsq
 
+# add mount directory to Python path so we can import lplots
+mount_dir = Path(__file__).parent.parent.parent.parent
+sys.path.insert(0, str(mount_dir))
+
 from lplots.h5.utils import auto_install
 
 
