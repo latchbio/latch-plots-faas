@@ -63,8 +63,10 @@ async def align_image(
 
         subprocess_script = Path(__file__).parent / "align_subprocess.py"
 
+        # temp file to avoid "Argument list too long" error
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=True, encoding="utf-8") as temp_file:
             json.dump(subprocess_input, temp_file)
+            temp_file.flush()
             temp_file_path = temp_file.name
 
             process = await asyncio.create_subprocess_exec(
@@ -175,6 +177,7 @@ async def align_image(
                     }
                 }
             })
+
     except Exception as e:
         error_msg = f"Alignment error: {e!s}\n{traceback.format_exc()}"
         await send({
