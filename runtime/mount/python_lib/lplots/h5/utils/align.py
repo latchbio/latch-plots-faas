@@ -54,7 +54,7 @@ async def align_image(
             "scatter_data": scatter_data,
             "points_i": points_i,
             "points_j": points_j,
-            "alignment_method": alignment_method.value if isinstance(alignment_method, AlignmentMethod) else alignment_method,
+            "alignment_method": alignment_method.value,
             "widget_session_key": widget_session_key
         }
 
