@@ -101,7 +101,7 @@ async def align_image(
                                     "data": {
                                         "progress": message["progress"],
                                         "next_stage": message["next_stage"],
-                                        "completed_stage": message["completed_stage"]
+                                        "completed_stage": message.get("completed_stage", None)
                                     }
                                 }
                             })

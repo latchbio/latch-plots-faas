@@ -25,7 +25,7 @@ class AlignmentMethod(Enum):
     stalign = "stalign"
 
 
-def send_progress_update(completed_stage: str, next_stage: str, progress: float, widget_session_key: str = "") -> None:
+def send_progress_update(completed_stage: str | None, next_stage: str, progress: float, widget_session_key: str = "") -> None:
     message = {
         "type": "progress",
         "completed_stage": completed_stage,
@@ -62,6 +62,8 @@ def align_image_subprocess(
     image_bytes: bytes | None,
     widget_session_key: str
 ) -> list[list[float]]:
+    send_progress_update(None, "lstsq", 0.1, widget_session_key)
+
     points_I_arr = np.asarray(points_I, dtype=float)
     points_J_arr = np.asarray(points_J, dtype=float)
     X_data = np.asarray(scatter_data, dtype=float)  # (N,2) x,y
