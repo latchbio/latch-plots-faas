@@ -60,6 +60,7 @@ async def align_image(
         subprocess_script = Path(__file__).parent / "align_subprocess.py"
 
         # temp file to avoid "Argument list too long" error
+        # note(aidan): could use socket here. Unclear if it would be better.
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=True, encoding="utf-8") as temp_file:
             json.dump(subprocess_input, temp_file)
             temp_file.flush()
