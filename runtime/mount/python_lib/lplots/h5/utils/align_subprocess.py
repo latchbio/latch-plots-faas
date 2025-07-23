@@ -177,7 +177,8 @@ def main() -> None:
             widget_session_key=widget_session_key
         )
 
-        progress_file = Path(f"/tmp/align_progress_{widget_session_key}.json")  # noqa: S108
+        progress_file = Path("/tmp/align_progress.json")  # noqa: S108
+        progress_file.touch()
         progress_file.write_text(json.dumps({
             "stage": "completed",
             "success": True
