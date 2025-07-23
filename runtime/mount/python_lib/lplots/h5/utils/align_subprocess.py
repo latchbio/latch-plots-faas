@@ -1,4 +1,4 @@
-# ruff: noqa: N806
+# ruff: noqa: N803, N806
 
 import base64
 import json
@@ -54,22 +54,22 @@ def send_error(error_message: str, widget_session_key: str = "") -> None:
 
 def align_image_subprocess(
     scatter_data: list[list[float]],
-    points_i: list[list[float]],
-    points_j: list[list[float]],
+    points_I: list[list[float]],
+    points_J: list[list[float]],
     alignment_method: str,
     image_bytes: bytes | None,
     widget_session_key: str
 ) -> list[list[float]]:
-    points_i_arr = np.asarray(points_i, dtype=float)
-    points_j_arr = np.asarray(points_j, dtype=float)
+    points_I_arr = np.asarray(points_I, dtype=float)
+    points_J_arr = np.asarray(points_J, dtype=float)
     X_data = np.asarray(scatter_data, dtype=float)  # (N,2) x,y
 
     send_progress_update("lstsq", widget_session_key)
 
-    k = points_j_arr.shape[0]
+    k = points_J_arr.shape[0]
     ones = np.ones((k, 1))
-    A = np.hstack([points_j_arr, ones])              # (k,3)
-    B = points_i_arr                                 # (k,2)
+    A = np.hstack([points_J_arr, ones])              # (k,3)
+    B = points_I_arr                                 # (k,2)
 
     # Least-squares:  A · M ≈ B   where M (3, 2)
     M, *_ = lstsq(A, B)
@@ -116,8 +116,8 @@ def align_image_subprocess(
     params = {"L": L,
               "T": T,
               "niter": 50,
-              "pointsI": points_i_arr,
-              "pointsJ": points_j_arr,
+              "pointsI": points_I_arr,
+              "pointsJ": points_J_arr,
               "device": device,
               "sigmaM": 0.15,
               "sigmaB": 0.10,
@@ -160,8 +160,8 @@ def main() -> None:
             input_data = json.load(f)
 
         scatter_data = input_data["scatter_data"]
-        points_i = input_data["points_i"]
-        points_j = input_data["points_j"]
+        points_I = input_data["points_I"]
+        points_J = input_data["points_J"]
         alignment_method = input_data["alignment_method"]
         widget_session_key = input_data["widget_session_key"]
 
@@ -171,8 +171,8 @@ def main() -> None:
 
         aligned_coordinates = align_image_subprocess(
             scatter_data=scatter_data,
-            points_i=points_i,
-            points_j=points_j,
+            points_I=points_I,
+            points_J=points_J,
             alignment_method=alignment_method,
             image_bytes=image_bytes,
             widget_session_key=widget_session_key,

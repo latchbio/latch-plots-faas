@@ -563,10 +563,11 @@ async def process_h5ad_request(
                 }
             }
 
+        alignment_is_running = True
+
         async def run_alignment() -> None:
             global alignment_is_running
 
-            alignment_is_running = True
             try:
                 await align_image(
                     msg["scatter_data_key"],

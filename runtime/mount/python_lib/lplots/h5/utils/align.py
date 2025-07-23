@@ -1,3 +1,5 @@
+# ruff: noqa: N803
+
 import asyncio
 import base64
 import json
@@ -17,8 +19,8 @@ ad = auto_install.ad
 async def align_image(
         scatter_data_key: str,
         new_scatter_data_key: str,
-        points_i: list[list[float]],
-        points_j: list[list[float]],
+        points_I: list[list[float]],
+        points_J: list[list[float]],
         alignment_method: str,
         image_bytes: bytes | None,
         adata: ad.AnnData,
@@ -46,8 +48,8 @@ async def align_image(
 
         subprocess_input = {
             "scatter_data": scatter_data,
-            "points_i": points_i,
-            "points_j": points_j,
+            "points_I": points_I,
+            "points_J": points_J,
             "alignment_method": alignment_method,
             "widget_session_key": widget_session_key
         }
@@ -61,17 +63,17 @@ async def align_image(
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=True, encoding="utf-8") as temp_file:
             json.dump(subprocess_input, temp_file)
             temp_file.flush()
-            temp_file_path = temp_file.name
 
             process = await asyncio.create_subprocess_exec(
                 sys.executable,
-                str(subprocess_script),
-                temp_file_path,
+                str(subprocess_script.resolve()),
+                temp_file.name,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
 
             aligned_coordinates = None
+            stderr_buffer: str = ""
 
             async def monitor_stdout() -> None:
                 nonlocal aligned_coordinates
@@ -122,17 +124,30 @@ async def align_image(
                     except json.JSONDecodeError:
                         continue
 
+            async def monitor_stderr() -> None:
+                nonlocal stderr_buffer
+                if process.stderr is None:
+                    return
+
+                while True:
+                    line = await process.stderr.readline()
+                    if not line:
+                        break
+
+                    txt = line.decode(errors="replace")
+                    stderr_buffer += txt
+
+                    if len(stderr_buffer) > 5000:
+                        stderr_buffer = stderr_buffer[-5000:]
+
             stdout_task = asyncio.create_task(monitor_stdout())
+            stderr_task = asyncio.create_task(monitor_stderr())
 
             returncode = await process.wait()
             await stdout_task
+            await stderr_task
 
             if returncode != 0:
-                stderr_output = ""
-                if process.stderr:
-                    stderr_bytes = await process.stderr.read()
-                    stderr_output = stderr_bytes.decode()
-
                 await send({
                     "type": "h5",
                     "op": "align_image",
@@ -141,7 +156,7 @@ async def align_image(
                     "value": {
                         "data": {
                             "stage": "subprocess",
-                            "error": f"Subprocess failed with return code {returncode}. Stderr: {stderr_output}"
+                            "error": f"Subprocess failed with return code {returncode}. Stderr: {stderr_buffer}"
                         }
                     }
                 })
