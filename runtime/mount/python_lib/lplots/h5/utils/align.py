@@ -68,7 +68,7 @@ async def align_image(
                 str(subprocess_script),
                 temp_file_path,
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.STDOUT
+                stderr=asyncio.subprocess.PIPE,
             )
 
             aligned_coordinates = None
@@ -86,7 +86,9 @@ async def align_image(
                     try:
                         message = json.loads(line.decode().strip())
 
-                        if message["type"] == "progress":
+                        msg_type = message.get("type")
+
+                        if msg_type == "progress":
                             await send({
                                 "type": "h5",
                                 "op": "align_image",
@@ -98,9 +100,12 @@ async def align_image(
                                     }
                                 }
                             })
-                        elif message["type"] == "result":
-                            aligned_coordinates = message["aligned_coordinates"]
-                        elif message["type"] == "error":
+                        elif msg_type == "result_file":
+                            file_path = message["file_path"]
+                            with Path(file_path).open(encoding="utf-8") as fp:  # noqa: ASYNC230
+                                aligned_coordinates = json.load(fp)
+                            Path(file_path).unlink()
+                        elif msg_type == "error":
                             await send({
                                 "type": "h5",
                                 "op": "align_image",

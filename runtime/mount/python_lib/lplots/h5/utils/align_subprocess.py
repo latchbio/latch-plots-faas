@@ -3,6 +3,7 @@
 import base64
 import json
 import sys
+import tempfile
 import traceback
 from enum import Enum
 from io import BytesIO
@@ -33,11 +34,11 @@ def send_progress_update(stage: str, widget_session_key: str = "") -> None:
     print(json.dumps(message), file=sys.stdout, flush=True)
 
 
-def send_result(aligned_coordinates: list[list[float]], widget_session_key: str = "") -> None:
+def send_result_file(file_path: str, widget_session_key: str = "") -> None:
     message = {
-        "type": "result",
-        "aligned_coordinates": aligned_coordinates,
-        "widget_session_key": widget_session_key
+        "type": "result_file",
+        "file_path": file_path,
+        "widget_session_key": widget_session_key,
     }
     print(json.dumps(message), file=sys.stdout, flush=True)
 
@@ -174,22 +175,14 @@ def main() -> None:
             points_j=points_j,
             alignment_method=alignment_method,
             image_bytes=image_bytes,
-            widget_session_key=widget_session_key
+            widget_session_key=widget_session_key,
         )
 
-        progress_file = Path("/tmp/align_progress.json")  # noqa: S108
-        progress_file.touch()
-        progress_file.write_text(json.dumps({
-            "stage": "completed",
-            "success": True
-        }))
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False, prefix="aligned_coords_", encoding="utf-8") as tmp:
+            json.dump(aligned_coordinates, tmp)
+            result_path = tmp.name
 
-        send_result(aligned_coordinates, widget_session_key)
-
-        progress_file.write_text(json.dumps({
-            "stage": "sent_result",
-            "success": True
-        }))
+        send_result_file(result_path, widget_session_key)
 
     except Exception as e:
         error_msg = f"Subprocess error: {e!s}\n{traceback.format_exc()}"
