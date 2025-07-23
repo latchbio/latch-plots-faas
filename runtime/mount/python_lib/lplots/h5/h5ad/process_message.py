@@ -1,5 +1,6 @@
 from collections.abc import Awaitable, Callable
 from typing import Any
+import asyncio
 
 from lplots.h5.h5ad.ops import (
     fetch_and_process_image,
@@ -550,27 +551,39 @@ async def process_h5ad_request(
                     },
                 }
 
-            await align_image(
-                msg["scatter_data_key"],
-                msg["new_scatter_data_key"],
-                msg["points_I"],
-                msg["points_J"],
-                msg["alignment_method"],
-                image_bytes,
-                adata,
-                widget_session_key,
-                send,
-            )
-            alignment_is_running = False
+            async def _run_alignment() -> None:
+                global alignment_is_running
+                try:
+                    await align_image(
+                        msg["scatter_data_key"],
+                        msg["new_scatter_data_key"],
+                        msg["points_I"],
+                        msg["points_J"],
+                        msg["alignment_method"],
+                        image_bytes,
+                        adata,
+                        widget_session_key,
+                        send,
+                    )
+                finally:
+                    alignment_is_running = False
+
+            asyncio.create_task(_run_alignment())
+
             return {
                 "type": "h5",
                 "op": op,
                 "data_type": "h5ad",
                 "key": widget_session_key,
-                "value": {"data": {"aligned_obsm_key": msg["new_scatter_data_key"]}},
+                "value": {
+                    "data": {
+                        "stage": "started",
+                        "message": "Alignment started in background"
+                    }
+                },
             }
         finally:
-            alignment_is_running = False
+            pass
 
     if op == "store_image_transformation":
         if "image_transformation" not in msg or "id" not in msg:
