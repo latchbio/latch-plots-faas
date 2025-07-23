@@ -537,16 +537,16 @@ async def process_h5ad_request(
             return {
                 "type": "h5",
                 "op": op,
-                "progress": True,
+                "data_type": "h5ad",
                 "key": widget_session_key,
                 "value": {
                     "data": {
-                            "stage": "fetch_image",
-                            "error": (
-                                f"attempting to align image from an unprocessed node (node_id: {msg['node_id']})"
-                            ),
-                        }
-                }
+                        "stage": "fetch_image",
+                        "error": (
+                            f"attempting to align image from an unprocessed node (nid: {msg['node_id']})"
+                        ),
+                    }
+                },
             }
 
         if alignment_is_running:
