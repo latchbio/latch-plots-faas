@@ -5,7 +5,6 @@ import sys
 import tempfile
 import traceback
 from collections.abc import Awaitable, Callable
-from enum import Enum
 from pathlib import Path
 
 import numpy as np
@@ -13,11 +12,6 @@ import numpy as np
 from lplots.h5.utils import auto_install
 
 ad = auto_install.ad
-
-
-class AlignmentMethod(Enum):
-    affine = "affine"
-    stalign = "stalign"
 
 
 async def align_image(
