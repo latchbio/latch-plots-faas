@@ -171,8 +171,7 @@ async def align_image(
                 "key": widget_session_key,
                 "value": {
                     "data": {
-                        "stage": "completed",
-                        "success": True
+                        "aligned_obsm_key": new_scatter_data_key,
                     }
                 }
             })
