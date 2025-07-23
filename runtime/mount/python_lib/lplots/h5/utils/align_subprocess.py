@@ -177,7 +177,18 @@ def main() -> None:
             widget_session_key=widget_session_key
         )
 
+        progress_file = Path(f"/tmp/align_progress_{widget_session_key}.json")  # noqa: S108
+        progress_file.write_text(json.dumps({
+            "stage": "completed",
+            "success": True
+        }))
+
         send_result(aligned_coordinates, widget_session_key)
+
+        progress_file.write_text(json.dumps({
+            "stage": "sent_result",
+            "success": True
+        }))
 
     except Exception as e:
         error_msg = f"Subprocess error: {e!s}\n{traceback.format_exc()}"
