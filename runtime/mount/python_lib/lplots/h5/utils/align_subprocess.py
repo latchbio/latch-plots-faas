@@ -68,8 +68,6 @@ def align_image_subprocess(
     points_J_arr = np.asarray(points_J, dtype=float)
     X_data = np.asarray(scatter_data, dtype=float)  # (N,2) x,y
 
-    send_progress_update("lstsq", "install-and-import", 0.1, widget_session_key)
-
     k = points_J_arr.shape[0]
     ones = np.ones((k, 1))
     A = np.hstack([points_J_arr, ones])              # (k,3)
@@ -92,24 +90,26 @@ def align_image_subprocess(
     if image_bytes is None:
         raise ValueError("Image bytes required for STalign method")
 
-    send_progress_update("install-and-import", "normalize_image", 0.2, widget_session_key)
-    STalign, torch = auto_install.install_and_import_stalign_and_torch()
+    send_progress_update("lstsq", "install-and-import", 0.2, widget_session_key)
 
-    send_progress_update("normalize_image", "rasterize", 0.3, widget_session_key)
+    STalign, torch = auto_install.install_and_import_stalign_and_torch()
+    send_progress_update("install-and-import", "normalize_image", 0.3, widget_session_key)
+
     V = np.array(Image.open(BytesIO(image_bytes)).convert("RGB")) / 255.0
     I_img = STalign.normalize(V).transpose(2, 0, 1)   # RGB → CHW
 
     I_y = np.arange(I_img.shape[1])
     I_x = np.arange(I_img.shape[2])
+    send_progress_update("normalize_image", "rasterize", 0.3, widget_session_key)
 
-    send_progress_update("rasterize", "normalize_points", 0.4, widget_session_key)
     J_x, J_y, M, _ = STalign.rasterize(xs, ys, dx=5)
+    send_progress_update("rasterize", "normalize_points", 0.4, widget_session_key)
 
     # M shape (1, H_J, W_J) but dummy channel
     M2 = M.squeeze(0)
 
-    send_progress_update("normalize_points", "lddmm", 0.5, widget_session_key)
     J_img = STalign.normalize(np.stack([M2] * 3))         # make RGB-like 3xH_JxW_J
+    send_progress_update("normalize_points", "lddmm", 0.5, widget_session_key)
 
     if torch.cuda.is_available():
         device = "cuda:0"
@@ -131,12 +131,12 @@ def align_image_subprocess(
               "muA": torch.tensor([1, 1, 1])
     }
 
-    send_progress_update("lddmm", "transform_points", 0.6, widget_session_key)
     out = STalign.LDDMM(
         [I_y, I_x], I_img,
         [J_y, J_x], J_img,
         **params
     )
+    send_progress_update("lddmm", "transform_points", 0.6, widget_session_key)
 
     pts = np.stack([xs, ys], axis=1)  # (N,2) in J-coords
     dtype = out["A"].dtype
