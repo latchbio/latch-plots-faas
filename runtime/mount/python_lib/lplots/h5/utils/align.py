@@ -68,7 +68,7 @@ async def align_image(
                 str(subprocess_script),
                 temp_file_path,
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                stderr=asyncio.subprocess.STDOUT
             )
 
             aligned_coordinates = None
