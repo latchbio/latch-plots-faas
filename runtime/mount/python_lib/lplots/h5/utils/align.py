@@ -113,7 +113,7 @@ async def align_image(
                                 "key": widget_session_key,
                                 "value": {
                                     "data": {
-                                        "stage": "subprocess_error",
+                                        "stage": "subprocess",
                                         "error": message["error"]
                                     }
                                 }
@@ -140,7 +140,7 @@ async def align_image(
                     "key": widget_session_key,
                     "value": {
                         "data": {
-                            "stage": "subprocess_failed",
+                            "stage": "subprocess",
                             "error": f"Subprocess failed with return code {returncode}. Stderr: {stderr_output}"
                         }
                     }
@@ -155,7 +155,7 @@ async def align_image(
                     "key": widget_session_key,
                     "value": {
                         "data": {
-                            "stage": "no_result",
+                            "stage": "subprocess",
                             "error": "Subprocess completed but no result was received"
                         }
                     }
