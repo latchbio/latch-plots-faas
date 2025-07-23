@@ -167,7 +167,6 @@ async def align_image(
             await send({
                 "type": "h5",
                 "op": "align_image",
-                "progress": True,
                 "key": widget_session_key,
                 "value": {
                     "data": {
