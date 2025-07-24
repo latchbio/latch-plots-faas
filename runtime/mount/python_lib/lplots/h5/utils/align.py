@@ -99,7 +99,7 @@ async def align_image(
                                 "key": widget_session_key,
                                 "value": {
                                     "data": {
-                                        "progress": message["progress"],
+                                        "progress_percentage": message["progress_percentage"],
                                         "next_stage": message["next_stage"],
                                         "completed_stage": message.get("completed_stage", None)
                                     }

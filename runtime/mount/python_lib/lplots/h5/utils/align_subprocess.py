@@ -25,12 +25,12 @@ class AlignmentMethod(Enum):
     stalign = "stalign"
 
 
-def send_progress_update(completed_stage: str | None, next_stage: str, progress: float, widget_session_key: str = "") -> None:
+def send_progress_update(completed_stage: str | None, next_stage: str, progress_percentage: float, widget_session_key: str = "") -> None:
     message = {
         "type": "progress",
         "completed_stage": completed_stage,
         "next_stage": next_stage,
-        "progress": progress,
+        "progress_percentage": progress_percentage,
         "widget_session_key": widget_session_key
     }
     print(json.dumps(message), file=sys.stdout, flush=True)
