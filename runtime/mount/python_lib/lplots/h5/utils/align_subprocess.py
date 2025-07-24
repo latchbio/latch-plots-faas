@@ -109,7 +109,7 @@ def align_image_subprocess(
     M2 = M.squeeze(0)
 
     J_img = STalign.normalize(np.stack([M2] * 3))         # make RGB-like 3xH_JxW_J
-    send_progress_update("normalize_points", "lddmm", 0.5, widget_session_key)
+    send_progress_update("normalize_points", "lddmm", 0.6, widget_session_key)
 
     if torch.cuda.is_available():
         device = "cuda:0"
@@ -136,7 +136,7 @@ def align_image_subprocess(
         [J_y, J_x], J_img,
         **params
     )
-    send_progress_update("lddmm", "transform_points", 0.6, widget_session_key)
+    send_progress_update("lddmm", "transform_points", 0.75, widget_session_key)
 
     pts = np.stack([xs, ys], axis=1)  # (N,2) in J-coords
     dtype = out["A"].dtype
