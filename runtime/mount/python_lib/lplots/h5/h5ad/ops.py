@@ -27,8 +27,8 @@ pil_image_cache: dict[str, bytes] = {}
 async def fetch_and_process_image(
     node_id: str,
     s3_presigned_url: str,
-    max_width: int = 512,
-    max_height: int = 512,
+    max_width: int = 1024,
+    max_height: int = 1024,
 ) -> str:
     if node_id in pil_image_cache:
         data = pil_image_cache[node_id]
@@ -44,7 +44,7 @@ async def fetch_and_process_image(
         img.thumbnail((max_width, max_height))  # `thumbnail` maintains aspect ratio, `resize` does not
 
         output_buffer = BytesIO()
-        img.save(output_buffer, format="PNG")
+        img.save(output_buffer, format="PNG", optimize=True, quantize=256)
         output_buffer.seek(0)
 
         base64_str = base64.b64encode(output_buffer.read()).decode("utf-8")
