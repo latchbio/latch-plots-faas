@@ -100,6 +100,7 @@ class RegistryTable(widget.BaseWidget):
     def _value(self, val: object) -> RegistryTableValue:
         table_id = self._state.get("table_id")
         table = Table(id=table_id)
+        print(val)
 
         if not isinstance(val, dict) or "selected_rows" not in val:
             return RegistryTableValue(table=table, selected_rows=None)
