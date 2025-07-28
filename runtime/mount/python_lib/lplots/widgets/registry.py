@@ -106,7 +106,7 @@ class RegistryTable(widget.BaseWidget):
             return RegistryTableValue(table=table, selected_rows=None)
 
         table_rows = table.list_records()
-        selection = self._state.get("selection")
+        selection = self._state.get("selected_rows")
         selected_rows = None
         if selection is not None:
             selected_rows = {}
