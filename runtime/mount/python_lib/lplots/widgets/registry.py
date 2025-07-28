@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Literal, NotRequired, TypedDict
 
-from latch.registry.table import Table
+from latch.registry.table import Record, Table
 
 from ..reactive import Signal
 from . import _emit, _state, widget
@@ -82,11 +82,13 @@ class RegistryTableState(_emit.WidgetState[registry_table_type, str]):
     default: NotRequired[str | None]
     appearance: NotRequired[FormInputAppearance | None]
     table_id: str
+    selection: NotRequired[list[str] | None]
 
 
 # note(manske): typed dict to allow additional values like selection/active filters
 class RegistryTableValue(TypedDict):
     table: Table | None
+    selected_rows: dict[str, Record] | None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -95,18 +97,33 @@ class RegistryTable(widget.BaseWidget):
     _state: RegistryTableState
     _signal: Signal[object | str]
 
-    def _value(self) -> RegistryTableValue:
+    def _value(self, val: object) -> RegistryTableValue:
         table_id = self._state.get("table_id")
+        table = Table(id=table_id)
 
-        return RegistryTableValue(table=Table(id=table_id))
+        if not isinstance(val, dict) or "selected_rows" not in val:
+            return RegistryTableValue(table=table, selected_rows=None)
+
+        table_rows = table.list_records()
+        selection = self._state.get("selection")
+        selected_rows = None
+        if selection is not None:
+            selected_rows = {}
+            for page in table_rows:
+                for record_id, record in page.items():
+                    if record_id in selection:
+                        selected_rows[record_id] = record
+
+        return RegistryTableValue(table=table, selected_rows=selected_rows)
 
     @property
     def value(self) -> RegistryTableValue:
-        self._signal()
-        return self._value()
+        res = self._signal()
+        return self._value(res)
 
     def sample(self) -> RegistryTableValue:
-        return self._value()
+        res = self._signal.sample()
+        return self._value(res)
 
 
 _emit.widget_registry[registry_table_type] = RegistryTable
