@@ -85,7 +85,6 @@ class RegistryTableState(_emit.WidgetState[registry_table_type, str]):
     selection: NotRequired[list[str] | None]
 
 
-# note(manske): typed dict to allow additional values like selection/active filters
 class RegistryTableValue(TypedDict):
     table: Table | None
     selected_rows: dict[str, Record] | None
