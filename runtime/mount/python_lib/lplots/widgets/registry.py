@@ -87,7 +87,7 @@ class RegistryTableState(_emit.WidgetState[registry_table_type, str]):
 
 class RegistryTableValue(TypedDict):
     table: Table | None
-    selected_rows: dict[str, Record] | None
+    selected_rows: list[Record] | None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -101,17 +101,12 @@ class RegistryTable(widget.BaseWidget):
         table = Table(id=table_id)
 
         if not isinstance(val, dict) or "selected_rows" not in val:
-            return RegistryTableValue(table=table, selected_rows=None)
+            return RegistryTableValue(table=table, selected_rows=[])
 
-        table_rows = table.list_records()
         selection = val["selected_rows"]
-        selected_rows = None
+        selected_rows = []
         if selection is not None:
-            selected_rows = {}
-            for page in table_rows:
-                for record_id, record in page.items():
-                    if record_id in selection:
-                        selected_rows[record_id] = record
+            selected_rows = [Record(record_id) for record_id in selection]
 
         return RegistryTableValue(table=table, selected_rows=selected_rows)
 
