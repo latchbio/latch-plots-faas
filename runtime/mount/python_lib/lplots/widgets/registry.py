@@ -106,6 +106,7 @@ class RegistryTable(widget.BaseWidget):
         selection = val["selected_rows"]
         selected_rows = []
         if selection is not None:
+            selection = set(selection)
             selected_rows = [Record(record_id) for record_id in selection]
 
         return RegistryTableValue(table=table, selected_rows=selected_rows)
