@@ -248,7 +248,10 @@ class RCtx:
                 self.cur_comp = self.cur_comp.parent
 
     async def _tick(self) -> None:
-        tick_updated_signals = self.signals_updated_from_code
+        tick_updated_signals = {
+            **self.signals_updated_from_code,
+            **self.updated_signals,
+        }
         self.signals_updated_from_code = {}
 
         try:
@@ -454,8 +457,6 @@ class Signal(Generic[T]):
         ctx.updated_signals[self.id] = self
         if not _ui_update:
             ctx.signals_updated_from_code[self.id] = self
-        else:
-            self._ui_update = True
 
         self._mark_listeners()
 
