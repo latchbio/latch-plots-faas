@@ -1,10 +1,8 @@
-import types
 from dataclasses import dataclass
 from typing import Literal, NotRequired
 
-from runtime.mount.lplots.widgets.shared import FormInputAppearance
-
 from . import _emit, _state, widget
+from .shared import FormInputAppearance
 
 logs_display_type: Literal["logs_display"] = "logs_display"
 
