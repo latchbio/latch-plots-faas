@@ -9,7 +9,6 @@ logs_display_type: Literal["logs_display"] = "logs_display"
 
 class LogsDisplayState(_emit.WidgetState[Literal["logs_display"], None]):
     appearance: NotRequired[FormInputAppearance | None]
-    format: bool
     label: str | None
 
 
@@ -22,7 +21,6 @@ class LogsDisplay(widget.BaseWidget):
 def w_logs_display(
     *,
     key: str | None = None,
-    format: bool = False,
     label: str | None = None,
     appearance: FormInputAppearance | None = None,
 ) -> LogsDisplay:
@@ -32,7 +30,6 @@ def w_logs_display(
         _key=key,
         _state={
             "type": "logs_display",
-            "format": format,
             "label": label,
             "appearance": appearance,
         },
