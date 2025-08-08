@@ -3,12 +3,12 @@ import socket
 import struct
 import sys
 import time
-import zlib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Self
 
 import orjson
+import zstd
 
 sys.path.append(str(Path(__file__).parent.absolute()))
 from utils import orjson_encoder
@@ -40,7 +40,7 @@ class SocketIo:
         header = struct.pack("<q", len(data))
         append_log_message(f"sending message of {len(data)} bytes")
         start_time = time.time()
-        compressed = zlib.compress(data)
+        compressed = zstd.compress(data)
         end_time = time.time()
         append_log_message(f"would be {len(compressed)} bytes compressed, {end_time - start_time} seconds to compress")
 
