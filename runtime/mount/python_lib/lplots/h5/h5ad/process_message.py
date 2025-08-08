@@ -501,7 +501,7 @@ async def process_h5ad_request(
             }
 
         image_uri = await fetch_and_process_image(
-            msg["node_id"], msg["s3_presigned_url"]
+            msg["node_id"], msg["s3_presigned_url"], msg.get("max_width", 1536), msg.get("max_height", 1536),
         )
 
         image_id = msg["id"]
