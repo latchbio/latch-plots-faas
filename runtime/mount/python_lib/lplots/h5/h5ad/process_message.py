@@ -177,6 +177,8 @@ async def process_h5ad_request(
                     "init_views": adata.uns.get("latch_views", []),
                     # images
                     "init_images": adata.uns.get("latch_images", {}),
+                    "cache_key": cache_key,
+                    "was_cached": cached_value is not None,
                 }
             },
         }
