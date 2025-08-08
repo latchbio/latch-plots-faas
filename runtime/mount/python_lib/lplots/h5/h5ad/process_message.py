@@ -3,6 +3,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 import base64
+import zlib
 import numpy as _np
 from lplots.h5.h5ad.ops import (
     fetch_and_process_image,
@@ -123,14 +124,16 @@ async def process_h5ad_request(
         init_obsm_shape = None
         if obsm is not None:
             obsm_f32 = _np.asarray(obsm, dtype=_np.float32)
-            init_obsm_b64 = base64.b64encode(obsm_f32.ravel(order="C").tobytes()).decode("ascii")
             init_obsm_shape = [int(obsm_f32.shape[0]), int(obsm_f32.shape[1])]
+            obsm_bytes = obsm_f32.ravel(order="C").tobytes()
+            init_obsm_b64 = base64.b64encode(zlib.compress(obsm_bytes, level=1, wbits=15)).decode("ascii")
 
         init_var_values_b64 = None
         init_var_length = None
         if gene_column is not None:
             gene_f32 = _np.asarray(gene_column, dtype=_np.float32)
-            init_var_values_b64 = base64.b64encode(gene_f32.ravel(order="C").tobytes()).decode("ascii")
+            gene_bytes = gene_f32.ravel(order="C").tobytes()
+            init_var_values_b64 = base64.b64encode(zlib.compress(gene_bytes, level=1, wbits=15)).decode("ascii")
             init_var_length = int(gene_f32.size)
 
         return {
@@ -246,16 +249,18 @@ async def process_h5ad_request(
 
         # Encode obsm as base64 Float32 to reduce JSON size
         obsm_f32 = _np.asarray(obsm, dtype=_np.float32)
-        obsm_b64 = base64.b64encode(obsm_f32.ravel(order="C").tobytes()).decode("ascii")
+        obsm_bytes = obsm_f32.ravel(order="C").tobytes()
+        obsm_b64 = base64.b64encode(zlib.compress(obsm_bytes, level=1, wbits=15)).decode("ascii")
 
         # If var values present, encode as base64 Float32 arrays
         var_values_b64 = None
         var_values_lengths = None
         if gene_columns is not None:
-            var_values_b64 = [
-                base64.b64encode(_np.asarray(col, dtype=_np.float32).ravel(order="C").tobytes()).decode("ascii")
-                for col in gene_columns
-            ]
+            var_values_b64 = []
+            for col in gene_columns:
+                col_f32 = _np.asarray(col, dtype=_np.float32)
+                col_bytes = col_f32.ravel(order="C").tobytes()
+                var_values_b64.append(base64.b64encode(zlib.compress(col_bytes, level=1, wbits=15)).decode("ascii"))
             var_values_lengths = [int(_np.asarray(col).size) for col in gene_columns]
 
         return {
@@ -318,6 +323,11 @@ async def process_h5ad_request(
             obj_id, adata, msg["obs_key"], max_visualization_cells
         )
 
+        # Compress long per-cell arrays
+        values_json = _np.asarray(obs).tolist()
+        values_bytes = bytes(str(values_json), "utf-8")
+        values_b64 = base64.b64encode(zlib.compress(values_bytes, level=1, wbits=15)).decode("ascii")
+
         return {
             "type": "h5",
             "op": op,
@@ -326,7 +336,8 @@ async def process_h5ad_request(
             "value": {
                 "data": {
                     "fetched_for_key": msg["obs_key"],
-                    "values": obs.tolist(),
+                    # compressed JSON payload for values to reduce wire size
+                    "values_b64": values_b64,
                     "unique_values": unique_obs.tolist(),
                     "counts": counts.tolist(),
                     "nrof_values": nrof_obs,
@@ -351,7 +362,8 @@ async def process_h5ad_request(
 
         gene_column = get_obs_vector(obj_id, adata, msg["var_index"])
         gene_f32 = _np.asarray(gene_column, dtype=_np.float32)
-        gene_b64 = base64.b64encode(gene_f32.ravel(order="C").tobytes()).decode("ascii")
+        gene_bytes = gene_f32.ravel(order="C").tobytes()
+        gene_b64 = base64.b64encode(zlib.compress(gene_bytes, level=1, wbits=15)).decode("ascii")
 
         return {
             "type": "h5",
