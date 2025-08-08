@@ -20,10 +20,7 @@ ad = auto_install.ad
 
 alignment_is_running = False
 
-
 init_data_cache: dict[tuple, dict[str, Any]] = {}
-
-alignment_tasks: set[asyncio.Task[None]] = set()
 
 
 async def process_h5ad_request(
