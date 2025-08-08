@@ -11,6 +11,14 @@ import orjson
 sys.path.append(str(Path(__file__).parent.absolute()))
 from utils import orjson_encoder
 
+logfile = Path("/tmp/socketio_messages.log")  # noqa: S108
+logfile.touch()
+
+
+def append_log_message(message: str) -> None:
+    with logfile.open("a") as f:
+        f.write(message)
+
 
 @dataclass(kw_only=True)
 class SocketIo:
@@ -28,8 +36,7 @@ class SocketIo:
 
     async def send_bytes(self, data: bytes) -> None:
         header = struct.pack("<q", len(data))
-
-        print(f"Sending {len(data)} bytes")
+        append_log_message(f"sending message of {len(data)} bytes")
 
         async with self.wlock:
             await self.loop.sock_sendall(self.sock, header)
