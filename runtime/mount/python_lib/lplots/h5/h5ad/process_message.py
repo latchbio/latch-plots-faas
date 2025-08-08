@@ -170,7 +170,6 @@ async def process_h5ad_request(
                     # init state with these
                     "init_obs_key": init_obs_key,
                     "init_obsm_key": init_obsm_key,
-                    # heavy fields from cache
                     **cached_value,
                     # alignment info
                     "alignment_is_running": alignment_is_running,
