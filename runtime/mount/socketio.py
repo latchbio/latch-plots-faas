@@ -40,7 +40,7 @@ class SocketIo:
         header = struct.pack("<q", len(data))
         append_log_message(f"sending message of {len(data)} bytes")
         start_time = time.time()
-        compressed = zlib.compress(data)
+        compressed = zlib.compress(data, level=1, wbits=15)
         end_time = time.time()
         append_log_message(f"would be {len(compressed)} bytes compressed, {end_time - start_time} seconds to compress")
 
