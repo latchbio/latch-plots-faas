@@ -2,6 +2,8 @@ import asyncio
 from collections.abc import Awaitable, Callable
 from typing import Any
 
+import base64
+import numpy as _np
 from lplots.h5.h5ad.ops import (
     fetch_and_process_image,
     get_obs,
@@ -84,6 +86,7 @@ async def process_h5ad_request(
         if init_obs_key is None and init_var_key is None and len(possible_obs_keys) > 0:
             init_obs_key = possible_obs_keys[0]
 
+        # Compute init arrays; large numeric arrays will be encoded
         obsm = None
         index = None
         recomputed_index = False
@@ -115,6 +118,21 @@ async def process_h5ad_request(
 
         global alignment_is_running
 
+        # Encode large numeric arrays
+        init_obsm_b64 = None
+        init_obsm_shape = None
+        if obsm is not None:
+            obsm_f32 = _np.asarray(obsm, dtype=_np.float32)
+            init_obsm_b64 = base64.b64encode(obsm_f32.ravel(order="C").tobytes()).decode("ascii")
+            init_obsm_shape = [int(obsm_f32.shape[0]), int(obsm_f32.shape[1])]
+
+        init_var_values_b64 = None
+        init_var_length = None
+        if gene_column is not None:
+            gene_f32 = _np.asarray(gene_column, dtype=_np.float32)
+            init_var_values_b64 = base64.b64encode(gene_f32.ravel(order="C").tobytes()).decode("ascii")
+            init_var_length = int(gene_f32.size)
+
         return {
             "type": "h5",
             "op": op,
@@ -135,9 +153,12 @@ async def process_h5ad_request(
                     "init_obs_key": init_obs_key,
                     "init_obsm_key": init_obsm_key,
                     "init_recomputed_index": recomputed_index,
-                    "init_obsm_values": obsm.tolist() if obsm is not None else None,
+                    # obsm sent as compact base64 Float32
+                    "init_obsm_b64": init_obsm_b64,
+                    "init_obsm_shape": init_obsm_shape,
                     "init_obsm_index": index.tolist() if index is not None else None,
                     "init_obsm_filters": filters,
+                    # obs values and metadata
                     "init_obs_values": obs.tolist() if obs is not None else None,
                     "init_obs_unique_values": (
                         unique_obs.tolist() if unique_obs is not None else None
@@ -149,10 +170,9 @@ async def process_h5ad_request(
                     "init_var_names": (
                         var_names.tolist() if var_names is not None else None
                     ),
-                    # var color by info
-                    "init_var_values": (
-                        gene_column.tolist() if gene_column is not None else None
-                    ),
+                    # initial var column as compact base64 Float32 if requested
+                    "init_var_values_b64": init_var_values_b64,
+                    "init_var_length": init_var_length,
                     "init_var_key": init_var_key if init_var_key is not None else None,
                     # alignment info
                     "alignment_is_running": alignment_is_running,
@@ -224,6 +244,20 @@ async def process_h5ad_request(
                     get_obs_vector(obj_id, adata, g) for g in fetched_for_var_keys
                 ]
 
+        # Encode obsm as base64 Float32 to reduce JSON size
+        obsm_f32 = _np.asarray(obsm, dtype=_np.float32)
+        obsm_b64 = base64.b64encode(obsm_f32.ravel(order="C").tobytes()).decode("ascii")
+
+        # If var values present, encode as base64 Float32 arrays
+        var_values_b64 = None
+        var_values_lengths = None
+        if gene_columns is not None:
+            var_values_b64 = [
+                base64.b64encode(_np.asarray(col, dtype=_np.float32).ravel(order="C").tobytes()).decode("ascii")
+                for col in gene_columns
+            ]
+            var_values_lengths = [int(_np.asarray(col).size) for col in gene_columns]
+
         return {
             "type": "h5",
             "op": op,
@@ -232,8 +266,10 @@ async def process_h5ad_request(
             "value": {
                 "data": {
                     "fetched_for_key": msg["obsm_key"],
-                    "obsm": obsm.tolist(),
-                    "index": index.tolist(),
+                    # binary payload for coordinates
+                    "obsm_b64": obsm_b64,
+                    "obsm_shape": [int(obsm_f32.shape[0]), int(obsm_f32.shape[1])],
+                    # omit index to reduce payload; client can synthesize if absent
                     "recomputed_index": recomputed_index,
                     "fetched_for_obs_key": fetched_for_obs_key,
                     "fetched_for_var_keys": fetched_for_var_keys,
@@ -244,9 +280,9 @@ async def process_h5ad_request(
                     ),
                     "counts": counts.tolist() if counts is not None else None,
                     "nrof_values": nrof_obs,
-                    "var_values": [
-                        col.tolist() for col in gene_columns
-                    ] if gene_columns is not None else None,
+                    # binary payloads for var values if present
+                    "var_values_b64": var_values_b64,
+                    "var_values_lengths": var_values_lengths,
                 },
             },
         }
@@ -314,6 +350,8 @@ async def process_h5ad_request(
             }
 
         gene_column = get_obs_vector(obj_id, adata, msg["var_index"])
+        gene_f32 = _np.asarray(gene_column, dtype=_np.float32)
+        gene_b64 = base64.b64encode(gene_f32.ravel(order="C").tobytes()).decode("ascii")
 
         return {
             "type": "h5",
@@ -322,7 +360,9 @@ async def process_h5ad_request(
             "value": {
                 "data": {
                     "fetched_for_key": msg["var_index"],
-                    "values": gene_column.tolist(),
+                    # binary payload to reduce JSON overhead
+                    "values_b64": gene_b64,
+                    "length": int(gene_f32.size),
                 }
             },
         }
