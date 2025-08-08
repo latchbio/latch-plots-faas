@@ -2,6 +2,8 @@ import asyncio
 import socket
 import struct
 import sys
+import time
+import zlib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Self
@@ -17,7 +19,7 @@ logfile.touch()
 
 def append_log_message(message: str) -> None:
     with logfile.open("a") as f:
-        f.write(message)
+        f.write(message + "\n")
 
 
 @dataclass(kw_only=True)
@@ -37,6 +39,10 @@ class SocketIo:
     async def send_bytes(self, data: bytes) -> None:
         header = struct.pack("<q", len(data))
         append_log_message(f"sending message of {len(data)} bytes")
+        start_time = time.time()
+        compressed = zlib.compress(data)
+        end_time = time.time()
+        append_log_message(f"would be {len(compressed)} bytes compressed, {end_time - start_time} seconds to compress")
 
         async with self.wlock:
             await self.loop.sock_sendall(self.sock, header)
