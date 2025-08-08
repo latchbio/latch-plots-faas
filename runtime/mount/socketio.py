@@ -29,6 +29,8 @@ class SocketIo:
     async def send_bytes(self, data: bytes) -> None:
         header = struct.pack("<q", len(data))
 
+        print(f"Sending {len(data)} bytes")
+
         async with self.wlock:
             await self.loop.sock_sendall(self.sock, header)
             await self.loop.sock_sendall(self.sock, data)
