@@ -87,10 +87,12 @@ async def process_h5ad_request(
         if init_obs_key is None and init_var_key is None and len(possible_obs_keys) > 0:
             init_obs_key = possible_obs_keys[0]
 
+        filters = msg.get("filters")
+
         cache_key = (
             obj_id,
             init_obsm_key,
-            json.dumps(msg.get("filters"), sort_keys=True),
+            json.dumps(filters, sort_keys=True),
             init_obs_key,
             init_var_key,
             int(max_visualization_cells),
@@ -104,7 +106,7 @@ async def process_h5ad_request(
             recomputed_index = False
             if init_obsm_key is not None:
                 obsm, index, recomputed_index = get_obsm(
-                    obj_id, adata, init_obsm_key, msg.get("filters"), max_visualization_cells
+                    obj_id, adata, init_obsm_key, filters, max_visualization_cells
                 )
 
             obs = None
@@ -130,7 +132,7 @@ async def process_h5ad_request(
                 "init_recomputed_index": recomputed_index,
                 "init_obsm_values": obsm.tolist() if obsm is not None else None,
                 "init_obsm_index": index.tolist() if index is not None else None,
-                "init_obsm_filters": msg.get("filters"),
+                "init_obsm_filters": filters,
                 "init_obs_values": obs.tolist() if obs is not None else None,
                 "init_obs_unique_values": (
                     unique_obs.tolist() if unique_obs is not None else None
