@@ -106,6 +106,17 @@ async def process_h5ad_request(
             obs, (unique_obs, counts), nrof_obs = get_obs(
                 obj_id, adata, init_obs_key, max_visualization_cells
             )
+        init_obs_codes_b64 = None
+        if obs is not None and unique_obs is not None:
+            # Build code mapping to indices of unique_obs
+            import pandas as _pd  # local import to avoid top-level dependency name change
+            def _keyify(v: object) -> object:
+                return ("NaN", None) if _pd.isna(v) else ("VAL", v)
+            mapping = { _keyify(v): i for i, v in enumerate(unique_obs) }
+            codes = _np.empty(obs.shape[0], dtype=_np.uint32)
+            for i, v in enumerate(obs):
+                codes[i] = mapping.get(_keyify(v), _np.uint32(0))
+            init_obs_codes_b64 = base64.b64encode(zlib.compress(codes.tobytes(), level=1, wbits=15)).decode("ascii")
 
         gene_column = None
         if (
@@ -162,7 +173,7 @@ async def process_h5ad_request(
                     "init_obsm_index": index.tolist() if index is not None else None,
                     "init_obsm_filters": filters,
                     # obs values and metadata
-                    "init_obs_values": obs.tolist() if obs is not None else None,
+                    "init_obs_values_codes_b64": init_obs_codes_b64,
                     "init_obs_unique_values": (
                         unique_obs.tolist() if unique_obs is not None else None
                     ),
