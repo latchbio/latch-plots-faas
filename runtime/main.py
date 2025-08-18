@@ -21,7 +21,9 @@ latch_server = LatchASGIServer(
     shutdown_tasks=[shutdown()],
 )
 
-app = latch_server.raw_app
+
+async def app(scope, receive, send):
+    await latch_server.raw_app(scope, receive, send)
 
 
 async def _run_uvicorn() -> None:
