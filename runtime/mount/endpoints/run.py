@@ -82,7 +82,7 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
     global connection_idx, session_owner
 
     sess_hash = secrets.token_hex(32)
-    await ctx.accept_connection()
+    await ctx.accept_connection(negotiate_permessage_deflate=True)
 
     auth_msg = await ctx.receive_message(MAuth)
 

@@ -7,7 +7,7 @@ authors = [
     { name = "maximsmol", email = "max@latch.bio" },
 ]
 dependencies = [
-    "latch-asgi>=1.0.1",
+    "latch-asgi==1.0.6.dev2",
     "latch-o11y>=0.1.4",
     "uvloop>=0.19.0",
     "aiohttp>=3.9.3",
