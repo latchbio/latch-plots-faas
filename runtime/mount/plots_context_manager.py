@@ -1,5 +1,6 @@
 import asyncio
 import contextlib
+import zlib
 from collections import defaultdict
 from dataclasses import dataclass
 
@@ -17,7 +18,7 @@ class UserProfile:
 
 async def try_send_message(ctx: Context, msg: str) -> None:
     with contextlib.suppress(WebsocketConnectionClosedError):
-        await ctx.send_message(msg)
+        await ctx.send_message(zlib.compress(msg.encode("utf-8"), level=1))
 
 
 class PlotsContextManager:
