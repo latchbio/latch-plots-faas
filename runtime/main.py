@@ -32,6 +32,7 @@ async def _run_uvicorn() -> None:
         host="0.0.0.0",
         port=5000,
         ws="websockets",
+        ws_per_message_deflate=True,
         reload=config.auto_reload,
         log_config=None,
     )
