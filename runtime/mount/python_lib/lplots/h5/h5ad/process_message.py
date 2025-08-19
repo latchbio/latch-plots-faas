@@ -1,4 +1,6 @@
 import asyncio
+import time
+import zlib
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -165,6 +167,26 @@ async def process_h5ad_request(
                 f"{k}_size_orjson_bytes": len(orjson.dumps(v)) for k, v in data.items()
             }
             data.update(sizes)
+
+        if init_data_stats:
+            # Measure compression time and size for selected large fields using fast deflate
+            fields_to_measure = [
+                "init_obs_counts",
+                "init_obs_unique_values",
+                "init_obs_values",
+                "init_obsm_index",
+                "init_obsm_values",
+            ]
+            for key in fields_to_measure:
+                value = data.get(key)
+                if value is None:
+                    continue
+                payload = orjson.dumps(value)
+                start = time.perf_counter()
+                compressed = zlib.compress(payload, level=1)
+                elapsed_ms = (time.perf_counter() - start) * 1000.0
+                data[f"{key}_compressed_size_deflate_bytes"] = len(compressed)
+                data[f"{key}_compression_time_ms"] = elapsed_ms
 
         return {
             "type": "h5",
