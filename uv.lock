@@ -1021,7 +1021,7 @@ wheels = [
 
 [[package]]
 name = "latch-asgi"
-version = "1.0.6.dev0"
+version = "1.0.6.dev1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "hypercorn", extra = ["uvloop"] },
@@ -1033,9 +1033,9 @@ dependencies = [
     { name = "orjson" },
     { name = "pyjwt", extra = ["crypto"] },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ef/e3/f3427be168bd541948cbe2a7cd631062800c4b5680a5cec5bac1eb183eed/latch_asgi-1.0.6.dev0.tar.gz", hash = "sha256:fe996d2a5b6a3047efaa9b00fcee90d8b25deb42845ed62c278ce011d0041a02", size = 15520 }
+sdist = { url = "https://files.pythonhosted.org/packages/65/7b/a34fb358ec2231d34d00860798cb85f00512e1ef2914190bcf18584f8860/latch_asgi-1.0.6.dev1.tar.gz", hash = "sha256:2435da19a7ca0b544b5c4638fc9899cfa5ce8a1e9fd182c233a2db2c9788385a", size = 15518 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/c3/f3/f3d7af096de2d9c57cdcf12044ff0364388a6e0a67adbc44b6a899a65d3b/latch_asgi-1.0.6.dev0-py3-none-any.whl", hash = "sha256:af4b20970a6ee90837b5fb1e85017d4a588e93929c1335bbc3d50e3133224d07", size = 20233 },
+    { url = "https://files.pythonhosted.org/packages/12/d9/6730468f76c9a58b8768f905d3a3814eb5dbe431e8404b9109e6c2a8431f/latch_asgi-1.0.6.dev1-py3-none-any.whl", hash = "sha256:8b3220750ffdde200fb57d7f49a435a47c6064ffd9bf1644e6456a2c445b68bd", size = 20319 },
 ]
 
 [[package]]
@@ -1125,7 +1125,7 @@ requires-dist = [
     { name = "dill", specifier = ">=0.3.9" },
     { name = "duckdb", specifier = ">=1.0.0" },
     { name = "latch", specifier = ">=2.65.1" },
-    { name = "latch-asgi", specifier = "==1.0.6.dev0" },
+    { name = "latch-asgi", specifier = "==1.0.6.dev1" },
     { name = "latch-o11y", specifier = ">=0.1.4" },
     { name = "latch-postgres", specifier = ">=0.1.18" },
     { name = "matplotlib", specifier = ">=3.9.2" },
