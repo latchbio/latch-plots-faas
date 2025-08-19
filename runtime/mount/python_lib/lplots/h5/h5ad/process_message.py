@@ -169,7 +169,7 @@ async def process_h5ad_request(
             data.update(sizes)
 
         if init_data_stats:
-            # Measure compression time and size for selected large fields using fast deflate
+            # Measure compression time and size for selected large fields using deflate (levels 1-5)
             fields_to_measure = [
                 "init_obs_counts",
                 "init_obs_unique_values",
@@ -182,11 +182,12 @@ async def process_h5ad_request(
                 if value is None:
                     continue
                 payload = orjson.dumps(value)
-                start = time.perf_counter()
-                compressed = zlib.compress(payload, level=1)
-                elapsed_ms = (time.perf_counter() - start) * 1000.0
-                data[f"{key}_compressed_size_deflate_bytes"] = len(compressed)
-                data[f"{key}_compression_time_ms"] = elapsed_ms
+                for level in (1, 2, 3, 4, 5):
+                    start = time.perf_counter()
+                    compressed = zlib.compress(payload, level=level)
+                    elapsed_ms = (time.perf_counter() - start) * 1000.0
+                    data[f"{key}_compressed_size_deflate_level_{level}_bytes"] = len(compressed)
+                    data[f"{key}_compression_time_level_{level}_ms"] = elapsed_ms
 
         return {
             "type": "h5",
