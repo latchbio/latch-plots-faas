@@ -2,9 +2,6 @@ import asyncio
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-import bson
-import msgpack
-
 from lplots.h5.h5ad.ops import (
     fetch_and_process_image,
     get_obs,
@@ -118,66 +115,53 @@ async def process_h5ad_request(
 
         global alignment_is_running
 
-        data = {
-            # display info
-            "num_obs": adata.n_obs,
-            "num_vars": adata.n_vars,
-            # options
-            "possible_obs_keys": possible_obs_keys,
-            "possible_obs_keys_types": [
-                str(adata.obs[key].dtype) for key in possible_obs_keys
-            ],
-            "possible_obsm_keys": possible_obsm_keys,
-            # init state with these
-            "init_obs_key": init_obs_key,
-            "init_obsm_key": init_obsm_key,
-            "init_recomputed_index": recomputed_index,
-            "init_obsm_values": obsm.tolist() if obsm is not None else None,
-            "init_obsm_index": index.tolist() if index is not None else None,
-            "init_obsm_filters": filters,
-            "init_obs_values": obs.tolist() if obs is not None else None,
-            "init_obs_unique_values": (
-                unique_obs.tolist() if unique_obs is not None else None
-            ),
-            "init_obs_counts": counts.tolist() if counts is not None else None,
-            "init_obs_nrof_values": nrof_obs,
-            # var info
-            "init_var_index": var_index.tolist(),
-            "init_var_names": (
-                var_names.tolist() if var_names is not None else None
-            ),
-            # var color by info
-            "init_var_values": (
-                gene_column.tolist() if gene_column is not None else None
-            ),
-            "init_var_key": init_var_key if init_var_key is not None else None,
-            # alignment info
-            "alignment_is_running": alignment_is_running,
-            # views info
-            "init_views": adata.uns.get("latch_views", []),
-            # images
-            "init_images": adata.uns.get("latch_images", {}),
-        }
-
-        # BSON and MessagePack serialized sizes
-        try:
-            data["bson_size_bytes"] = len(bson.BSON.encode(data))
-        except Exception:
-            data["bson_size_bytes"] = None
-
-        try:
-            data["messagepack_size_bytes"] = len(
-                msgpack.packb(data, use_bin_type=True)
-            )
-        except Exception:
-            data["messagepack_size_bytes"] = None
-
         return {
             "type": "h5",
             "op": op,
             "data_type": "h5ad",
             "key": widget_session_key,
-            "value": {"data": data},
+            "value": {
+                "data": {
+                    # display info
+                    "num_obs": adata.n_obs,
+                    "num_vars": adata.n_vars,
+                    # options
+                    "possible_obs_keys": possible_obs_keys,
+                    "possible_obs_keys_types": [
+                        str(adata.obs[key].dtype) for key in possible_obs_keys
+                    ],
+                    "possible_obsm_keys": possible_obsm_keys,
+                    # init state with these
+                    "init_obs_key": init_obs_key,
+                    "init_obsm_key": init_obsm_key,
+                    "init_recomputed_index": recomputed_index,
+                    "init_obsm_values": obsm.tolist() if obsm is not None else None,
+                    "init_obsm_index": index.tolist() if index is not None else None,
+                    "init_obsm_filters": filters,
+                    "init_obs_values": obs.tolist() if obs is not None else None,
+                    "init_obs_unique_values": (
+                        unique_obs.tolist() if unique_obs is not None else None
+                    ),
+                    "init_obs_counts": counts.tolist() if counts is not None else None,
+                    "init_obs_nrof_values": nrof_obs,
+                    # var info
+                    "init_var_index": var_index.tolist(),
+                    "init_var_names": (
+                        var_names.tolist() if var_names is not None else None
+                    ),
+                    # var color by info
+                    "init_var_values": (
+                        gene_column.tolist() if gene_column is not None else None
+                    ),
+                    "init_var_key": init_var_key if init_var_key is not None else None,
+                    # alignment info
+                    "alignment_is_running": alignment_is_running,
+                    # views info
+                    "init_views": adata.uns.get("latch_views", []),
+                    # images
+                    "init_images": adata.uns.get("latch_images", {}),
+                }
+            },
         }
 
     if op == "get_obsm_options":
