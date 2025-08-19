@@ -162,24 +162,15 @@ async def process_h5ad_request(
             "init_images": adata.uns.get("latch_images", {}),
         }
 
-        if init_data_stats:
-            # Measure whole data payload (pre-diagnostics) size and deflate compression levels 1-9
-            payload_bytes = orjson.dumps(data)
-            data["init_data_payload_size_orjson_bytes"] = len(payload_bytes)
-            for level in (1, 2, 3, 4, 5, 6, 7, 8, 9):
-                start = time.perf_counter()
-                payload_compressed = zlib.compress(payload_bytes, level=level)
-                elapsed_ms = (time.perf_counter() - start) * 1000.0
-                data[f"init_data_payload_compressed_size_deflate_level_{level}_bytes"] = len(payload_compressed)
-                data[f"init_data_payload_compression_time_level_{level}_ms"] = elapsed_ms
-
         return {
             "type": "h5",
             "op": op,
             "data_type": "h5ad",
             "key": widget_session_key,
             "value": {
-                "data": data,
+                "data": {
+                    "compressed_data": zlib.compress(orjson.dumps(data), level=1),
+                },
             },
         }
 
