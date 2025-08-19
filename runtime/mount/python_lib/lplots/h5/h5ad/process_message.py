@@ -1,5 +1,5 @@
 import asyncio
-import time
+import base64
 import zlib
 from collections.abc import Awaitable, Callable
 from typing import Any
@@ -169,7 +169,9 @@ async def process_h5ad_request(
             "key": widget_session_key,
             "value": {
                 "data": {
-                    "compressed_data": zlib.compress(orjson.dumps(data), level=1),
+                    "compressed_data_b64": base64.b64encode(
+                        zlib.compress(orjson.dumps(data), level=1)
+                    ).decode("ascii"),
                 },
             },
         }
