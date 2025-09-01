@@ -760,6 +760,7 @@ class Kernel:
         if clear_status:
             await self.set_active_cell(None)
         self.cells_with_pending_widget_updates.clear()
+        await self.send_global_updates()
 
         # fixme(rteqs): cleanup signals in some other way. the below does not work because widget signals
         # are restored on `init` but there are no corresponding `rnodes`
@@ -1105,8 +1106,6 @@ class Kernel:
             await self.send_cell_result(cell_id)
 
     async def send_cell_result(self, cell_id: str) -> None:
-        await self.send_global_updates()
-
         outputs = self._cell_outputs()
 
         msg = {
