@@ -248,10 +248,11 @@ class RCtx:
                 self.cur_comp = self.cur_comp.parent
 
     async def _tick(self) -> None:
-        tick_updated_signals = {
-            **self.signals_updated_from_code,
-            **self.updated_signals,
-        }
+        # tick_updated_signals = {
+        #     **self.signals_updated_from_code,
+        #     **self.updated_signals,
+        # }
+        tick_updated_signals = self.signals_updated_from_code
         self.signals_updated_from_code = {}
 
         try:
