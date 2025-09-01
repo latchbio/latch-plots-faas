@@ -758,7 +758,8 @@ class Kernel:
             )
 
         self.cells_with_pending_widget_updates.clear()
-        await self.send_global_updates()
+        if len(ctx.stale_nodes) == 0:
+            await self.send_global_updates()
 
         if clear_status:
             await self.set_active_cell(None)
