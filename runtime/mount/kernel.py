@@ -757,10 +757,11 @@ class Kernel:
                 }
             )
 
-        if clear_status:
-            await self.set_active_cell(None)
         self.cells_with_pending_widget_updates.clear()
         await self.send_global_updates()
+
+        if clear_status:
+            await self.set_active_cell(None)
 
         # fixme(rteqs): cleanup signals in some other way. the below does not work because widget signals
         # are restored on `init` but there are no corresponding `rnodes`
