@@ -1287,7 +1287,7 @@ class Kernel:
             res = filter_and_sort(df=res, pagination_settings=pagination_settings)
 
             if viewer_id is not None:
-                async with ctx.transaction:
+                async with ctx.transaction():
                     filtered_dataframe_name = f"df_{viewer_id}"
                     self.k_globals[filtered_dataframe_name] = res
 
@@ -1485,7 +1485,7 @@ class Kernel:
                     else:
                         sig._value = v["value"]
 
-            async with ctx.transaction:
+            async with ctx.transaction():
                 for viewer_id, (
                     data_id,
                     key_type,
@@ -1642,7 +1642,7 @@ class Kernel:
                     if w_key not in self.widget_signals:
                         continue
 
-                    async with ctx.transaction:
+                    async with ctx.transaction():
                         self.widget_signals[w_key](
                             orjson.loads(payload), _ui_update=True
                         )

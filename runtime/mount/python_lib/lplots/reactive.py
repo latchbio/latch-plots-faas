@@ -235,7 +235,7 @@ class RCtx:
         if _cell_id is not None:
             await _inject.kernel.set_active_cell(_cell_id)
 
-        async with self.transaction:
+        async with self.transaction():
             self.cur_comp = Node(
                 f=f, parent=self.cur_comp, cell_id=_cell_id, _id=None, code=code
             )
