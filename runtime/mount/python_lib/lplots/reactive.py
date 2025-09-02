@@ -292,7 +292,7 @@ class RCtx:
             for n, _p in to_dispose.values():
                 n.dispose()
 
-            if len(to_dispose) > 1:
+            if len(to_dispose) > 0:
                 async with self.transaction:
                     for n, p in to_dispose.values():
                         self.cur_comp = p
