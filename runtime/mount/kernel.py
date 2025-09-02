@@ -758,8 +758,7 @@ class Kernel:
             )
 
         self.cells_with_pending_widget_updates.clear()
-        if len(ctx.stale_nodes) == 0:
-            await self.send_global_updates()
+        await self.send_global_updates()
 
         if clear_status:
             await self.set_active_cell(None)
@@ -1635,7 +1634,7 @@ class Kernel:
                     **(key_fields), viewer_id=msg.get("viewer_id")
                 )
 
-                await self.send_global_updates()
+                # await self.send_global_updates()
 
         if msg["type"] == "set_widget_value":
             for w_key, payload in msg["data"].items():
