@@ -272,6 +272,7 @@ class RCtx:
             return
 
         try:
+
             for s in self.updated_signals.values():
                 s._apply_updates()
 
@@ -314,8 +315,9 @@ class RCtx:
                         finally:
                             self.cur_comp = None
 
-        finally:
             await _inject.kernel.on_tick_finished(tick_updated_signals)
+
+        finally:
             self.prev_updated_signals = {}
             for sig in live_signals.values():
                 sig._ui_update = False
