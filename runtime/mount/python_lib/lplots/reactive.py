@@ -216,7 +216,6 @@ class RCtx:
     prev_updated_signals: dict[str, "Signal"] = field(default_factory=dict)
 
     in_tx: bool = False
-    in_tick: bool = False
 
     async def run(
         self,
@@ -248,12 +247,7 @@ class RCtx:
             finally:
                 self.cur_comp = self.cur_comp.parent
 
-    async def _tick(self) -> None:
-        if self.in_tick:
-            return
-
-        self.in_tick = True
-
+    async def _tick(self, from_nested_tx: bool = False) -> None:
         import traceback
         print(f">>> _tick called, updated_signals={len(self.updated_signals)}, stack: {' -> '.join([f'{f.filename}:{f.lineno}:{f.name}' for f in traceback.extract_stack()[-6:-1]])}")
         # tick_updated_signals = {
@@ -302,7 +296,7 @@ class RCtx:
                 n.dispose()
 
             if len(to_dispose) > 0:
-                async with self.transaction:
+                async with self.transaction(from_tick=True):
                     for n, p in to_dispose.values():
                         self.cur_comp = p
 
@@ -322,17 +316,16 @@ class RCtx:
                         finally:
                             self.cur_comp = None
 
-            await _inject.kernel.on_tick_finished(tick_updated_signals)
+            if not from_nested_tx:
+                await _inject.kernel.on_tick_finished(tick_updated_signals)
 
         finally:
-            self.in_tick = False
             self.prev_updated_signals = {}
             for sig in live_signals.values():
                 sig._ui_update = False
 
-    @property
     @asynccontextmanager
-    async def transaction(self) -> AsyncGenerator[None, None]:
+    async def transaction(self, from_tick: bool = False) -> AsyncGenerator[None, None]:
         if self.in_tx:
             yield
             return
@@ -344,7 +337,7 @@ class RCtx:
         finally:
             self.in_tx = False
             print("Transaction ending, calling _tick")
-            await self._tick()
+            await self._tick(from_nested_tx=from_tick)
 
 
 ctx = RCtx()
