@@ -216,6 +216,7 @@ class RCtx:
     prev_updated_signals: dict[str, "Signal"] = field(default_factory=dict)
 
     in_tx: bool = False
+    in_tick: bool = False
 
     async def run(
         self,
@@ -248,6 +249,11 @@ class RCtx:
                 self.cur_comp = self.cur_comp.parent
 
     async def _tick(self) -> None:
+        if self.in_tick:
+            return
+
+        self.in_tick = True
+
         import traceback
         print(f">>> _tick called, updated_signals={len(self.updated_signals)}, stack: {' -> '.join([f'{f.filename}:{f.lineno}:{f.name}' for f in traceback.extract_stack()[-6:-1]])}")
         # tick_updated_signals = {
@@ -274,7 +280,6 @@ class RCtx:
             return
 
         try:
-
             for s in self.updated_signals.values():
                 s._apply_updates()
 
@@ -320,6 +325,7 @@ class RCtx:
             await _inject.kernel.on_tick_finished(tick_updated_signals)
 
         finally:
+            self.in_tick = False
             self.prev_updated_signals = {}
             for sig in live_signals.values():
                 sig._ui_update = False
