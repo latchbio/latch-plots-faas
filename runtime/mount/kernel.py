@@ -1634,8 +1634,6 @@ class Kernel:
                     **(key_fields), viewer_id=msg.get("viewer_id")
                 )
 
-                await self.send_global_updates()
-
         if msg["type"] == "set_widget_value":
             for w_key, payload in msg["data"].items():
                 try:
