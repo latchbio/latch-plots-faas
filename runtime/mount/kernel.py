@@ -758,7 +758,6 @@ class Kernel:
             )
 
         self.cells_with_pending_widget_updates.clear()
-        await self.send_global_updates()
 
         if clear_status:
             await self.set_active_cell(None)
@@ -1107,6 +1106,7 @@ class Kernel:
             await self.send_cell_result(cell_id)
 
     async def send_cell_result(self, cell_id: str) -> None:
+        await self.send_global_updates()
         outputs = self._cell_outputs()
 
         msg = {
