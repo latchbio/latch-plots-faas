@@ -248,6 +248,9 @@ class RCtx:
                 self.cur_comp = self.cur_comp.parent
 
     async def _tick(self) -> None:
+        import traceback
+        print(f">>> _tick called, updated_signals={len(self.updated_signals)}, stack: {' -> '.join([f'{f.filename}:{f.lineno}:{f.name}' for f
+      in traceback.extract_stack()[-6:-1]])}")
         # tick_updated_signals = {
         #     **self.signals_updated_from_code,
         #     **self.updated_signals,
@@ -329,11 +332,13 @@ class RCtx:
             yield
             return
 
+        print("Transaction starting, will call _tick on exit")
         try:
             self.in_tx = True
             yield
         finally:
             self.in_tx = False
+            print("Transaction ending, calling _tick")
             await self._tick()
 
 
