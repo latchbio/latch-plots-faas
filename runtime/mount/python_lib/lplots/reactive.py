@@ -292,41 +292,32 @@ class RCtx:
             for n, _p in to_dispose.values():
                 n.dispose()
 
-            async with self.transaction:
-                for n, p in to_dispose.values():
-                    self.cur_comp = p
+            if len(to_dispose) > 1:
+                async with self.transaction:
+                    for n, p in to_dispose.values():
+                        self.cur_comp = p
 
-                    try:
-                        if n._is_stub:
-                            n._is_stub = False
-                            assert n.cell_id is not None
-                            # reconstruct the function with globals
-                            await _inject.kernel.exec(
-                                cell_id=n.cell_id, code=n.code, _from_stub=True
-                            )
-                        else:
-                            await self.run(n.f, n.code, _cell_id=n.cell_id)
+                        try:
+                            if n._is_stub:
+                                n._is_stub = False
+                                assert n.cell_id is not None
+                                # reconstruct the function with globals
+                                await _inject.kernel.exec(
+                                    cell_id=n.cell_id, code=n.code, _from_stub=True
+                                )
+                            else:
+                                await self.run(n.f, n.code, _cell_id=n.cell_id)
 
-                    except Exception:
-                        print_exc()
-                    finally:
-                        self.cur_comp = None
+                        except Exception:
+                            print_exc()
+                        finally:
+                            self.cur_comp = None
 
         finally:
             await _inject.kernel.on_tick_finished(tick_updated_signals)
-            # await self.gc_signals()
             self.prev_updated_signals = {}
             for sig in live_signals.values():
                 sig._ui_update = False
-
-    # todo(kenny): don't clean up widget signals, potentially others.
-    # async def gc_signals(self) -> None:
-    #     used_signals = {sid for node in live_nodes.values() for sid in node.signals}
-    #     unused_signals = set(live_signal_ids) - used_signals
-
-    #     for sid in unused_signals:
-    #         del live_signals[sid]
-    #         live_signal_ids.remove(sid)
 
     @property
     @asynccontextmanager
