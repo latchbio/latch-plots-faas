@@ -140,7 +140,11 @@ def get_obsm(
 
     # todo(aidan): allow specifying dimensions to fetch (PCA components is an example where this is useful)
     # todo(aidan): support sparse data?
-    obsm = np.asarray(adata.obsm[obsm_key][idxs, :2], dtype=np.float32)  # type: ignore
+    obsm_raw = adata.obsm[obsm_key]
+    if isinstance(obsm_raw, pd.DataFrame):
+        obsm = obsm_raw.iloc[idxs, :2].to_numpy(dtype=np.float32, copy=False)
+    else:
+        obsm = np.asarray(obsm_raw[idxs, :2], dtype=np.float32)
     index = np.asarray(adata.obs_names[idxs])
 
     return obsm, index, recomputed_index
@@ -238,7 +242,11 @@ def mutate_obs_by_lasso(
     lasso_points: list[tuple[int, int]],
     filters: list[dict[str, Any]] | None = None,
 ) -> None:
-    embedding = adata.obsm[obsm_key][:, :2]  # type: ignore
+    obsm_raw = adata.obsm[obsm_key]
+    if isinstance(obsm_raw, pd.DataFrame):
+        embedding = obsm_raw.iloc[:, :2].to_numpy()
+    else:
+        embedding = np.asarray(obsm_raw[:, :2])
 
     if len(lasso_points) < 3:
         return
