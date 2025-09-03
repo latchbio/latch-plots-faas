@@ -144,7 +144,7 @@ def get_obsm(
     if isinstance(obsm_raw, pd.DataFrame):
         obsm = obsm_raw.iloc[idxs, :2].to_numpy(dtype=np.float32, copy=False)
     else:
-        obsm = np.asarray(obsm_raw[idxs, :2], dtype=np.float32)  # type: ignore[index]
+        obsm = np.asarray(obsm_raw[idxs, :2], dtype=np.float32)
     index = np.asarray(adata.obs_names[idxs])
 
     return obsm, index, recomputed_index
@@ -246,7 +246,7 @@ def mutate_obs_by_lasso(
     if isinstance(obsm_raw, pd.DataFrame):
         embedding = obsm_raw.iloc[:, :2].to_numpy()
     else:
-        embedding = np.asarray(obsm_raw[:, :2])  # type: ignore[index]
+        embedding = np.asarray(obsm_raw[:, :2])
 
     if len(lasso_points) < 3:
         return
