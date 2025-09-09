@@ -36,6 +36,7 @@ class H5State(_emit.WidgetState[h5_widget_type, str | ad.AnnData | None]):
     obj_id: str | None
     spatial_dir: LPath | None
     readonly: bool
+    ann_tiles: LPath | None
     appearance: OutputAppearance | None
     viewer_presets: ViewerPreset | None
 
@@ -95,6 +96,7 @@ def w_h5(
     ann_tiles: LPath | None = None,
     readonly: bool = False,
     appearance: OutputAppearance | None = None,
+    viewer_presets: ViewerPreset | None = None,
 ) -> H5:
     key = _state.use_state_key(key=key)
 
@@ -113,6 +115,7 @@ def w_h5(
             "spatial_dir": spatial_dir,
             "ann_tiles": ann_tiles,
             "readonly": readonly,
+            "viewer_presets": viewer_presets,
             "appearance": appearance,
         },
         _signal=_state.use_value_signal(key=key),
