@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from typing import Literal, TypedDict
 
 from latch.ldata.path import LPath
+
 from lplots.h5.utils import auto_install
 from lplots.h5.utils.persistence import use_anndata_key
 
@@ -15,11 +16,28 @@ ad = auto_install.ad
 h5_widget_type: Literal["h5"] = "h5"
 
 
+class ColorByObs(TypedDict):
+    type: Literal["obs"]
+    key: str
+
+
+class ColorByVar(TypedDict):
+    type: Literal["var"]
+    keys: list[str]
+
+
+class ViewerPreset(TypedDict):
+    default_genes: list[str] | None
+    default_color_by: ColorByObs | ColorByVar | None
+    default_cell_marker_size: int | None
+
+
 class H5State(_emit.WidgetState[h5_widget_type, str | ad.AnnData | None]):
     obj_id: str | None
     spatial_dir: LPath | None
     readonly: bool
     appearance: OutputAppearance | None
+    viewer_presets: ViewerPreset | None
 
 
 # note(aidan): typed dict to allow additional values
