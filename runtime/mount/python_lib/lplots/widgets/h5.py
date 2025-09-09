@@ -16,17 +16,17 @@ ad = auto_install.ad
 h5_widget_type: Literal["h5"] = "h5"
 
 
-class ColorByObs(TypedDict):
+class ColorByObs(TypedDict, total=False):
     type: Literal["obs"]
     key: str
 
 
-class ColorByVar(TypedDict):
+class ColorByVar(TypedDict, total=False):
     type: Literal["var"]
     keys: list[str]
 
 
-class ViewerPreset(TypedDict):
+class ViewerPreset(TypedDict, total=False):
     default_genes: list[str] | None
     default_color_by: ColorByObs | ColorByVar | None
     default_cell_marker_size: int | None
