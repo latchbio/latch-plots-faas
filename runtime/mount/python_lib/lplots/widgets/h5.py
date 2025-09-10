@@ -26,10 +26,16 @@ class ColorByVar(TypedDict, total=False):
     keys: list[str]
 
 
+class CellMarkers(TypedDict, total=False):
+    default_size: int | None
+    default_opacity: float | None
+
+
 class ViewerPreset(TypedDict, total=False):
-    default_genes: list[str] | None
+    genes_of_interest: list[str] | None
     default_color_by: ColorByObs | ColorByVar | None
-    default_cell_marker_size: int | None
+    default_obsm_key: str | None
+    cell_markers: CellMarkers | None
 
 
 class H5State(_emit.WidgetState[h5_widget_type, str | ad.AnnData | None]):
