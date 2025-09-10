@@ -486,8 +486,12 @@ def _split_violin_groups(trace: dict[str, Any]) -> list[dict[str, Any]] | None:
         print(f"[plots-faas] violin fan-out: no index axis {index_axis}0 or d{index_axis}", flush=True)
         return None
 
-    if index_axis not in trace or data_axis not in trace:
-        print(f"[plots-faas] violin fan-out: no index axis {index_axis} or data axis {data_axis}", flush=True)
+    if index_axis not in trace:
+        print(f"[plots-faas] violin fan-out: no index axis {index_axis}", flush=True)
+        return None
+
+    if data_axis not in trace:
+        print(f"[plots-faas] violin fan-out: no data axis {data_axis}", flush=True)
         return None
 
     idx_vals = trace.get(index_axis)
