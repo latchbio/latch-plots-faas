@@ -508,7 +508,8 @@ def _split_violin_groups(trace: dict[str, Any]) -> list[dict[str, Any]] | None:
 
     idx_vals = _to_list(trace.get(index_axis))
     vals = _to_list(trace.get(data_axis))
-
+    print('vals', vals, 'len(vals)', len(vals), 'type(vals)', type(vals), 'type(vals[0])', type(vals[0]))
+    print('idx_vals', idx_vals, 'len(idx_vals)', len(idx_vals), 'type(idx_vals)', type(idx_vals), 'type(idx_vals[0])', type(idx_vals[0]))
     # Wide shape: data axis is list-of-lists (G groups)
     if isinstance(vals, list) and len(vals) > 0 and isinstance(vals[0], list):
         print('wide shape', idx_vals, vals)
