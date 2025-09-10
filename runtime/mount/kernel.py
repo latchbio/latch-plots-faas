@@ -478,10 +478,11 @@ class CategorizedCellOutputs:
 # TODO(tim): clean this up and remove redundant checks
 
 def _split_violin_groups(trace: dict[str, Any]) -> list[dict[str, Any]] | None:
+    print('_split_violin_groups trace', trace)
     orientation = trace.get("orientation", "v")
     data_axis = "y" if orientation == "v" else "x"
     index_axis = "x" if orientation == "v" else "y"
-
+    # these look like they're always present, but empty str
     # Skip traces with generated indices (x0/dx or y0/dy)
     # if (f"{index_axis}0" in trace):
     #     print('index axis has _0')
