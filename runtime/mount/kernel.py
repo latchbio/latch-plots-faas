@@ -564,6 +564,8 @@ def _split_violin_groups(trace: dict[str, Any]) -> list[dict[str, Any]] | None:
 
             # Drop index axis to trigger precalc + set name for positioning
             child.pop(index_axis, None)
+            child.pop(f"{index_axis}0", None)          # removes 'x0' (or 'y0')
+            child.pop(f"d{index_axis}", None)          # removes 'dx' (or 'dy') 
             child["name"] = str(labels[g])
 
             group_traces.append(child)
