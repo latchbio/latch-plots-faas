@@ -15,7 +15,7 @@ import socket
 import sys
 import traceback
 from collections import defaultdict
-from copy import copy
+from copy import copy, deepcopy
 from dataclasses import asdict, dataclass, field
 from io import TextIOWrapper
 from pathlib import Path
@@ -475,20 +475,132 @@ class CategorizedCellOutputs:
     figures: list[str] = field(default_factory=list)
     static_figures: list[str] = field(default_factory=list)
 
+# TODO(tim): clean this up and remove redundant checks
+def _split_violin_groups(trace: dict[str, Any]) -> list[dict[str, Any]] | None:
+
+    orientation = trace.get("orientation", "v")
+    data_axis = "y" if orientation == "v" else "x"
+    index_axis = "x" if orientation == "v" else "y"
+
+    if (f"{index_axis}0" in trace and f"d{index_axis}" in trace):
+        return None
+
+    if index_axis not in trace or data_axis not in trace:
+        return None
+
+    idx_vals = trace.get(index_axis)
+    vals = trace.get(data_axis)
+
+    if not isinstance(idx_vals, list) or not isinstance(vals, list):
+        return None
+
+    n = len(vals)
+
+    if len(idx_vals) != n or n == 0:
+        return None
+
+    order: list[Any] = []
+    groups: dict[Any, list[int]] = {}
+    for i, k in enumerate(idx_vals):
+        if k not in groups:
+            groups[k] = []
+            order.append(k)
+        groups[k].append(i)
+
+    if len(order) <= 1:
+        return None
+
+    # Keys with per-point arrays to subset in group traces
+    point_keys_top = ["text", "customdata", "ids", "hovertext", "hovertemplate"]
+
+    def subset_seq(seq: Any, idxs: list[int]) -> Any:
+        if isinstance(seq, list) and len(seq) == n:
+            return [seq[i] for i in idxs]
+        return seq
+
+    # Precomputed keys to drop in group traces
+    stat_keys = {
+        "q1",
+        "median",
+        "q3",
+        "lowerfence",
+        "upperfence",
+        "mean",
+        "sd",
+        "notchspan",
+        "density",
+        "maxKDE",
+        "count",
+        "span",
+        "bandwidth",
+    }
+
+    group_traces: list[dict[str, Any]] = []
+    for k in order:
+        idxs = groups[k]
+        child = deepcopy(trace)
+
+        child[data_axis] = [vals[i] for i in idxs]
+        child[index_axis] = [k for _ in idxs]
+
+        for sk in stat_keys:
+            if sk in child:
+                child.pop(sk, None)
+
+        for pk in point_keys_top:
+            if pk in child:
+                child[pk] = subset_seq(child[pk], idxs)
+
+        m = child.get("marker")
+        if isinstance(m, dict):
+            for mk in ("size", "color", "opacity", "symbol"):
+                if mk in m:
+                    m[mk] = subset_seq(m[mk], idxs)
+            ml = m.get("line")
+            if isinstance(ml, dict):
+                for lk in ("color", "width"):
+                    if lk in ml:
+                        ml[lk] = subset_seq(ml[lk], idxs)
+
+        group_traces.append(child)
+
+    return group_traces
+
 
 def serialize_plotly_figure(x: BaseFigure) -> object:
     res = x.to_dict()
 
+    data_out: list[dict[str, Any]] = []
     for trace in res["data"]:
         try:
             if trace["type"] == "box":
                 precalc_box(trace)
+                data_out.append(trace)
             elif trace["type"] == "violin":
-                precalc_violin(trace)
+                # NOTE(tim): if the trace has multiple violins,
+                # seperate them into seperate traces so we can precompute
+                # them separately
+                group_traces = _split_violin_groups(trace)
+                if group_traces is not None:
+                    for group_trace in group_traces:
+                        try:
+                            precalc_violin(group_trace)
+                        except Exception:
+                            traceback.print_exc()
+                        data_out.append(group_trace)
+                else:
+                    precalc_violin(trace)
+                    data_out.append(trace)
             elif trace["type"] == "scatter":
                 trace["type"] = "scattergl"
+                data_out.append(trace)
+            else:
+                data_out.append(trace)
         except Exception:
             traceback.print_exc()
+            data_out.append(trace)
+
+    res["data"] = data_out
 
     modules = {
         "sage_all": pio_json.get_module("sage.all", should_load=False),
