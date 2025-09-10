@@ -483,20 +483,24 @@ def _split_violin_groups(trace: dict[str, Any]) -> list[dict[str, Any]] | None:
     index_axis = "x" if orientation == "v" else "y"
 
     if (f"{index_axis}0" in trace and f"d{index_axis}" in trace):
+        print(f"[plots-faas] violin fan-out: no index axis {index_axis}0 or d{index_axis}", flush=True)
         return None
 
     if index_axis not in trace or data_axis not in trace:
+        print(f"[plots-faas] violin fan-out: no index axis {index_axis} or data axis {data_axis}", flush=True)
         return None
 
     idx_vals = trace.get(index_axis)
     vals = trace.get(data_axis)
 
     if not isinstance(idx_vals, list) or not isinstance(vals, list):
+        print(f"[plots-faas] violin fan-out: no index axis {index_axis} or data axis {data_axis}", flush=True)
         return None
 
     n = len(vals)
 
     if len(idx_vals) != n or n == 0:
+        print(f"[plots-faas] violin fan-out: no index axis {index_axis} or data axis {data_axis}", flush=True)
         return None
 
     order: list[Any] = []
@@ -508,6 +512,7 @@ def _split_violin_groups(trace: dict[str, Any]) -> list[dict[str, Any]] | None:
         groups[k].append(i)
 
     if len(order) <= 1:
+        print(f"[plots-faas] violin fan-out: no index axis {index_axis} or data axis {data_axis}", flush=True)
         return None
 
     # Keys with per-point arrays to subset in group traces
