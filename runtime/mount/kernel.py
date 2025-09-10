@@ -526,8 +526,6 @@ def _split_violin_groups(trace: dict[str, Any]) -> list[dict[str, Any]] | None:
             "density",
             "maxKDE",
             "count",
-            "span",
-            "bandwidth",
         }
 
         point_keys_top = ["text", "customdata", "ids", "hovertext", "hovertemplate"]
@@ -563,6 +561,21 @@ def _split_violin_groups(trace: dict[str, Any]) -> list[dict[str, Any]] | None:
                     for lk in ("color", "width"):
                         if lk in ml:
                             ml[lk] = subset_seq_wide(ml[lk], g)
+
+            # Propagate user-provided per-group params (e.g., span/bandwidth)
+            if "bandwidth" in trace:
+                bw = _to_list(trace.get("bandwidth"))
+                if isinstance(bw, list) and len(bw) == G and (not bw or not isinstance(bw[0], (list, tuple, np.ndarray))):
+                    child["bandwidth"] = bw[g]
+                else:
+                    child["bandwidth"] = bw
+
+            if "span" in trace:
+                sp = _to_list(trace.get("span"))
+                if isinstance(sp, list) and len(sp) == G and sp and isinstance(sp[0], (list, tuple, np.ndarray)):
+                    child["span"] = sp[g]
+                else:
+                    child["span"] = sp
 
             # Drop index axis to trigger precalc + set name for positioning
             child.pop(index_axis, None)
@@ -611,11 +624,11 @@ def _split_violin_groups(trace: dict[str, Any]) -> list[dict[str, Any]] | None:
         "density",
         "maxKDE",
         "count",
-        "span",
-        "bandwidth",
+        # keep user-configurable params like span/bandwidth
     }
 
     group_traces: list[dict[str, Any]] = []
+    pos_by_label = {label: i for i, label in enumerate(order)}
     for k in order:
         idxs = groups[k]
         # Guard against malformed indices
@@ -644,6 +657,22 @@ def _split_violin_groups(trace: dict[str, Any]) -> list[dict[str, Any]] | None:
                 for lk in ("color", "width"):
                     if lk in ml:
                         ml[lk] = subset_seq(ml[lk], idxs)
+
+        # Propagate user-provided per-group params (e.g., span/bandwidth)
+        gi = pos_by_label[k]
+        if "bandwidth" in trace:
+            bw = _to_list(trace.get("bandwidth"))
+            if isinstance(bw, list) and len(bw) == len(order) and (not bw or not isinstance(bw[0], (list, tuple, np.ndarray))):
+                child["bandwidth"] = bw[gi]
+            else:
+                child["bandwidth"] = bw
+
+        if "span" in trace:
+            sp = _to_list(trace.get("span"))
+            if isinstance(sp, list) and len(sp) == len(order) and sp and isinstance(sp[0], (list, tuple, np.ndarray)):
+                child["span"] = sp[gi]
+            else:
+                child["span"] = sp
 
         # Drop index axis to trigger precalc + set name for positioning
         child.pop(index_axis, None)
