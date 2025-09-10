@@ -483,14 +483,14 @@ def _split_violin_groups(trace: dict[str, Any]) -> list[dict[str, Any]] | None:
     index_axis = "x" if orientation == "v" else "y"
 
     # Skip traces with generated indices (x0/dx or y0/dy)
-    if (f"{index_axis}0" in trace):
-        print('index axis has _0')
-        return None
-    if (f"d{index_axis}" in trace):
-        print('index axis has _x')
-        return None
-    # if index_axis not in trace or data_axis not in trace:
+    # if (f"{index_axis}0" in trace):
+    #     print('index axis has _0')
     #     return None
+    # if (f"d{index_axis}" in trace):
+    #     print('index axis has _x')
+    #     return None
+    if index_axis not in trace or data_axis not in trace:
+        return None
 
     # Normalize possible typed arrays (plotly {dtype,bdata} or numpy arrays) to lists
     def _to_list(v: Any) -> Any:
@@ -510,6 +510,7 @@ def _split_violin_groups(trace: dict[str, Any]) -> list[dict[str, Any]] | None:
 
     # Wide shape: data axis is list-of-lists (G groups)
     if isinstance(vals, list) and len(vals) > 0 and isinstance(vals[0], list):
+        print('wide shape', idx_vals, vals)
         G = len(vals)
         labels: list[Any]
         if isinstance(idx_vals, list) and len(idx_vals) == G:
