@@ -569,6 +569,7 @@ def _split_violin_groups(trace: dict[str, Any]) -> list[dict[str, Any]] | None:
 
 def serialize_plotly_figure(x: BaseFigure) -> object:
     res = x.to_dict()
+    orig_n = len(res["data"]) if isinstance(res.get("data"), list) else 0
 
     data_out: list[dict[str, Any]] = []
     for trace in res["data"]:
@@ -582,6 +583,13 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
                 # them separately
                 group_traces = _split_violin_groups(trace)
                 if group_traces is not None:
+                    try:
+                        print(
+                            f"[plots-faas] violin fan-out: groups={len(group_traces)} name={trace.get('name')} orient={trace.get('orientation','v')}",
+                            flush=True,
+                        )
+                    except Exception:
+                        pass
                     for group_trace in group_traces:
                         try:
                             precalc_violin(group_trace)
@@ -601,6 +609,13 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
             data_out.append(trace)
 
     res["data"] = data_out
+    try:
+        print(
+            f"[plots-faas] serialize_plotly_figure: traces in={orig_n}, out={len(res['data'])}",
+            flush=True,
+        )
+    except Exception:
+        pass
 
     modules = {
         "sage_all": pio_json.get_module("sage.all", should_load=False),
