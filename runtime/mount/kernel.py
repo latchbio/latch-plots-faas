@@ -497,15 +497,15 @@ def _split_violin_groups(trace: dict[str, Any]) -> list[dict[str, Any]] | None:
     idx_vals = trace.get(index_axis)
     vals = trace.get(data_axis)
 
-    if not isinstance(idx_vals, list) or not isinstance(vals, list):
-        print(f"[plots-faas] violin fan-out: no index axis {index_axis} or data axis {data_axis}", flush=True)
-        return None
+    # if not isinstance(idx_vals, list) or not isinstance(vals, list):
+    #     print(f"[plots-faas] violin fan-out: no index axis {index_axis} or data axis {data_axis}", flush=True)
+    #     return None
 
-    n = len(vals)
+    # n = len(vals)
 
-    if len(idx_vals) != n or n == 0:
-        print(f"[plots-faas] violin fan-out: no index axis {index_axis} or data axis {data_axis}", flush=True)
-        return None
+    # if len(idx_vals) != n or n == 0:
+    #     print(f"[plots-faas] violin fan-out: no index axis {index_axis} or data axis {data_axis}", flush=True)
+    #     return None
 
     order: list[Any] = []
     groups: dict[Any, list[int]] = {}
@@ -543,6 +543,7 @@ def _split_violin_groups(trace: dict[str, Any]) -> list[dict[str, Any]] | None:
         "span",
         "bandwidth",
     }
+    # create a violin plot of just two traces 
 
     group_traces: list[dict[str, Any]] = []
     for k in order:
