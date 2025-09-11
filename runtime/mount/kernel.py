@@ -603,7 +603,10 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
                         pass
                     for group_trace in group_traces:
                         try:
+                            print("group trace before precalc", group_trace)
                             precalc_violin(group_trace)
+                            print("group trace after precalc", group_trace)
+
                             # After precalc, re-anchor the child on the categorical axis
                             orient = group_trace.get("orientation", "v")
                             pos_axis = "x" if orient == "v" else "y"
@@ -611,7 +614,7 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
                             group_trace.pop(pos_axis, None)          # ensure no point position array
                             group_trace[f"{pos_axis}0"] = label      # categorical anchor
                             group_trace.pop(f"d{pos_axis}", None)    # drop any uniform-index placeholder
-                            # Use computed count when available; fallback to current data length
+                            print("group trace after re-anchor", group_trace)
                         except Exception:
                             traceback.print_exc()
                         data_out.append(group_trace)
