@@ -108,8 +108,8 @@ def precalc_violin(trace: Any):
         i = 0
         t = trace_span[0]
         while i < n and t < trace_span[1] + step / 2:
-            kde = float(kernel(t))
-            density.append({"v": kde, "t": float(t)})
+            kde = kernel(t)
+            density.append({"v": kde, "t": t})
             maxKDE = max(maxKDE, kde)
 
             i += 1
@@ -118,10 +118,3 @@ def precalc_violin(trace: Any):
         trace["density"].append(density)
         trace["maxKDE"].append(maxKDE)
 
-    # Sentinel so Plotly considers the trace "active"
-    try:
-        med = trace["median"][0] if isinstance(trace.get("median"), list) and trace["median"] else float(np.median(trace_data))
-    except Exception:
-        med = float(np.median(trace_data)) if getattr(trace_data, "size", 0) else 0.0
-    # Ensure plain Python float for downstream JSON and Plotly calc.
-    trace[data_axis] = np.asarray([float(med)])

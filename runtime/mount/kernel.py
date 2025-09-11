@@ -573,21 +573,18 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
                             data_axis = "y" if orient == "v" else "x"
                             label     = str(group_trace.get("name", ""))
 
-                            # Anchor each split trace to its categorical slot so
-                            # Plotly centers the label under the violin. We use
-                            # the scalar category anchor (`x0`/`y0`) rather than
-                            # nested position arrays and also clear any step (`d*`).
-                            group_trace.pop(pos_axis, None)
-                            group_trace[f"{pos_axis}0"] = label
-                            group_trace.pop(f"d{pos_axis}", None)
+                            # # Anchor each split trace to its categorical slot
+                            # group_trace.pop(pos_axis, None)
+                            # group_trace[f"{pos_axis}0"] = label
+                            # group_trace.pop(f"d{pos_axis}", None)
 
-                            # Clean any generated placeholders on the data axis too
-                            group_trace.pop(f"{data_axis}0", None)
-                            group_trace.pop(f"d{data_axis}", None)
+                            # # Clean any generated placeholders on the data axis too
+                            # group_trace.pop(f"{data_axis}0", None)
+                            # group_trace.pop(f"d{data_axis}", None)
 
-                            # Clear grouping offset so Plotly doesn't shift
-                            # categories as if they were side-by-side groups.
-                            group_trace.pop("offsetgroup", None)
+                            # # Clear grouping offset so Plotly doesn't shift
+                            # # categories as if they were side-by-side groups.
+                            # group_trace.pop("offsetgroup", None)
 
                             print("group trace after post compute", group_trace)
 
