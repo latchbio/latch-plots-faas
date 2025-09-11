@@ -506,6 +506,8 @@ def _split_violin_groups(trace: dict[str, Any]) -> list[dict[str, Any]] | None:
     # TODO(tim): might not need
     except Exception:
         return None
+    print('idx_arr', idx_arr, 'vals_arr', vals_arr)
+    print('getattr(idx_arr, "ndim", 1)', getattr(idx_arr, "ndim", 1), 'getattr(vals_arr, "ndim", 1)', getattr(vals_arr, "ndim", 1))
     if getattr(idx_arr, "ndim", 1) != 1:
         print('getattr(idx_arr, "ndim", 1) != 1')
     if getattr(vals_arr, "ndim", 1) != 1:
