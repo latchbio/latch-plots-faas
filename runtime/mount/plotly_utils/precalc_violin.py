@@ -117,3 +117,10 @@ def precalc_violin(trace: Any):
 
         trace["density"].append(density)
         trace["maxKDE"].append(maxKDE)
+
+    # Sentinel so Plotly considers the trace "active"
+    try:
+        med = trace["median"][0] if isinstance(trace.get("median"), list) and trace["median"] else float(np.median(trace_data))
+    except Exception:
+        med = float(np.median(trace_data)) if getattr(trace_data, "size", 0) else 0.0
+    trace[data_axis] = np.asarray([med])
