@@ -491,12 +491,14 @@ def _split_violin_groups(trace: dict[str, Any]) -> list[dict[str, Any]] | None:
     # Decode Plotly typed arrays for numeric data
     def _decode_plotly_typed(v: Any) -> Any:
         if isinstance(v, dict) and "bdata" in v and "dtype" in v:
+            # TODO(tim): put in imports
             import base64 as _b64
             buf = _b64.b64decode(v["bdata"])  # type: ignore[arg-type]
             return np.frombuffer(buf, dtype=np.dtype(v["dtype"]))
         return v
 
     try:
+        # TODO(tim): do we need exception handling here?
         idx_arr = np.asarray(trace.get(index_axis))
         vals_arr = np.asarray(_decode_plotly_typed(trace.get(data_axis)))
     except Exception:
@@ -511,6 +513,7 @@ def _split_violin_groups(trace: dict[str, Any]) -> list[dict[str, Any]] | None:
     try:
         codes, uniques = pd.factorize(idx_arr, sort=False)
     except Exception:
+        # TODO(tim): do we need exception handling here?
         # Fallback without pandas
         labels_sorted, first_idx, codes = np.unique(idx_arr, return_index=True, return_inverse=True)
         order_pos = np.argsort(first_idx)
@@ -524,11 +527,13 @@ def _split_violin_groups(trace: dict[str, Any]) -> list[dict[str, Any]] | None:
     codes = np.asarray(codes, dtype=np.int64)
     order_idx = np.argsort(codes, kind="stable")
     counts = np.bincount(codes, minlength=len(order))
+    # edge case where order is empty
     offsets = np.empty(len(order), dtype=np.int64)
     offsets[0] = 0
     if len(order) > 1:
         np.cumsum(counts[:-1], out=offsets[1:])
     print('offsets', offsets, 'counts', counts, 'order', order, 'order_idx', order_idx)
+    # TODO(tim): can prob remove this (from here to end of subset_seq)
     point_keys_top = ["text", "customdata", "ids", "hovertext", "hovertemplate"]
     stat_keys = {"q1", "median", "q3", "lowerfence", "upperfence", "mean", "sd", "notchspan", "density", "maxKDE", "count"}
     def subset_seq(seq: Any, idxs: np.ndarray) -> Any:
@@ -546,6 +551,7 @@ def _split_violin_groups(trace: dict[str, Any]) -> list[dict[str, Any]] | None:
         child = deepcopy(trace)
         child[data_axis] = vals_arr[idxs]
         child[index_axis] = [label for _ in range(idxs.size)]
+        # TODO(tim): can prob remove this (from here to the pops)
         for sk in stat_keys:
             if sk in child:
                 child.pop(sk, None)
@@ -603,8 +609,8 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
                         pass
                     for group_trace in group_traces:
                         try:
-
                             print("group trace before precalc", group_trace)
+
                             precalc_violin(group_trace)
                             print("group trace after precalc", group_trace)
 
@@ -613,7 +619,7 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
                             data_axis = "y" if orient == "v" else "x"
                             label     = str(group_trace.get("name", ""))
 
-                            # Outliers after precalc_violin (list-of-array or array)
+                            # -- ensure at least one point so the category exists
                             dv = group_trace.get(data_axis)
                             if isinstance(dv, list) and dv and hasattr(dv[0], "__len__"):
                                 outliers = np.asarray(dv[0])
@@ -622,26 +628,20 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
                             else:
                                 outliers = np.asarray(dv)
 
-                            n_out = int(getattr(outliers, "size", len(outliers)))
+                            if int(getattr(outliers, "size", len(outliers))) == 0:
+                                group_trace[data_axis] = [np.array([np.nan])]  # dummy point
 
-                            # Ensure at least one point so the category slot exists
-                            if n_out == 0:
-                                group_trace[data_axis] = [np.array([np.nan])]
-                                n_out = 1
-                            elif not isinstance(dv, list) or not hasattr(dv[0], "__len__"):
-                                # Normalize to list-of-array shape if needed
-                                group_trace[data_axis] = [np.asarray(outliers)]
-
-                            # Provide matching positions on the index axis (list-of-array)
-                            group_trace[pos_axis] = [np.full(n_out, label, dtype=object)]
-
-                            # Remove any auto-index placeholders on BOTH axes
-                            group_trace.pop(f"{pos_axis}0", None)
+                            # -- anchor using x0/y0 (not nested x/y)
+                            group_trace.pop(pos_axis, None)                    # remove any x/y arrays
+                            group_trace[f"{pos_axis}0"] = label                # categorical anchor
                             group_trace.pop(f"d{pos_axis}", None)
+
+                            # -- clean any generated placeholders on the data axis too
                             group_trace.pop(f"{data_axis}0", None)
                             group_trace.pop(f"d{data_axis}", None)
 
                             print("group trace after post compute", group_trace)
+
                         except Exception:
                             traceback.print_exc()
                         data_out.append(group_trace)
@@ -664,6 +664,28 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
             flush=True,
         )
     except Exception:
+        pass
+
+    # Ensure categorical axes for violin traces based on orientation
+    try:
+        has_vert_violin = any(
+            isinstance(t, dict) and t.get("type") == "violin" and t.get("orientation", "v") == "v"
+            for t in res.get("data", [])
+        )
+        has_horz_violin = any(
+            isinstance(t, dict) and t.get("type") == "violin" and t.get("orientation", "v") == "h"
+            for t in res.get("data", [])
+        )
+        if has_vert_violin or has_horz_violin:
+            layout = res.setdefault("layout", {})
+            if has_vert_violin:
+                xa = layout.setdefault("xaxis", {})
+                xa["type"] = "category"
+            if has_horz_violin:
+                ya = layout.setdefault("yaxis", {})
+                ya["type"] = "category"
+    except Exception:
+        # Axis typing is best-effort; ignore failures
         pass
 
     modules = {
