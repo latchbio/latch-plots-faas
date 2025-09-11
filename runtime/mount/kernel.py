@@ -475,12 +475,6 @@ class CategorizedCellOutputs:
     figures: list[str] = field(default_factory=list)
     static_figures: list[str] = field(default_factory=list)
 
-# TODO(tim): clean this up and remove redundant checks
-
-
-
-
-# Redefine with simplified ndarray-only implementation (last definition wins)
 def _split_violin_groups(trace: dict[str, Any]) -> list[dict[str, Any]] | None:
     orientation = trace.get("orientation", "v")
     data_axis = "y" if orientation == "v" else "x"
@@ -488,92 +482,52 @@ def _split_violin_groups(trace: dict[str, Any]) -> list[dict[str, Any]] | None:
     if index_axis not in trace or data_axis not in trace:
         return None
 
-    # Decode Plotly typed arrays for numeric data
+    # handle binary plotly typed arrays
     def _decode_plotly_typed(v: Any) -> Any:
         if isinstance(v, dict) and "bdata" in v and "dtype" in v:
-            # TODO(tim): put in imports
             import base64 as _b64
-            buf = _b64.b64decode(v["bdata"])  # type: ignore[arg-type]
+            buf = _b64.b64decode(v["bdata"])
             return np.frombuffer(buf, dtype=np.dtype(v["dtype"]))
         return v
 
     try:
-        # TODO(tim): do we need exception handling here?
+        # TODO(tim): might not need exception handling here?
         idx_arr = np.asarray(trace.get(index_axis))
         vals_arr = np.asarray(_decode_plotly_typed(trace.get(data_axis)))
     except Exception:
         return None
     print('idx_arr', idx_arr, 'vals_arr', vals_arr)
     print('getattr(idx_arr, "ndim", 1)', getattr(idx_arr, "ndim", 1), 'getattr(vals_arr, "ndim", 1)', getattr(vals_arr, "ndim", 1))
+    # make sure input is 1D, not empty, and has the same length
     if getattr(idx_arr, "ndim", 1) != 1 or getattr(vals_arr, "ndim", 1) != 1:
         return None
     n = int(vals_arr.shape[0])
     if n == 0 or int(idx_arr.shape[0]) != n:
         return None
-    try:
-        codes, uniques = pd.factorize(idx_arr, sort=False)
-    except Exception:
-        # TODO(tim): do we need exception handling here?
-        # Fallback without pandas
-        labels_sorted, first_idx, codes = np.unique(idx_arr, return_index=True, return_inverse=True)
-        order_pos = np.argsort(first_idx)
-        uniques = labels_sorted[order_pos]
-        remap = np.empty_like(order_pos)
-        remap[order_pos] = np.arange(order_pos.size)
-        codes = remap[codes]
-    if getattr(uniques, "size", len(uniques)) <= 1:
+
+    # group by category, then build grouped indices
+    codes, uniques = pd.factorize(idx_arr, sort=False)
+    if len(uniques) <= 1:
         return None
     order = uniques.tolist()
-    codes = np.asarray(codes, dtype=np.int64)
+    codes = codes.astype(np.int64, copy=False)
     order_idx = np.argsort(codes, kind="stable")
-    counts = np.bincount(codes, minlength=len(order))
-    # edge case where order is empty
-    offsets = np.empty(len(order), dtype=np.int64)
-    offsets[0] = 0
-    if len(order) > 1:
-        np.cumsum(counts[:-1], out=offsets[1:])
+    counts = np.bincount(codes)
+    offsets = np.r_[0, counts.cumsum()[:-1]]
     print('offsets', offsets, 'counts', counts, 'order', order, 'order_idx', order_idx)
-    # TODO(tim): can prob remove this (from here to end of subset_seq)
-    point_keys_top = ["text", "customdata", "ids", "hovertext", "hovertemplate"]
-    stat_keys = {"q1", "median", "q3", "lowerfence", "upperfence", "mean", "sd", "notchspan", "density", "maxKDE", "count"}
-    def subset_seq(seq: Any, idxs: np.ndarray) -> Any:
-        if isinstance(seq, np.ndarray) and getattr(seq, "ndim", 1) == 1 and len(seq) == n:
-            return seq[idxs]
-        if isinstance(seq, list) and len(seq) == n:
-            return [seq[int(i)] for i in idxs]
-        return seq
     
     group_traces: list[dict[str, Any]] = []
-    for gi, label in enumerate(order):
-        start = offsets[gi]
-        stop = start + counts[gi]
+    for group_idx, label in enumerate(order):
+        start = offsets[group_idx]
+        stop = start + counts[group_idx]
         idxs = order_idx[start:stop]
         child = deepcopy(trace)
         child[data_axis] = vals_arr[idxs]
-        child[index_axis] = [label for _ in range(idxs.size)]
-        # TODO(tim): can prob remove this (from here to the pops)
-        for sk in stat_keys:
-            if sk in child:
-                child.pop(sk, None)
-        for pk in point_keys_top:
-            if pk in child:
-                child[pk] = subset_seq(child[pk], idxs)
-        m = child.get("marker")
-        if isinstance(m, dict):
-            for mk in ("size", "color", "opacity", "symbol"):
-                if mk in m:
-                    m[mk] = subset_seq(m[mk], idxs)
-            ml = m.get("line")
-            if isinstance(ml, dict):
-                for lk in ("color", "width"):
-                    if lk in ml:
-                        ml[lk] = subset_seq(ml[lk], idxs)
+        # clear any indexes that will cause trouble in precalc_violin
         child.pop(index_axis, None)
-        # Clear any placeholder generated indices from PX, then set categorical anchor
         child.pop(f"{index_axis}0", None)
         child.pop(f"d{index_axis}", None)
         child["name"] = str(label)
-        # child[f"{index_axis}0"] = str(label)
         print(
             "[split_violin] child:",
             "label=", label,
@@ -658,27 +612,23 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
     except Exception:
         pass
 
-    # Ensure categorical axes for violin traces based on orientation
-    try:
-        has_vert_violin = any(
-            isinstance(t, dict) and t.get("type") == "violin" and t.get("orientation", "v") == "v"
-            for t in res.get("data", [])
-        )
-        has_horz_violin = any(
-            isinstance(t, dict) and t.get("type") == "violin" and t.get("orientation", "v") == "h"
-            for t in res.get("data", [])
-        )
-        if has_vert_violin or has_horz_violin:
-            layout = res.setdefault("layout", {})
-            if has_vert_violin:
-                xa = layout.setdefault("xaxis", {})
-                xa["type"] = "category"
-            if has_horz_violin:
-                ya = layout.setdefault("yaxis", {})
-                ya["type"] = "category"
-    except Exception:
-        # Axis typing is best-effort; ignore failures
-        pass
+    # Set layout and categorical axes for violin traces
+    has_vert_violin = any(
+        isinstance(t, dict) and t.get("type") == "violin" and t.get("orientation", "v") == "v"
+        for t in res.get("data", [])
+    )
+    has_horz_violin = any(
+        isinstance(t, dict) and t.get("type") == "violin" and t.get("orientation", "v") == "h"
+        for t in res.get("data", [])
+    )
+    if has_vert_violin or has_horz_violin:
+        layout = res.setdefault("layout", {})
+        if has_vert_violin:
+            xa = layout.setdefault("xaxis", {})
+            xa["type"] = "category"
+        if has_horz_violin:
+            ya = layout.setdefault("yaxis", {})
+            ya["type"] = "category"
 
     modules = {
         "sage_all": pio_json.get_module("sage.all", should_load=False),
