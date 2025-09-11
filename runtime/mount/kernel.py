@@ -619,17 +619,6 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
                             data_axis = "y" if orient == "v" else "x"
                             label     = str(group_trace.get("name", ""))
 
-                            # -- ensure at least one point so the category exists
-                            dv = group_trace.get(data_axis)
-                            if isinstance(dv, list) and dv and hasattr(dv[0], "__len__"):
-                                outliers = np.asarray(dv[0])
-                            elif isinstance(dv, list):
-                                outliers = np.array([])
-                            else:
-                                outliers = np.asarray(dv)
-
-                            if int(getattr(outliers, "size", len(outliers))) == 0:
-                                group_trace[data_axis] = [np.array([np.nan])]  # dummy point
 
                             # -- anchor using x0/y0 (not nested x/y)
                             group_trace.pop(pos_axis, None)                    # remove any x/y arrays
@@ -639,6 +628,9 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
                             # -- clean any generated placeholders on the data axis too
                             group_trace.pop(f"{data_axis}0", None)
                             group_trace.pop(f"d{data_axis}", None)
+
+                            # Clear grouping offset so each category centers its violin
+                            group_trace.pop("offsetgroup", None)
 
                             print("group trace after post compute", group_trace)
 
