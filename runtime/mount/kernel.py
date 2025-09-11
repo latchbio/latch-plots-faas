@@ -603,18 +603,45 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
                         pass
                     for group_trace in group_traces:
                         try:
+
                             print("group trace before precalc", group_trace)
                             precalc_violin(group_trace)
                             print("group trace after precalc", group_trace)
 
-                            # After precalc, re-anchor the child on the categorical axis
-                            orient = group_trace.get("orientation", "v")
-                            pos_axis = "x" if orient == "v" else "y"
-                            label = str(group_trace.get("name", ""))
-                            group_trace.pop(pos_axis, None)          # ensure no point position array
-                            group_trace[f"{pos_axis}0"] = label      # categorical anchor
-                            group_trace.pop(f"d{pos_axis}", None)    # drop any uniform-index placeholder
-                            print("group trace after re-anchor", group_trace)
+                            orient    = group_trace.get("orientation", "v")
+                            pos_axis  = "x" if orient == "v" else "y"   # categorical axis
+                            data_axis = "y" if orient == "v" else "x"
+                            label     = str(group_trace.get("name", ""))
+
+                            # Outliers after precalc_violin (list-of-array or array)
+                            dv = group_trace.get(data_axis)
+                            if isinstance(dv, list) and dv and hasattr(dv[0], "__len__"):
+                                outliers = np.asarray(dv[0])
+                            elif isinstance(dv, list):
+                                outliers = np.array([])
+                            else:
+                                outliers = np.asarray(dv)
+
+                            n_out = int(getattr(outliers, "size", len(outliers)))
+
+                            # Ensure at least one point so the category slot exists
+                            if n_out == 0:
+                                group_trace[data_axis] = [np.array([np.nan])]
+                                n_out = 1
+                            elif not isinstance(dv, list) or not hasattr(dv[0], "__len__"):
+                                # Normalize to list-of-array shape if needed
+                                group_trace[data_axis] = [np.asarray(outliers)]
+
+                            # Provide matching positions on the index axis (list-of-array)
+                            group_trace[pos_axis] = [np.full(n_out, label, dtype=object)]
+
+                            # Remove any auto-index placeholders on BOTH axes
+                            group_trace.pop(f"{pos_axis}0", None)
+                            group_trace.pop(f"d{pos_axis}", None)
+                            group_trace.pop(f"{data_axis}0", None)
+                            group_trace.pop(f"d{data_axis}", None)
+
+                            print("group trace after post compute", group_trace)
                         except Exception:
                             traceback.print_exc()
                         data_out.append(group_trace)
