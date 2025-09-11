@@ -485,55 +485,39 @@ def _split_violin_groups(trace: dict[str, Any]) -> list[dict[str, Any]] | None:
     orientation = trace.get("orientation", "v")
     data_axis = "y" if orientation == "v" else "x"
     index_axis = "x" if orientation == "v" else "y"
-    if index_axis not  in trace:
-        print('index_axis', index_axis, 'in trace')
-    if data_axis not in trace:
-        print('data_axis', data_axis, 'in trace')
     if index_axis not in trace or data_axis not in trace:
         return None
+
+    # Decode Plotly typed arrays for numeric data
+    def _decode_plotly_typed(v: Any) -> Any:
+        if isinstance(v, dict) and "bdata" in v and "dtype" in v:
+            import base64 as _b64
+            buf = _b64.b64decode(v["bdata"])  # type: ignore[arg-type]
+            return np.frombuffer(buf, dtype=np.dtype(v["dtype"]))
+        return v
+
     try:
         idx_arr = np.asarray(trace.get(index_axis))
-    except Exception:
-        print('exception parsing index_axis')
-        return None
-    try:
-        vals_arr = np.asarray(trace.get(data_axis))
-    except Exception:
-        print('exception parsing data_axis')
-    try:
-        idx_arr = np.asarray(trace.get(index_axis))
-        vals_arr = np.asarray(trace.get(data_axis))
-    # TODO(tim): might not need
+        vals_arr = np.asarray(_decode_plotly_typed(trace.get(data_axis)))
     except Exception:
         return None
     print('idx_arr', idx_arr, 'vals_arr', vals_arr)
     print('getattr(idx_arr, "ndim", 1)', getattr(idx_arr, "ndim", 1), 'getattr(vals_arr, "ndim", 1)', getattr(vals_arr, "ndim", 1))
-    if getattr(idx_arr, "ndim", 1) != 1:
-        print('getattr(idx_arr, "ndim", 1) != 1')
-    if getattr(vals_arr, "ndim", 1) != 1:
-        print('getattr(vals_arr, "ndim", 1) != 1')
     if getattr(idx_arr, "ndim", 1) != 1 or getattr(vals_arr, "ndim", 1) != 1:
         return None
     n = int(vals_arr.shape[0])
-    if n == 0:
-        print('n == 0')
-    if int(idx_arr.shape[0]) != n:
-        print('int(idx_arr.shape[0]) != n')
     if n == 0 or int(idx_arr.shape[0]) != n:
         return None
     try:
         codes, uniques = pd.factorize(idx_arr, sort=False)
     except Exception:
-        # TODO(tim): might not need
-        print('numpy case')
+        # Fallback without pandas
         labels_sorted, first_idx, codes = np.unique(idx_arr, return_index=True, return_inverse=True)
         order_pos = np.argsort(first_idx)
         uniques = labels_sorted[order_pos]
         remap = np.empty_like(order_pos)
         remap[order_pos] = np.arange(order_pos.size)
         codes = remap[codes]
-    if getattr(uniques, "size", len(uniques)) <= 1:
-        print('getattr(uniques, "size", len(uniques)) <= 1')
     if getattr(uniques, "size", len(uniques)) <= 1:
         return None
     order = uniques.tolist()
