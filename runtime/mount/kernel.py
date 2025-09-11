@@ -606,29 +606,12 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
                             precalc_violin(group_trace)
                             # After precalc, re-anchor the child on the categorical axis
                             orient = group_trace.get("orientation", "v")
-                            data_axis = "y" if orient == "v" else "x"
-                            index_axis = "x" if orient == "v" else "y"
+                            pos_axis = "x" if orient == "v" else "y"
                             label = str(group_trace.get("name", ""))
+                            group_trace.pop(pos_axis, None)          # ensure no point position array
+                            group_trace[f"{pos_axis}0"] = label      # categorical anchor
+                            group_trace.pop(f"d{pos_axis}", None)    # drop any uniform-index placeholder
                             # Use computed count when available; fallback to current data length
-                            try:
-                                cnt_list = group_trace.get("count")
-                                cnt = int(cnt_list[0]) if isinstance(cnt_list, list) and cnt_list else None
-                            except Exception:
-                                cnt = None
-                            if cnt is None:
-                                dv = group_trace.get(data_axis)
-                                if isinstance(dv, list):
-                                    # If outliers were substituted, dv may be a list-of-array
-                                    cnt = len(dv[0]) if dv and hasattr(dv[0], "__len__") else len(dv)
-                                else:
-                                    try:
-                                        cnt = len(dv)
-                                    except Exception:
-                                        cnt = 0
-                            if cnt and label:
-                                group_trace[index_axis] = [label for _ in range(cnt)]
-                                group_trace.pop(f"{index_axis}0", None)
-                                group_trace.pop(f"d{index_axis}", None)
                         except Exception:
                             traceback.print_exc()
                         data_out.append(group_trace)
