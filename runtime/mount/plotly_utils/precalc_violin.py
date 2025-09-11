@@ -74,8 +74,7 @@ def precalc_violin(trace: Any):
                 silverman = 1.059 * min(ssd, iqr / 1.349) * pow(l, -0.2)
                 bandwidth = max(silverman, (q4 - q0) / 100)
             else:
-                # Avoid zero bandwidth for size=1 or zero variance distributions
-                bandwidth = 1
+                bandwidth = 0
             trace["bandwidth"] = [bandwidth]
 
         # >>> span
