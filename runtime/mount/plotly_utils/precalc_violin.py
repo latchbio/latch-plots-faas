@@ -108,8 +108,8 @@ def precalc_violin(trace: Any):
         i = 0
         t = trace_span[0]
         while i < n and t < trace_span[1] + step / 2:
-            kde = kernel(t)
-            density.append({"v": kde, "t": t})
+            kde = float(kernel(t))
+            density.append({"v": kde, "t": float(t)})
             maxKDE = max(maxKDE, kde)
 
             i += 1
@@ -123,4 +123,5 @@ def precalc_violin(trace: Any):
         med = trace["median"][0] if isinstance(trace.get("median"), list) and trace["median"] else float(np.median(trace_data))
     except Exception:
         med = float(np.median(trace_data)) if getattr(trace_data, "size", 0) else 0.0
-    trace[data_axis] = np.asarray([med])
+    # Ensure plain Python float for downstream JSON and Plotly calc.
+    trace[data_axis] = np.asarray([float(med)])
