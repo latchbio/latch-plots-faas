@@ -516,7 +516,6 @@ def _split_violin_groups(trace: dict[str, Any]) -> list[dict[str, Any]] | None:
     offsets = np.cumsum(np.r_[0, counts[:-1]])
     point_keys_top = ["text", "customdata", "ids", "hovertext", "hovertemplate"]
     stat_keys = {"q1", "median", "q3", "lowerfence", "upperfence", "mean", "sd", "notchspan", "density", "maxKDE", "count"}
-    
     def subset_seq(seq: Any, idxs: np.ndarray) -> Any:
         if isinstance(seq, np.ndarray) and getattr(seq, "ndim", 1) == 1 and len(seq) == n:
             return seq[idxs]
@@ -525,8 +524,10 @@ def _split_violin_groups(trace: dict[str, Any]) -> list[dict[str, Any]] | None:
         return seq
     
     group_traces: list[dict[str, Any]] = []
+    print('order', order, 'offsets', offsets, 'counts', counts, 'order_idx', order_idx)
     for gi, label in enumerate(order):
-        start = offsets[gi]; stop = start + counts[gi]
+        start = offsets[gi]
+        stop = start + counts[gi]
         idxs = order_idx[start:stop]
         child = deepcopy(trace)
         child[data_axis] = vals_arr[idxs]
