@@ -502,6 +502,7 @@ def _split_violin_groups(trace: dict[str, Any]) -> list[dict[str, Any]] | None:
         codes, uniques = pd.factorize(idx_arr, sort=False)
     except Exception:
         # TODO(tim): might not need
+        print('numpy case')
         labels_sorted, first_idx, codes = np.unique(idx_arr, return_index=True, return_inverse=True)
         order_pos = np.argsort(first_idx)
         uniques = labels_sorted[order_pos]
@@ -511,9 +512,13 @@ def _split_violin_groups(trace: dict[str, Any]) -> list[dict[str, Any]] | None:
     if getattr(uniques, "size", len(uniques)) <= 1:
         return None
     order = uniques.tolist()
+    codes = np.asarray(codes, dtype=np.int64)
     order_idx = np.argsort(codes, kind="stable")
     counts = np.bincount(codes, minlength=len(order))
-    offsets = np.cumsum(np.r_[0, counts[:-1]])
+    offsets = np.empty(len(order), dtype=np.int64)
+    offsets[0] = 0
+    if len(order) > 1:
+        np.cumsum(counts[:-1], out=offsets[1:])
     point_keys_top = ["text", "customdata", "ids", "hovertext", "hovertemplate"]
     stat_keys = {"q1", "median", "q3", "lowerfence", "upperfence", "mean", "sd", "notchspan", "density", "maxKDE", "count"}
     def subset_seq(seq: Any, idxs: np.ndarray) -> Any:
@@ -524,7 +529,6 @@ def _split_violin_groups(trace: dict[str, Any]) -> list[dict[str, Any]] | None:
         return seq
     
     group_traces: list[dict[str, Any]] = []
-    print('order', order, 'offsets', offsets, 'counts', counts, 'order_idx', order_idx)
     for gi, label in enumerate(order):
         start = offsets[gi]
         stop = start + counts[gi]
