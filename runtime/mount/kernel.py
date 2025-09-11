@@ -485,17 +485,38 @@ def _split_violin_groups(trace: dict[str, Any]) -> list[dict[str, Any]] | None:
     orientation = trace.get("orientation", "v")
     data_axis = "y" if orientation == "v" else "x"
     index_axis = "x" if orientation == "v" else "y"
+    if index_axis not  in trace:
+        print('index_axis', index_axis, 'in trace')
+    if data_axis not in trace:
+        print('data_axis', data_axis, 'in trace')
     if index_axis not in trace or data_axis not in trace:
         return None
+    try:
+        idx_arr = np.asarray(trace.get(index_axis))
+    except Exception:
+        print('exception parsing index_axis')
+        return None
+    try:
+        vals_arr = np.asarray(trace.get(data_axis))
+    except Exception:
+        print('exception parsing data_axis')
     try:
         idx_arr = np.asarray(trace.get(index_axis))
         vals_arr = np.asarray(trace.get(data_axis))
     # TODO(tim): might not need
     except Exception:
         return None
+    if getattr(idx_arr, "ndim", 1) != 1:
+        print('getattr(idx_arr, "ndim", 1) != 1')
+    if getattr(vals_arr, "ndim", 1) != 1:
+        print('getattr(vals_arr, "ndim", 1) != 1')
     if getattr(idx_arr, "ndim", 1) != 1 or getattr(vals_arr, "ndim", 1) != 1:
         return None
     n = int(vals_arr.shape[0])
+    if n == 0:
+        print('n == 0')
+    if int(idx_arr.shape[0]) != n:
+        print('int(idx_arr.shape[0]) != n')
     if n == 0 or int(idx_arr.shape[0]) != n:
         return None
     try:
@@ -510,6 +531,8 @@ def _split_violin_groups(trace: dict[str, Any]) -> list[dict[str, Any]] | None:
         remap[order_pos] = np.arange(order_pos.size)
         codes = remap[codes]
     if getattr(uniques, "size", len(uniques)) <= 1:
+        print('getattr(uniques, "size", len(uniques)) <= 1')
+    if getattr(uniques, "size", len(uniques)) <= 1:
         return None
     order = uniques.tolist()
     codes = np.asarray(codes, dtype=np.int64)
@@ -519,6 +542,7 @@ def _split_violin_groups(trace: dict[str, Any]) -> list[dict[str, Any]] | None:
     offsets[0] = 0
     if len(order) > 1:
         np.cumsum(counts[:-1], out=offsets[1:])
+    print('offsets', offsets, 'counts', counts, 'order', order, 'order_idx', order_idx)
     point_keys_top = ["text", "customdata", "ids", "hovertext", "hovertemplate"]
     stat_keys = {"q1", "median", "q3", "lowerfence", "upperfence", "mean", "sd", "notchspan", "density", "maxKDE", "count"}
     def subset_seq(seq: Any, idxs: np.ndarray) -> Any:
