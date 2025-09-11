@@ -20,6 +20,7 @@ def precalc_violin(trace: Any):
 
     if index_axis in trace:
         # todo(maximsmol): support multibox traces
+        print('index_axis', index_axis, 'in trace')
         return
 
     # note(maximsmol): box precalc will replace this with outliers
@@ -29,6 +30,7 @@ def precalc_violin(trace: Any):
 
     # todo(maximsmol): we don't necessarily need all the data here
     if not precalc_box(trace):
+        print('precalc_box returned False')
         return
 
     trace["density"] = []

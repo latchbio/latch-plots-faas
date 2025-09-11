@@ -18,6 +18,7 @@ def precalc_box(trace: Any):
             "notchspan",
         ]
     ):
+        print("q1 in trace", "q1" in trace, "median in trace", "median" in trace, "q3 in trace", "q3" in trace, "lowerfence in trace", "lowerfence" in trace, "upperfence in trace", "upperfence" in trace, "mean in trace", "mean" in trace, "sd in trace", "sd" in trace, "notchspan in trace", "notchspan" in trace)
         return False
 
     boxpoints = trace.get(
@@ -27,10 +28,12 @@ def precalc_box(trace: Any):
     )
     if boxpoints == "all":
         # todo(maximsmol): support subsampling points
+        print("boxpoints", boxpoints, "all")
         return False
 
     if trace.get("quartilemethod", "linear") != "linear":
         # todo(maximsmol): support other quantile methods
+        print("quartilemethod", trace.get("quartilemethod", "linear"), "not linear")
         return False
 
     orientation = trace.get("orientation", "v")
@@ -40,6 +43,7 @@ def precalc_box(trace: Any):
     if index_axis in trace or (f"{index_axis}0" in trace and f"d{index_axis}" in trace):
         # todo(maximsmol): support multibox traces
         # todo(maximsmol): support generated index axes
+        print("index_axis", index_axis, "in trace or", f"{index_axis}0" in trace, "and", f"d{index_axis}" in trace)
         return False
 
     data = np.sort(np.array(trace.get(data_axis, [])))
