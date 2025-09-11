@@ -563,9 +563,18 @@ def _split_violin_groups(trace: dict[str, Any]) -> list[dict[str, Any]] | None:
                     if lk in ml:
                         ml[lk] = subset_seq(ml[lk], idxs)
         child.pop(index_axis, None)
+        # Clear any placeholder generated indices from PX, then set categorical anchor
         child.pop(f"{index_axis}0", None)
         child.pop(f"d{index_axis}", None)
         child["name"] = str(label)
+        child[f"{index_axis}0"] = str(label)
+        print(
+            "[split_violin] child:",
+            "label=", label,
+            "name=", child.get("name"),
+            f"{index_axis}0=", child.get(f"{index_axis}0"),
+            "n=", int(idxs.size),
+        )
         group_traces.append(child)
     return group_traces
 
