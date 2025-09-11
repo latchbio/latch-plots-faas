@@ -569,22 +569,22 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
                             print("group trace after precalc", group_trace)
 
                             orient    = group_trace.get("orientation", "v")
-                            pos_axis  = "x" if orient == "v" else "y"   # categorical axis
+                            pos_axis  = "x" if orient == "v" else "y"
                             data_axis = "y" if orient == "v" else "x"
                             label     = str(group_trace.get("name", ""))
 
-
+                            # TODO(tim): might no longer need this
                             # -- anchor using x0/y0 (not nested x/y)
-                            group_trace.pop(pos_axis, None)                    # remove any x/y arrays
-                            group_trace[f"{pos_axis}0"] = label                # categorical anchor
-                            group_trace.pop(f"d{pos_axis}", None)
+                            # group_trace.pop(pos_axis, None)                    
+                            # group_trace[f"{pos_axis}0"] = label
+                            # group_trace.pop(f"d{pos_axis}", None)
 
                             # -- clean any generated placeholders on the data axis too
-                            group_trace.pop(f"{data_axis}0", None)
-                            group_trace.pop(f"d{data_axis}", None)
+                            # group_trace.pop(f"{data_axis}0", None)
+                            # group_trace.pop(f"d{data_axis}", None)
 
                             # Clear grouping offset so each category centers its violin
-                            group_trace.pop("offsetgroup", None)
+                            # group_trace.pop("offsetgroup", None)
 
                             print("group trace after post compute", group_trace)
 
@@ -612,6 +612,7 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
     except Exception:
         pass
 
+    # TODO:(tim): consider only setting category for exact violin axes
     # Set layout and categorical axes for violin traces
     has_vert_violin = any(
         isinstance(t, dict) and t.get("type") == "violin" and t.get("orientation", "v") == "v"
