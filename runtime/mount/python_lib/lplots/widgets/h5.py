@@ -36,6 +36,8 @@ class ViewerPreset(TypedDict, total=False):
     default_color_by: ColorByObs | ColorByVar | None
     default_obsm_key: str | None
     cell_markers: CellMarkers | None
+    categorical_color_palette: list[str] | None
+    continuous_color_palette: list[str] | None
 
 
 class H5State(_emit.WidgetState[h5_widget_type, str | ad.AnnData | None]):
