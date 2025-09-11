@@ -477,204 +477,81 @@ class CategorizedCellOutputs:
 
 # TODO(tim): clean this up and remove redundant checks
 
+
+
+
+# Redefine with simplified ndarray-only implementation (last definition wins)
 def _split_violin_groups(trace: dict[str, Any]) -> list[dict[str, Any]] | None:
-    print('_split_violin_groups trace', trace)
     orientation = trace.get("orientation", "v")
     data_axis = "y" if orientation == "v" else "x"
     index_axis = "x" if orientation == "v" else "y"
-    # these look like they're always present, but empty str
-    # Skip traces with generated indices (x0/dx or y0/dy)
-    # if (f"{index_axis}0" in trace):
-    #     print('index axis has _0')
-    #     return None
-    # if (f"d{index_axis}" in trace):
-    #     print('index axis has _x')
-    #     return None
     if index_axis not in trace or data_axis not in trace:
         return None
-
-    # Normalize possible typed arrays (plotly {dtype,bdata}) but preserve numpy arrays
-    # def _to_seq(v: Any) -> Any:
-    #     try:
-    #         if isinstance(v, dict) and "bdata" in v and "dtype" in v:
-    #             import base64 as _b64
-    #             buf = _b64.b64decode(v["bdata"])  # type: ignore[arg-type]
-    #             return np.frombuffer(buf, dtype=np.dtype(v["dtype"]))
-    #         if isinstance(v, np.ndarray):
-    #             return v
-    #     except Exception:
-    #         pass
-    #     return v
-
-    # idx_vals = _to_seq(trace.get(index_axis))
-    # vals = _to_seq(trace.get(data_axis))
-
-    idx_vals = np.array(trace.get(data_axis, []))
-    vals = np.array(trace.get(data_axis, []))
-    # vals = trace.get(data_axis)
-
-    print('vals', vals, 'len(vals)', len(vals), 'type(vals)', type(vals), 'type(vals[0])', type(vals[0]))
-    print('idx_vals', idx_vals, 'len(idx_vals)', len(idx_vals), 'type(idx_vals)', type(idx_vals), 'type(idx_vals[0])', type(idx_vals[0]))
-
-    # Plotly express processes wide lists to long form
-    # Wide shape: data axis is list-of-lists (G groups)
-    # if isinstance(vals, list) and len(vals) > 0 and isinstance(vals[0], list):
-    #     print('wide shape', idx_vals, vals)
-    #     G = len(vals)
-    #     labels: list[Any]
-    #     if isinstance(idx_vals, list) and len(idx_vals) == G:
-    #         labels = idx_vals
-    #     else:
-    #         labels = [f"g{i}" for i in range(G)]
-
-    #     stat_keys = {
-    #         "q1",
-    #         "median",
-    #         "q3",
-    #         "lowerfence",
-    #         "upperfence",
-    #         "mean",
-    #         "sd",
-    #         "notchspan",
-    #         "density",
-    #         "maxKDE",
-    #         "count",
-    #     }
-
-    #     point_keys_top = ["text", "customdata", "ids", "hovertext", "hovertemplate"]
-
-    #     def subset_seq_wide(seq: Any, g: int) -> Any:
-    #         seq = _to_list(seq)
-    #         if isinstance(seq, list) and len(seq) == G and seq and isinstance(seq[0], list):
-    #             return seq[g]
-    #         return seq
-
-    #     group_traces: list[dict[str, Any]] = []
-    #     for g in range(G):
-    #         samples = _to_list(vals[g])
-    #         child = deepcopy(trace)
-    #         child[data_axis] = samples
-    #         child[index_axis] = [labels[g] for _ in range(len(samples))]
-
-    #         for sk in stat_keys:
-    #             if sk in child:
-    #                 child.pop(sk, None)
-
-    #         for pk in point_keys_top:
-    #             if pk in child:
-    #                 child[pk] = subset_seq_wide(child[pk], g)
-
-    #         m = child.get("marker")
-    #         if isinstance(m, dict):
-    #             for mk in ("size", "color", "opacity", "symbol"):
-    #                 if mk in m:
-    #                     m[mk] = subset_seq_wide(m[mk], g)
-    #             ml = m.get("line")
-    #             if isinstance(ml, dict):
-    #                 for lk in ("color", "width"):
-    #                     if lk in ml:
-    #                         ml[lk] = subset_seq_wide(ml[lk], g)
-
-    #         # Drop index axis to trigger precalc + set name for positioning
-    #         child.pop(index_axis, None)
-    #         child.pop(f"{index_axis}0", None)          # removes 'x0' (or 'y0')
-    #         child.pop(f"d{index_axis}", None)          # removes 'dx' (or 'dy') 
-    #         child["name"] = str(labels[g])
-
-    #         group_traces.append(child)
-
-    #     return group_traces
-
-    # Long shape: both arrays are flat per-point lists of equal length
-    if not isinstance(idx_vals, list) or not (isinstance(vals, list) or isinstance(vals, np.ndarray)):
+    try:
+        idx_arr = np.asarray(trace.get(index_axis))
+        vals_arr = np.asarray(trace.get(data_axis))
+    # TODO(tim): might not need
+    except Exception:
         return None
-
-    # TODO(tim): could make idx vals != 0 as well check, might not be needed tho
-    n = len(vals)
-    if n == 0 or len(idx_vals) != n:
+    if getattr(idx_arr, "ndim", 1) != 1 or getattr(vals_arr, "ndim", 1) != 1:
         return None
-
-    order: list[Any] = []
-    groups: dict[Any, list[int]] = {}
-    for i, k in enumerate(idx_vals):
-        if k not in groups:
-            groups[k] = []
-            order.append(k)
-        groups[k].append(i)
-    print('groups', groups, 'order', order)
-    # TODO(tim): if this neccesary? maybe we could also check len(idx_vals) in cond above
-    if len(order) <= 1:
+    n = int(vals_arr.shape[0])
+    if n == 0 or int(idx_arr.shape[0]) != n:
         return None
-
-    # point_keys_top = ["text", "customdata", "ids", "hovertext", "hovertemplate"]
-
-    # def subset_seq(seq: Any, idxs: list[int]) -> Any:
-    #     seq = _to_seq(seq)
-    #     if isinstance(seq, np.ndarray) and getattr(seq, "ndim", 1) == 1 and len(seq) == n:
-    #         return seq[idxs]
-    #     if isinstance(seq, list) and len(seq) == n:
-    #         return [seq[i] for i in idxs]
-    #     return seq
-
-    # stat_keys = {
-    #     "q1",
-    #     "median",
-    #     "q3",
-    #     "lowerfence",
-    #     "upperfence",
-    #     "mean",
-    #     "sd",
-    #     "notchspan",
-    #     "density",
-    #     "maxKDE",
-    #     "count",
-    #     # keep user-configurable params like span/bandwidth
-    # }
-
+    try:
+        codes, uniques = pd.factorize(idx_arr, sort=False)
+    except Exception:
+        # TODO(tim): might not need
+        labels_sorted, first_idx, codes = np.unique(idx_arr, return_index=True, return_inverse=True)
+        order_pos = np.argsort(first_idx)
+        uniques = labels_sorted[order_pos]
+        remap = np.empty_like(order_pos)
+        remap[order_pos] = np.arange(order_pos.size)
+        codes = remap[codes]
+    if getattr(uniques, "size", len(uniques)) <= 1:
+        return None
+    order = uniques.tolist()
+    order_idx = np.argsort(codes, kind="stable")
+    counts = np.bincount(codes, minlength=len(order))
+    offsets = np.cumsum(np.r_[0, counts[:-1]])
+    point_keys_top = ["text", "customdata", "ids", "hovertext", "hovertemplate"]
+    stat_keys = {"q1", "median", "q3", "lowerfence", "upperfence", "mean", "sd", "notchspan", "density", "maxKDE", "count"}
+    
+    def subset_seq(seq: Any, idxs: np.ndarray) -> Any:
+        if isinstance(seq, np.ndarray) and getattr(seq, "ndim", 1) == 1 and len(seq) == n:
+            return seq[idxs]
+        if isinstance(seq, list) and len(seq) == n:
+            return [seq[int(i)] for i in idxs]
+        return seq
+    
     group_traces: list[dict[str, Any]] = []
-    # pos_by_label = {label: i for i, label in enumerate(order)}
-    # for k in order:
-    #     idxs = groups[k]
-    #     # Guard against malformed indices
-    #     if idxs and max(idxs) >= n:
-    #         continue
-
-    #     child = deepcopy(trace)
-    #     if isinstance(vals, np.ndarray):
-    #         child[data_axis] = vals[idxs]
-    #     else:
-    #         child[data_axis] = [vals[i] for i in idxs]
-    #     child[index_axis] = [k for _ in idxs]
-
-    #     for sk in stat_keys:
-    #         if sk in child:
-    #             child.pop(sk, None)
-
-    #     for pk in point_keys_top:
-    #         if pk in child:
-    #             child[pk] = subset_seq(child[pk], idxs)
-
-    #     m = child.get("marker")
-    #     if isinstance(m, dict):
-    #         for mk in ("size", "color", "opacity", "symbol"):
-    #             if mk in m:
-    #                 m[mk] = subset_seq(m[mk], idxs)
-    #         ml = m.get("line")
-    #         if isinstance(ml, dict):
-    #             for lk in ("color", "width"):
-    #                 if lk in ml:
-    #                     ml[lk] = subset_seq(ml[lk], idxs)
-        
-
-
-    #     # Drop index axis to trigger precalc + set name for positioning
-    #     child.pop(index_axis, None)
-    #     child.pop(f"{index_axis}0", None)          # removes 'x0' (or 'y0')
-    #     child.pop(f"d{index_axis}", None)          # removes 'dx' (or 'dy')
-    #     child["name"] = str(k)
-
-    #     group_traces.append(child)
-
+    for gi, label in enumerate(order):
+        start = offsets[gi]; stop = start + counts[gi]
+        idxs = order_idx[start:stop]
+        child = deepcopy(trace)
+        child[data_axis] = vals_arr[idxs]
+        child[index_axis] = [label for _ in range(idxs.size)]
+        for sk in stat_keys:
+            if sk in child:
+                child.pop(sk, None)
+        for pk in point_keys_top:
+            if pk in child:
+                child[pk] = subset_seq(child[pk], idxs)
+        m = child.get("marker")
+        if isinstance(m, dict):
+            for mk in ("size", "color", "opacity", "symbol"):
+                if mk in m:
+                    m[mk] = subset_seq(m[mk], idxs)
+            ml = m.get("line")
+            if isinstance(ml, dict):
+                for lk in ("color", "width"):
+                    if lk in ml:
+                        ml[lk] = subset_seq(ml[lk], idxs)
+        child.pop(index_axis, None)
+        child.pop(f"{index_axis}0", None)
+        child.pop(f"d{index_axis}", None)
+        child["name"] = str(label)
+        group_traces.append(child)
     return group_traces
 
 
