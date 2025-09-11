@@ -568,10 +568,10 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
                             precalc_violin(group_trace)
                             print("group trace after precalc", group_trace)
 
-                            orient    = group_trace.get("orientation", "v")
-                            pos_axis  = "x" if orient == "v" else "y"
-                            data_axis = "y" if orient == "v" else "x"
-                            label     = str(group_trace.get("name", ""))
+                            # orient    = group_trace.get("orientation", "v")
+                            # pos_axis  = "x" if orient == "v" else "y"
+                            # data_axis = "y" if orient == "v" else "x"
+                            # label     = str(group_trace.get("name", ""))
 
                             # # Anchor each split trace to its categorical slot
                             # group_trace.pop(pos_axis, None)
@@ -586,7 +586,7 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
                             # # categories as if they were side-by-side groups.
                             # group_trace.pop("offsetgroup", None)
 
-                            print("group trace after post compute", group_trace)
+                            # print("group trace after post compute", group_trace)
 
                         except Exception:
                             traceback.print_exc()
