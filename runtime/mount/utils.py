@@ -96,7 +96,6 @@ async def gql_query(query: str, variables: dict[str, Any], auth: str) -> Any:
         json={"query": query, "variables": variables},
     ) as resp:
         resp.raise_for_status()
-        
         res = await resp.json()
         if "errors" in res:
             raise RuntimeError(f"graphql error: {res}")
