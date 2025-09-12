@@ -565,34 +565,28 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
                         try:
                             print("group trace before precalc", group_trace)
 
+                            
+
                             precalc_violin(group_trace)
                             print("group trace after precalc", group_trace)
 
-
+                            # Position the split violin at its category via a
+                            # single-element position array (e.g., x=[label]) and
+                            # clear any conflicting anchors/offsets so the label
+                            # aligns with center.
                             orient    = group_trace.get("orientation", "v")
-                            # pos_axis  = "x" if orient == "v" else "y"
+                            pos_axis  = "x" if orient == "v" else "y"
                             # data_axis = "y" if orient == "v" else "x"
                             label     = str(group_trace.get("name", ""))
 
-                            group_trace[orient] = label
-
-                            
-                            
-
-                            # # Anchor each split trace to its categorical slot
-                            # group_trace.pop(pos_axis, None)
-                            # group_trace[f"{pos_axis}0"] = label
+                            group_trace[pos_axis] = [label]
+                            # group_trace.pop(f"{pos_axis}0", None)
                             # group_trace.pop(f"d{pos_axis}", None)
-
-                            # # Clean any generated placeholders on the data axis too
                             # group_trace.pop(f"{data_axis}0", None)
                             # group_trace.pop(f"d{data_axis}", None)
-
-                            # # Clear grouping offset so Plotly doesn't shift
-                            # # categories as if they were side-by-side groups.
                             # group_trace.pop("offsetgroup", None)
 
-                            # print("group trace after post compute", group_trace)
+                            print("group trace after post compute", group_trace)
 
                         except Exception:
                             traceback.print_exc()
