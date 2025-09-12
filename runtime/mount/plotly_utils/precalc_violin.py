@@ -117,7 +117,6 @@ def precalc_violin(trace: Any):
 
         trace["density"].append(density)
         trace["maxKDE"].append(maxKDE)
-    
+
     # add dummy val to make trace shown
-    med = float(np.median(trace_data)) if getattr(trace_data, "size", 0) else 0.0
-    trace[data_axis] = np.asarray([1])
+    trace[data_axis] = np.asarray([-100])
