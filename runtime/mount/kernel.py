@@ -483,15 +483,15 @@ def _split_violin_groups(trace: dict[str, Any]) -> list[dict[str, Any]] | None:
     if index_axis not in trace or data_axis not in trace:
         return None
 
-    # note(tim): handle binary plotly typed array that's in the trace
-    def _decode_plotly_typed(val: Any) -> Any:
-        if isinstance(val, dict) and "bdata" in val and "dtype" in val:
-            buf = b64decode(val["bdata"])
-            return np.frombuffer(buf, dtype=np.dtype(val["dtype"]))
-        return val
-
+    # assume Plotly typed array with base64 payload (no helper)
     idx_arr = np.asarray(trace.get(index_axis))
-    vals_arr = np.asarray(_decode_plotly_typed(trace.get(data_axis)))
+    data_field = trace.get(data_axis)
+    # note(tim): Plotly makes this field base64, 
+    # so decode it if it is
+    if isinstance(data_field, dict) and "bdata" in data_field and "dtype" in data_field:
+        vals_arr = np.frombuffer(b64decode(data_field["bdata"]), dtype=np.dtype(data_field["dtype"]))
+    else:
+        vals_arr = np.asarray(data_field)
 
     # group by category
     categories, cat_idx = np.unique(idx_arr, return_inverse=True)
