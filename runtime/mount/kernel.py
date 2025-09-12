@@ -618,25 +618,6 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
     except Exception:
         pass
 
-    # TODO:(tim): consider only setting category for exact violin axes
-    # Set layout and categorical axes for violin traces
-    has_vert_violin = any(
-        isinstance(t, dict) and t.get("type") == "violin" and t.get("orientation", "v") == "v"
-        for t in res.get("data", [])
-    )
-    has_horz_violin = any(
-        isinstance(t, dict) and t.get("type") == "violin" and t.get("orientation", "v") == "h"
-        for t in res.get("data", [])
-    )
-    if has_vert_violin or has_horz_violin:
-        layout = res.setdefault("layout", {})
-        if has_vert_violin:
-            xa = layout.setdefault("xaxis", {})
-            xa["type"] = "category"
-        if has_horz_violin:
-            ya = layout.setdefault("yaxis", {})
-            ya["type"] = "category"
-
     modules = {
         "sage_all": pio_json.get_module("sage.all", should_load=False),
         "np": pio_json.get_module("numpy", should_load=False),
