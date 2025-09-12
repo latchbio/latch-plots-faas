@@ -575,10 +575,14 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
                             # single-element position array (e.g., x=[label]) and
                             # clear any conflicting anchors/offsets so the label
                             # aligns with center.
-                            orient    = group_trace.get("orientation", "v")
-                            pos_axis  = "x" if orient == "v" else "y"
-                            data_axis = "y" if orient == "v" else "x"
+
+                            orientation = trace.get("orientation", "v")
+                            data_axis = "y" if orientation == "v" else "x"
+                            index_axis = "x" if orientation == "v" else "y"
                             label     = str(group_trace.get("name", ""))
+                            group_trace[index_axis] = [label]
+                            # group_trace[data_axis] = [label] * 10
+                            # group_trace[pos_axis] = [label] * 10
                             # group_trace[data_axis] = [label]
                             # group_trace[pos_axis] = [label] * len(group_trace[data_axis])
                             # group_trace[data_axis] = [label]
