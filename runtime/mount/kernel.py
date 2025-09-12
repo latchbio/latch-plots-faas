@@ -581,6 +581,9 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
                             index_axis = "x" if orientation == "v" else "y"
                             label     = str(group_trace.get("name", ""))
                             group_trace[index_axis] = [label] * 10
+                            # NOTE: this col is not being used, but plotly has 
+                            # weird issues if it's not provided, so set it to 0
+                            group_trace[data_axis] = [0]
                             # group_trace[data_axis] = [label] * 10
                             # group_trace[pos_axis] = [label] * 10
                             # group_trace[data_axis] = [label]
