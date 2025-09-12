@@ -493,9 +493,6 @@ def _split_violin_groups(trace: dict[str, Any]) -> list[dict[str, Any]] | None:
     idx_arr = np.asarray(trace.get(index_axis))
     vals_arr = np.asarray(_decode_plotly_typed(trace.get(data_axis)))
 
-    print('idx_arr', idx_arr, 'vals_arr', vals_arr)
-    print('getattr(idx_arr, "ndim", 1)', getattr(idx_arr, "ndim", 1), 'getattr(vals_arr, "ndim", 1)', getattr(vals_arr, "ndim", 1))
-
     # group by category using NumPy with sorted category order
     categories, cat_idx = np.unique(idx_arr, return_inverse=True)
     if len(categories) <= 1:
@@ -508,7 +505,6 @@ def _split_violin_groups(trace: dict[str, Any]) -> list[dict[str, Any]] | None:
     # find where to split the categories
     split_idx = np.flatnonzero(np.diff(cat_idx_sorted)) + 1
     groups = np.split(order_idx, split_idx)
-    print('groups_per_category', [g.size for g in groups], 'order', order)
     group_traces: list[dict[str, Any]] = []
     for label, idxs in zip(order, groups):
         child = deepcopy(trace)
@@ -519,72 +515,49 @@ def _split_violin_groups(trace: dict[str, Any]) -> list[dict[str, Any]] | None:
         child.pop(f"{index_axis}0", None)
         child.pop(f"d{index_axis}", None)
         child["name"] = str(label)
-        print(
-            "[split_violin] child:",
-            "label=", label,
-            "name=", child.get("name"),
-            "n=", int(idxs.size),
-        )
         group_traces.append(child)
     return group_traces
 
 
 def serialize_plotly_figure(x: BaseFigure) -> object:
     res = x.to_dict()
-    orig_n = len(res["data"]) if isinstance(res.get("data"), list) else 0
 
-    data_out: list[dict[str, Any]] = []
+    processed_traces: list[dict[str, Any]] = []
     for trace in res["data"]:
         try:
             if trace["type"] == "box":
                 precalc_box(trace)
-                data_out.append(trace)
+                processed_traces.append(trace)
             elif trace["type"] == "violin":
                 # NOTE(tim): if the trace has multiple violins,
                 # seperate them into different traces to allow 
                 # precomputation for each
                 group_traces = _split_violin_groups(trace)
                 if group_traces is not None:
-                    try:
-                        print(
-                            f"[plots-faas] violin fan-out: groups={len(group_traces)} name={trace.get('name')} orient={trace.get('orientation','v')}",
-                            flush=True,
-                        )
-                    except Exception:
-                        pass
                     for group_trace in group_traces:
                         try:
-                            print("group trace before precalc", group_trace)
                             precalc_violin(group_trace)
-                            print("group trace after precalc", group_trace)
                             orientation = trace.get("orientation", "v")
                             data_axis = "y" if orientation == "v" else "x"
+                            # NOTE(tim): plotly has weird issues if this is not provided
                             group_trace[data_axis] = []
-                            print(f"group trace after post compute {group_trace}")
 
                         except Exception:
                             traceback.print_exc()
-                        data_out.append(group_trace)
+                        processed_traces.append(group_trace)
                 else:
                     precalc_violin(trace)
-                    data_out.append(trace)
+                    processed_traces.append(trace)
             elif trace["type"] == "scatter":
                 trace["type"] = "scattergl"
-                data_out.append(trace)
+                processed_traces.append(trace)
             else:
-                data_out.append(trace)
+                processed_traces.append(trace)
         except Exception:
             traceback.print_exc()
-            data_out.append(trace)
+            processed_traces.append(trace)
 
-    res["data"] = data_out
-    try:
-        print(
-            f"[plots-faas] serialize_plotly_figure: traces in={orig_n}, out={len(res['data'])}",
-            flush=True,
-        )
-    except Exception:
-        pass
+    res["data"] = processed_traces
 
     modules = {
         "sage_all": pio_json.get_module("sage.all", should_load=False),

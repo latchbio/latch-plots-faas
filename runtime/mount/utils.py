@@ -95,22 +95,8 @@ async def gql_query(query: str, variables: dict[str, Any], auth: str) -> Any:
         },
         json={"query": query, "variables": variables},
     ) as resp:
-        try:
-            resp.raise_for_status()
-        except Exception as e:
-            if getattr(e, "status", None) == 413:
-                v = variables.get("data")
-                size_mb = (
-                    len(v.encode("utf-8")) / (1024 * 1024)
-                    if isinstance(v, str)
-                    else None
-                )
-                print(
-                    f"[plots-faas] GraphQL 413 Payload Too Large url={resp.url} data_size_mb={size_mb}",
-                    flush=True,
-                )
-            raise
-
+        resp.raise_for_status()
+        
         res = await resp.json()
         if "errors" in res:
             raise RuntimeError(f"graphql error: {res}")
