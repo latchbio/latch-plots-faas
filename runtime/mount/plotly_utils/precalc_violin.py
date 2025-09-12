@@ -120,4 +120,4 @@ def precalc_violin(trace: Any):
     
     # add dummy val to make trace shown
     med = float(np.median(trace_data)) if getattr(trace_data, "size", 0) else 0.0
-    trace[data_axis] = np.asarray([med])
+    trace[data_axis] = np.asarray([1])
