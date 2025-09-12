@@ -57,6 +57,7 @@ from plotly_utils.precalc_box import precalc_box
 from plotly_utils.precalc_violin import precalc_violin
 from socketio_thread import SocketIoThread
 from stdio_over_socket import SocketWriter, text_socket_writer
+from base64 import b64decode
 
 ad = auto_install.ad
 
@@ -485,8 +486,7 @@ def _split_violin_groups(trace: dict[str, Any]) -> list[dict[str, Any]] | None:
     # NOTE(tim): handle binary plotly typed array that's in the trace
     def _decode_plotly_typed(val: Any) -> Any:
         if isinstance(val, dict) and "bdata" in val and "dtype" in val:
-            import base64 as _b64
-            buf = _b64.b64decode(val["bdata"])
+            buf = b64decode(val["bdata"])
             return np.frombuffer(buf, dtype=np.dtype(val["dtype"]))
         return val
 
@@ -495,13 +495,6 @@ def _split_violin_groups(trace: dict[str, Any]) -> list[dict[str, Any]] | None:
 
     print('idx_arr', idx_arr, 'vals_arr', vals_arr)
     print('getattr(idx_arr, "ndim", 1)', getattr(idx_arr, "ndim", 1), 'getattr(vals_arr, "ndim", 1)', getattr(vals_arr, "ndim", 1))
-    # TODO(tim): consider deleting this err handling
-    # make sure input is 1D, not empty, and has the same length
-    if getattr(idx_arr, "ndim", 1) != 1 or getattr(vals_arr, "ndim", 1) != 1:
-        return None
-    n = int(vals_arr.shape[0])
-    if n == 0 or int(idx_arr.shape[0]) != n:
-        return None
 
     # group by category using NumPy with sorted category order
     categories, cat_idx = np.unique(idx_arr, return_inverse=True)
@@ -511,6 +504,7 @@ def _split_violin_groups(trace: dict[str, Any]) -> list[dict[str, Any]] | None:
     cat_idx = cat_idx.astype(np.int64, copy=False)
     order_idx = np.argsort(cat_idx, kind="stable")
     cat_idx_sorted = cat_idx[order_idx]
+    
     # find where to split the categories
     split_idx = np.flatnonzero(np.diff(cat_idx_sorted)) + 1
     groups = np.split(order_idx, split_idx)
@@ -519,7 +513,7 @@ def _split_violin_groups(trace: dict[str, Any]) -> list[dict[str, Any]] | None:
     for label, idxs in zip(order, groups):
         child = deepcopy(trace)
         child[data_axis] = vals_arr[idxs]
-        # child[index_axis] = [label] * len(child[data_axis])
+        
         # clear any indexes that will cause trouble in precalc_violin
         child.pop(index_axis, None)
         child.pop(f"{index_axis}0", None)
@@ -547,8 +541,8 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
                 data_out.append(trace)
             elif trace["type"] == "violin":
                 # NOTE(tim): if the trace has multiple violins,
-                # seperate them into seperate traces so we can precompute
-                # them separately
+                # seperate them into different traces to allow 
+                # precomputation for each
                 group_traces = _split_violin_groups(trace)
                 if group_traces is not None:
                     try:
@@ -561,37 +555,11 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
                     for group_trace in group_traces:
                         try:
                             print("group trace before precalc", group_trace)
-
-                            
-
                             precalc_violin(group_trace)
                             print("group trace after precalc", group_trace)
-
-                            # Position the split violin at its category via a
-                            # single-element position array (e.g., x=[label]) and
-                            # clear any conflicting anchors/offsets so the label
-                            # aligns with center.
-
                             orientation = trace.get("orientation", "v")
                             data_axis = "y" if orientation == "v" else "x"
-                            index_axis = "x" if orientation == "v" else "y"
-                            label     = str(group_trace.get("name", ""))
-                            # group_trace[index_axis] = [label] * 10
-                            # NOTE: this col is not being used, but plotly has 
-                            # weird issues if it's not provided, so set it to 0
                             group_trace[data_axis] = []
-                            # group_trace[data_axis] = [label] * 10
-                            # group_trace[pos_axis] = [label] * 10
-                            # group_trace[data_axis] = [label]
-                            # group_trace[pos_axis] = [label] * len(group_trace[data_axis])
-                            # group_trace[data_axis] = [label]
-                            # print(f"group_trace[data_axis] {group_trace[data_axis]}")
-                            # group_trace[pos_axis] = [label] * len(group_trace[data_axis])
-                            # group_trace.pop(f"{pos_axis}0", None)
-                            # group_trace.pop(f"d{pos_axis}", None)
-                            # group_trace.pop(f"{data_axis}0", None)
-                            # group_trace.pop(f"d{data_axis}", None)
-                            # group_trace.pop("offsetgroup", None)
                             print(f"group trace after post compute {group_trace}")
 
                         except Exception:
