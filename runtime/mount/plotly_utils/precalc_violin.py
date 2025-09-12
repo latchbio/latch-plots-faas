@@ -119,6 +119,7 @@ def precalc_violin(trace: Any):
         trace["maxKDE"].append(maxKDE)
 
     # add dummy val to make trace shown
-    # trace[data_axis] = np.asarray([-100])
+    trace[data_axis] = np.asarray([-100])
     # import random
-    # trace[index_axis] = np.asarray([random.ran(0, 100)])
+    import random
+    trace[index_axis] = np.asarray([random.randint(-100, 0)])
