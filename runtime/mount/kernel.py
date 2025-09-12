@@ -482,22 +482,20 @@ def _split_violin_groups(trace: dict[str, Any]) -> list[dict[str, Any]] | None:
     if index_axis not in trace or data_axis not in trace:
         return None
 
-    # handle binary plotly typed arrays
-    def _decode_plotly_typed(v: Any) -> Any:
-        if isinstance(v, dict) and "bdata" in v and "dtype" in v:
+    # NOTE(tim): handle binary plotly typed array that's in the trace
+    def _decode_plotly_typed(val: Any) -> Any:
+        if isinstance(val, dict) and "bdata" in val and "dtype" in val:
             import base64 as _b64
-            buf = _b64.b64decode(v["bdata"])
-            return np.frombuffer(buf, dtype=np.dtype(v["dtype"]))
-        return v
+            buf = _b64.b64decode(val["bdata"])
+            return np.frombuffer(buf, dtype=np.dtype(val["dtype"]))
+        return val
 
-    try:
-        # TODO(tim): might not need exception handling here?
-        idx_arr = np.asarray(trace.get(index_axis))
-        vals_arr = np.asarray(_decode_plotly_typed(trace.get(data_axis)))
-    except Exception:
-        return None
+    idx_arr = np.asarray(trace.get(index_axis))
+    vals_arr = np.asarray(_decode_plotly_typed(trace.get(data_axis)))
+
     print('idx_arr', idx_arr, 'vals_arr', vals_arr)
     print('getattr(idx_arr, "ndim", 1)', getattr(idx_arr, "ndim", 1), 'getattr(vals_arr, "ndim", 1)', getattr(vals_arr, "ndim", 1))
+    # TODO(tim): consider deleting this err handling
     # make sure input is 1D, not empty, and has the same length
     if getattr(idx_arr, "ndim", 1) != 1 or getattr(vals_arr, "ndim", 1) != 1:
         return None
@@ -505,22 +503,20 @@ def _split_violin_groups(trace: dict[str, Any]) -> list[dict[str, Any]] | None:
     if n == 0 or int(idx_arr.shape[0]) != n:
         return None
 
-    # group by category, then build grouped indices
-    codes, uniques = pd.factorize(idx_arr, sort=False)
-    if len(uniques) <= 1:
+    # group by category using NumPy with sorted category order
+    categories, cat_idx = np.unique(idx_arr, return_inverse=True)
+    if len(categories) <= 1:
         return None
-    order = uniques.tolist()
-    codes = codes.astype(np.int64, copy=False)
-    order_idx = np.argsort(codes, kind="stable")
-    counts = np.bincount(codes)
-    offsets = np.r_[0, counts.cumsum()[:-1]]
-    print('offsets', offsets, 'counts', counts, 'order', order, 'order_idx', order_idx)
-    
+    order = categories.tolist()
+    cat_idx = cat_idx.astype(np.int64, copy=False)
+    order_idx = np.argsort(cat_idx, kind="stable")
+    cat_idx_sorted = cat_idx[order_idx]
+    # find where to split the categories
+    split_idx = np.flatnonzero(np.diff(cat_idx_sorted)) + 1
+    groups = np.split(order_idx, split_idx)
+    print('groups_per_category', [g.size for g in groups], 'order', order)
     group_traces: list[dict[str, Any]] = []
-    for group_idx, label in enumerate(order):
-        start = offsets[group_idx]
-        stop = start + counts[group_idx]
-        idxs = order_idx[start:stop]
+    for label, idxs in zip(order, groups):
         child = deepcopy(trace)
         child[data_axis] = vals_arr[idxs]
         # child[index_axis] = [label] * len(child[data_axis])
