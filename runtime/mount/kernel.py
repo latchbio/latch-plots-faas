@@ -483,7 +483,7 @@ def _split_violin_groups(trace: dict[str, Any]) -> list[dict[str, Any]] | None:
     if index_axis not in trace or data_axis not in trace:
         return None
 
-    # NOTE(tim): handle binary plotly typed array that's in the trace
+    # note(tim): handle binary plotly typed array that's in the trace
     def _decode_plotly_typed(val: Any) -> Any:
         if isinstance(val, dict) and "bdata" in val and "dtype" in val:
             buf = b64decode(val["bdata"])
@@ -493,10 +493,8 @@ def _split_violin_groups(trace: dict[str, Any]) -> list[dict[str, Any]] | None:
     idx_arr = np.asarray(trace.get(index_axis))
     vals_arr = np.asarray(_decode_plotly_typed(trace.get(data_axis)))
 
-    # group by category using NumPy with sorted category order
+    # group by category
     categories, cat_idx = np.unique(idx_arr, return_inverse=True)
-    if len(categories) <= 1:
-        return None
     order = categories.tolist()
     cat_idx = cat_idx.astype(np.int64, copy=False)
     order_idx = np.argsort(cat_idx, kind="stable")
@@ -529,7 +527,7 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
                 precalc_box(trace)
                 processed_traces.append(trace)
             elif trace["type"] == "violin":
-                # NOTE(tim): if the trace has multiple violins,
+                # note(tim): if the trace has multiple violins,
                 # seperate them into different traces to allow 
                 # precomputation for each
                 group_traces = _split_violin_groups(trace)
@@ -539,7 +537,8 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
                             precalc_violin(group_trace)
                             orientation = trace.get("orientation", "v")
                             data_axis = "y" if orientation == "v" else "x"
-                            # NOTE(tim): plotly has weird issues if this is not provided
+                            
+                            # note(tim): plotly has weird issues if this is not provided
                             group_trace[data_axis] = []
 
                         except Exception:
