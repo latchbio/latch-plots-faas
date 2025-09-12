@@ -539,7 +539,7 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
                             data_axis = "y" if orientation == "v" else "x"
                             
                             # note(tim): plotly has weird issues if this is not provided
-                            group_trace[data_axis] = []
+                            # group_trace[data_axis] = []
 
                         except Exception:
                             traceback.print_exc()
