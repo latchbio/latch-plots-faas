@@ -579,12 +579,12 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
                             data_axis = "y" if orient == "v" else "x"
                             label     = str(group_trace.get("name", ""))
                             group_trace[pos_axis] = [label]
-                            group_trace.pop(f"{pos_axis}0", None)
-                            group_trace.pop(f"d{pos_axis}", None)
-                            group_trace.pop(f"{data_axis}0", None)
-                            group_trace.pop(f"d{data_axis}", None)
-                            group_trace.pop("offsetgroup", None)
-                            print("group trace after post compute", group_trace)
+                            # group_trace.pop(f"{pos_axis}0", None)
+                            # group_trace.pop(f"d{pos_axis}", None)
+                            # group_trace.pop(f"{data_axis}0", None)
+                            # group_trace.pop(f"d{data_axis}", None)
+                            # group_trace.pop("offsetgroup", None)
+                            print(f"group trace after post compute {group_trace}")
 
                         except Exception:
                             traceback.print_exc()
