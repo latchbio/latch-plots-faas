@@ -496,8 +496,8 @@ def _split_violin_groups(trace: dict[str, Any]) -> list[dict[str, Any]] | None:
         vals_arr = np.asarray(_decode_plotly_typed(trace.get(data_axis)))
     except Exception:
         return None
-    # print('idx_arr', idx_arr, 'vals_arr', vals_arr)
-    # print('getattr(idx_arr, "ndim", 1)', getattr(idx_arr, "ndim", 1), 'getattr(vals_arr, "ndim", 1)', getattr(vals_arr, "ndim", 1))
+    print('idx_arr', idx_arr, 'vals_arr', vals_arr)
+    print('getattr(idx_arr, "ndim", 1)', getattr(idx_arr, "ndim", 1), 'getattr(vals_arr, "ndim", 1)', getattr(vals_arr, "ndim", 1))
     # make sure input is 1D, not empty, and has the same length
     if getattr(idx_arr, "ndim", 1) != 1 or getattr(vals_arr, "ndim", 1) != 1:
         return None
@@ -514,7 +514,7 @@ def _split_violin_groups(trace: dict[str, Any]) -> list[dict[str, Any]] | None:
     order_idx = np.argsort(codes, kind="stable")
     counts = np.bincount(codes)
     offsets = np.r_[0, counts.cumsum()[:-1]]
-    # print('offsets', offsets, 'counts', counts, 'order', order, 'order_idx', order_idx)
+    print('offsets', offsets, 'counts', counts, 'order', order, 'order_idx', order_idx)
     
     group_traces: list[dict[str, Any]] = []
     for group_idx, label in enumerate(order):
@@ -529,12 +529,12 @@ def _split_violin_groups(trace: dict[str, Any]) -> list[dict[str, Any]] | None:
         child.pop(f"{index_axis}0", None)
         child.pop(f"d{index_axis}", None)
         child["name"] = str(label)
-        # print(
-        #     "[split_violin] child:",
-        #     "label=", label,
-        #     "name=", child.get("name"),
-        #     "n=", int(idxs.size),
-        # )
+        print(
+            "[split_violin] child:",
+            "label=", label,
+            "name=", child.get("name"),
+            "n=", int(idxs.size),
+        )
         group_traces.append(child)
     return group_traces
 
@@ -564,12 +564,12 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
                         pass
                     for group_trace in group_traces:
                         try:
-                            # print("group trace before precalc", group_trace)
+                            print("group trace before precalc", group_trace)
 
                             
 
                             precalc_violin(group_trace)
-                            # print("group trace after precalc", group_trace)
+                            print("group trace after precalc", group_trace)
 
                             # Position the split violin at its category via a
                             # single-element position array (e.g., x=[label]) and
@@ -589,8 +589,7 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
                             # group_trace.pop(f"{data_axis}0", None)
                             # group_trace.pop(f"d{data_axis}", None)
                             # group_trace.pop("offsetgroup", None)
-                            
-                            # print(f"group trace after post compute {group_trace}")
+                            print(f"group trace after post compute {group_trace}")
 
                         except Exception:
                             traceback.print_exc()
@@ -608,13 +607,13 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
             data_out.append(trace)
 
     res["data"] = data_out
-    # try:
-    #     print(
-    #         f"[plots-faas] serialize_plotly_figure: traces in={orig_n}, out={len(res['data'])}",
-    #         flush=True,
-    #     )
-    # except Exception:
-    #     pass
+    try:
+        print(
+            f"[plots-faas] serialize_plotly_figure: traces in={orig_n}, out={len(res['data'])}",
+            flush=True,
+        )
+    except Exception:
+        pass
 
     # TODO:(tim): consider only setting category for exact violin axes
     # Set layout and categorical axes for violin traces
