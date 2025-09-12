@@ -576,16 +576,14 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
                             # aligns with center.
                             orient    = group_trace.get("orientation", "v")
                             pos_axis  = "x" if orient == "v" else "y"
-                            # data_axis = "y" if orient == "v" else "x"
+                            data_axis = "y" if orient == "v" else "x"
                             label     = str(group_trace.get("name", ""))
-
                             group_trace[pos_axis] = [label]
-                            # group_trace.pop(f"{pos_axis}0", None)
-                            # group_trace.pop(f"d{pos_axis}", None)
-                            # group_trace.pop(f"{data_axis}0", None)
-                            # group_trace.pop(f"d{data_axis}", None)
-                            # group_trace.pop("offsetgroup", None)
-
+                            group_trace.pop(f"{pos_axis}0", None)
+                            group_trace.pop(f"d{pos_axis}", None)
+                            group_trace.pop(f"{data_axis}0", None)
+                            group_trace.pop(f"d{data_axis}", None)
+                            group_trace.pop("offsetgroup", None)
                             print("group trace after post compute", group_trace)
 
                         except Exception:
