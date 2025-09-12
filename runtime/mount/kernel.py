@@ -523,6 +523,7 @@ def _split_violin_groups(trace: dict[str, Any]) -> list[dict[str, Any]] | None:
         idxs = order_idx[start:stop]
         child = deepcopy(trace)
         child[data_axis] = vals_arr[idxs]
+        # child[index_axis] = [label] * len(child[data_axis])
         # clear any indexes that will cause trouble in precalc_violin
         child.pop(index_axis, None)
         child.pop(f"{index_axis}0", None)
@@ -578,7 +579,10 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
                             pos_axis  = "x" if orient == "v" else "y"
                             data_axis = "y" if orient == "v" else "x"
                             label     = str(group_trace.get("name", ""))
-                            group_trace[pos_axis] = [label] * len(group_trace[data_axis])
+                            # group_trace[pos_axis] = [label] * len(group_trace[data_axis])
+                            # group_trace[data_axis] = [label]
+                            # print(f"group_trace[data_axis] {group_trace[data_axis]}")
+                            # group_trace[pos_axis] = [label] * len(group_trace[data_axis])
                             # group_trace.pop(f"{pos_axis}0", None)
                             # group_trace.pop(f"d{pos_axis}", None)
                             # group_trace.pop(f"{data_axis}0", None)
