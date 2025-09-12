@@ -120,4 +120,5 @@ def precalc_violin(trace: Any):
 
     # add dummy val to make trace shown
     # trace[data_axis] = np.asarray([-100])
-    trace[index_axis] = np.asarray(["CatagoryA", "CatagoryB"])
+    # import random
+    # trace[index_axis] = np.asarray([random.ran(0, 100)])

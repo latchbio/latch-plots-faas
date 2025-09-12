@@ -579,6 +579,7 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
                             pos_axis  = "x" if orient == "v" else "y"
                             data_axis = "y" if orient == "v" else "x"
                             label     = str(group_trace.get("name", ""))
+                            group_trace[data_axis] = [label]
                             # group_trace[pos_axis] = [label] * len(group_trace[data_axis])
                             # group_trace[data_axis] = [label]
                             # print(f"group_trace[data_axis] {group_trace[data_axis]}")
