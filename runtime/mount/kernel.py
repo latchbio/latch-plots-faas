@@ -483,7 +483,6 @@ def _split_violin_groups(trace: dict[str, Any]) -> list[dict[str, Any]] | None:
     if index_axis not in trace or data_axis not in trace:
         return None
 
-    # assume Plotly typed array with base64 payload (no helper)
     idx_arr = np.asarray(trace.get(index_axis))
     data_field = trace.get(data_axis)
     # note(tim): Plotly makes this field base64, 
