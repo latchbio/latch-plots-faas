@@ -485,7 +485,8 @@ def _split_violin_groups(trace: dict[str, Any]) -> list[dict[str, Any]] | None:
 
     idx_arr = np.asarray(trace.get(index_axis))
     data_field = trace.get(data_axis)
-    # note(tim): Plotly makes this field base64, 
+    
+    # note(tim): plotly makes this field base64, 
     # so decode it if it is
     if isinstance(data_field, dict) and "bdata" in data_field and "dtype" in data_field:
         vals_arr = np.frombuffer(b64decode(data_field["bdata"]), dtype=np.dtype(data_field["dtype"]))
