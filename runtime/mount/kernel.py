@@ -510,12 +510,11 @@ def _split_violin_groups(trace: dict[str, Any]) -> list[dict[str, Any]] | None:
         
         # clear any indexes that will cause trouble in precalc_violin
         child.pop(index_axis, None)
-        #todo(tim: also handle the subplot case where the index 
-        # axis can be more level e.g. x1
+        #todo(tim): also handle the subplot case where there can 
+        # be more index axis levels e.g. x1
         child.pop(f"{index_axis}0", None)
         child.pop(f"d{index_axis}", None)
         child["name"] = str(label)
-        child["violinmode"] = "overlay"
         group_traces.append(child)
     return group_traces
 
@@ -535,6 +534,9 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
                 # precomputation for each
                 group_traces = _split_violin_groups(trace)
                 if group_traces is not None:
+                    # NOTE(tim): set violinmode to overlay offsets to avoid 
+                    # label offset issues
+                    res.setdefault("layout", {})["violinmode"] = "overlay"
                     for group_trace in group_traces:
                         try:
                             precalc_violin(group_trace)
