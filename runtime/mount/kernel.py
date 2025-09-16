@@ -510,9 +510,12 @@ def _split_violin_groups(trace: dict[str, Any]) -> list[dict[str, Any]] | None:
         
         # clear any indexes that will cause trouble in precalc_violin
         child.pop(index_axis, None)
+        #todo(tim: also handle the subplot case where the index 
+        # axis can be more level e.g. x1
         child.pop(f"{index_axis}0", None)
         child.pop(f"d{index_axis}", None)
         child["name"] = str(label)
+        child["violinmode"] = "overlay"
         group_traces.append(child)
     return group_traces
 
@@ -539,7 +542,8 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
                             data_axis = "y" if orientation == "v" else "x"
                             
                             # note(tim): plotly has weird issues if this is not provided
-                            group_trace[data_axis] = []
+                            # group_trace[data_axis] = []
+                            # violin_mode = group_trace.get("violinmode", "group")
 
                         except Exception:
                             traceback.print_exc()
