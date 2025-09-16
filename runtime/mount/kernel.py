@@ -582,6 +582,7 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
 
     res["data"] = processed_traces
 
+    # note(tim): violin_layout_mode will be none if no violin traces
     if violin_layout_mode == "overlay":
         res.setdefault("layout", {})["violinmode"] = "overlay"
 
