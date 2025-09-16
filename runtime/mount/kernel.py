@@ -526,8 +526,8 @@ def _split_violin_groups(
         child.pop(index_axis, None)
         #todo(tim): also handle the subplot case where there can 
         # be more index axis levels e.g. x1
-        child.pop(f"{index_axis}0", None)
-        child.pop(f"d{index_axis}", None)
+        # child.pop(f"{index_axis}0", None)
+        # child.pop(f"d{index_axis}", None)
         child["name"] = str(label)
         group_traces.append(child)
     return group_traces, has_group_labels

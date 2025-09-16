@@ -37,7 +37,13 @@ def precalc_box(trace: Any):
     data_axis = "y" if orientation == "v" else "x"
     index_axis = "x" if orientation == "v" else "y"
 
+    if f"{index_axis}0" in trace and f"d{index_axis}" in trace:
+        print(f"precalc_box: f\"{index_axis}0\" in trace and f\"d{index_axis}\" in trace)")
+        # return False
+
     if index_axis in trace or (f"{index_axis}0" in trace and f"d{index_axis}" in trace):
+        # print the index axis with printf
+        print(f"precalc_box: index_axis in trace : {index_axis}")
         # todo(maximsmol): support multibox traces
         # todo(maximsmol): support generated index axes
         return False
