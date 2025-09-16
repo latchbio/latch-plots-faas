@@ -497,13 +497,11 @@ def _split_violin_groups(
 
     categories, cat_idx = np.unique(idx_arr, return_inverse=True)
     
-    # note(tim): end early if we only have 
-    # one group (e.g. ["a"] or ["a", "a"])
     if len(categories) <= 1:
         return None, False
 
-    has_group_labels = any(
-        (bool(val) if isinstance(val, str) else val is not None)
+    has_group_settings = any(
+        val is not None and (not isinstance(val, str) or val != "")
         for val in (trace.get("legendgroup"), trace.get("offsetgroup"))
     )
 
@@ -528,7 +526,7 @@ def _split_violin_groups(
         child.pop(f"d{index_axis}", None)
         child["name"] = str(label)
         group_traces.append(child)
-    return group_traces, has_group_labels
+    return group_traces, has_group_settings
 
 
 def serialize_plotly_figure(x: BaseFigure) -> object:
@@ -545,12 +543,12 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
                 # note(tim): if the trace has multiple violins,
                 # seperate them into different traces to allow 
                 # precomputation for each
-                group_traces, has_group_labels = _split_violin_groups(trace)
+                group_traces, has_group_settings = _split_violin_groups(trace)
 
                 if group_traces is not None:
                     # note(tim): determine if we need to set violinmode to 
                     # overlay or group to avoid group name offsets issues
-                    if has_group_labels:
+                    if has_group_settings:
                         violin_layout_mode = "group"
                     elif violin_layout_mode != "group":
                         violin_layout_mode = "overlay"
