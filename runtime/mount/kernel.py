@@ -476,12 +476,15 @@ class CategorizedCellOutputs:
     figures: list[str] = field(default_factory=list)
     static_figures: list[str] = field(default_factory=list)
 
-def _split_violin_groups(trace: dict[str, Any]) -> list[dict[str, Any]] | None:
+def _split_violin_groups(
+    trace: dict[str, Any]
+) -> tuple[list[dict[str, Any]] | None, bool]:
+
     orientation = trace.get("orientation", "v")
     data_axis = "y" if orientation == "v" else "x"
     index_axis = "x" if orientation == "v" else "y"
     if index_axis not in trace or data_axis not in trace:
-        return None
+        return None, False
 
     idx_arr = np.asarray(trace.get(index_axis))
     data_field = trace.get(data_axis)
@@ -495,6 +498,17 @@ def _split_violin_groups(trace: dict[str, Any]) -> list[dict[str, Any]] | None:
 
     # group by category
     categories, cat_idx = np.unique(idx_arr, return_inverse=True)
+    
+    # note(tim): end early if we only have 
+    # one group (e.g. ["a"] or ["a", "a"])
+    if len(categories) <= 1:
+        return None, False
+
+    has_group_labels = any(
+        (bool(val) if isinstance(val, str) else val is not None)
+        for val in (trace.get("legendgroup"), trace.get("offsetgroup"))
+    )
+
     order = categories.tolist()
     cat_idx = cat_idx.astype(np.int64, copy=False)
     order_idx = np.argsort(cat_idx, kind="stable")
@@ -516,11 +530,12 @@ def _split_violin_groups(trace: dict[str, Any]) -> list[dict[str, Any]] | None:
         child.pop(f"d{index_axis}", None)
         child["name"] = str(label)
         group_traces.append(child)
-    return group_traces
+    return group_traces, has_group_labels
 
 
 def serialize_plotly_figure(x: BaseFigure) -> object:
     res = x.to_dict()
+    violin_layout_mode: Literal["overlay", "group"] | None = None
 
     processed_traces: list[dict[str, Any]] = []
     for trace in res["data"]:
@@ -532,11 +547,15 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
                 # note(tim): if the trace has multiple violins,
                 # seperate them into different traces to allow 
                 # precomputation for each
-                group_traces = _split_violin_groups(trace)
+                group_traces, has_group_labels = _split_violin_groups(trace)
+
                 if group_traces is not None:
-                    # NOTE(tim): set violinmode to overlayto avoid 
-                    # label offset issues
-                    res.setdefault("layout", {})["violinmode"] = "overlay"
+                    # NOTE(tim): detremine if we need to 
+                    # set violinmode to overlay 
+                    if has_group_labels:
+                        violin_layout_mode = "group"
+                    elif violin_layout_mode != "group":
+                        violin_layout_mode = "overlay"
                     for group_trace in group_traces:
                         try:
                             precalc_violin(group_trace)
@@ -562,6 +581,12 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
             processed_traces.append(trace)
 
     res["data"] = processed_traces
+
+    # NOTE(tim): set violinmode to overlay to avoid 
+    # label offset issues if it's not a group label
+    # case
+    if violin_layout_mode == "overlay":
+        res.setdefault("layout", {})["violinmode"] = "overlay"
 
     modules = {
         "sage_all": pio_json.get_module("sage.all", should_load=False),
