@@ -534,7 +534,7 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
                 # precomputation for each
                 group_traces = _split_violin_groups(trace)
                 if group_traces is not None:
-                    # NOTE(tim): set violinmode to overlay offsets to avoid 
+                    # NOTE(tim): set violinmode to overlayto avoid 
                     # label offset issues
                     res.setdefault("layout", {})["violinmode"] = "overlay"
                     for group_trace in group_traces:
@@ -544,8 +544,7 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
                             data_axis = "y" if orientation == "v" else "x"
                             
                             # note(tim): plotly has weird issues if this is not provided
-                            # group_trace[data_axis] = []
-                            # violin_mode = group_trace.get("violinmode", "group")
+                            group_trace[data_axis] = []
 
                         except Exception:
                             traceback.print_exc()
