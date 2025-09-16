@@ -550,9 +550,8 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
                 group_traces, has_group_labels = _split_violin_groups(trace)
 
                 if group_traces is not None:
-                    # note(tim): determine if we need to 
-                    # set violinmode to overlay or group to
-                    # avoid group name offsets issues
+                    # note(tim): determine if we need to set violinmode to 
+                    # overlay or group to avoid group name offsets issues
                     if has_group_labels:
                         violin_layout_mode = "group"
                     elif violin_layout_mode != "group":
