@@ -489,14 +489,12 @@ def _split_violin_groups(
     idx_arr = np.asarray(trace.get(index_axis))
     data_field = trace.get(data_axis)
     
-    # note(tim): plotly makes this field base64, 
-    # so decode it if it is
+    # note(tim): plotly makes this field base64
     if isinstance(data_field, dict) and "bdata" in data_field and "dtype" in data_field:
         vals_arr = np.frombuffer(b64decode(data_field["bdata"]), dtype=np.dtype(data_field["dtype"]))
     else:
         vals_arr = np.asarray(data_field)
 
-    # group by category
     categories, cat_idx = np.unique(idx_arr, return_inverse=True)
     
     # note(tim): end early if we only have 
@@ -522,9 +520,9 @@ def _split_violin_groups(
         child = deepcopy(trace)
         child[data_axis] = vals_arr[idxs]
         
-        # clear any indexes that will cause trouble in precalc_violin
+        # note(tim): clear any indexes that will cause trouble in precalc_violin
         child.pop(index_axis, None)
-        #todo(tim): also handle the subplot case where there can 
+        # todo(tim): also handle the subplot case where there can 
         # be more index axis levels e.g. x1
         child.pop(f"{index_axis}0", None)
         child.pop(f"d{index_axis}", None)
