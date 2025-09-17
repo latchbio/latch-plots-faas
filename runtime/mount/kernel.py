@@ -531,7 +531,6 @@ def _split_violin_groups(
 
 def serialize_plotly_figure(x: BaseFigure) -> object:
     res = x.to_dict()
-    violin_layout_mode: Literal["overlay", "group"] | None = None
 
     processed_traces: list[dict[str, Any]] = []
     for trace in res["data"]:
@@ -547,11 +546,9 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
 
                 if group_traces is not None:
                     # note(tim): determine if we need to set violinmode to 
-                    # overlay or group to avoid group name offsets issues
-                    if has_group_settings:
-                        violin_layout_mode = "group"
-                    elif violin_layout_mode != "group":
-                        violin_layout_mode = "overlay"
+                    # overlay to avoid group name offsets issues
+                    if not has_group_settings:
+                        res.setdefault("layout", {})["violinmode"] = "overlay"
                     for group_trace in group_traces:
                         try:
                             precalc_violin(group_trace)
@@ -577,10 +574,6 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
             processed_traces.append(trace)
 
     res["data"] = processed_traces
-
-    # note(tim): violin_layout_mode will be none if no violin traces
-    if violin_layout_mode == "overlay":
-        res.setdefault("layout", {})["violinmode"] = "overlay"
 
     modules = {
         "sage_all": pio_json.get_module("sage.all", should_load=False),
