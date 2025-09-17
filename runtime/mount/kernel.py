@@ -15,7 +15,7 @@ import socket
 import sys
 import traceback
 from collections import defaultdict
-from copy import copy
+from copy import copy, deepcopy
 from dataclasses import asdict, dataclass, field
 from io import TextIOWrapper
 from pathlib import Path
@@ -57,6 +57,7 @@ from plotly_utils.precalc_box import precalc_box
 from plotly_utils.precalc_violin import precalc_violin
 from socketio_thread import SocketIoThread
 from stdio_over_socket import SocketWriter, text_socket_writer
+from base64 import b64decode
 
 ad = auto_install.ad
 
@@ -475,20 +476,104 @@ class CategorizedCellOutputs:
     figures: list[str] = field(default_factory=list)
     static_figures: list[str] = field(default_factory=list)
 
+def _split_violin_groups(
+    trace: dict[str, Any]
+) -> tuple[list[dict[str, Any]] | None, bool]:
+
+    orientation = trace.get("orientation", "v")
+    data_axis = "y" if orientation == "v" else "x"
+    index_axis = "x" if orientation == "v" else "y"
+    if index_axis not in trace or data_axis not in trace:
+        return None, False
+
+    idx_arr = np.asarray(trace.get(index_axis))
+    data_field = trace.get(data_axis)
+    
+    # note(tim): plotly makes this field base64
+    if isinstance(data_field, dict) and "bdata" in data_field and "dtype" in data_field:
+        vals_arr = np.frombuffer(b64decode(data_field["bdata"]), dtype=np.dtype(data_field["dtype"]))
+    else:
+        vals_arr = np.asarray(data_field)
+
+    categories, cat_idx = np.unique(idx_arr, return_inverse=True)
+    
+    if len(categories) <= 1:
+        return None, False
+
+    has_group_settings = any(
+        val is not None and (not isinstance(val, str) or val != "")
+        for val in (trace.get("legendgroup"), trace.get("offsetgroup"))
+    )
+
+    order = categories.tolist()
+    cat_idx = cat_idx.astype(np.int64, copy=False)
+    order_idx = np.argsort(cat_idx, kind="stable")
+    cat_idx_sorted = cat_idx[order_idx]
+    
+    # find where to split the categories
+    split_idx = np.flatnonzero(np.diff(cat_idx_sorted)) + 1
+    groups = np.split(order_idx, split_idx)
+    group_traces: list[dict[str, Any]] = []
+    for label, idxs in zip(order, groups):
+        child = deepcopy(trace)
+        child[data_axis] = vals_arr[idxs]
+        
+        # note(tim): clear any indexes that will cause trouble in precalc_violin
+        child.pop(index_axis, None)
+        # todo(tim): also handle the subplot case where there can 
+        # be more index axis levels e.g. x1
+        child.pop(f"{index_axis}0", None)
+        child.pop(f"d{index_axis}", None)
+        child["name"] = str(label)
+        group_traces.append(child)
+    return group_traces, has_group_settings
+
 
 def serialize_plotly_figure(x: BaseFigure) -> object:
     res = x.to_dict()
 
+    processed_traces: list[dict[str, Any]] = []
     for trace in res["data"]:
         try:
             if trace["type"] == "box":
                 precalc_box(trace)
+                processed_traces.append(trace)
             elif trace["type"] == "violin":
-                precalc_violin(trace)
+                # note(tim): if the trace has multiple violins,
+                # seperate them into different traces to allow 
+                # precomputation for each
+                group_traces, has_group_settings = _split_violin_groups(trace)
+
+                if group_traces is not None:
+                    # note(tim): determine if we need to set violinmode to 
+                    # overlay to avoid group name offsets issues
+                    if not has_group_settings:
+                        res.setdefault("layout", {})["violinmode"] = "overlay"
+                    for group_trace in group_traces:
+                        try:
+                            precalc_violin(group_trace)
+                            orientation = trace.get("orientation", "v")
+                            data_axis = "y" if orientation == "v" else "x"
+                            
+                            # note(tim): plotly has weird issues if this is not provided
+                            group_trace[data_axis] = []
+
+                        except Exception:
+                            traceback.print_exc()
+                        processed_traces.append(group_trace)
+                else:
+                    precalc_violin(trace)
+                    processed_traces.append(trace)
             elif trace["type"] == "scatter":
                 trace["type"] = "scattergl"
+                processed_traces.append(trace)
+            else:
+                processed_traces.append(trace)
         except Exception:
             traceback.print_exc()
+            processed_traces.append(trace)
+
+    res["data"] = processed_traces
 
     modules = {
         "sage_all": pio_json.get_module("sage.all", should_load=False),
