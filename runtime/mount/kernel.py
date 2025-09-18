@@ -783,6 +783,9 @@ class Kernel:
 
             tg.create_task(self.send_globals_summary())
 
+    async def send_run_queue(self, queue: list[str]) -> None:
+        await self.send({"type": "run_queue", "queue": queue})
+
     async def on_tick_finished(
         self, updated_signals: dict[int, Signal[object]], clear_status: bool = True
     ) -> None:
@@ -845,6 +848,8 @@ class Kernel:
         if clear_status:
             await self.set_active_cell(None)
         self.cells_with_pending_widget_updates.clear()
+
+        await self.send_run_queue([])
 
         # fixme(rteqs): cleanup signals in some other way. the below does not work because widget signals
         # are restored on `init` but there are no corresponding `rnodes`

@@ -289,6 +289,14 @@ class RCtx:
 
             self.stale_nodes = {}
 
+            run_queue: list[str] = []
+            for n, _p in to_dispose.values():
+                if n.cell_id is not None and n.cell_id not in run_queue:
+                    run_queue.append(n.cell_id)
+
+            if len(run_queue) > 0:
+                await _inject.kernel.send_run_queue(run_queue)
+
             for n, _p in to_dispose.values():
                 n.dispose()
 
@@ -298,6 +306,10 @@ class RCtx:
                         self.cur_comp = p
 
                         try:
+                            if n.cell_id is not None and n.cell_id in run_queue:
+                                run_queue.remove(n.cell_id)
+                                await _inject.kernel.send_run_queue(run_queue)
+
                             if n._is_stub:
                                 n._is_stub = False
                                 assert n.cell_id is not None
