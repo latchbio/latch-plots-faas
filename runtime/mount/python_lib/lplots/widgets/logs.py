@@ -36,4 +36,6 @@ def w_logs_display(
     )
 
     _emit.emit_widget(key, res._state)
+    _state.submit_widget_state()
+
     return res
