@@ -28,7 +28,11 @@ def w_logs_display(
 
     res = LogsDisplay(
         _key=key,
-        _state={"type": "logs_display", "label": label, "appearance": appearance},
+        _state={
+            "type": "logs_display",
+            "label": label,
+            "appearance": appearance,
+        },
     )
 
     _emit.emit_widget(key, res._state)
