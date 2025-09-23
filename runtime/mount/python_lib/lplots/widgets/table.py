@@ -59,16 +59,13 @@ def w_table(
             global_key = k
             break
 
-    if global_key is None:
-        raise ValueError("Could not find source in global variables")
-
     res = Table(
         _key=key,
         _state={
             "type": table_widget_type,
             "label": label,
             "value_viewer_key": f"{global_key}_{key}",
-            "global_key": global_key,
+            "global_key": str(global_key),
             "appearance": appearance,
         },
         _signal=_state.use_value_signal(key=key),

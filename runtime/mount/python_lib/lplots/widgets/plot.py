@@ -77,9 +77,6 @@ def w_plot(
         if plot_title == "":
             plot_title = " | ".join(ax.get_title() for ax in source.figure.axes)
 
-    if global_key is None:
-        raise ValueError("Could not find source in global variables")
-
     res = Plot(
         _key=key,
         _state={
@@ -87,7 +84,7 @@ def w_plot(
             "label": label,
             "plot_title": plot_title,
             "value_viewer_key": f"{global_key}_{key}",
-            "global_key": global_key,
+            "global_key": str(global_key),
             "appearance": appearance,
         },
         _signal=_state.use_value_signal(key=key),
