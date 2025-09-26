@@ -68,7 +68,7 @@ async def process_h5ad_request(
                 if "umap" in key.lower() or "spatial" in key.lower():
                     init_obsm_key = key
                     break
-        if init_obsm_key is None and len(possible_obsm_keys) > 0:
+        if (init_obsm_key is None or init_obsm_key not in possible_obsm_keys) and len(possible_obsm_keys) > 0:
             init_obsm_key = possible_obsm_keys[0]
 
         possible_obs_keys = adata.obs_keys()
