@@ -12,7 +12,7 @@ from latch_asgi.server import LatchASGIServer
 
 from .config import config
 from .mount.endpoints import http_routes, websocket_routes
-from .mount.entrypoint import shutdown, start_kernel_proc
+from .mount.entrypoint import shutdown, start_kernel_proc, start_agent_proc
 
 cfg = HypercornConfig()
 cfg.bind = ["[::]:5000"]
@@ -23,7 +23,7 @@ cfg.graceful_timeout = 0.1
 latch_server = LatchASGIServer(
     http_routes=http_routes,
     websocket_routes=websocket_routes,
-    startup_tasks=[start_kernel_proc()],
+    startup_tasks=[start_kernel_proc(), start_agent_proc()],
     shutdown_tasks=[shutdown()],
 )
 
