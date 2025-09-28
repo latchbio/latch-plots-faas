@@ -830,18 +830,12 @@ class Kernel:
 
                     res[abs_k]["value"] = val
 
-            if (
-                len(updated_widgets) == 0
-                and cell_id not in self.cells_with_pending_widget_updates
-            ):
-                continue
-
             await self.send(
                 {
                     "type": "cell_widgets",
                     "cell_id": cell_id,
                     "widget_state": res,
-                    "updated_widgets": list(updated_widgets),
+                    "updated_widgets": list(updated_widgets or res.keys()),
                 }
             )
 
