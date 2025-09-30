@@ -4,15 +4,33 @@ import socket
 import sys
 import traceback
 import uuid
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from enum import Enum
+from typing import Literal
 from textwrap import dedent
 
+sandbox_root = os.environ.get("LATCH_SANDBOX_ROOT")
+if sandbox_root:
+    import pathlib
+    original_path_new = pathlib.Path.__new__
+
+    def patched_path_new(cls, *args, **kwargs):
+        if args and args[0] == "/root/.latch":
+            return original_path_new(cls, sandbox_root, *args[1:], **kwargs)
+        return original_path_new(cls, *args, **kwargs)
+
+    pathlib.Path.__new__ = patched_path_new
+
+AGENT_DEBUG = os.environ.get("AGENT_DEBUG") == "1"
+
 from agents import Agent, Runner, SQLiteSession, function_tool
+from agents.items import ReasoningItem
 from agents.model_settings import ModelSettings
+from agents.result import RunResult
 from instructions import construct_instructions
 from lplots import _inject
 from openai.types.shared.reasoning import Reasoning
+from pydantic import BaseModel
 from socketio_thread import SocketIoThread
 
 
@@ -22,41 +40,40 @@ class Mode(Enum):
     debugging = "debugging"
 
 
-class PlanStatus(Enum):
-    todo = "todo"
-    in_progress = "in_progress"
-    done = "done"
-
-
-class PlanAction(Enum):
-    add = "add"
-    update = "update"
-    complete = "complete"
-
-
-@dataclass
-class PlanItem:
+class PlanItem(BaseModel):
     id: str
     description: str
-    status: PlanStatus
+    status: Literal["todo", "in_progress", "done"]
 
 
-@dataclass
-class PlanDiff:
-    action: PlanAction
+class PlanDiff(BaseModel):
+    action: Literal["add", "update", "complete"]
     id: str
     description: str
 
 
-@dataclass
-class NotebookResponse:
+class NotebookResponse(BaseModel):
     plan: list[PlanItem]
     plan_diff: list[PlanDiff]
     summary: list[str] | None = None
     questions: list[str] | None = None
 
 
-@dataclass(kw_only=True)
+from typing_extensions import TypedDict
+
+class PlanItemPayload(TypedDict):
+    id: str
+    description: str
+    status: Literal["todo", "in_progress", "done"]
+
+
+class PlanDiffPayload(TypedDict):
+    action: Literal["add", "update", "complete"]
+    id: str
+    description: str
+
+
+@dataclass
 class AgentHarness:
     conn: SocketIoThread
     initialized: bool = False
@@ -98,7 +115,8 @@ class AgentHarness:
             return {"status": "error", "error": f"Send failed: {e!s}"}
 
         try:
-            return await asyncio.wait_for(response_future, timeout=5.0)
+            result = await asyncio.wait_for(response_future, timeout=10.0)
+            return result
         except TimeoutError:
             return {"status": "error", "error": "Operation timeout", "tx_id": tx_id}
         finally:
@@ -144,6 +162,9 @@ class AgentHarness:
             if position < 0:
                 return "Error: Position must be non-negative"
 
+            if AGENT_DEBUG:
+                print(f"[tool] create_cell pos={position} title=\"{title}\"")
+
             params = {
                 "position": position,
                 "cell_type": "code",
@@ -155,7 +176,10 @@ class AgentHarness:
             result = await self.atomic_operation("create_cell", params)
             if result.get("status") == "success":
                 cell_id = result.get("cell_id", "unknown")
-                return f"Created cell at position {position} (ID: {cell_id}, Title: {title})"
+                msg = f"Created cell at position {position} (ID: {cell_id}, Title: {title})"
+                if AGENT_DEBUG:
+                    print(f"[tool] create_cell -> {msg}")
+                return msg
             return f"Failed to create cell: {result.get('error', 'Unknown error')}"
 
         @function_tool
@@ -169,6 +193,9 @@ class AgentHarness:
             if position < 0:
                 return "Error: Position must be non-negative"
 
+            if AGENT_DEBUG:
+                print(f"[tool] create_markdown_cell pos={position}")
+
             params = {
                 "position": position,
                 "cell_type": "markdown",
@@ -178,7 +205,10 @@ class AgentHarness:
             result = await self.atomic_operation("create_markdown_cell", params)
             if result.get("status") == "success":
                 cell_id = result.get("cell_id", "unknown")
-                return f"Created markdown cell at position {position} (ID: {cell_id})"
+                msg = f"Created markdown cell at position {position} (ID: {cell_id})"
+                if AGENT_DEBUG:
+                    print(f"[tool] create_markdown_cell -> {msg}")
+                return msg
             return f"Failed to create cell: {result.get('error', 'Unknown error')}"
 
         @function_tool
@@ -190,6 +220,9 @@ class AgentHarness:
                 new_code: The new source code for the cell
                 auto_run: Whether to automatically run the cell after editing
             """
+            if AGENT_DEBUG:
+                print(f"[tool] edit_cell id={cell_id}")
+
             params = {
                 "cell_id": cell_id,
                 "source": new_code,
@@ -198,12 +231,18 @@ class AgentHarness:
 
             result = await self.atomic_operation("edit_cell", params)
             if result.get("status") == "success":
-                return f"Cell {cell_id} edited successfully"
+                msg = f"Cell {cell_id} edited successfully"
+                if AGENT_DEBUG:
+                    print(f"[tool] edit_cell -> {msg}")
+                return msg
             return f"Failed to edit cell: {result.get('error', 'Unknown error')}"
 
         @function_tool
         async def delete_cell(cell_id: str) -> str:
             """Remove a cell from the notebook."""
+            if AGENT_DEBUG:
+                print(f"[tool] delete_cell id={cell_id}")
+
             params = {"cell_id": cell_id}
 
             result = await self.atomic_operation("delete_cell", params)
@@ -215,8 +254,12 @@ class AgentHarness:
                     cell_list = ", ".join([f"{c['index']}: {c['cell_type']}" for c in remaining[:5]])
                     if len(remaining) > 5:
                         cell_list += f", ... ({len(remaining) - 5} more)"
-                    return f"Cell {cell_id} deleted. {cell_count} cells remain: [{cell_list}]"
-                return f"Cell {cell_id} deleted. No cells remain in notebook."
+                    msg = f"Cell {cell_id} deleted. {cell_count} cells remain: [{cell_list}]"
+                else:
+                    msg = f"Cell {cell_id} deleted. No cells remain in notebook."
+                if AGENT_DEBUG:
+                    print(f"[tool] delete_cell -> {msg}")
+                return msg
             return f"Failed to delete cell: {result.get('error', 'Unknown error')}"
 
         @function_tool
@@ -247,12 +290,21 @@ class AgentHarness:
         @function_tool
         async def delete_all_cells() -> str:
             """Delete all cells in the notebook efficiently."""
-            params = {}
+            context_result = await self.atomic_operation("get_context", {})
+            if context_result.get("status") != "success":
+                return "Failed to get notebook context"
 
-            result = await self.atomic_operation("clear_notebook", params)
-            if result.get("status") == "success":
-                return "Cleared all cells from the notebook"
-            return f"Failed to clear notebook: {result.get('error', 'Unknown error')}"
+            cells = context_result.get("context", {}).get("cells", [])
+            deleted_count = 0
+
+            for cell in reversed(cells):
+                cell_id = cell.get("cell_id")
+                if cell_id:
+                    result = await self.atomic_operation("delete_cell", {"cell_id": cell_id})
+                    if result.get("status") == "success":
+                        deleted_count += 1
+
+            return f"Deleted {deleted_count} cells from the notebook"
 
         @function_tool
         async def get_notebook_context() -> str:
@@ -285,8 +337,8 @@ class AgentHarness:
 
         @function_tool
         async def send_plan_update(
-            plan: list[dict],
-            plan_diff: list[dict] | None = None,
+            plan: list[PlanItemPayload],
+            plan_diff: list[PlanDiffPayload] | None = None,
         ) -> str:
             """Send plan state update to the frontend.
 
@@ -301,6 +353,9 @@ class AgentHarness:
                 The final agent response already includes the complete plan, so
                 skip this call if you are about to return the final response.
             """
+            if AGENT_DEBUG:
+                print(f"[tool] send_plan_update plan_items={len(plan)} diff_items={len(plan_diff or [])}")
+
             try:
                 plan_items = [PlanItem(**item) for item in plan]
                 plan_diff_items = [PlanDiff(**item) for item in (plan_diff or [])]
@@ -308,13 +363,16 @@ class AgentHarness:
                 return f"Invalid plan data: {e}"
 
             plan_payload = {
-                "plan": [asdict(item) for item in plan_items],
-                "plan_diff": [asdict(item) for item in plan_diff_items],
+                "plan": [item.model_dump() for item in plan_items],
+                "plan_diff": [item.model_dump() for item in plan_diff_items],
             }
 
             result = await self.atomic_operation("plan_update", plan_payload)
             if result.get("status") == "success":
-                return "Plan update delivered"
+                msg = "Plan update delivered"
+                if AGENT_DEBUG:
+                    print(f"[tool] send_plan_update -> {msg}")
+                return msg
             return f"Failed to deliver plan update: {result.get('error', 'Unknown error')}"
 
         @function_tool
@@ -345,7 +403,8 @@ class AgentHarness:
             try:
                 os.environ["OPENAI_API_KEY"] = self.api_key
 
-                self.session = SQLiteSession()
+                session_id = f"local_session_{uuid.uuid4().hex[:8]}"
+                self.session = SQLiteSession(session_id)
                 self.init_tools()
 
                 context = msg.get("context", "")
@@ -383,6 +442,7 @@ class AgentHarness:
 
     async def handle_query(self, msg: dict[str, object]) -> None:
         query = msg.get("query", "")
+        request_id = msg.get("request_id")
 
         print(f"[agent] Processing query: {query[:100]}...")
 
@@ -401,6 +461,13 @@ class AgentHarness:
             if self.mode == Mode.planning and self.operation_counter > previous_ops:
                 self.set_mode(Mode.executing)
 
+            if AGENT_DEBUG and hasattr(result, "new_items"):
+                for item in result.new_items:
+                    if hasattr(item, "raw_item") and hasattr(item.raw_item, "reasoning"):
+                        reasoning = item.raw_item.reasoning
+                        if reasoning and hasattr(reasoning, "content"):
+                            print(f"[reasoning] {reasoning.content}")
+
             response_content = ""
             structured_output = None
 
@@ -417,15 +484,20 @@ class AgentHarness:
             else:
                 response_content = str(result)
 
+            if self.mode == Mode.executing:
+                self.set_mode(Mode.planning)
+
             response_msg = {
                 "type": "agent_result",
                 "status": "success",
-                "response": response_content,
-                "mode": self.mode.value
+                "responses": [response_content],
             }
 
+            if request_id is not None:
+                response_msg["request_id"] = request_id
+
             if structured_output is not None:
-                response_msg["structured_output"] = asdict(structured_output)
+                response_msg["structured_output"] = structured_output.model_dump()
 
             await self.send(response_msg)
 
@@ -542,12 +614,13 @@ class AgentHarness:
         msg = await self.conn.recv()
         msg_type = msg.get("type")
 
-        print(f"[agent] Received message type: {msg_type}")
+        if AGENT_DEBUG:
+            print(f"[agent] Received message type: {msg_type}")
 
         if msg_type == "init":
             await self.handle_init(msg)
         elif msg_type == "agent_query":
-            await self.handle_query(msg)
+            self.create_tracked_task(self.handle_query(msg))
         elif msg_type == "agent_cancel":
             await self.handle_cancel(msg)
         elif msg_type == "agent_action_response":
@@ -565,6 +638,8 @@ class AgentHarness:
             cell_id = msg.get("cell_id")
             if cell_id is not None:
                 self.executing_cells.discard(str(cell_id))
+        elif msg_type == "kernel_message":
+            pass
         else:
             print(f"[agent] Unknown message type: {msg_type}")
 
