@@ -537,14 +537,16 @@ async def stop_kernel_proc() -> None:
 
 async def stop_agent_proc() -> None:
     proc = a_proc.proc
-    if proc is not None:
+    if proc is not None and proc.returncode is None:
         try:
             proc.terminate()
-            await asyncio.wait_for(proc.wait(), timeout=10)
+            await asyncio.wait_for(proc.wait(), timeout=2)
         except TimeoutError:
             print("Error terminating agent process")
             proc.kill()
             await proc.wait()
+        except ProcessLookupError:
+            pass
 
 
 async def shutdown() -> None:

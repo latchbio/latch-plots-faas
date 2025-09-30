@@ -1,3 +1,5 @@
+import asyncio
+import os
 import re
 from dataclasses import dataclass
 
@@ -6,7 +8,6 @@ import orjson
 from latch_asgi.context.websocket import Context, HandlerResult
 from latch_asgi.framework.websocket import (
     WebsocketBadMessage,
-    WebsocketConnectionClosedError,
     receive_json,
 )
 from latch_data_validation.data_validation import validate
@@ -15,6 +16,8 @@ from opentelemetry.trace import Span
 
 from ..entrypoint import a_proc, pod_id, pod_session_id
 from ..utils import gql_query
+
+DISABLE_AUTH = os.environ.get("DISABLE_AUTH") == "1"
 
 
 @dataclass(frozen=True)
@@ -108,22 +111,34 @@ async def agent(s: Span, ctx: Context) -> HandlerResult:
         )
         return "Agent not available"
 
-    try:
-        await ctx.send_message(
-            orjson.dumps({
-                "type": "agent_ready",
-                "connection_idx": connection_idx,
-            }).decode()
-        )
+    await conn_a.send({
+        "type": "init",
+        "context": f"You are assisting with notebook {notebook_id}."
+    })
 
-        connection_idx += 1
+    await ctx.send_message(
+        orjson.dumps({
+            "type": "agent_ready",
+            "connection_idx": connection_idx,
+        }).decode()
+    )
 
+    connection_idx += 1
+
+    async def forward_to_agent() -> dict:
         while True:
             msg = await receive_json(ctx.receive)
-
             await conn_a.send(msg)
 
-    except WebsocketConnectionClosedError:
-        ...
+    async def forward_to_frontend() -> dict:
+        while True:
+            msg = await conn_a.recv()
+            await ctx.send_message(orjson.dumps(msg).decode())
+
+    await asyncio.gather(
+        forward_to_agent(),
+        forward_to_frontend(),
+        return_exceptions=True
+    )
 
     return "Ok"
