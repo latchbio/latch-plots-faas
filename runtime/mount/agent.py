@@ -6,8 +6,8 @@ import traceback
 import uuid
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Literal
 from textwrap import dedent
+from typing import Literal
 
 sandbox_root = os.environ.get("LATCH_SANDBOX_ROOT")
 if sandbox_root:
@@ -24,9 +24,7 @@ if sandbox_root:
 AGENT_DEBUG = os.environ.get("AGENT_DEBUG") == "1"
 
 from agents import Agent, Runner, SQLiteSession, function_tool
-from agents.items import ReasoningItem
 from agents.model_settings import ModelSettings
-from agents.result import RunResult
 from instructions import construct_instructions
 from lplots import _inject
 from openai.types.shared.reasoning import Reasoning
@@ -60,6 +58,7 @@ class NotebookResponse(BaseModel):
 
 
 from typing_extensions import TypedDict
+
 
 class PlanItemPayload(TypedDict):
     id: str
@@ -109,6 +108,8 @@ class AgentHarness:
         self.pending_operations[tx_id] = response_future
 
         try:
+            if AGENT_DEBUG:
+                print(f"[agent] -> {action}")
             await self.send({"type": "agent_action", "action": action, "params": params, "tx_id": tx_id})
         except Exception as e:
             self.pending_operations.pop(tx_id, None)
@@ -163,7 +164,7 @@ class AgentHarness:
                 return "Error: Position must be non-negative"
 
             if AGENT_DEBUG:
-                print(f"[tool] create_cell pos={position} title=\"{title}\"")
+                print(f'[tool] create_cell pos={position} title="{title}"')
 
             params = {
                 "position": position,
@@ -194,7 +195,8 @@ class AgentHarness:
                 return "Error: Position must be non-negative"
 
             if AGENT_DEBUG:
-                print(f"[tool] create_markdown_cell pos={position}")
+                code_preview = code[:60] + "..." if len(code) > 60 else code
+                print(f"[tool] create_markdown_cell pos={position} code={repr(code_preview)}")
 
             params = {
                 "position": position,
@@ -216,7 +218,7 @@ class AgentHarness:
             """Replace the contents of an existing cell.
 
             Args:
-                cell_id: The cell ID - can be either the user-visible number (0, 1, 2...) or internal ID
+                cell_id: The exact cell_id string from get_notebook_context (e.g. 'cid:0@123:Map'), NOT the index number.
                 new_code: The new source code for the cell
                 auto_run: Whether to automatically run the cell after editing
             """
@@ -239,7 +241,11 @@ class AgentHarness:
 
         @function_tool
         async def delete_cell(cell_id: str) -> str:
-            """Remove a cell from the notebook."""
+            """Remove a cell from the notebook.
+
+            Args:
+                cell_id: The exact cell_id string from get_notebook_context (e.g. 'cid:0@123:Map'), NOT the index number.
+            """
             if AGENT_DEBUG:
                 print(f"[tool] delete_cell id={cell_id}")
 
@@ -264,7 +270,11 @@ class AgentHarness:
 
         @function_tool
         async def run_cell(cell_id: str) -> str:
-            """Execute a specific cell."""
+            """Execute a specific cell.
+
+            Args:
+                cell_id: The exact cell_id string from get_notebook_context (e.g. 'cid:0@123:Map'), NOT the index number.
+            """
             params = {"cell_id": cell_id}
 
             await self.send({
@@ -278,7 +288,11 @@ class AgentHarness:
 
         @function_tool
         async def stop_cell(cell_id: str) -> str:
-            """Stop execution of a specific cell."""
+            """Stop execution of a specific cell.
+
+            Args:
+                cell_id: The exact cell_id string from get_notebook_context (e.g. 'cid:0@123:Map'), NOT the index number.
+            """
             params = {"cell_id": cell_id}
 
             result = await self.atomic_operation("stop_cell", params)
@@ -321,7 +335,8 @@ class AgentHarness:
 
             summary = f"Notebook has {cell_count} cell(s):\n"
             for cell in cells:
-                user_id = cell.get("user_id", cell.get("index", "?"))
+                index = cell.get("index", "?")
+                cell_id = cell.get("cell_id", "?")
                 cell_type = cell.get("cell_type", "unknown")
                 status = cell.get("status", "idle")
                 source = cell.get("source", "")
@@ -329,7 +344,7 @@ class AgentHarness:
                 source_preview = source[:100] + "..." if len(source) > 100 else source
                 source_preview = source_preview.replace("\n", " ")
 
-                summary += f"\nCell {user_id} ({cell_type}, {status})"
+                summary += f"\n[{index}] ({cell_type}, {status}, id: {cell_id})"
                 if source_preview:
                     summary += f": {source_preview}"
 
@@ -491,6 +506,7 @@ class AgentHarness:
                 "type": "agent_result",
                 "status": "success",
                 "responses": [response_content],
+                "mode": self.mode.value,
             }
 
             if request_id is not None:
@@ -506,7 +522,8 @@ class AgentHarness:
             await self.send({
                 "type": "agent_result",
                 "status": "error",
-                "error": str(e)
+                "error": str(e),
+                "mode": self.mode.value,
             })
 
     def create_tracked_task(self, coro) -> asyncio.Task:
@@ -598,7 +615,8 @@ class AgentHarness:
         print(f"[agent] Started error fix task for cell {cell_id}")
 
     async def handle_cancel(self, msg: dict[str, object]) -> None:
-        print("[agent] Cancel request")
+        request_id = msg.get("request_id", "unknown")
+        print(f"[agent] Cancelling request {request_id}")
 
         for task in list(self.active_tasks):
             if not task.done():
@@ -614,16 +632,26 @@ class AgentHarness:
         msg = await self.conn.recv()
         msg_type = msg.get("type")
 
-        if AGENT_DEBUG:
-            print(f"[agent] Received message type: {msg_type}")
-
         if msg_type == "init":
+            if AGENT_DEBUG:
+                print(f"[agent] Message: {msg_type}")
             await self.handle_init(msg)
         elif msg_type == "agent_query":
+            if AGENT_DEBUG:
+                query = msg.get("query", "")
+                query_preview = query[:60] + "..." if len(query) > 60 else query
+                print(f"[agent] Query: {query_preview}")
             self.create_tracked_task(self.handle_query(msg))
         elif msg_type == "agent_cancel":
+            if AGENT_DEBUG:
+                request_id = msg.get("request_id", "unknown")
+                print(f"[agent] Cancel: {request_id}")
             await self.handle_cancel(msg)
         elif msg_type == "agent_action_response":
+            if AGENT_DEBUG:
+                action = msg.get("action", "unknown")
+                status = msg.get("status", "unknown")
+                print(f"[agent] {action} -> {status}")
             await self.handle_action_response(msg)
         elif msg_type == "cell_result" and msg.get("exception") is not None:
             await self.handle_cell_error({
@@ -639,7 +667,21 @@ class AgentHarness:
             if cell_id is not None:
                 self.executing_cells.discard(str(cell_id))
         elif msg_type == "kernel_message":
-            pass
+            nested_msg = msg.get("message", {})
+            nested_type = nested_msg.get("type")
+            if nested_type == "cell_result" and nested_msg.get("has_exception") is True:
+                await self.handle_cell_error({
+                    "cell_id": nested_msg.get("cell_id"),
+                    "exception": nested_msg.get("exception", "")
+                })
+            elif nested_type == "start_cell":
+                cell_id = nested_msg.get("cell_id")
+                if cell_id is not None:
+                    self.executing_cells.add(str(cell_id))
+            elif nested_type == "cell_result":
+                cell_id = nested_msg.get("cell_id")
+                if cell_id is not None:
+                    self.executing_cells.discard(str(cell_id))
         else:
             print(f"[agent] Unknown message type: {msg_type}")
 
