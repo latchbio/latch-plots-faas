@@ -85,12 +85,11 @@ def generate_filter_mask(
         elif f["type"] == "var":
             keys = f.get("keys", [])
             if not keys:
-                # Fallback to old single key format for backward compatibility
+                # old key format
                 key = f.get("key")
                 if key:
                     keys = [key]
 
-            # Filter out keys that don't exist in var_names
             valid_keys = [k for k in keys if k in adata.var_names]
             if not valid_keys:
                 continue
@@ -98,11 +97,9 @@ def generate_filter_mask(
             op = f["operation"]
             value = op["value"]
 
-            # If multiple keys, compute the average
             if len(valid_keys) == 1:
                 var_values = np.asarray(adata[:, valid_keys[0]].to_df().iloc[:, 0:].values.ravel())  # noqa: PD011
             else:
-                # Compute average across multiple genes
                 gene_values = [
                     np.asarray(adata[:, key].to_df().iloc[:, 0:].values.ravel())  # noqa: PD011
                     for key in valid_keys
