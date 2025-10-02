@@ -56,7 +56,7 @@ from plotly.basedatatypes import BaseFigure
 from plotly_utils.precalc_box import precalc_box
 from plotly_utils.precalc_violin import precalc_violin
 from socketio_thread import SocketIoThread
-from stdio_over_socket import SocketWriter, text_socket_writer, text_tee_writer
+from stdio_over_socket import SocketWriter, text_socket_writer
 from base64 import b64decode
 
 ad = auto_install.ad
@@ -1801,19 +1801,11 @@ async def main() -> None:
         k = Kernel(conn=socket_io_thread)
         _inject.kernel = k
 
-        log_path = Path('/var/log/kernel.log')
-        log_path.parent.mkdir(parents=True, exist_ok=True)
-        kernel_log = open(log_path, 'a')
-
-        sys.stdout = text_tee_writer(
-            SocketWriter(conn=k.conn, kernel=k, name="stdout", loop=loop),
-            kernel_log,
-            "stdout"
+        sys.stdout = text_socket_writer(
+            SocketWriter(conn=k.conn, kernel=k, name="stdout", loop=loop)
         )
-        sys.stderr = text_tee_writer(
-            SocketWriter(conn=k.conn, kernel=k, name="stderr", loop=loop),
-            kernel_log,
-            "stderr"
+        sys.stderr = text_socket_writer(
+            SocketWriter(conn=k.conn, kernel=k, name="stderr", loop=loop)
         )
 
         await k.send({"type": "ready"})
@@ -1827,7 +1819,6 @@ async def main() -> None:
 
         print("Kernel shutting down...")
     finally:
-        kernel_log.close()
         socket_io_thread.shutdown.set()
         socket_io_thread.join()
 

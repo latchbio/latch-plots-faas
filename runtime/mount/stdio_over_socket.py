@@ -66,37 +66,3 @@ def text_socket_writer(x: SocketWriter) -> TextIOWrapper:
     return TextIOWrapper(
         BufferedWriter(x), encoding="utf-8", errors="replace", line_buffering=True
     )
-
-class TeeWriter(RawIOBase):
-    def __init__(self, socket_writer: SocketWriter, log_file, stream_name: str):
-        self.socket_writer = socket_writer
-        self.log_file = log_file
-        self.stream_name = stream_name
-
-    @override
-    def write(self, b: "ReadableBuffer") -> int | None:
-        result = self.socket_writer.write(b)
-
-        try:
-            from datetime import datetime
-            data = bytes(b).decode(errors='replace')
-            timestamp = datetime.now().isoformat()
-            self.log_file.write(f"{timestamp} [kernel:{self.stream_name}] {data}")
-            self.log_file.flush()
-        except Exception as e:
-            import sys
-            print(f"[TeeWriter ERROR] {e}", file=sys.__stderr__, flush=True)
-
-        return result
-
-    @override
-    def writable(self) -> bool:
-        return True
-
-def text_tee_writer(socket_writer: SocketWriter, log_file, stream_name: str) -> TextIOWrapper:
-    return TextIOWrapper(
-        BufferedWriter(TeeWriter(socket_writer, log_file, stream_name)),
-        encoding="utf-8",
-        errors="replace",
-        line_buffering=True
-    )
