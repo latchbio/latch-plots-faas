@@ -343,7 +343,7 @@ class AgentHarness:
                 status = cell.get("status", "idle")
                 source = cell.get("source", "")
 
-                source_preview = source[:100] + "..." if len(source) > 100 else source
+                source_preview = source[:500] + "..." if len(source) > 500 else source
                 source_preview = source_preview.replace("\n", " ")
 
                 summary += f"\n[{index}] ({cell_type}, {status}, id: {cell_id})"
@@ -416,44 +416,45 @@ class AgentHarness:
 
         self.api_key = os.environ.get("OPENAI_API_KEY")
 
-        if self.api_key:
-            try:
-                os.environ["OPENAI_API_KEY"] = self.api_key
-
-                session_id = f"local_session_{uuid.uuid4().hex[:8]}"
-                self.session = SQLiteSession(session_id)
-                self.init_tools()
-
-                context = msg.get("context", "")
-                model, reasoning_effort = self.mode_config[self.mode]
-
-                self.agent = Agent(
-                    name="NotebookAssistant",
-                    model=model,
-                    instructions=construct_instructions(context),
-                    tools=self.tools,
-                    output_type=NotebookResponse,
-                    model_settings=ModelSettings(
-                        reasoning=Reasoning(effort=reasoning_effort)
-                    )
-                )
-
-                self.initialized = True
-                await self.send({
-                    "type": "agent_status",
-                    "status": "ready"
-                })
-                print("[agent] Initialization complete", flush=True)
-            except Exception as e:
-                await self.send({
-                    "type": "agent_error",
-                    "error": f"Failed to initialize: {e!s}",
-                    "fatal": True
-                })
-        else:
+        if not self.api_key:
             await self.send({
                 "type": "agent_error",
                 "error": "OPENAI_API_KEY not set",
+                "fatal": True
+            })
+            return
+
+        try:
+            os.environ["OPENAI_API_KEY"] = self.api_key
+
+            session_id = f"local_session_{uuid.uuid4().hex[:8]}"
+            self.session = SQLiteSession(session_id)
+            self.init_tools()
+
+            context = msg.get("context", "")
+            model, reasoning_effort = self.mode_config[self.mode]
+
+            self.agent = Agent(
+                name="NotebookAssistant",
+                model=model,
+                instructions=construct_instructions(context),
+                tools=self.tools,
+                output_type=NotebookResponse,
+                model_settings=ModelSettings(
+                    reasoning=Reasoning(effort=reasoning_effort)
+                )
+            )
+
+            self.initialized = True
+            await self.send({
+                "type": "agent_status",
+                "status": "ready"
+            })
+            print("[agent] Initialization complete", flush=True)
+        except Exception as e:
+            await self.send({
+                "type": "agent_error",
+                "error": f"Failed to initialize: {e!s}",
                 "fatal": True
             })
 
@@ -461,7 +462,7 @@ class AgentHarness:
         query = msg.get("query", "")
         request_id = msg.get("request_id")
 
-        print(f"[agent] Processing query: {query[:100]}...")
+        print(f"[agent] Processing query: {query[:500]}...")
 
         assert self.agent is not None, "Agent not initialized"
 
@@ -590,8 +591,7 @@ class AgentHarness:
                 print(f"[agent] Successfully fixed error in cell {cell_id}")
 
             finally:
-                if self.mode != previous_mode:
-                    self.set_mode(previous_mode)
+                self.set_mode(previous_mode)
 
         except Exception as e:
             print(f"[agent] Failed to fix error in cell {cell_id}: {e}")

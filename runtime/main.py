@@ -23,7 +23,7 @@ cfg.graceful_timeout = 0.1
 latch_server = LatchASGIServer(
     http_routes=http_routes,
     websocket_routes=websocket_routes,
-    startup_tasks=[start_kernel_proc(), start_agent_proc()],
+    startup_tasks=[start_kernel_proc()],
     shutdown_tasks=[shutdown()],
 )
 

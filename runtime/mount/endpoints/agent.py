@@ -8,9 +8,10 @@ from latch_asgi.framework.websocket import (
 from latch_o11y.o11y import trace_app_function_with_span
 from opentelemetry.trace import Span
 
-from ..entrypoint import a_proc, pod_id, pod_session_id
+from ..entrypoint import a_proc, pod_id, pod_session_id, start_agent_proc
 
 connection_idx = 0
+agent_start_lock = asyncio.Lock()
 
 
 @trace_app_function_with_span
@@ -25,12 +26,16 @@ async def agent(s: Span, ctx: Context) -> HandlerResult:
         "connection_idx": connection_idx,
     })
 
+    async with agent_start_lock:
+        if a_proc.conn_a is None:
+            await start_agent_proc()
+
     conn_a = a_proc.conn_a
     if conn_a is None:
         await ctx.send_message(
             orjson.dumps({
                 "type": "agent_error",
-                "error": "Agent process not available",
+                "error": "Agent process failed to start",
                 "fatal": True
             }).decode()
         )
