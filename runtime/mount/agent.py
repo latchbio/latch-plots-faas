@@ -94,6 +94,8 @@ class AgentHarness:
     })
 
     async def send(self, msg: dict[str, object]) -> None:
+        msg_type = msg.get("type", "unknown")
+        print(f"[agent] Sending message: {msg_type}", flush=True)
         await self.conn.send(msg)
 
     async def atomic_operation(self, action: str, params: dict) -> dict:
@@ -410,7 +412,7 @@ class AgentHarness:
         ]
 
     async def handle_init(self, msg: dict[str, object]) -> None:
-        print("[agent] Initializing")
+        print("[agent] Initializing", flush=True)
 
         self.api_key = os.environ.get("OPENAI_API_KEY")
 
@@ -441,7 +443,7 @@ class AgentHarness:
                     "type": "agent_status",
                     "status": "ready"
                 })
-                print("[agent] Initialization complete")
+                print("[agent] Initialization complete", flush=True)
             except Exception as e:
                 await self.send({
                     "type": "agent_error",
@@ -631,6 +633,8 @@ class AgentHarness:
     async def accept(self) -> None:
         msg = await self.conn.recv()
         msg_type = msg.get("type")
+
+        print(f"[agent] Received message: {msg_type}", flush=True)
 
         if msg_type == "init":
             if AGENT_DEBUG:

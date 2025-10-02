@@ -83,8 +83,9 @@ class TeeWriter(RawIOBase):
             timestamp = datetime.now().isoformat()
             self.log_file.write(f"{timestamp} [kernel:{self.stream_name}] {data}")
             self.log_file.flush()
-        except Exception:
-            pass
+        except Exception as e:
+            import sys
+            print(f"[TeeWriter ERROR] {e}", file=sys.__stderr__, flush=True)
 
         return result
 
