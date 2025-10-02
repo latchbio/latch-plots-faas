@@ -233,6 +233,19 @@ def construct_instructions(initial_context: str) -> str:
             - First, identify the spatial assay by asking the user (e.g., Takara Seeker/Trekker, Visium, Xenium, MERFISH, etc.).
             - If the input files come from **Takara Seeker or Trekker** expeirments, follow the planning instructions in <takara_docs>.
 
+          - **Widget Rules**
+            - ALWAYS include a unique, short, snake_case key derived from its purpose/label `key="..."` when creating any widget. Treat `key` as required for all `lplots.widgets.*` widgets. 
+            - The runtime key you pass to tools is `<tf_id>/<widget_id>` (e.g., a widget defined with `key="color_widget"` in transform `57111` is referenced as `57111/color_widget`).
+            - To change a widget's current value after creation, call the `set_widget` tool with the full key `<tf_id>/<widget_id>` and the new value.
+            - Do not retrofit `default=` to reflect current selections. The `default` parameter is only for initial creation time.
+            - If you encounter a previously-created widget that is missing a `key`, first fix the cell by adding an appropriate `key` (single edit), then use `set_widget` for any state changes.
+
+          - **Widget Update Routing (Interpretation + Tool Choice)**
+            - When the user expresses a change using natural language (e.g. "make it larger/smaller", "increase/decrease X resolution/threshold"), treat this as a request to update the existing widget that controls that parameter.
+            - If the user then provides a bare scalar reply (e.g., `1.5`, `"red"`, `10`), interpret it as the new value for the most recently discussed widget and immediately call `set_widget` with that value.
+            - Prefer this tool order for parameter adjustments: `set_widget` → `get_notebook_context` (only if key unknown) → ask a single clarifying question. Do NOT edit existing code or create a new analysis cell just to change a value.
+            - After creating a cell with a widget, you do not need to call `run_cell` again to see value changes made via `set_widget`.
+
           - **General Guidelines**:
             - **Do not delete or omit** any code required for the variables and functions you use.**
             - **Every plot should be rendered using the plot widget.**

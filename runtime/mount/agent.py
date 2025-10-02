@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from textwrap import dedent
 from typing import Literal
+import json
 
 from agents import Agent, Runner, SQLiteSession, function_tool
 from agents.model_settings import ModelSettings
@@ -71,6 +72,7 @@ class PlanDiffPayload(TypedDict):
     id: str
     description: str
 
+WidgetUpdatePayload = TypedDict("WidgetUpdatePayload", {"key": str, "value": str})
 
 @dataclass
 class AgentHarness:
@@ -223,6 +225,10 @@ class AgentHarness:
                 cell_id: The exact cell_id string from get_notebook_context (e.g. 'cid:0@123:Map'), NOT the index number.
                 new_code: The new source code for the cell
                 auto_run: Whether to automatically run the cell after editing
+            
+            Note:
+                Do NOT use this to change a widget's current value/state, 
+                always call the `set_widget` tool for value updates.
             """
             if AGENT_DEBUG:
                 print(f"[tool] edit_cell id={cell_id}")
@@ -350,6 +356,10 @@ class AgentHarness:
                 if source_preview:
                     summary += f": {source_preview}"
 
+                widget_summary = self._format_widget_summaries(cell.get("widgets") or [])
+                if widget_summary:
+                    summary += f"\n  Widgets: {widget_summary}"
+
             return summary
 
         @function_tool
@@ -398,6 +408,65 @@ class AgentHarness:
             self.set_mode(Mode.planning)
             return "Started new planning session"
 
+        @function_tool
+        async def set_widget(updates: list[WidgetUpdatePayload]) -> str:
+            """Set widget values by widget key.
+
+            Args:
+                updates: List of widget updates. Each item must include a `key`
+                    (for example "tf_id/widget_id") and a JSON-serializable
+                    `value` string.
+
+            Returns:
+                Result message describing applied updates
+
+            Notes:
+                - Use this tool for ANY change to a widget's current value/state after creation.
+                - The `key` is the full widget key, including the `tf_id` and `widget_id`, so if you created a widget "leiden_resolution_widget" in transform cell 57111,
+                  the key is "57111/leiden_resolution_widget".
+                - If you already know the widget `key` (e.g., you created it), call this directly.
+                  Otherwise, call `get_notebook_context` to discover keys.
+
+            Examples:
+                set_widget([
+                    {"key": "57111/leiden_resolution_widget", "value": "1.5"}
+                ])
+                set_widget([
+                    {"key": "57112/color_widget", "value": "\"red\""}
+                ])
+            """
+            if not updates:
+                return "No widget updates provided"
+
+            updates_dict: dict[str, object] = {}
+            payload_updates: list[WidgetUpdatePayload] = []
+            print(f"[Agent] Setting widget values: {updates}")
+            for item in updates:
+                key = item.get("key")
+                if not key:
+                    return "Widget updates must include a 'key'"
+
+                value_json = item.get("value")
+                if not value_json:
+                    return "Widget updates must include a 'value'"
+                try:
+                    parsed_value = json.loads(value_json)
+                except json.JSONDecodeError:
+                    parsed_value = value_json
+
+                updates_dict[key] = parsed_value
+                payload_updates.append({"key": key, "value": json.dumps(parsed_value)})
+
+
+            params = {"widget_updates": payload_updates}
+            result = await self.atomic_operation("set_widget", params)
+
+            if result.get("status") == "success":
+                applied_keys = ", ".join(updates_dict.keys())
+                return f"Updated widget values for: {applied_keys}"
+
+            return f"Failed to update widget values: {result.get('error', 'Unknown error')}"
+
         self.tools = [
             create_cell,
             create_markdown_cell,
@@ -409,6 +478,7 @@ class AgentHarness:
             get_notebook_context,
             send_plan_update,
             start_new_plan,
+            set_widget,
         ]
 
     async def handle_init(self, msg: dict[str, object]) -> None:
@@ -629,6 +699,31 @@ class AgentHarness:
 
         self.active_tasks.clear()
         self.error_fixes_in_progress.clear()
+    
+    def _format_widget_summaries(self, widgets: list[dict]) -> str:
+            if not widgets:
+                return ""
+            
+            widget_summaries = []
+            for widget in widgets:
+                widget_key = widget.get("key") or "?"
+                widget_id = widget.get("widget_id") or widget_key
+                label = widget.get("label") or ""
+                value_preview = widget.get("value_preview")
+                widget_type = widget.get("type")
+                
+                widget_desc = f"key={widget_key}"
+                if widget_type:
+                    widget_desc += f", type={widget_type}"
+                if widget_id and widget_id != widget_key:
+                    widget_desc += f", id={widget_id}"
+                if label:
+                    widget_desc += f" ({label})"
+                if value_preview:
+                    widget_desc += f" = {value_preview}"
+                widget_summaries.append(widget_desc)
+            
+            return ", ".join(widget_summaries)
 
     async def accept(self) -> None:
         msg = await self.conn.recv()
