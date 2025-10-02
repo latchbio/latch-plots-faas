@@ -1,7 +1,4 @@
 import asyncio
-import os
-import re
-from dataclasses import dataclass
 
 import orjson
 from latch_asgi.context.websocket import Context, HandlerResult
@@ -13,36 +10,7 @@ from opentelemetry.trace import Span
 
 from ..entrypoint import a_proc, pod_id, pod_session_id
 
-DISABLE_AUTH = os.environ.get("DISABLE_AUTH") == "1"
-
-
-@dataclass(frozen=True)
-class MAuth:
-    token: str
-    notebook_id: str
-
-
-@dataclass(frozen=True)
-class PlotsSignerHasNotebookAccessData:
-    plotsSignerHasNotebookAccess: bool
-
-
-@dataclass(frozen=True)
-class PlotsSignerHasNotebookAccessResp:
-    data: PlotsSignerHasNotebookAccessData
-
-
 connection_idx = 0
-
-auth_header_regex = re.compile(
-    r"""
-    ^(
-        Bearer \s+ (?P<oauth_token>.*) |
-        Latch-Session-Token \s+ (?P<session_token>.*) |
-    )$
-    """,
-    re.IGNORECASE | re.VERBOSE,
-)
 
 
 @trace_app_function_with_span

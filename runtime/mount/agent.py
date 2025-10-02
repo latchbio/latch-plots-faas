@@ -9,6 +9,14 @@ from enum import Enum
 from textwrap import dedent
 from typing import Literal
 
+from agents import Agent, Runner, SQLiteSession, function_tool
+from agents.model_settings import ModelSettings
+from instructions import construct_instructions
+from lplots import _inject
+from openai.types.shared.reasoning import Reasoning
+from pydantic import BaseModel
+from socketio_thread import SocketIoThread
+
 sandbox_root = os.environ.get("LATCH_SANDBOX_ROOT")
 if sandbox_root:
     import pathlib
@@ -22,14 +30,6 @@ if sandbox_root:
     pathlib.Path.__new__ = patched_path_new
 
 AGENT_DEBUG = os.environ.get("AGENT_DEBUG") == "1"
-
-from agents import Agent, Runner, SQLiteSession, function_tool
-from agents.model_settings import ModelSettings
-from instructions import construct_instructions
-from lplots import _inject
-from openai.types.shared.reasoning import Reasoning
-from pydantic import BaseModel
-from socketio_thread import SocketIoThread
 
 
 class Mode(Enum):
@@ -196,7 +196,7 @@ class AgentHarness:
 
             if AGENT_DEBUG:
                 code_preview = code[:60] + "..." if len(code) > 60 else code
-                print(f"[tool] create_markdown_cell pos={position} code={repr(code_preview)}")
+                print(f"[tool] create_markdown_cell pos={position} code={code_preview!r}")
 
             params = {
                 "position": position,
@@ -689,6 +689,9 @@ class AgentHarness:
 async def main() -> None:
     global loop
     loop = asyncio.get_running_loop()
+
+    from datetime import datetime
+    print(f"{datetime.now().isoformat()} [agent] Starting", flush=True)
 
     sock = socket.socket(family=socket.AF_UNIX, fileno=int(sys.argv[-1]))
     sock.setblocking(False)

@@ -7,7 +7,7 @@ import traceback
 from asyncio.subprocess import Process
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TypedDict, TypeVar
+from typing import IO, TypedDict, TypeVar
 
 import orjson
 from latch_data_validation.data_validation import validate
@@ -87,6 +87,7 @@ k_proc = KernelProc()
 class AgentProc:
     conn_a: SocketIo | None = None
     proc: Process | None = None
+    log_file: IO[str] | None = None
 
 
 a_proc = AgentProc()
@@ -505,6 +506,10 @@ async def start_agent_proc() -> None:
         asyncio.create_task(handle_agent_messages(a_proc.conn_a))
     )
 
+    log_path = Path('/var/log/agent.log')
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    a_proc.log_file = open(log_path, 'a')
+
     print("Starting agent subprocess")
     a_proc.proc = await asyncio.create_subprocess_exec(
         sys.executable,
@@ -512,6 +517,8 @@ async def start_agent_proc() -> None:
         str(sock_agent_fd),
         pass_fds=[sock_agent_fd],
         stdin=asyncio.subprocess.DEVNULL,
+        stdout=a_proc.log_file,
+        stderr=a_proc.log_file,
         preexec_fn=lambda: os.nice(5),
     )
 
@@ -547,6 +554,9 @@ async def stop_agent_proc() -> None:
             await proc.wait()
         except ProcessLookupError:
             pass
+
+    if a_proc.log_file is not None:
+        a_proc.log_file.close()
 
 
 async def shutdown() -> None:
