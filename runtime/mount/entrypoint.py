@@ -265,6 +265,7 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                     "type": msg["type"],
                     "cell_id": msg["cell_id"],
                     "has_exception": exc is not None,
+                    "exception": exc,
                     **outputs_data,
                 }
 

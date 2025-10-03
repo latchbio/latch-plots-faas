@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 import socket
 import sys
@@ -538,22 +539,39 @@ class AgentHarness:
     async def fix_cell_error(self, cell_id: str, exception: str) -> None:
         print(f"[agent] Auto-fixing error in cell {cell_id}")
 
+        if not exception:
+            print(f"[agent] No exception text provided for cell {cell_id}")
+            return
+
         try:
             result = await self.atomic_operation("get_context", {})
             source = ""
+            cell_info = None
             if result.get("status") == "success":
                 cells = result.get("context", {}).get("cells", [])
                 for cell in cells:
-                    if str(cell.get("id")) == str(cell_id) or str(cell.get("user_id")) == str(cell_id):
+                    if cell.get("tf_id") is not None and str(cell.get("tf_id")) == str(cell_id):
                         source = cell.get("source", "")
+                        cell_info = cell
                         break
 
             if source == "":
                 print(f"[agent] Could not find source for cell {cell_id}")
+                if result.get("status") == "success":
+                    cells = result.get("context", {}).get("cells", [])
+                    print(f"[agent] Available cells: {[(c.get('tf_id'), c.get('cell_id'), c.get('index')) for c in cells[:3]]}")
                 return
 
+            exception_text = exception
+            try:
+                parsed = json.loads(exception)
+                if isinstance(parsed, dict) and "string" in parsed:
+                    exception_text = parsed["string"]
+            except json.JSONDecodeError:
+                print(f"[agent] Exception is not JSON-encoded, using raw text")
+
             fix_query = dedent(f"""
-                Cell {cell_id} failed with this error:
+                Cell at position {cell_info.get('index', '?')} failed with this error:
 
                 ```python
                 {source}
@@ -561,7 +579,7 @@ class AgentHarness:
 
                 Error:
                 ```
-                {exception}
+                {exception_text}
                 ```
 
                 Analyze and fix this error by:
