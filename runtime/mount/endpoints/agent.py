@@ -8,6 +8,7 @@ from latch_asgi.framework.websocket import (
 from latch_o11y.o11y import trace_app_function_with_span
 from opentelemetry.trace import Span
 
+import runtime.mount.entrypoint as entrypoint_module
 from ..entrypoint import a_proc, pod_id, pod_session_id, start_agent_proc
 
 connection_idx = 0
@@ -26,12 +27,15 @@ async def agent(s: Span, ctx: Context) -> HandlerResult:
         "connection_idx": connection_idx,
     })
 
+    entrypoint_module.current_agent_ctx = ctx
+
     async with agent_start_lock:
         if a_proc.conn_a is None:
             await start_agent_proc()
 
     conn_a = a_proc.conn_a
     if conn_a is None:
+        entrypoint_module.current_agent_ctx = None
         await ctx.send_message(
             orjson.dumps({
                 "type": "agent_error",
@@ -40,10 +44,6 @@ async def agent(s: Span, ctx: Context) -> HandlerResult:
             }).decode()
         )
         return "Agent not available"
-
-    await conn_a.send({
-        "type": "init",
-    })
 
     await ctx.send_message(
         orjson.dumps({
@@ -54,20 +54,11 @@ async def agent(s: Span, ctx: Context) -> HandlerResult:
 
     connection_idx += 1
 
-    async def forward_to_agent() -> dict:
+    try:
         while True:
             msg = await receive_json(ctx.receive)
             await conn_a.send(msg)
-
-    async def forward_to_frontend() -> dict:
-        while True:
-            msg = await conn_a.recv()
-            await ctx.send_message(orjson.dumps(msg).decode())
-
-    await asyncio.gather(
-        forward_to_agent(),
-        forward_to_frontend(),
-        return_exceptions=True
-    )
+    finally:
+        entrypoint_module.current_agent_ctx = None
 
     return "Ok"
