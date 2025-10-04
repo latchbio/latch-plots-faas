@@ -7,7 +7,7 @@ import traceback
 from asyncio.subprocess import Process
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TypedDict, TypeVar
+from typing import IO, TypedDict, TypeVar
 
 import orjson
 from latch_data_validation.data_validation import validate
@@ -32,6 +32,10 @@ T = TypeVar("T")
 sock, sock_k = socket.socketpair(family=socket.AF_UNIX)
 sock.setblocking(False)
 sock_k_fd = sock_k.detach()
+
+sock_a, sock_agent = socket.socketpair(family=socket.AF_UNIX)
+sock_a.setblocking(False)
+sock_agent_fd = sock_agent.detach()
 
 ready_ev = asyncio.Event()
 
@@ -77,6 +81,16 @@ class KernelProc:
 
 
 k_proc = KernelProc()
+
+
+@dataclass
+class AgentProc:
+    conn_a: SocketIo | None = None
+    proc: Process | None = None
+    log_file: IO[str] | None = None
+
+
+a_proc = AgentProc()
 
 
 # todo(maximsmol): typing
@@ -251,6 +265,7 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                     "type": msg["type"],
                     "cell_id": msg["cell_id"],
                     "has_exception": exc is not None,
+                    "exception": exc,
                     **outputs_data,
                 }
 
@@ -475,6 +490,28 @@ async def start_kernel_proc() -> None:
     )
 
 
+async def start_agent_proc() -> None:
+    conn_a = a_proc.conn_a = await SocketIo.from_socket(sock_a)
+
+    log_path = Path('/var/log/agent.log')
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    a_proc.log_file = open(log_path, 'a')
+
+    print("Starting agent subprocess")
+    a_proc.proc = await asyncio.create_subprocess_exec(
+        sys.executable,
+        (dir_p / "agent.py"),
+        str(sock_agent_fd),
+        pass_fds=[sock_agent_fd],
+        stdin=asyncio.subprocess.DEVNULL,
+        stdout=a_proc.log_file,
+        stderr=a_proc.log_file,
+        preexec_fn=lambda: os.nice(5),
+    )
+
+    await conn_a.send({"type": "init"})
+
+
 async def stop_kernel_proc() -> None:
     ready_ev.clear()
 
@@ -492,13 +529,36 @@ async def stop_kernel_proc() -> None:
         task.cancel()
 
 
+async def stop_agent_proc() -> None:
+    proc = a_proc.proc
+    if proc is not None and proc.returncode is None:
+        try:
+            proc.terminate()
+            await asyncio.wait_for(proc.wait(), timeout=2)
+        except TimeoutError:
+            print("Error terminating agent process")
+            proc.kill()
+            await proc.wait()
+        except ProcessLookupError:
+            pass
+
+    if a_proc.log_file is not None:
+        a_proc.log_file.close()
+
+
 async def shutdown() -> None:
     await stop_kernel_proc()
+    await stop_agent_proc()
+
     with contextlib.suppress(Exception):
         sock_k.close()
+    with contextlib.suppress(Exception):
+        sock_agent.close()
 
     with contextlib.suppress(Exception):
         sock.close()
+    with contextlib.suppress(Exception):
+        sock_a.close()
 
     with contextlib.suppress(Exception):
         sess = get_global_http_sess()

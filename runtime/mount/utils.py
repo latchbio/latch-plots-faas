@@ -18,9 +18,18 @@ sys.path.append(str(Path(__file__).parent.parent.absolute()))
 from config import config
 
 latch_p = Path("/root/.latch")
-sdk_token = (latch_p / "token").read_text()
+sdk_token_path = latch_p / "token"
+if sdk_token_path.exists():
+    sdk_token = sdk_token_path.read_text()
+else:
+    sdk_token = ""
 auth_token_sdk = f"Latch-SDK-Token {sdk_token}"
-nucleus_url = (latch_p / "nucleus-url").read_text()
+
+nucleus_url_path = latch_p / "nucleus-url"
+if nucleus_url_path.exists():
+    nucleus_url = nucleus_url_path.read_text()
+else:
+    nucleus_url = "https://nucleus.latch.bio"
 
 sess: ClientSession | None = None
 
