@@ -692,9 +692,12 @@ class AgentHarness:
             nested_msg = msg.get("message", {})
             nested_type = nested_msg.get("type")
             if nested_type == "cell_result" and nested_msg.get("has_exception") is True:
+                cell_id = nested_msg.get("cell_id")
+                exception = nested_msg.get("exception", "")
+                print(f"[agent] Cell error detected: cell_id={cell_id}, has_exception={exception != ''}")
                 await self.handle_cell_error({
-                    "cell_id": nested_msg.get("cell_id"),
-                    "exception": nested_msg.get("exception", "")
+                    "cell_id": cell_id,
+                    "exception": exception
                 })
             elif nested_type == "start_cell":
                 cell_id = nested_msg.get("cell_id")
