@@ -414,17 +414,6 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
             await plots_ctx_manager.broadcast_message(orjson.dumps(err_msg).decode())
 
 
-async def handle_agent_messages(conn_a: SocketIo) -> None:
-    print("Starting agent message listener")
-    while True:
-        msg = await conn_a.recv()
-        print("[entrypoint] Agent >", msg)
-
-        await plots_ctx_manager.broadcast_message(
-            orjson.dumps(msg).decode()
-        )
-
-
 async def start_kernel_proc() -> None:
     await add_pod_event(auth=auth_token_sdk, event_type="runtime_starting")
     conn_k = k_proc.conn_k = await SocketIo.from_socket(sock)
@@ -503,9 +492,6 @@ async def start_kernel_proc() -> None:
 
 async def start_agent_proc() -> None:
     conn_a = a_proc.conn_a = await SocketIo.from_socket(sock_a)
-    async_tasks.append(
-        asyncio.create_task(handle_agent_messages(a_proc.conn_a))
-    )
 
     log_path = Path('/var/log/agent.log')
     log_path.parent.mkdir(parents=True, exist_ok=True)
