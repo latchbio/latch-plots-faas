@@ -544,15 +544,28 @@ class AgentHarness:
             return
 
         try:
-            result = await self.atomic_operation("get_cell_source", {"tf_id": cell_id})
+            ctx_result = await self.atomic_operation("get_context", {})
 
-            if result.get("status") != "success":
-                print(f"[agent] Could not fetch cell source: {result.get('error')}")
+            if ctx_result.get("status") != "success":
+                print(f"[agent] Could not fetch context")
                 return
 
-            source = result.get("source", "")
+            cells = ctx_result.get("context", {}).get("cells", [])
+            cell_info = next((c for c in cells if c.get("tf_id") == cell_id), None)
+
+            if cell_info is None:
+                print(f"[agent] Cell {cell_id} not found in context")
+                return
+
+            source = cell_info.get("source", "")
+            crdt_cell_id = cell_info.get("cell_id")
+
             if source == "":
                 print(f"[agent] Cell {cell_id} has no source code")
+                return
+
+            if crdt_cell_id is None:
+                print(f"[agent] No cell_id for tf_id {cell_id}")
                 return
 
             exception_text = exception
@@ -564,7 +577,7 @@ class AgentHarness:
                 print(f"[agent] Exception is not JSON-encoded, using raw text")
 
             fix_query = dedent(f"""
-                Cell at position {cell_info.get('index', '?')} failed with this error:
+                Cell {crdt_cell_id} at position {cell_info.get('index', '?')} failed with this error:
 
                 ```python
                 {source}
