@@ -45,13 +45,6 @@ async def agent(s: Span, ctx: Context) -> HandlerResult:
         )
         return "Agent not available"
 
-    await ctx.send_message(
-        orjson.dumps({
-            "type": "agent_ready",
-            "connection_idx": connection_idx,
-        }).decode()
-    )
-
     connection_idx += 1
 
     try:
