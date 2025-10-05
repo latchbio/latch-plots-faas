@@ -544,22 +544,15 @@ class AgentHarness:
             return
 
         try:
-            result = await self.atomic_operation("get_context", {})
-            source = ""
-            cell_info = None
-            if result.get("status") == "success":
-                cells = result.get("context", {}).get("cells", [])
-                for cell in cells:
-                    if cell.get("tf_id") is not None and str(cell.get("tf_id")) == str(cell_id):
-                        source = cell.get("source", "")
-                        cell_info = cell
-                        break
+            result = await self.atomic_operation("get_cell_source", {"tf_id": cell_id})
 
+            if result.get("status") != "success":
+                print(f"[agent] Could not fetch cell source: {result.get('error')}")
+                return
+
+            source = result.get("source", "")
             if source == "":
-                print(f"[agent] Could not find source for cell {cell_id}")
-                if result.get("status") == "success":
-                    cells = result.get("context", {}).get("cells", [])
-                    print(f"[agent] Available cells: {[(c.get('tf_id'), c.get('cell_id'), c.get('index')) for c in cells[:3]]}")
+                print(f"[agent] Cell {cell_id} has no source code")
                 return
 
             exception_text = exception
