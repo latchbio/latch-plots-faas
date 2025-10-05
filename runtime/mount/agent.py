@@ -551,10 +551,11 @@ class AgentHarness:
                 return
 
             cells = ctx_result.get("context", {}).get("cells", [])
-            cell_info = next((c for c in cells if c.get("tf_id") == cell_id), None)
+            cell_info = next((c for c in cells if str(c.get("tf_id")) == str(cell_id)), None)
 
             if cell_info is None:
-                print(f"[agent] Cell {cell_id} not found in context")
+                print(f"[agent] Cell with tf_id={cell_id} not found in context")
+                print(f"[agent] Available cells: {[(c.get('cell_id'), c.get('tf_id')) for c in cells]}")
                 return
 
             source = cell_info.get("source", "")
