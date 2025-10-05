@@ -547,7 +547,7 @@ class AgentHarness:
             ctx_result = await self.atomic_operation("get_context", {})
 
             if ctx_result.get("status") != "success":
-                print(f"[agent] Could not fetch context")
+                print("[agent] Could not fetch context")
                 return
 
             cells = ctx_result.get("context", {}).get("cells", [])
@@ -575,7 +575,7 @@ class AgentHarness:
                 if isinstance(parsed, dict) and "string" in parsed:
                     exception_text = parsed["string"]
             except json.JSONDecodeError:
-                print(f"[agent] Exception is not JSON-encoded, using raw text")
+                print("[agent] Exception is not JSON-encoded, using raw text")
 
             fix_query = dedent(f"""
                 Cell {crdt_cell_id} at position {cell_info.get('index', '?')} failed with this error:
@@ -589,10 +589,9 @@ class AgentHarness:
                 {exception_text}
                 ```
 
-                Analyze and fix this error by:
-                1. Understanding what went wrong
-                2. Either editing the cell to fix it OR creating a new cell before it with necessary imports/setup
-                3. Re-running the cell after fixing
+                Fix this error by editing the cell with the corrected code.
+                Only create additional cells if the error is due to missing
+                imports or dependencies that should be in a separate cell.
 
                 Be concise and fix the issue directly.
             """)
