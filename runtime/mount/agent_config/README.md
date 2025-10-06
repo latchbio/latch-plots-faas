@@ -178,7 +178,7 @@ These paths are managed separately and should not be modified here:
    ```python
    {
        "name": "proteomics_docs",
-       "path": "/opt/latch/latch-plots-faas/runtime/mount/agent_config/docs/proteomics_workflow.md",
+       "path": "/opt/latch/plots-faas/runtime/mount/agent_config/docs/proteomics_workflow.md",
        "type": "file",
    }
    ```
@@ -211,7 +211,7 @@ custom_tools = [export_results]
 
 **"Config module not found"**
 - Check file path in error message
-- Ensure files are in `/opt/latch/latch-plots-faas/runtime/mount/agent_config/`
+- Ensure files are in `/opt/latch/plots-faas/runtime/mount/agent_config/`
 
 **"Could not load custom tools"**
 - Check `tools.py` syntax

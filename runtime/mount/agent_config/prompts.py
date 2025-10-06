@@ -16,7 +16,7 @@ external_docs = [
     },
     {
         "name": "takara_docs",
-        "path": "/opt/latch/latch-plots-faas/runtime/mount/agent_config/docs/takara_workflow.md",
+        "path": "/opt/latch/plots-faas/runtime/mount/agent_config/docs/takara_workflow.md",
         "type": "file",
     },
 ]
