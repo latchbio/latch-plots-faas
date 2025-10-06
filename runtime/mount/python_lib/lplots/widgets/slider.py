@@ -5,28 +5,23 @@ from ..reactive import Signal
 from . import _emit, _state, widget
 from .shared import FormInputAppearance
 
-number_slider_widget_type: Literal["number_slider_input"] = "number_slider_input"
+tool_tip_formatter_type = Literal[
+    "number", "percentage", "currency", "decimal", "integer", "scientific", "bytes"
+]
 
 
 class _SliderInputBase(TypedDict):
     label: str
     readonly: bool
-    marks: NotRequired[dict[str, int | float]]
-    step: NotRequired[int | float]
-    min: NotRequired[int | float]
-    max: NotRequired[int | float]
-    tooltip_formatter: NotRequired[
-        Literal[
-            "number",
-            "percentage",
-            "currency",
-            "decimal",
-            "integer",
-            "scientific",
-            "bytes",
-        ]
-    ]
+    marks: NotRequired[dict[str, int | float]] | None
+    step: NotRequired[int | float] | None
+    min: NotRequired[int | float] | None
+    max: NotRequired[int | float] | None
+    tooltip_formatter: NotRequired[tool_tip_formatter_type] | None
     appearance: NotRequired[FormInputAppearance | None]
+
+
+number_slider_widget_type: Literal["number_slider_input"] = "number_slider_input"
 
 
 class NumberSliderInputWidgetState(
@@ -70,6 +65,11 @@ def w_number_slider_input(
     label: str,
     readonly: bool = False,
     default: int | float | None = None,
+    min: int | float | None = None,
+    max: int | float | None = None,
+    step: int | float | None = None,
+    tooltip_formatter: tool_tip_formatter_type | None = None,
+    marks: dict[str, int | float] | None = None,
     appearance: FormInputAppearance | None = None,
 ) -> NumberSliderInputWidget:
     key = _state.use_state_key(key=key)
@@ -81,6 +81,11 @@ def w_number_slider_input(
             "label": label,
             "default": default,
             "readonly": readonly,
+            "min": min,
+            "max": max,
+            "step": step,
+            "tooltip_formatter": tooltip_formatter,
+            "marks": marks,
             "appearance": appearance,
         },
         _signal=_state.use_value_signal(key=key),
@@ -138,6 +143,11 @@ def w_range_slider_input(
     label: str,
     readonly: bool = False,
     default: RangeSliderValue | None = None,
+    min: int | float | None = None,
+    max: int | float | None = None,
+    step: int | float | None = None,
+    tooltip_formatter: tool_tip_formatter_type | None = None,
+    marks: dict[str, int | float] | None = None,
     appearance: FormInputAppearance | None = None,
 ) -> RangeSliderInputWidget:
     key = _state.use_state_key(key=key)
@@ -149,6 +159,11 @@ def w_range_slider_input(
             "label": label,
             "default": default,
             "readonly": readonly,
+            "min": min,
+            "max": max,
+            "step": step,
+            "tooltip_formatter": tooltip_formatter,
+            "marks": marks,
             "appearance": appearance,
         },
         _signal=_state.use_value_signal(key=key),
