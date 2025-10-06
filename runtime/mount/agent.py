@@ -412,7 +412,7 @@ class AgentHarness:
             start_new_plan,
         ]
 
-        custom_tools = get_custom_tools()
+        custom_tools = get_custom_tools(function_tool)
         if custom_tools:
             self.tools.extend(custom_tools)
             print(f"[agent] Loaded {len(custom_tools)} custom tools")

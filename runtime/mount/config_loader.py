@@ -18,10 +18,23 @@ def load_config_module(module_name: str):
 
     return module
 
-def get_custom_tools() -> list:
+def get_custom_tools(function_tool) -> list:
     try:
-        tools_module = load_config_module("tools")
-        return tools_module.custom_tools
+        config_file = config_path / "tools.py"
+
+        if not config_file.exists():
+            return []
+
+        spec = importlib.util.spec_from_file_location("agent_config.tools", config_file)
+        module = importlib.util.module_from_spec(spec)
+
+        sys.modules["agents"] = type(sys)("agents")
+        sys.modules["agents"].function_tool = function_tool
+
+        sys.modules["agent_config.tools"] = module
+        spec.loader.exec_module(module)
+
+        return module.custom_tools
     except Exception as e:
         print(f"[config_loader] Warning: Could not load custom tools: {e}")
         return []
