@@ -12,7 +12,7 @@ from typing import Literal
 
 from agents import Agent, Runner, SQLiteSession, function_tool
 from agents.model_settings import ModelSettings
-from instructions import construct_instructions
+from config_loader import build_full_instruction, get_custom_tools
 from lplots import _inject
 from openai.types.shared.reasoning import Reasoning
 from pydantic import BaseModel
@@ -412,6 +412,11 @@ class AgentHarness:
             start_new_plan,
         ]
 
+        custom_tools = get_custom_tools()
+        if custom_tools:
+            self.tools.extend(custom_tools)
+            print(f"[agent] Loaded {len(custom_tools)} custom tools")
+
     async def handle_init(self, msg: dict[str, object]) -> None:
         print("[agent] Initializing", flush=True)
 
@@ -438,7 +443,7 @@ class AgentHarness:
             self.agent = Agent(
                 name="NotebookAssistant",
                 model=model,
-                instructions=construct_instructions(context),
+                instructions=build_full_instruction(context),
                 tools=self.tools,
                 output_type=NotebookResponse,
                 model_settings=ModelSettings(
