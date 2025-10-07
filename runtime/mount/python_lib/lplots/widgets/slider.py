@@ -9,6 +9,8 @@ tool_tip_formatter_type = Literal[
     "number", "percentage", "currency", "decimal", "integer", "scientific", "bytes"
 ]
 
+scale_type_type = Literal["linear", "logarithmic"]
+
 
 class _SliderInputBase(TypedDict):
     label: str
@@ -17,6 +19,7 @@ class _SliderInputBase(TypedDict):
     step: NotRequired[int | float] | None
     min: NotRequired[int | float] | None
     max: NotRequired[int | float] | None
+    scale_type: NotRequired[scale_type_type] | None
     tooltip_formatter: NotRequired[tool_tip_formatter_type] | None
     appearance: NotRequired[FormInputAppearance | None]
 
@@ -69,6 +72,7 @@ def w_number_slider_input(
     max: int | float | None = None,
     step: int | float | None = None,
     tooltip_formatter: tool_tip_formatter_type | None = None,
+    scale_type: scale_type_type | None = None,
     marks: dict[str, int | float] | None = None,
     appearance: FormInputAppearance | None = None,
 ) -> NumberSliderInputWidget:
@@ -84,6 +88,7 @@ def w_number_slider_input(
             "min": min,
             "max": max,
             "step": step,
+            "scale_type": scale_type,
             "tooltip_formatter": tooltip_formatter,
             "marks": marks,
             "appearance": appearance,
@@ -147,6 +152,7 @@ def w_range_slider_input(
     max: int | float | None = None,
     step: int | float | None = None,
     tooltip_formatter: tool_tip_formatter_type | None = None,
+    scale_type: scale_type_type | None = None,
     marks: dict[str, int | float] | None = None,
     appearance: FormInputAppearance | None = None,
 ) -> RangeSliderInputWidget:
@@ -162,6 +168,7 @@ def w_range_slider_input(
             "min": min,
             "max": max,
             "step": step,
+            "scale_type": scale_type,
             "tooltip_formatter": tooltip_formatter,
             "marks": marks,
             "appearance": appearance,
