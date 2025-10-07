@@ -15,7 +15,7 @@ scale_type_type = Literal["linear", "logarithmic"]
 class _SliderInputBase(TypedDict):
     label: str
     readonly: bool
-    marks: NotRequired[dict[str, int | float]] | None
+    marks: NotRequired[dict[int | float, str]] | None
     step: NotRequired[int | float] | None
     min: NotRequired[int | float] | None
     max: NotRequired[int | float] | None
@@ -73,7 +73,7 @@ def w_number_slider_input(
     step: int | float | None = None,
     tooltip_formatter: tool_tip_formatter_type | None = None,
     scale_type: scale_type_type | None = None,
-    marks: dict[str, int | float] | None = None,
+    marks: dict[int | float, str] | None = None,
     appearance: FormInputAppearance | None = None,
 ) -> NumberSliderInputWidget:
     key = _state.use_state_key(key=key)
@@ -153,7 +153,7 @@ def w_range_slider_input(
     step: int | float | None = None,
     tooltip_formatter: tool_tip_formatter_type | None = None,
     scale_type: scale_type_type | None = None,
-    marks: dict[str, int | float] | None = None,
+    marks: dict[int | float, str] | None = None,
     appearance: FormInputAppearance | None = None,
 ) -> RangeSliderInputWidget:
     key = _state.use_state_key(key=key)
