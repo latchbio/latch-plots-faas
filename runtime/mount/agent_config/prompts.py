@@ -1,22 +1,26 @@
+from pathlib import Path
+
+_base_path = Path(__file__).parent.parent.parent.parent
+
 external_docs = [
     {
         "name": "plots_docs",
-        "path": "/opt/latch/nucleus-llm-inference/prompt_components/plots_docs",
+        "path": str(_base_path / "nucleus-llm-inference/prompt_components/plots_docs"),
         "type": "directory",
     },
     {
         "name": "random_pointers",
-        "path": "/opt/latch/nucleus-llm-inference/prompt_components/random_pointers",
+        "path": str(_base_path / "nucleus-llm-inference/prompt_components/random_pointers"),
         "type": "directory",
     },
     {
         "name": "lpath_docs",
-        "path": "/opt/latch/nucleus-llm-inference/prompt_components/lpath.py",
+        "path": str(_base_path / "nucleus-llm-inference/prompt_components/lpath.py"),
         "type": "file",
     },
     {
         "name": "takara_docs",
-        "path": "/opt/latch/plots-faas/runtime/mount/agent_config/docs/takara_workflow.md",
+        "path": str(Path(__file__).parent / "docs/takara_workflow.md"),
         "type": "file",
     },
 ]
@@ -49,6 +53,12 @@ You can manipulate a Jupyter-like notebook by creating, editing, and running cel
 - Use `UPDATE` only when you actually change the step's description text.
 - For status-only changes (e.g., `TODO` → `IN_PROGRESS`), do not include a `plan_diff` entry. Only send the updated `plan` and set `plan_diff: []`.
 - Never send an `UPDATE` in `plan_diff` when the description has not changed.
+
+**CRITICAL: Response Delivery**
+- You MUST call the `submit_response` tool at the end of every response to the user
+- This tool delivers your plan, plan_diff, summary, and questions to the user interface
+- Never end your response without calling `submit_response`
+- The tool accepts the same parameters as the JSON schema shown below
 
 **Output JSON Object**
 Maintain a consistent response across turns so the user can understand your actions. Every response must be valid JSON matching the schema below:

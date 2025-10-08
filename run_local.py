@@ -116,6 +116,10 @@ async def run_server():
     async def patched_start_agent_proc():
         conn_a = entrypoint.a_proc.conn_a = await entrypoint.SocketIo.from_socket(entrypoint.sock_a)
 
+        entrypoint.async_tasks.append(
+            asyncio.create_task(entrypoint.handle_agent_messages(entrypoint.a_proc.conn_a))
+        )
+
         print("[run_local] Starting agent subprocess with output capture")
         entrypoint.a_proc.proc = await asyncio.create_subprocess_exec(
             sys.executable,
@@ -140,6 +144,8 @@ async def run_server():
         asyncio.create_task(stream_output(entrypoint.a_proc.proc.stdout, ""))
         asyncio.create_task(stream_output(entrypoint.a_proc.proc.stderr, "[stderr] "))
         print(f"[run_local] Agent subprocess started, PID: {entrypoint.a_proc.proc.pid}", flush=True)
+
+        await conn_a.send({"type": "init"})
 
     entrypoint.start_agent_proc = patched_start_agent_proc
 

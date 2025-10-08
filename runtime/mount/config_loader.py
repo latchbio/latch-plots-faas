@@ -3,7 +3,8 @@ import sys
 from pathlib import Path
 from textwrap import dedent
 
-config_path = Path("/opt/latch/plots-faas/runtime/mount/agent_config")
+config_path = Path(__file__).parent / "agent_config"
+
 
 def load_config_module(module_name: str):
     config_file = config_path / f"{module_name}.py"
@@ -17,6 +18,7 @@ def load_config_module(module_name: str):
     spec.loader.exec_module(module)
 
     return module
+
 
 def get_custom_tools(function_tool) -> list:
     try:
@@ -38,6 +40,7 @@ def get_custom_tools(function_tool) -> list:
     except Exception as e:
         print(f"[config_loader] Warning: Could not load custom tools: {e}")
         return []
+
 
 def build_full_instruction(initial_context: str) -> str:
     try:

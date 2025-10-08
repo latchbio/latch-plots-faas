@@ -417,16 +417,25 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
 
 
 async def handle_agent_messages(conn_a: SocketIo) -> None:
-    assert current_agent_ctx is not None
-    print("Starting agent message listener")
+    print(f"[entrypoint] handle_agent_messages starting")
+    print("[entrypoint] Starting agent message listener")
     while True:
-        msg = await conn_a.recv()
-        print("[entrypoint] Agent >", msg)
-
         try:
-            await current_agent_ctx.send_message(orjson.dumps(msg).decode())
-        except:
-            pass
+            msg = await conn_a.recv()
+            print(f"[entrypoint] Agent > {msg.get('type', 'unknown')}: {str(msg)[:200]}")
+
+            if current_agent_ctx is None:
+                print("[entrypoint] WARNING: current_agent_ctx is None, cannot forward message")
+                continue
+
+            json_str = orjson.dumps(msg).decode()
+            print(f"[entrypoint] Sending to websocket client: {json_str[:200]}")
+            await current_agent_ctx.send_message(json_str)
+            print("[entrypoint] Successfully sent message to websocket client")
+        except Exception as e:
+            print(f"[entrypoint] ERROR in message handler: {e}")
+            import traceback
+            traceback.print_exc()
 
 
 async def start_kernel_proc() -> None:
