@@ -31,7 +31,7 @@ if sandbox_root:
 
 AGENT_DEBUG = os.environ.get("AGENT_DEBUG") == "1"
 
-# todo(tim): anthropic offfers @beta_tool decorator and tool_runner, but not sure
+# todo(tim): anthropic has @beta_tool decorator and tool_runner, but not sure
 # these would make sense given our custom reqs like mode switching, cell exec tracking, etc.
 class ToolDefinition:
     def __init__(self, name: str, description: str, input_schema: dict, handler: Callable):
@@ -181,9 +181,7 @@ class AgentHarness:
         return False
 
     # todo(tim): make this more efficient (e.g single pass and not revisiting conversation history)
-    def _filter_messages_for_thinking(self) -> tuple[list[MessageParam], bool]:
-        """Return filtered history and whether to fall back to full history."""
-
+    def _filter_relevant_messages(self) -> tuple[list[MessageParam], bool]:
         def _block_type(block):
             if isinstance(block, dict):
                 return block.get("type")
@@ -731,7 +729,7 @@ class AgentHarness:
 
                 messages_to_send = self.conversation_history
                 if thinking_budget is not None:
-                    filtered_messages, needs_full_history = self._filter_messages_for_thinking()
+                    filtered_messages, needs_full_history = self._filter_relevant_messages()
                     if not needs_full_history:
                         messages_to_send = filtered_messages
 
