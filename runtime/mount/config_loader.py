@@ -3,7 +3,7 @@ import sys
 from pathlib import Path
 from textwrap import dedent
 
-config_path = Path("/opt/latch/plots-faas/runtime/mount/agent_config")
+config_path = Path(__file__).parent / "agent_config"
 
 def load_config_module(module_name: str):
     config_file = config_path / f"{module_name}.py"

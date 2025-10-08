@@ -1,22 +1,26 @@
+from pathlib import Path
+
+_base_path = Path(__file__).parent.parent.parent.parent
+
 external_docs = [
     {
         "name": "plots_docs",
-        "path": "/opt/latch/nucleus-llm-inference/prompt_components/plots_docs",
+        "path": str(_base_path / "nucleus-llm-inference/prompt_components/plots_docs"),
         "type": "directory",
     },
     {
         "name": "random_pointers",
-        "path": "/opt/latch/nucleus-llm-inference/prompt_components/random_pointers",
+        "path": str(_base_path / "nucleus-llm-inference/prompt_components/random_pointers"),
         "type": "directory",
     },
     {
         "name": "lpath_docs",
-        "path": "/opt/latch/nucleus-llm-inference/prompt_components/lpath.py",
+        "path": str(_base_path / "nucleus-llm-inference/prompt_components/lpath.py"),
         "type": "file",
     },
     {
         "name": "takara_docs",
-        "path": "/opt/latch/plots-faas/runtime/mount/agent_config/docs/takara_workflow.md",
+        "path": str(Path(__file__).parent / "docs/takara_workflow.md"),
         "type": "file",
     },
 ]
