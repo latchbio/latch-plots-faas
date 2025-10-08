@@ -30,6 +30,8 @@ if sandbox_root:
     pathlib.Path.__new__ = patched_path_new
 
 AGENT_DEBUG = os.environ.get("AGENT_DEBUG") == "1"
+MAX_TURNS = 100
+BASE_MAX_TOKENS = 4096
 
 # note(tim): anthropic has @beta_tool decorator and tool_runner, but not sure
 # these would make sense given our custom reqs like mode switching, cell exec tracking, etc.
@@ -646,17 +648,16 @@ class AgentHarness:
         })
 
         model, thinking_budget = self.mode_config[self.mode]
-        max_turns = 100
         turn = 0
 
-        while turn < max_turns:
+        while turn < MAX_TURNS:
             turn += 1
 
             try:
                 if thinking_budget is not None:
-                    max_tokens = thinking_budget + 4096
+                    max_tokens = thinking_budget + BASE_MAX_TOKENS
                 else:
-                    max_tokens = 4096
+                    max_tokens = BASE_MAX_TOKENS
 
                 messages_to_send = self.conversation_history
 
