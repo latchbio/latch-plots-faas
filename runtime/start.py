@@ -20,12 +20,12 @@ host_ip = host_ip_match.group(1).decode() if host_ip_match else ""
 
 otel_exporter_otlp_endpoint = f"http://{host_ip}:4317"
 
-openai_api_key_path = latch_p / "openai-api-key"
-openai_api_key = ""
-if openai_api_key_path.exists():
-    openai_api_key = openai_api_key_path.read_text().strip()
+anthropic_api_key_path = latch_p / "anthropic-api-key"
+anthropic_api_key = ""
+if anthropic_api_key_path.exists():
+    anthropic_api_key = anthropic_api_key_path.read_text().strip()
 else:
-    openai_api_key = os.environ.get("OPENAI_API_KEY", "")
+    anthropic_api_key = os.environ.get("ANTHROPIC_API_KEY", "")
 
 env_vars = {
     "DD_SERVICE": "plots-faas",
@@ -40,7 +40,7 @@ env_vars = {
     "CONDA_DEFAULT_ENV": "plots-faas",
     "CONDA_PREFIX": "/opt/mamba/envs/plots-faas",
     "PATH": "/opt/mamba/envs/plots-faas/bin:" + os.environ["PATH"],
-    "OPENAI_API_KEY": openai_api_key,
+    "ANTHROPIC_API_KEY": anthropic_api_key,
 }
 
 os.system("git -C /opt/latch/plots-faas pull origin main")
