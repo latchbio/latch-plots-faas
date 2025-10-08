@@ -157,7 +157,6 @@ class AgentHarness:
         print(f"[agent] Mode changed to {mode.value}")
 
     def register_tool(self, tool: ToolDefinition) -> None:
-        """Register tool for API exposure and quick lookup."""
         self.tools.append(tool)
         self.tool_map[tool.name] = tool
     
