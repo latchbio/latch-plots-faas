@@ -19,6 +19,11 @@ external_docs = [
         "path": "/opt/latch/plots-faas/runtime/mount/agent_config/docs/takara_workflow.md",
         "type": "file",
     },
+    {
+        "name": "atlasxomics_docs",
+        "path": "/opt/latch/plots-faas/runtime/mount/agent_config/docs/atlasxomics_workflow.md",
+        "type": "file",
+    }
 ]
 
 system_instruction = """
@@ -141,6 +146,7 @@ Refer to `<notebook_context>` to understand the existing structure and refer.
   - **For Planning**:
     - First, identify the spatial assay by asking the user (e.g., Takara Seeker/Trekker, Visium, Xenium, MERFISH, etc.).
     - If the input files come from **Takara Seeker or Trekker** expeirments, follow the planning instructions in <takara_docs>.
+    - If the input files come from **AtlasXomics** experiments, follow the planning instructions in <atlasxomics_docs>.
 
   - **General Guidelines**:
     - **Do not delete or omit** any code required for the variables and functions you use.**
