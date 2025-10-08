@@ -31,7 +31,7 @@ if sandbox_root:
 
 AGENT_DEBUG = os.environ.get("AGENT_DEBUG") == "1"
 
-# todo(tim): anthropic has @beta_tool decorator and tool_runner, but not sure
+# note(tim): anthropic has @beta_tool decorator and tool_runner, but not sure
 # these would make sense given our custom reqs like mode switching, cell exec tracking, etc.
 class ToolDefinition:
     def __init__(self, name: str, description: str, input_schema: dict, handler: Callable):
@@ -714,39 +714,20 @@ class AgentHarness:
             tool_results = []
             structured_output_from_tool = None
 
-            # todo(tim): cleanup tool input handling
             for tool_use in tool_uses:
                 tool_name = tool_use.name
                 tool_input = tool_use.input
 
                 if tool_name == "submit_response":
-                    print(f"[agent] Received submit_response with structured output")
                     try:
-                        summary = tool_input.get("summary")
-                        if summary is not None:
-                            if isinstance(summary, str) and summary.lower() in ("null", "none"):
-                                summary = None
-                            elif not isinstance(summary, list):
-                                print(f"[agent] Warning: summary is not a list, got {type(summary)}")
-                                summary = None
-
-                        questions = tool_input.get("questions")
-                        if questions is not None:
-                            if isinstance(questions, str) and questions.lower() in ("null", "none"):
-                                questions = None
-                            elif not isinstance(questions, list):
-                                print(f"[agent] Warning: questions is not a list, got {type(questions)}")
-                                questions = None
-
                         structured_output_from_tool = NotebookResponse(
                             plan=[PlanItem(**item) for item in tool_input.get("plan", [])],
                             plan_diff=[PlanDiff(**item) for item in tool_input.get("plan_diff", [])],
-                            summary=summary,
-                            questions=questions
+                            summary=tool_input.get("summary") or None,
+                            questions=tool_input.get("questions") or None
                         )
                         result = await self._call_tool(tool_name, tool_input)
                     except Exception as e:
-                        print(f"[agent] Error parsing submit_response: {e}")
                         if AGENT_DEBUG:
                             traceback.print_exc()
                         result = f"Error parsing response: {e}"
@@ -840,7 +821,6 @@ class AgentHarness:
             if request_id is not None:
                 response_msg["request_id"] = request_id
 
-            # todo(tim): cleanup the structured output logic
             structured_output_dict = None
 
             if structured_output is not None:
@@ -867,7 +847,6 @@ class AgentHarness:
                         structured_output_dict["summary"] = responses
 
                 response_msg["structured_output"] = structured_output_dict
-            print(f"[agent] Response message: {response_msg}")
 
             await self.send(response_msg)
 
