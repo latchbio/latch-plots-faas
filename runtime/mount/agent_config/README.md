@@ -4,9 +4,8 @@ This directory contains the agent configuration that can be modified to customiz
 
 ## Overview
 
-The agent uses three main configuration files:
+The agent uses two main configuration files:
 - **`prompts.py`** - System instructions and documentation references
-- **`tools.py`** - Custom tool definitions
 - **`docs/`** - Workflow documentation files
 
 ## File Structure
@@ -14,7 +13,6 @@ The agent uses three main configuration files:
 ```
 agent_config/
 ├── prompts.py              # Agent instructions and doc references
-├── tools.py                # Custom tools
 ├── docs/
 │   └── takara_workflow.md  # Example workflow documentation
 └── README.md               # This file
@@ -76,52 +74,18 @@ Then create the file at `docs/proteomics_workflow.md`:
 
 The agent will automatically include this as `<proteomics_docs>...</proteomics_docs>` in its instructions.
 
-### 3. Add Custom Tools (`tools.py`)
-
-Create custom tools that the agent can call:
-
-```python
-from agents import function_tool
-
-@function_tool
-async def export_to_csv(cell_id: str, filename: str) -> str:
-    """Export cell output to CSV file.
-
-    Args:
-        cell_id: The cell containing dataframe output
-        filename: Output filename (e.g., "results.csv")
-
-    Returns:
-        Success message with file path
-    """
-    # Your implementation here
-    return f"Exported to {filename}"
-
-custom_tools = [
-    export_to_csv,
-]
-```
-
-**Tool Guidelines:**
-- Must be `async` functions
-- Use `@function_tool` decorator
-- Include detailed docstring (agent sees this)
-- Return string messages for user feedback
-- Add to `custom_tools` list to register
-
 ## How It Works
 
 ### Initialization Flow
 
 1. Agent starts up (`agent.py::handle_init`)
-2. `config_loader.py` loads `prompts.py` and `tools.py`
+2. `config_loader.py` loads `prompts.py`
 3. `build_full_instruction()` assembles the complete prompt:
    - Loads external docs (plots_docs, random_pointers, lpath_docs, takara_docs)
    - Wraps them in XML tags
    - Appends `system_instruction`
    - Injects current notebook context
-4. `get_custom_tools()` returns list of tools
-5. Agent is initialized with combined instructions and tools
+4. Agent is initialized with combined instructions
 
 ### Assembled Instruction Format
 
@@ -189,36 +153,12 @@ These paths are managed separately and should not be modified here:
        - If proteomics, follow <proteomics_docs> workflow
    ```
 
-### Example: Add Export Tool
-
-```python
-# tools.py
-
-@function_tool
-async def export_results(format: str = "csv") -> str:
-    """Export analysis results to file.
-
-    Args:
-        format: Output format ("csv", "excel", "json")
-    """
-    # Implementation
-    return f"Results exported as {format}"
-
-custom_tools = [export_results]
-```
-
 ## Troubleshooting
 
 **"Config module not found"**
 - Check file path in error message
 - Ensure files are in `/opt/latch/plots-faas/runtime/mount/agent_config/`
 
-**"Could not load custom tools"**
-- Check `tools.py` syntax
-- Ensure `custom_tools = [...]` is defined
-- Verify `@function_tool` decorator is used
-
 **Changes not applying**
 - Restart agent process
-- Check logs for `[agent] Loaded N custom tools`
 - Verify no syntax errors in modified files

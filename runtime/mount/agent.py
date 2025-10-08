@@ -12,7 +12,7 @@ from typing import Literal
 
 from agents import Agent, Runner, SQLiteSession, function_tool
 from agents.model_settings import ModelSettings
-from config_loader import build_full_instruction, get_custom_tools
+from config_loader import build_full_instruction
 from lplots import _inject
 from openai.types.shared.reasoning import Reasoning
 from pydantic import BaseModel
@@ -412,10 +412,6 @@ class AgentHarness:
             start_new_plan,
         ]
 
-        custom_tools = get_custom_tools(function_tool)
-        if custom_tools:
-            self.tools.extend(custom_tools)
-            print(f"[agent] Loaded {len(custom_tools)} custom tools")
 
     async def handle_init(self, msg: dict[str, object]) -> None:
         print("[agent] Initializing", flush=True)
