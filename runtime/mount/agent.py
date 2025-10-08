@@ -180,74 +180,6 @@ class AgentHarness:
 
         return False
 
-    # todo(tim): make this more efficient (e.g single pass and not revisiting conversation history)
-    def _filter_relevant_messages(self) -> tuple[list[MessageParam], bool]:
-        def _block_type(block):
-            if isinstance(block, dict):
-                return block.get("type")
-            return getattr(block, "type", None)
-
-        def _tool_use_id(block):
-            if isinstance(block, dict):
-                return block.get("id")
-            return getattr(block, "id", None)
-
-        valid_tool_use_ids: set[str] = set()
-        filtered_messages: list[MessageParam] = []
-        filtered_assistant_count = 0
-        assistant_messages_seen = False
-
-        for msg in self.conversation_history:
-            if msg.get("role") != "assistant":
-                continue
-            assistant_messages_seen = True
-
-            content = msg.get("content", [])
-            if isinstance(content, list):
-                for block in content:
-                    if _block_type(block) == "tool_use":
-                        tool_id = _tool_use_id(block)
-                        if tool_id:
-                            valid_tool_use_ids.add(tool_id)
-
-        for msg in self.conversation_history:
-            role = msg.get("role")
-            content = msg.get("content", [])
-
-            if role == "assistant":
-                if isinstance(content, list) and content:
-                    first_block = content[0]
-                    has_thinking = _block_type(first_block) in ("thinking", "redacted_thinking")
-                    has_tool_use = any(_block_type(block) == "tool_use" for block in content)
-
-                    if has_thinking or has_tool_use:
-                        filtered_messages.append(msg)
-                        filtered_assistant_count += 1
-
-            elif role == "user":
-                if isinstance(content, list):
-                    filtered_content = []
-                    for block in content:
-                        if isinstance(block, dict) and block.get("type") == "tool_result":
-                            tool_use_id = block.get("tool_use_id")
-                            if tool_use_id in valid_tool_use_ids:
-                                filtered_content.append(block)
-                        else:
-                            filtered_content.append(block)
-
-                    if filtered_content:
-                        filtered_messages.append({
-                            "role": "user",
-                            "content": filtered_content
-                        })
-                else:
-                    filtered_messages.append(msg)
-            else:
-                filtered_messages.append(msg)
-
-        needs_full_history = assistant_messages_seen and filtered_assistant_count == 0
-        return filtered_messages, needs_full_history
-
     def init_tools(self) -> None:
         self.tools.clear()
         self.tool_map.clear()
@@ -728,10 +660,6 @@ class AgentHarness:
                     max_tokens = 4096
 
                 messages_to_send = self.conversation_history
-                if thinking_budget is not None:
-                    filtered_messages, needs_full_history = self._filter_relevant_messages()
-                    if not needs_full_history:
-                        messages_to_send = filtered_messages
 
                 request_params = {
                     "model": model,
