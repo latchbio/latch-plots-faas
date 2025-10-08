@@ -31,9 +31,9 @@ if sandbox_root:
 
 AGENT_DEBUG = os.environ.get("AGENT_DEBUG") == "1"
 
-
+# todo(tim): anthropic offfers @beta_tool decorator and tool_runner, but not sure
+# these would make sense given our custom reqs like mode switching, cell exec tracking, etc.
 class ToolDefinition:
-    """Helper class to define a tool with its handler function."""
     def __init__(self, name: str, description: str, input_schema: dict, handler: Callable):
         self.name = name
         self.description = description
@@ -93,12 +93,13 @@ class AgentHarness:
     conn: SocketIoThread
     initialized: bool = False
     api_key: str | None = None
-    client: anthropic.AsyncAnthropic | None = None
+    agent: anthropic.AsyncAnthropic | None = None
     conversation_history: list[MessageParam] = field(default_factory=list)
     mode: Mode = Mode.planning
     pending_operations: dict[str, asyncio.Future] = field(default_factory=dict)
     executing_cells: set[str] = field(default_factory=set)
     tools: list[ToolDefinition] = field(default_factory=list)
+    tool_map: dict[str, ToolDefinition] = field(default_factory=dict)
     active_tasks: set[asyncio.Task] = field(default_factory=set)
     error_fixes_in_progress: set[str] = field(default_factory=set)
     operation_counter: int = 0
@@ -155,7 +156,34 @@ class AgentHarness:
         self.mode = mode
         print(f"[agent] Mode changed to {mode.value}")
 
+    def register_tool(self, tool: ToolDefinition) -> None:
+        """Register tool for API exposure and quick lookup."""
+        self.tools.append(tool)
+        self.tool_map[tool.name] = tool
+    
+    def _last_assistant_has_thinking(self, messages: list[MessageParam]) -> bool:
+        for msg in reversed(messages):
+            if msg.get("role") != "assistant":
+                continue
+
+            content = msg.get("content", [])
+            if not (isinstance(content, list) and content):
+                return False
+
+            first_block = content[0]
+            if isinstance(first_block, dict):
+                block_type = first_block.get("type")
+            else:
+                block_type = getattr(first_block, "type", None)
+
+            return block_type in ("thinking", "redacted_thinking")
+
+        return False
+
     def init_tools(self) -> None:
+        self.tools.clear()
+        self.tool_map.clear()
+
         async def create_cell_handler(
             position: int,
             code: str,
@@ -185,7 +213,7 @@ class AgentHarness:
                 return msg
             return f"Failed to create cell: {result.get('error', 'Unknown error')}"
 
-        self.tools.append(ToolDefinition(
+        self.register_tool(ToolDefinition(
             name="create_cell",
             description="Create a new code cell at specified position.",
             input_schema={
@@ -237,7 +265,7 @@ class AgentHarness:
                 return msg
             return f"Failed to create cell: {result.get('error', 'Unknown error')}"
 
-        self.tools.append(ToolDefinition(
+        self.register_tool(ToolDefinition(
             name="create_markdown_cell",
             description="Create a new markdown cell at specified position.",
             input_schema={
@@ -275,7 +303,7 @@ class AgentHarness:
                 return msg
             return f"Failed to edit cell: {result.get('error', 'Unknown error')}"
 
-        self.tools.append(ToolDefinition(
+        self.register_tool(ToolDefinition(
             name="edit_cell",
             description="Replace the contents of an existing cell.",
             input_schema={
@@ -323,7 +351,7 @@ class AgentHarness:
                 return msg
             return f"Failed to delete cell: {result.get('error', 'Unknown error')}"
 
-        self.tools.append(ToolDefinition(
+        self.register_tool(ToolDefinition(
             name="delete_cell",
             description="Remove a cell from the notebook.",
             input_schema={
@@ -351,7 +379,7 @@ class AgentHarness:
 
             return f"Cell {cell_id} execution started"
 
-        self.tools.append(ToolDefinition(
+        self.register_tool(ToolDefinition(
             name="run_cell",
             description="Execute a specific cell.",
             input_schema={
@@ -376,7 +404,7 @@ class AgentHarness:
                 return f"Stopped cell {cell_id}"
             return f"Failed to stop cell {cell_id}: {result.get('error', 'Unknown error')}"
 
-        self.tools.append(ToolDefinition(
+        self.register_tool(ToolDefinition(
             name="stop_cell",
             description="Stop execution of a specific cell.",
             input_schema={
@@ -409,7 +437,7 @@ class AgentHarness:
 
             return f"Deleted {deleted_count} cells from the notebook"
 
-        self.tools.append(ToolDefinition(
+        self.register_tool(ToolDefinition(
             name="delete_all_cells",
             description="Delete all cells in the notebook efficiently.",
             input_schema={
@@ -447,7 +475,7 @@ class AgentHarness:
 
             return summary
 
-        self.tools.append(ToolDefinition(
+        self.register_tool(ToolDefinition(
             name="get_notebook_context",
             description="Get the current state of the notebook including all cells and their content.",
             input_schema={
@@ -483,7 +511,7 @@ class AgentHarness:
                 return msg
             return f"Failed to deliver plan update: {result.get('error', 'Unknown error')}"
 
-        self.tools.append(ToolDefinition(
+        self.register_tool(ToolDefinition(
             name="send_plan_update",
             description="Send the latest non-final plan state to the frontend. The final agent response already includes the complete plan, so skip this call if you are about to return the final response.",
             input_schema={
@@ -522,11 +550,10 @@ class AgentHarness:
         ))
 
         async def start_new_plan_handler() -> str:
-            print("[agent] Starting new planning session")
             self.set_mode(Mode.planning)
             return "Started new planning session"
 
-        self.tools.append(ToolDefinition(
+        self.register_tool(ToolDefinition(
             name="start_new_plan",
             description="Start a new planning session. Only use this tool if the previous plan is complete and the user asks for tasks that require a new plan.",
             input_schema={
@@ -545,7 +572,7 @@ class AgentHarness:
             """This is a special tool that doesn't actually execute - it's used to capture structured output."""
             return "Response submitted"
 
-        self.tools.append(ToolDefinition(
+        self.register_tool(ToolDefinition(
             name="submit_response",
             description="Submit your final response to the user with a structured plan, plan updates, optional summary points, and optional questions. Use this tool when you are ready to respond to the user.",
             input_schema={
@@ -597,25 +624,23 @@ class AgentHarness:
         return build_full_instruction(self.instructions_context)
 
     async def _call_tool(self, tool_name: str, tool_input: dict) -> str:
-        """Execute a tool and return its result."""
-        for tool in self.tools:
-            if tool.name == tool_name:
-                try:
-                    result = await tool.handler(**tool_input)
-                    return str(result)
-                except Exception as e:
-                    error_msg = f"Error executing {tool_name}: {str(e)}"
-                    print(f"[agent] {error_msg}")
-                    if AGENT_DEBUG:
-                        traceback.print_exc()
-                    return error_msg
-        return f"Unknown tool: {tool_name}"
+        tool = self.tool_map.get(tool_name)
+        if tool is None:
+            return f"Unknown tool: {tool_name}"
+
+        try:
+            result = await tool.handler(**tool_input)
+            return str(result)
+        except Exception as e:
+            error_msg = f"Error executing {tool_name}: {str(e)}"
+            print(f"[agent] {error_msg}")
+            if AGENT_DEBUG:
+                traceback.print_exc()
+            return error_msg
 
     async def _run_agent_step(self, user_query: str) -> tuple[list[str], NotebookResponse | None]:
-        """Run one step of the agent conversation with Claude."""
         responses = []
 
-        # Add user message to conversation history
         self.conversation_history.append({
             "role": "user",
             "content": user_query
@@ -628,7 +653,6 @@ class AgentHarness:
         while turn < max_turns:
             turn += 1
 
-            # Call Claude with tools
             try:
                 if thinking_budget is not None:
                     max_tokens = thinking_budget + 4096
@@ -656,27 +680,19 @@ class AgentHarness:
                             return block.get("id")
                         return getattr(block, "id", None)
 
-                    # First pass: collect valid tool_use IDs
+                    # todo(tim): clean this up, try a one pass approach instead
                     for msg in self.conversation_history:
                         if msg["role"] == "assistant":
                             content = msg.get("content", [])
                             if isinstance(content, list) and len(content) > 0:
-                                first_block = content[0]
-                                has_thinking = (
-                                    _block_type(first_block) in ("thinking", "redacted_thinking")
-                                )
-                                contains_tool_use = any(
-                                    _block_type(block) == "tool_use"
-                                    for block in content
-                                )
-                                if has_thinking or contains_tool_use:
-                                    for block in content:
-                                        if _block_type(block) == "tool_use":
-                                            tool_id = _tool_use_id(block)
-                                            if tool_id:
-                                                valid_tool_use_ids.add(tool_id)
+                                has_tool_use = False
+                                for block in content:
+                                    if _block_type(block) == "tool_use":
+                                        has_tool_use = True
+                                        tool_id = _tool_use_id(block)
+                                        if tool_id:
+                                            valid_tool_use_ids.add(tool_id)
 
-                    # Second pass: build filtered message list
                     for msg in self.conversation_history:
                         if msg["role"] == "assistant":
                             content = msg.get("content", [])
@@ -685,11 +701,14 @@ class AgentHarness:
                                 has_thinking = (
                                     _block_type(first_block) in ("thinking", "redacted_thinking")
                                 )
-                                contains_tool_use = any(
-                                    _block_type(block) == "tool_use"
-                                    for block in content
-                                )
-                                if has_thinking or contains_tool_use:
+
+                                has_tool_use = False
+                                for block in content:
+                                    if _block_type(block) == "tool_use":
+                                        has_tool_use = True
+                                        break
+
+                                if has_thinking or has_tool_use:
                                     filtered_messages.append(msg)
                                     filtered_assistant_count += 1
                                 else:
@@ -716,11 +735,8 @@ class AgentHarness:
 
                     messages_to_send = filtered_messages
                     if filtered_assistant_count == 0 and assistant_messages_seen:
-                        print("[agent] No assistant messages with thinking blocks; sending full history")
                         messages_to_send = self.conversation_history
                         removed_count = 0
-                    elif removed_count > 0:
-                        print(f"[agent] Filtered {removed_count} assistant message(s) without thinking blocks")
 
                 request_params = {
                     "model": model,
@@ -736,36 +752,13 @@ class AgentHarness:
                         "type": "enabled",
                         "budget_tokens": thinking_budget
                     }
+                    # note(tim): anthropic requires thinking blocks at the beginning of the assistant message
+                    if not self._last_assistant_has_thinking(messages_to_send):
+                        enable_thinking = False
+                        request_params.pop("thinking", None)
 
-                if enable_thinking:
-                    last_assistant = None
-                    for msg in reversed(messages_to_send):
-                        if msg.get("role") == "assistant":
-                            last_assistant = msg
-                            break
+                response = await self.agent.messages.create(**request_params)
 
-                    if last_assistant is not None:
-                        content = last_assistant.get("content", [])
-                        if isinstance(content, list) and content:
-                            first_block = content[0]
-                            first_type = _block_type(first_block)
-                            if first_type not in ("thinking", "redacted_thinking"):
-                                enable_thinking = False
-                                request_params.pop("thinking", None)
-
-                response = await self.client.messages.create(**request_params)
-
-                # Debug thinking
-                if thinking_budget is not None and enable_thinking and AGENT_DEBUG:
-                    has_thinking_response = False
-                    for block in response.content:
-                        if hasattr(block, 'type') and block.type in ("thinking", "redacted_thinking"):
-                            has_thinking_response = True
-                            if hasattr(block, 'thinking'):
-                                print(f"[reasoning] {block.thinking}")
-                            break
-                    if not has_thinking_response:
-                        print(f"[agent WARNING] Response does not contain thinking block despite budget={thinking_budget}")
 
             except Exception as e:
                 raise RuntimeError(f"Error calling Claude API: {e}")
@@ -788,7 +781,6 @@ class AgentHarness:
                 "content": assistant_content
             })
 
-            # If no tool uses, we're done
             if not tool_uses:
                 if text_responses:
                     combined_text = "\n".join(text_responses)
@@ -796,7 +788,6 @@ class AgentHarness:
 
                 return responses, None
 
-            # Execute tools
             tool_results = []
             structured_output_from_tool = None
 
@@ -804,7 +795,6 @@ class AgentHarness:
                 tool_name = tool_use.name
                 tool_input = tool_use.input
 
-                # Special handling for submit_response tool
                 if tool_name == "submit_response":
                     print(f"[agent] Received submit_response with structured output")
                     try:
@@ -847,7 +837,6 @@ class AgentHarness:
                     "content": result
                 })
 
-            # Add tool results to conversation
             self.conversation_history.append({
                 "role": "user",
                 "content": tool_results
@@ -878,7 +867,7 @@ class AgentHarness:
             return
 
         try:
-            self.client = anthropic.AsyncAnthropic(api_key=self.api_key)
+            self.agent = anthropic.AsyncAnthropic(api_key=self.api_key)
             self.init_tools()
 
             context = msg.get("context", "")
@@ -924,13 +913,6 @@ class AgentHarness:
 
         print(f"[agent] Processing query: {query[:500]}...")
 
-        # Auto-initialize if not initialized
-        if self.client is None:
-            print("[agent] Auto-initializing agent...")
-            await self.handle_init(msg)
-            if self.client is None:
-                print("[agent] Initialization failed, cannot process query")
-                return
 
         try:
             previous_ops = self.operation_counter
@@ -962,12 +944,13 @@ class AgentHarness:
 
             if structured_output is not None:
                 structured_output_dict = structured_output.model_dump()
-
+                # TODO(tim): cleanup this code, consider deleting
                 # Ensure required plan fields are always present as arrays
                 if not isinstance(structured_output_dict.get("plan"), list):
                     structured_output_dict["plan"] = []
                 if not isinstance(structured_output_dict.get("plan_diff"), list):
                     structured_output_dict["plan_diff"] = []
+            # todo(tim): cleanup this code, consider deleting
             else:
                 structured_output_dict = {
                     "plan": [],
@@ -975,7 +958,7 @@ class AgentHarness:
                     "summary": None,
                     "questions": None,
                 }
-
+            # todo(tim): cleanup this code, consider deleting just his conditional (not indisde it)
             if structured_output_dict is not None:
                 # Ensure summary and questions are None or arrays
                 if structured_output_dict.get("summary") is not None and not isinstance(structured_output_dict["summary"], list):
