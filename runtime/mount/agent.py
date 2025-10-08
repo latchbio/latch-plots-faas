@@ -514,7 +514,7 @@ class AgentHarness:
 
         self.register_tool(ToolDefinition(
             name="send_plan_update",
-            description="Send the latest non-final plan state to the frontend. The final agent response already includes the complete plan, so skip this call if you are about to return the final response.",
+            description="Send the latest non-final plan state to the frontend. Always use lowercase statuses (todo, in_progress, done) and lowercase actions (add, update, complete). The final agent response already includes the complete plan, so skip this call if you are about to return the final response.",
             input_schema={
                 "type": "object",
                 "properties": {
@@ -575,7 +575,7 @@ class AgentHarness:
 
         self.register_tool(ToolDefinition(
             name="submit_response",
-            description="Submit your final response to the user with a structured plan, plan updates, optional summary points, and optional questions. Use this tool when you are ready to respond to the user.",
+            description="Submit your final response to the user with a structured plan, plan updates, optional summary points, and optional questions. Always provide lowercase statuses (todo, in_progress, done) and lowercase plan_diff actions (add, update, complete). Use this tool when you are ready to respond to the user.",
             input_schema={
                 "type": "object",
                 "properties": {
@@ -719,11 +719,19 @@ class AgentHarness:
 
                 if tool_name == "submit_response":
                     try:
+                        summary = tool_input.get("summary")
+                        if not isinstance(summary, list):
+                            summary = None
+
+                        questions = tool_input.get("questions")
+                        if not isinstance(questions, list):
+                            questions = None
+
                         structured_output_from_tool = NotebookResponse(
                             plan=[PlanItem(**item) for item in tool_input.get("plan", [])],
                             plan_diff=[PlanDiff(**item) for item in tool_input.get("plan_diff", [])],
-                            summary=tool_input.get("summary") or None,
-                            questions=tool_input.get("questions") or None
+                            summary=summary,
+                            questions=questions
                         )
                         result = await self._call_tool(tool_name, tool_input)
                     except Exception as e:
