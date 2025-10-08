@@ -180,6 +180,76 @@ class AgentHarness:
 
         return False
 
+    # todo(tim): make this more efficient (e.g single pass and not revisiting conversation history)
+    def _filter_messages_for_thinking(self) -> tuple[list[MessageParam], bool]:
+        """Return filtered history and whether to fall back to full history."""
+
+        def _block_type(block):
+            if isinstance(block, dict):
+                return block.get("type")
+            return getattr(block, "type", None)
+
+        def _tool_use_id(block):
+            if isinstance(block, dict):
+                return block.get("id")
+            return getattr(block, "id", None)
+
+        valid_tool_use_ids: set[str] = set()
+        filtered_messages: list[MessageParam] = []
+        filtered_assistant_count = 0
+        assistant_messages_seen = False
+
+        for msg in self.conversation_history:
+            if msg.get("role") != "assistant":
+                continue
+            assistant_messages_seen = True
+
+            content = msg.get("content", [])
+            if isinstance(content, list):
+                for block in content:
+                    if _block_type(block) == "tool_use":
+                        tool_id = _tool_use_id(block)
+                        if tool_id:
+                            valid_tool_use_ids.add(tool_id)
+
+        for msg in self.conversation_history:
+            role = msg.get("role")
+            content = msg.get("content", [])
+
+            if role == "assistant":
+                if isinstance(content, list) and content:
+                    first_block = content[0]
+                    has_thinking = _block_type(first_block) in ("thinking", "redacted_thinking")
+                    has_tool_use = any(_block_type(block) == "tool_use" for block in content)
+
+                    if has_thinking or has_tool_use:
+                        filtered_messages.append(msg)
+                        filtered_assistant_count += 1
+
+            elif role == "user":
+                if isinstance(content, list):
+                    filtered_content = []
+                    for block in content:
+                        if isinstance(block, dict) and block.get("type") == "tool_result":
+                            tool_use_id = block.get("tool_use_id")
+                            if tool_use_id in valid_tool_use_ids:
+                                filtered_content.append(block)
+                        else:
+                            filtered_content.append(block)
+
+                    if filtered_content:
+                        filtered_messages.append({
+                            "role": "user",
+                            "content": filtered_content
+                        })
+                else:
+                    filtered_messages.append(msg)
+            else:
+                filtered_messages.append(msg)
+
+        needs_full_history = assistant_messages_seen and filtered_assistant_count == 0
+        return filtered_messages, needs_full_history
+
     def init_tools(self) -> None:
         self.tools.clear()
         self.tool_map.clear()
@@ -659,84 +729,11 @@ class AgentHarness:
                 else:
                     max_tokens = 4096
 
-                # Filter conversation history when thinking is enabled
                 messages_to_send = self.conversation_history
                 if thinking_budget is not None:
-                    valid_tool_use_ids = set()
-                    filtered_messages = []
-                    removed_count = 0
-                    filtered_assistant_count = 0
-                    assistant_messages_seen = any(
-                        msg.get("role") == "assistant" for msg in self.conversation_history
-                    )
-
-                    def _block_type(block):
-                        if isinstance(block, dict):
-                            return block.get("type")
-                        return getattr(block, "type", None)
-
-                    def _tool_use_id(block):
-                        if isinstance(block, dict):
-                            return block.get("id")
-                        return getattr(block, "id", None)
-
-                    # todo(tim): clean this up, try a one pass approach instead
-                    for msg in self.conversation_history:
-                        if msg["role"] == "assistant":
-                            content = msg.get("content", [])
-                            if isinstance(content, list) and len(content) > 0:
-                                has_tool_use = False
-                                for block in content:
-                                    if _block_type(block) == "tool_use":
-                                        has_tool_use = True
-                                        tool_id = _tool_use_id(block)
-                                        if tool_id:
-                                            valid_tool_use_ids.add(tool_id)
-
-                    for msg in self.conversation_history:
-                        if msg["role"] == "assistant":
-                            content = msg.get("content", [])
-                            if isinstance(content, list) and len(content) > 0:
-                                first_block = content[0]
-                                has_thinking = (
-                                    _block_type(first_block) in ("thinking", "redacted_thinking")
-                                )
-
-                                has_tool_use = False
-                                for block in content:
-                                    if _block_type(block) == "tool_use":
-                                        has_tool_use = True
-                                        break
-
-                                if has_thinking or has_tool_use:
-                                    filtered_messages.append(msg)
-                                    filtered_assistant_count += 1
-                                else:
-                                    removed_count += 1
-                        elif msg["role"] == "user":
-                            content = msg.get("content", [])
-                            if isinstance(content, list):
-                                filtered_content = []
-                                for block in content:
-                                    if isinstance(block, dict) and block.get("type") == "tool_result":
-                                        tool_use_id = block.get("tool_use_id")
-                                        if tool_use_id in valid_tool_use_ids:
-                                            filtered_content.append(block)
-                                    else:
-                                        filtered_content.append(block)
-
-                                if filtered_content:
-                                    filtered_messages.append({
-                                        "role": "user",
-                                        "content": filtered_content
-                                    })
-                            else:
-                                filtered_messages.append(msg)
-
-                    messages_to_send = filtered_messages
-                    if filtered_assistant_count == 0 and assistant_messages_seen:
-                        messages_to_send = self.conversation_history
-                        removed_count = 0
+                    filtered_messages, needs_full_history = self._filter_messages_for_thinking()
+                    if not needs_full_history:
+                        messages_to_send = filtered_messages
 
                 request_params = {
                     "model": model,
@@ -752,7 +749,8 @@ class AgentHarness:
                         "type": "enabled",
                         "budget_tokens": thinking_budget
                     }
-                    # note(tim): anthropic requires thinking blocks at the beginning of the assistant message
+                    # note(tim): anthropic rejects thinking requests unless the last assistant 
+                    # turn starts with a thinking block
                     if not self._last_assistant_has_thinking(messages_to_send):
                         enable_thinking = False
                         request_params.pop("thinking", None)
@@ -763,7 +761,6 @@ class AgentHarness:
             except Exception as e:
                 raise RuntimeError(f"Error calling Claude API: {e}")
 
-            # Add assistant response to history
             assistant_content = []
             tool_uses = []
             text_responses = []
@@ -791,6 +788,7 @@ class AgentHarness:
             tool_results = []
             structured_output_from_tool = None
 
+            # todo(tim): cleanup tool input handling
             for tool_use in tool_uses:
                 tool_name = tool_use.name
                 tool_input = tool_use.input
@@ -842,14 +840,12 @@ class AgentHarness:
                 "content": tool_results
             })
 
-            # If we got structured output from submit_response, we're done
             if structured_output_from_tool is not None:
                 if text_responses:
                     responses.append("\n".join(text_responses))
 
                 return responses, structured_output_from_tool
 
-        # Max turns reached
         responses.append("Maximum conversation turns reached without completion")
         return responses, None
 
@@ -872,27 +868,6 @@ class AgentHarness:
 
             context = msg.get("context", "")
             self.instructions_context = context
-
-            # Get initial notebook context
-            try:
-                result = await self.atomic_operation("get_context", {})
-                if result.get("status") == "success":
-                    ctx = result.get("context", {})
-                    cell_count = ctx.get("cell_count", 0)
-                    cells = ctx.get("cells", [])
-
-                    if cell_count > 0:
-                        self.instructions_context += f"\n\nCurrent notebook state: {cell_count} cell(s) present."
-                        for cell in cells[:5]:
-                            idx = cell.get("index", "?")
-                            cell_type = cell.get("cell_type", "unknown")
-                            source = cell.get("source", "")[:50]
-                            if source:
-                                self.instructions_context += f"\n- Cell {idx} ({cell_type}): {source}..."
-                        if cell_count > 5:
-                            self.instructions_context += f"\n- ... and {cell_count - 5} more cells"
-            except Exception as e:
-                print(f"[agent] Warning: Could not fetch initial context: {e}")
 
             self.initialized = True
             await self.send({
@@ -939,18 +914,15 @@ class AgentHarness:
             if request_id is not None:
                 response_msg["request_id"] = request_id
 
-
+            # todo(tim): cleanup the structured output logic
             structured_output_dict = None
 
             if structured_output is not None:
                 structured_output_dict = structured_output.model_dump()
-                # TODO(tim): cleanup this code, consider deleting
-                # Ensure required plan fields are always present as arrays
                 if not isinstance(structured_output_dict.get("plan"), list):
                     structured_output_dict["plan"] = []
                 if not isinstance(structured_output_dict.get("plan_diff"), list):
                     structured_output_dict["plan_diff"] = []
-            # todo(tim): cleanup this code, consider deleting
             else:
                 structured_output_dict = {
                     "plan": [],
@@ -958,15 +930,12 @@ class AgentHarness:
                     "summary": None,
                     "questions": None,
                 }
-            # todo(tim): cleanup this code, consider deleting just his conditional (not indisde it)
             if structured_output_dict is not None:
-                # Ensure summary and questions are None or arrays
                 if structured_output_dict.get("summary") is not None and not isinstance(structured_output_dict["summary"], list):
                     structured_output_dict["summary"] = None
                 if structured_output_dict.get("questions") is not None and not isinstance(structured_output_dict["questions"], list):
                     structured_output_dict["questions"] = None
 
-                # If there's no summary but there are text responses, put them in summary
                 if (structured_output_dict.get("summary") is None or len(structured_output_dict.get("summary", [])) == 0):
                     if responses and len(responses) > 0:
                         structured_output_dict["summary"] = responses
