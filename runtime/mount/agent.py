@@ -674,8 +674,7 @@ class AgentHarness:
                         "type": "enabled",
                         "budget_tokens": thinking_budget
                     }
-                    # note(tim): anthropic rejects thinking requests unless the last assistant 
-                    # turn starts with a thinking block
+                    # note(tim): only request thinking if the latest assistant turn starts with a thinking block
                     if not self._last_assistant_msg_has_thinking(messages_to_send):
                         enable_thinking = False
                         request_params.pop("thinking", None)
