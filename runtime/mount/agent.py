@@ -161,7 +161,7 @@ class AgentHarness:
         self.tools.append(tool)
         self.tool_map[tool.name] = tool
     
-    def _last_assistant_has_thinking(self, messages: list[MessageParam]) -> bool:
+    def _last_assistant_msg_has_thinking(self, messages: list[MessageParam]) -> bool:
         for msg in reversed(messages):
             if msg.get("role") != "assistant":
                 continue
@@ -677,7 +677,7 @@ class AgentHarness:
                     }
                     # note(tim): anthropic rejects thinking requests unless the last assistant 
                     # turn starts with a thinking block
-                    if not self._last_assistant_has_thinking(messages_to_send):
+                    if not self._last_assistant_msg_has_thinking(messages_to_send):
                         enable_thinking = False
                         request_params.pop("thinking", None)
 
@@ -852,25 +852,12 @@ class AgentHarness:
 
         except Exception as e:
             print(f"[agent] Error processing query: {e}")
-            if AGENT_DEBUG:
-                traceback.print_exc()
-            error_msg = {
+            await self.send({
                 "type": "agent_result",
                 "status": "error",
                 "error": str(e),
                 "mode": self.mode.value,
-                "structured_output": {
-                    "plan": [],
-                    "plan_diff": [],
-                    "summary": None,
-                    "questions": None,
-                },
-            }
-
-            if request_id is not None:
-                error_msg["request_id"] = request_id
-
-            await self.send(error_msg)
+            })
 
     def create_tracked_task(self, coro) -> asyncio.Task:
         task = asyncio.create_task(coro)
