@@ -72,6 +72,7 @@ class PlanDiffPayload(TypedDict):
     id: str
     description: str
 
+WidgetUpdatePayload = TypedDict("WidgetUpdatePayload", {"key": str, "value": str})
 
 @dataclass
 class AgentHarness:
@@ -290,6 +291,10 @@ class AgentHarness:
             position = args["position"]
             code = args["code"]
 
+        async def create_markdown_cell(args: dict) -> str:
+            position = args["position"]
+            code = args["code"]
+
             if position < 0:
                 return "Error: Position must be non-negative"
 
@@ -317,6 +322,11 @@ class AgentHarness:
             new_code = args["new_code"]
             auto_run = args.get("auto_run", True)
 
+        async def edit_cell(args: dict) -> str:
+            cell_id = args["cell_id"]
+            new_code = args["new_code"]
+            auto_run = args.get("auto_run", True)
+
             if AGENT_DEBUG:
                 print(f"[tool] edit_cell id={cell_id}")
 
@@ -334,6 +344,8 @@ class AgentHarness:
                 return msg
             return f"Failed to edit cell: {result.get('error', 'Unknown error')}"
 
+        async def delete_cell(args: dict) -> str:
+            cell_id = args["cell_id"]
         async def delete_cell(args: dict) -> str:
             cell_id = args["cell_id"]
 
@@ -361,6 +373,8 @@ class AgentHarness:
 
         async def run_cell(args: dict) -> str:
             cell_id = args["cell_id"]
+        async def run_cell(args: dict) -> str:
+            cell_id = args["cell_id"]
             params = {"cell_id": cell_id}
 
             await self.send({
@@ -374,6 +388,8 @@ class AgentHarness:
 
         async def stop_cell(args: dict) -> str:
             cell_id = args["cell_id"]
+        async def stop_cell(args: dict) -> str:
+            cell_id = args["cell_id"]
             params = {"cell_id": cell_id}
 
             result = await self.atomic_operation("stop_cell", params)
@@ -382,6 +398,7 @@ class AgentHarness:
                 return f"Stopped cell {cell_id}"
             return f"Failed to stop cell {cell_id}: {result.get('error', 'Unknown error')}"
 
+        async def delete_all_cells(args: dict) -> str:
         async def delete_all_cells(args: dict) -> str:
             context_result = await self.atomic_operation("get_context", {})
             if context_result.get("status") != "success":
@@ -400,6 +417,7 @@ class AgentHarness:
             return f"Deleted {deleted_count} cells from the notebook"
 
         async def get_notebook_context(args: dict) -> str:
+        async def get_notebook_context(args: dict) -> str:
             params = {}
 
             result = await self.atomic_operation("get_context", params)
@@ -417,15 +435,61 @@ class AgentHarness:
                 cell_type = cell.get("cell_type", "unknown")
                 status = cell.get("status", "idle")
                 source = cell.get("source", "")
+                tf_id = cell.get("tf_id", "?")
 
                 source_preview = source[:500] + "..." if len(source) > 500 else source
                 source_preview = source_preview.replace("\n", " ")
 
-                summary += f"\n[{index}] ({cell_type}, {status}, id: {cell_id})"
+                summary += f"\n[{index}] ({cell_type}, {status}, cell_id: {cell_id}, tf_id: {tf_id})"
                 if source_preview:
                     summary += f": {source_preview}"
 
+                widget_summary = self._format_widget_summaries(cell.get("widgets") or [])
+                if widget_summary:
+                    summary += f"\n  Widgets: {widget_summary}"
+
             return summary
+
+        async def send_plan_update(args: dict) -> str:
+            plan = args["plan"]
+            plan_diff = args.get("plan_diff")
+
+        async def set_widget(args: dict) -> str:
+            updates = args.get("updates")
+            if not updates:
+                return "No widget updates provided"
+
+            updates_dict: dict[str, object] = {}
+            payload_updates: list[WidgetUpdatePayload] = []
+
+            if AGENT_DEBUG:
+                print(f"[tool] set_widget updates={updates}")
+
+            for item in updates:
+                key = item.get("key")
+                if not key:
+                    return "Widget updates must include a 'key'"
+
+                value_json = item.get("value")
+                if not value_json:
+                    return "Widget updates must include a 'value'"
+
+                try:
+                    parsed_value = json.loads(value_json)
+                except json.JSONDecodeError:
+                    parsed_value = value_json
+
+                updates_dict[key] = parsed_value
+                payload_updates.append({"key": key, "value": json.dumps(parsed_value)})
+
+            params = {"widget_updates": payload_updates}
+            result = await self.atomic_operation("set_widget", params)
+
+            if result.get("status") == "success":
+                applied_keys = ", ".join(updates_dict.keys())
+                return f"Updated widget values for: {applied_keys}"
+
+            return f"Failed to update widget values: {result.get('error', 'Unknown error')}"
 
         async def send_plan_update(args: dict) -> str:
             plan = args["plan"]
@@ -453,6 +517,7 @@ class AgentHarness:
                 return msg
             return f"Failed to deliver plan update: {result.get('error', 'Unknown error')}"
 
+        async def start_new_plan(args: dict) -> str:
         async def start_new_plan(args: dict) -> str:
             self.set_mode(Mode.planning)
             return "Started new planning session"
@@ -828,6 +893,31 @@ class AgentHarness:
                 await self.conversation_task
             except asyncio.CancelledError:
                 pass
+    
+    def _format_widget_summaries(self, widgets: list[dict]) -> str:
+            if not widgets:
+                return ""
+            
+            widget_summaries = []
+            for widget in widgets:
+                widget_key = widget.get("key") or "?"
+                widget_id = widget.get("widget_id") or widget_key
+                label = widget.get("label") or ""
+                value_preview = widget.get("value_preview")
+                widget_type = widget.get("type")
+                
+                widget_desc = f"key={widget_key}"
+                if widget_type:
+                    widget_desc += f", type={widget_type}"
+                if widget_id != widget_key:
+                    widget_desc += f", id={widget_id}"
+                if label:
+                    widget_desc += f" ({label})"
+                if value_preview:
+                    widget_desc += f" = {value_preview}"
+                widget_summaries.append(widget_desc)
+            
+            return ", ".join(widget_summaries)
 
     async def accept(self) -> None:
         msg = await self.conn.recv()
