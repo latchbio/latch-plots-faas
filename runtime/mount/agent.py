@@ -106,6 +106,8 @@ class AgentHarness:
     error_fixes_in_progress: set[str] = field(default_factory=set)
     operation_counter: int = 0
     instructions_context: str = ""
+    last_assistant_had_thinking: bool = False
+    assistant_message_count: int = 0
 
     mode_config: dict[Mode, tuple[str, int | None]] = field(default_factory=lambda: {
         Mode.planning: ("claude-sonnet-4-5-20250929", 4096),
@@ -168,16 +170,27 @@ class AgentHarness:
                 continue
 
             content = msg.get("content", [])
-            if not (isinstance(content, list) and content):
+            if not isinstance(content, list):
                 return False
 
-            first_block = content[0]
-            if isinstance(first_block, dict):
-                block_type = first_block.get("type")
-            else:
-                block_type = getattr(first_block, "type", None)
+            has_thinking = False
+            has_text = False
 
-            return block_type in ("thinking", "redacted_thinking")
+            for block in content:
+                if isinstance(block, dict):
+                    block_type = block.get("type")
+                else:
+                    block_type = getattr(block, "type", None)
+
+                if block_type in ("thinking", "redacted_thinking"):
+                    has_thinking = True
+                elif block_type == "text":
+                    has_text = True
+
+            if has_thinking:
+                return True
+            if has_text:
+                return False
 
         return False
 
@@ -642,6 +655,9 @@ class AgentHarness:
     async def _run_agent_step(self, user_query: str) -> tuple[list[str], NotebookResponse | None]:
         responses = []
 
+        self.assistant_message_count = sum(1 for msg in self.conversation_history if msg.get("role") == "assistant")
+        self.last_assistant_had_thinking = self._last_assistant_msg_has_thinking(self.conversation_history)
+
         self.conversation_history.append({
             "role": "user",
             "content": user_query
@@ -669,18 +685,24 @@ class AgentHarness:
                     "tools": [tool.to_anthropic_tool() for tool in self.tools],
                 }
 
-                enable_thinking = thinking_budget is not None
-                if enable_thinking:
+                use_beta_api = False
+                if thinking_budget is not None and (
+                    self.assistant_message_count == 0 or self.last_assistant_had_thinking
+                ):
                     request_params["thinking"] = {
                         "type": "enabled",
                         "budget_tokens": thinking_budget
                     }
-                    # note(tim): only request thinking if the latest assistant turn starts with a thinking block
-                    if not self._last_assistant_msg_has_thinking(messages_to_send):
-                        enable_thinking = False
-                        request_params.pop("thinking", None)
+                    betas = request_params.setdefault("betas", [])
+                    if "interleaved-thinking-2025-05-14" not in betas:
+                        betas.append("interleaved-thinking-2025-05-14")
+                    use_beta_api = True
 
-                response = await self.agent.messages.create(**request_params)
+                if not use_beta_api:
+                    request_params.pop("betas", None)
+                    response = await self.agent.messages.create(**request_params)
+                else:
+                    response = await self.agent.beta.messages.create(**request_params)
 
 
             except Exception as e:
@@ -697,11 +719,27 @@ class AgentHarness:
                 elif block.type == "tool_use":
                     tool_uses.append(block)
                     assistant_content.append(block)
+                elif block.type in {"thinking", "redacted_thinking"}:
+                    assistant_content.append(block)
+
+            def _block_type(val) -> str | None:
+                if isinstance(val, dict):
+                    return val.get("type")
+                return getattr(val, "type", None)
+
+            assistant_has_thinking = any(_block_type(block) in {"thinking", "redacted_thinking"} for block in assistant_content)
+            assistant_has_text = any(_block_type(block) == "text" for block in assistant_content)
 
             self.conversation_history.append({
                 "role": "assistant",
                 "content": assistant_content
             })
+            self.assistant_message_count += 1
+            if assistant_has_thinking:
+                self.last_assistant_had_thinking = True
+            elif assistant_has_text:
+                self.last_assistant_had_thinking = False
+            print(json.dumps(self.conversation_history[-1], default=str))
 
             if not tool_uses:
                 if text_responses:
@@ -753,6 +791,7 @@ class AgentHarness:
                 "role": "user",
                 "content": tool_results
             })
+            print(json.dumps(self.conversation_history[-1], default=str))
 
             if structured_output_from_tool is not None:
                 if text_responses:
@@ -912,6 +951,11 @@ class AgentHarness:
                     exception_text = parsed["string"]
             except json.JSONDecodeError:
                 print("[agent] Exception is not JSON-encoded, using raw text")
+
+            print(
+                "[agent] Exception for cell"
+                f" {cell_id}:\n{exception_text}"
+            )
 
             fix_query = dedent(f"""
                 Cell {crdt_cell_id} at position {cell_info.get('index', '?')} failed with this error:
