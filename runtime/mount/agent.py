@@ -17,6 +17,7 @@ from config_loader import build_full_instruction
 from lplots import _inject
 from pydantic import BaseModel
 from socketio_thread import SocketIoThread
+from utils import auth_token_sdk, nucleus_url
 
 sandbox_root = os.environ.get("LATCH_SANDBOX_ROOT")
 if sandbox_root:
@@ -77,7 +78,6 @@ class PlanDiffPayload(TypedDict):
 class AgentHarness:
     conn: SocketIoThread
     initialized: bool = False
-    api_key: str | None = None
     client: anthropic.AsyncAnthropic | None = None
     conversation_history: list[MessageParam] = field(default_factory=list)
     mode: Mode = Mode.planning
@@ -694,23 +694,16 @@ class AgentHarness:
     async def handle_init(self, msg: dict[str, object]) -> None:
         print("[agent] Initializing", flush=True)
 
-        self.api_key = os.environ.get("ANTHROPIC_API_KEY")
-
-        if not self.api_key:
-            await self.send({
-                "type": "agent_error",
-                "error": "ANTHROPIC_API_KEY not set",
-                "fatal": True
-            })
-            return
-
         try:
             context = msg.get("context", "")
             self.instructions_context = context
 
             self.init_tools()
 
-            self.client = anthropic.AsyncAnthropic(api_key=self.api_key)
+            self.client = anthropic.AsyncAnthropic(
+                base_url=f"{nucleus_url}/agent/anthropic/v1",
+                default_headers={"Authorization": auth_token_sdk}
+            )
 
             self.initialized = True
             await self.send({
