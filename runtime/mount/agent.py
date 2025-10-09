@@ -287,7 +287,6 @@ class AgentHarness:
                 return msg
             return f"Failed to create cell: {result.get('error', 'Unknown error')}"
 
-
         async def create_markdown_cell(args: dict) -> str:
             position = args["position"]
             code = args["code"]
@@ -313,7 +312,6 @@ class AgentHarness:
                     print(f"[tool] create_markdown_cell -> {msg}")
                 return msg
             return f"Failed to create cell: {result.get('error', 'Unknown error')}"
-
 
         async def edit_cell(args: dict) -> str:
             cell_id = args["cell_id"]
@@ -404,7 +402,6 @@ class AgentHarness:
 
             return f"Deleted {deleted_count} cells from the notebook"
 
-        async def get_notebook_context(args: dict) -> str:
         async def get_notebook_context(args: dict) -> str:
             params = {}
 
@@ -674,6 +671,30 @@ class AgentHarness:
             },
         })
         self.tool_map["submit_response"] = submit_response
+
+        self.tools.append({
+                    "name": "set_widget",
+                    "description": "Set widget values by widget key.",
+                    "input_schema": {
+                        "type": "object",
+                        "properties": {
+                            "updates": {
+                                "type": "array",
+                                "description": "List of widget updates with keys and JSON-serializable values.",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "key": {"type": "string", "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"},
+                                        "value": {"type": "string", "description": "JSON-serializable value string"},
+                                    },
+                                    "required": ["key", "value"],
+                                },
+                            },
+                        },
+                        "required": ["updates"],
+                    },
+                })
+        self.tool_map["set_widget"] = set_widget
 
     async def run_agent_loop(self) -> None:
         assert self.client is not None, "Client not initialized"
