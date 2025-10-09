@@ -85,11 +85,15 @@ class AgentHarness:
     executing_cells: set[str] = field(default_factory=set)
     tools: list[ToolParam] = field(default_factory=list)
     tool_map: dict[str, Callable] = field(default_factory=dict)
-    active_tasks: set[asyncio.Task] = field(default_factory=set)
-    error_fixes_in_progress: set[str] = field(default_factory=set)
     operation_counter: int = 0
     instructions_context: str = ""
     current_structured_output: NotebookResponse | None = None
+    current_request_id: str | None = None
+
+    pending_messages: asyncio.Queue = field(default_factory=asyncio.Queue)
+    conversation_task: asyncio.Task | None = None
+    conversation_running: bool = False
+    system_prompt: str = ""
 
     mode_config: dict[Mode, tuple[str, int | None]] = field(default_factory=lambda: {
         Mode.planning: ("claude-sonnet-4-5-20250929", 4096),
@@ -171,6 +175,83 @@ class AgentHarness:
                 return False
 
         return False
+
+    async def _wait_for_message(self) -> None:
+        msg = await self.pending_messages.get()
+
+        msg_type = msg.get("type")
+
+        if msg_type == "user_query":
+            self.current_request_id = msg.get("request_id")
+
+            self.conversation_history.append({
+                "role": "user",
+                "content": msg["content"],
+            })
+
+            if AGENT_DEBUG:
+                content_preview = msg["content"][:100]
+                print(f"[agent] User query received: {content_preview}...")
+
+        elif msg_type == "cell_result":
+            cell_id = msg["cell_id"]
+            success = msg.get("success", True)
+
+            if success:
+                result_content = f"✓ Cell {cell_id} executed successfully"
+                if AGENT_DEBUG:
+                    print(f"[agent] Cell {cell_id} succeeded")
+            else:
+                exception = msg.get("exception", "Unknown error")
+                result_content = f"✗ Cell {cell_id} execution failed:\n```\n{exception}\n```"
+                if AGENT_DEBUG:
+                    print(f"[agent] Cell {cell_id} failed")
+
+            self.conversation_history.append({
+                "role": "user",
+                "content": result_content,
+            })
+
+        elif msg_type == "stop":
+            self.conversation_running = False
+            if AGENT_DEBUG:
+                print("[agent] Stop signal received")
+
+    async def _send_agent_result(self) -> None:
+        if not self.current_request_id:
+            return
+
+        if self.mode == Mode.executing:
+            self.set_mode(Mode.planning)
+
+        text_responses = []
+        for msg in reversed(self.conversation_history):
+            if msg.get("role") == "user":
+                break
+            if msg.get("role") == "assistant":
+                for block in msg.get("content", []):
+                    block_type = (block.get("type") if isinstance(block, dict)
+                                 else getattr(block, "type", None))
+                    block_text = (block.get("text") if isinstance(block, dict)
+                                 else getattr(block, "text", None))
+                    if block_type == "text" and block_text:
+                        text_responses.insert(0, block_text)
+
+        response_msg = {
+            "type": "agent_result",
+            "status": "success",
+            "responses": text_responses,
+            "mode": self.mode.value,
+            "request_id": self.current_request_id,
+        }
+
+        if self.current_structured_output is not None:
+            response_msg["structured_output"] = self.current_structured_output.model_dump()
+            self.current_structured_output = None
+
+        await self.send(response_msg)
+
+        self.current_request_id = None
 
     def init_tools(self) -> None:
         self.tools = []
@@ -545,21 +626,23 @@ class AgentHarness:
         })
         self.tool_map["submit_response"] = submit_response
 
-    async def _run_agent_conversation(self, user_message: str) -> list[str]:
+    async def run_agent_loop(self) -> None:
         assert self.client is not None, "Client not initialized"
 
-        model, thinking_budget = self.mode_config.get(self.mode, ("claude-sonnet-4-5-20250929", 1024))
-
-        self.conversation_history.append({
-            "role": "user",
-            "content": user_message,
-        })
-
-        text_responses = []
+        self.conversation_running = True
         turn = 0
 
-        while True:
+        while self.conversation_running:
+            if not self.conversation_history or self.conversation_history[-1]["role"] == "assistant":
+                await self._wait_for_message()
+                continue
+
+            if not self.conversation_running:
+                break
+
             turn += 1
+
+            model, thinking_budget = self.mode_config.get(self.mode, ("claude-sonnet-4-5-20250929", 1024))
 
             if AGENT_DEBUG:
                 print(f"[agent] Turn {turn}, mode={self.mode}, thinking_budget={thinking_budget}")
@@ -569,12 +652,10 @@ class AgentHarness:
             else:
                 max_tokens = 4096
 
-            system_prompt = build_full_instruction(self.instructions_context)
-
             kwargs = {
                 "model": model,
                 "max_tokens": max_tokens,
-                "system": system_prompt,
+                "system": self.system_prompt,
                 "messages": self.conversation_history,
                 "tools": self.tools,
             }
@@ -600,7 +681,7 @@ class AgentHarness:
                     "error": f"API error: {e!s}",
                     "fatal": False
                 })
-                break
+                continue
 
             assistant_msg = {
                 "role": "assistant",
@@ -611,14 +692,10 @@ class AgentHarness:
             for block in response.content:
                 if isinstance(block, dict):
                     block_type = block.get("type")
-                    block_text = block.get("text")
                 else:
                     block_type = getattr(block, "type", None)
-                    block_text = getattr(block, "text", None)
 
-                if block_type == "text" and block_text:
-                    text_responses.append(block_text)
-                elif block_type in ("thinking", "redacted_thinking"):
+                if block_type in ("thinking", "redacted_thinking"):
                     if AGENT_DEBUG:
                         thinking_text = block.get("thinking") if isinstance(block, dict) else getattr(block, "thinking", None)
                         if thinking_text:
@@ -628,8 +705,8 @@ class AgentHarness:
 
             if response.stop_reason == "end_turn":
                 if AGENT_DEBUG:
-                    print("[agent] Conversation ended (end_turn)")
-                break
+                    print("[agent] Turn ended, sending agent_result")
+                await self._send_agent_result()
             elif response.stop_reason == "tool_use":
                 tool_results = []
 
@@ -679,17 +756,14 @@ class AgentHarness:
                     })
                 else:
                     if AGENT_DEBUG:
-                        print("[agent] No tool results, ending conversation")
-                    break
+                        print("[agent] No tool results")
             elif response.stop_reason == "max_tokens":
-                print("[agent] Hit max tokens, ending conversation", flush=True)
-                break
+                print("[agent] Hit max tokens", flush=True)
+                await self._send_agent_result()
             else:
                 if AGENT_DEBUG:
                     print(f"[agent] Unknown stop reason: {response.stop_reason}")
-                break
-
-        return text_responses
+                await self._send_agent_result()
 
     async def handle_init(self, msg: dict[str, object]) -> None:
         print("[agent] Initializing", flush=True)
@@ -712,12 +786,16 @@ class AgentHarness:
 
             self.client = anthropic.AsyncAnthropic(api_key=self.api_key)
 
+            self.system_prompt = build_full_instruction(self.instructions_context)
+
             self.initialized = True
             await self.send({
                 "type": "agent_status",
                 "status": "ready"
             })
             print("[agent] Initialization complete", flush=True)
+
+            self.conversation_task = asyncio.create_task(self.run_agent_loop())
         except Exception as e:
             await self.send({
                 "type": "agent_error",
@@ -731,157 +809,25 @@ class AgentHarness:
 
         print(f"[agent] Processing query: {query}...")
 
-        assert self.client is not None, "Client not initialized"
+        await self.pending_messages.put({
+            "type": "user_query",
+            "content": query,
+            "request_id": request_id,
+        })
 
-        try:
-            self.current_structured_output = None
-            responses = await self._run_agent_conversation(query)
-
-            if self.mode == Mode.executing:
-                self.set_mode(Mode.planning)
-
-            response_msg = {
-                "type": "agent_result",
-                "status": "success",
-                "responses": responses,
-                "mode": self.mode.value,
-            }
-
-            if request_id is not None:
-                response_msg["request_id"] = request_id
-
-            if self.current_structured_output is not None:
-                response_msg["structured_output"] = self.current_structured_output.model_dump()
-
-            await self.send(response_msg)
-
-        except Exception as e:
-            print(f"[agent] Error processing query: {e}")
-            traceback.print_exc()
-            await self.send({
-                "type": "agent_result",
-                "status": "error",
-                "error": str(e),
-                "mode": self.mode.value,
-            })
-
-    def create_tracked_task(self, coro) -> asyncio.Task:
-        task = asyncio.create_task(coro)
-        self.active_tasks.add(task)
-        task.add_done_callback(self.active_tasks.discard)
-        return task
-
-    async def fix_cell_error(self, cell_id: str, exception: str) -> None:
-        print(f"[agent] Auto-fixing error in cell {cell_id}")
-
-        if not exception:
-            print(f"[agent] No exception text provided for cell {cell_id}")
-            return
-
-        try:
-            ctx_result = await self.atomic_operation("get_context", {})
-
-            if ctx_result.get("status") != "success":
-                print("[agent] Could not fetch context")
-                return
-
-            cells = ctx_result.get("context", {}).get("cells", [])
-            cell_info = next((c for c in cells if str(c.get("tf_id")) == str(cell_id)), None)
-
-            if cell_info is None:
-                print(f"[agent] Cell with tf_id={cell_id} not found in context")
-                print(f"[agent] Available cells: {[(c.get('cell_id'), c.get('tf_id')) for c in cells]}")
-                return
-
-            source = cell_info.get("source", "")
-            crdt_cell_id = cell_info.get("cell_id")
-
-            if source == "":
-                print(f"[agent] Cell {cell_id} has no source code")
-                return
-
-            if crdt_cell_id is None:
-                print(f"[agent] No cell_id for tf_id {cell_id}")
-                return
-
-            exception_text = exception
-            try:
-                parsed = json.loads(exception)
-                if isinstance(parsed, dict) and "string" in parsed:
-                    exception_text = parsed["string"]
-            except json.JSONDecodeError:
-                print("[agent] Exception is not JSON-encoded, using raw text")
-
-            fix_query = dedent(f"""
-                Cell {crdt_cell_id} at position {cell_info.get('index', '?')} failed with this error:
-
-                ```python
-                {source}
-                ```
-
-                Error:
-                ```
-                {exception_text}
-                ```
-
-                Fix this error by editing the cell with the corrected code.
-                Only create additional cells if the error is due to missing
-                imports or dependencies that should be in a separate cell.
-
-                Be concise and fix the issue directly.
-            """)
-
-            self.set_mode(Mode.debugging)
-
-            try:
-                await self._run_agent_conversation(fix_query)
-
-                await self.send({
-                    "type": "agent_error_fixed",
-                    "cell_id": cell_id,
-                    "status": "success"
-                })
-                print(f"[agent] Successfully fixed error in cell {cell_id}")
-
-            finally:
-                self.set_mode(Mode.planning)
-
-        except Exception as e:
-            print(f"[agent] Failed to fix error in cell {cell_id}: {e}")
-            await self.send({
-                "type": "agent_error_fixed",
-                "cell_id": cell_id,
-                "status": "failed",
-                "error": str(e)
-            })
-        finally:
-            self.error_fixes_in_progress.discard(cell_id)
-
-    async def handle_cell_error(self, msg: dict[str, object]) -> None:
-        cell_id = str(msg.get("cell_id"))
-        exception = msg.get("exception", "")
-
-        if cell_id in self.error_fixes_in_progress:
-            print(f"[agent] Error fix for cell {cell_id} already in progress")
-            return
-
-        self.error_fixes_in_progress.add(cell_id)
-        self.create_tracked_task(self.fix_cell_error(cell_id, exception))
-        print(f"[agent] Started error fix task for cell {cell_id}")
 
     async def handle_cancel(self, msg: dict[str, object]) -> None:
         request_id = msg.get("request_id", "unknown")
         print(f"[agent] Cancelling request {request_id}")
 
-        for task in list(self.active_tasks):
-            if not task.done():
-                task.cancel()
+        self.conversation_running = False
 
-        if self.active_tasks:
-            await asyncio.gather(*self.active_tasks, return_exceptions=True)
-
-        self.active_tasks.clear()
-        self.error_fixes_in_progress.clear()
+        if self.conversation_task and not self.conversation_task.done():
+            self.conversation_task.cancel()
+            try:
+                await self.conversation_task
+            except asyncio.CancelledError:
+                pass
 
     async def accept(self) -> None:
         msg = await self.conn.recv()
@@ -898,7 +844,7 @@ class AgentHarness:
                 query = msg.get("query", "")
                 query_preview = query[:60] + "..." if len(query) > 60 else query
                 print(f"[agent] Query: {query_preview}")
-            self.create_tracked_task(self.handle_query(msg))
+            await self.handle_query(msg)
         elif msg_type == "agent_cancel":
             if AGENT_DEBUG:
                 request_id = msg.get("request_id", "unknown")
@@ -910,38 +856,27 @@ class AgentHarness:
                 status = msg.get("status", "unknown")
                 print(f"[agent] {action} -> {status}")
             await self.handle_action_response(msg)
-        elif msg_type == "cell_result" and msg.get("exception") is not None:
-            await self.handle_cell_error({
-                "cell_id": msg.get("cell_id"),
-                "exception": msg.get("exception")
-            })
-        elif msg_type == "start_cell":
-            cell_id = msg.get("cell_id")
-            if cell_id is not None:
-                self.executing_cells.add(str(cell_id))
-        elif msg_type == "cell_result":
-            cell_id = msg.get("cell_id")
-            if cell_id is not None:
-                self.executing_cells.discard(str(cell_id))
         elif msg_type == "kernel_message":
             nested_msg = msg.get("message", {})
             nested_type = nested_msg.get("type")
-            if nested_type == "cell_result" and nested_msg.get("has_exception") is True:
+            if nested_type == "cell_result":
                 cell_id = nested_msg.get("cell_id")
+                has_exception = nested_msg.get("has_exception", False)
                 exception = nested_msg.get("exception", "")
-                print(f"[agent] Cell error detected: cell_id={cell_id}, has_exception={exception != ''}")
-                await self.handle_cell_error({
+
+                if cell_id is not None:
+                    self.executing_cells.discard(str(cell_id))
+
+                await self.pending_messages.put({
+                    "type": "cell_result",
                     "cell_id": cell_id,
-                    "exception": exception
+                    "success": not has_exception,
+                    "exception": exception,
                 })
             elif nested_type == "start_cell":
                 cell_id = nested_msg.get("cell_id")
                 if cell_id is not None:
                     self.executing_cells.add(str(cell_id))
-            elif nested_type == "cell_result":
-                cell_id = nested_msg.get("cell_id")
-                if cell_id is not None:
-                    self.executing_cells.discard(str(cell_id))
         else:
             print(f"[agent] Unknown message type: {msg_type}")
 
