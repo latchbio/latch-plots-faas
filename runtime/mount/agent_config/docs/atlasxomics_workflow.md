@@ -90,9 +90,14 @@ execution = w.value
 ```python
 viewer = w_h5(ann_data=adata)
 value = viewer.value
-if value.lasso_points:
-    print(f"User selected {len(value.lasso_points)} regions")
-    print(f"The embedding used for the lasso selection is {value.lasso_points_obsm}")
+
+# Get the current selections
+if value['lasso_points']:
+    print(f"User selected {len(value['lasso_points'])} regions")
+    print(f"The embedding used for the lasso selection is {value['lasso_points_obsm']}")
+    for i, region in enu merate(value['lasso_points']):
+        print(f"Region {i}: {len(region)} points")
+
 # Proceed to create an `adata_subset` based on lasso-selected points
 ```
 
@@ -133,7 +138,7 @@ What to Ask the User:
 
 How to Identify Groups:
 - You must infer which column in adata.obs encodes this grouping (e.g. "condition", "sample", or "cluster").
-- Then, for each group (A and B), filter all cell barcodes in adata.obs.index that match the selected value.
+- Then, for each group (A and B), filter all cell barcodes in `adata.obs.index` that match the selected value.
 
 ```python
 import json
