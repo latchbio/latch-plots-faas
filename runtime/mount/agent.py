@@ -287,9 +287,6 @@ class AgentHarness:
                 return msg
             return f"Failed to create cell: {result.get('error', 'Unknown error')}"
 
-        async def create_markdown_cell(args: dict) -> str:
-            position = args["position"]
-            code = args["code"]
 
         async def create_markdown_cell(args: dict) -> str:
             position = args["position"]
@@ -317,10 +314,6 @@ class AgentHarness:
                 return msg
             return f"Failed to create cell: {result.get('error', 'Unknown error')}"
 
-        async def edit_cell(args: dict) -> str:
-            cell_id = args["cell_id"]
-            new_code = args["new_code"]
-            auto_run = args.get("auto_run", True)
 
         async def edit_cell(args: dict) -> str:
             cell_id = args["cell_id"]
@@ -344,8 +337,6 @@ class AgentHarness:
                 return msg
             return f"Failed to edit cell: {result.get('error', 'Unknown error')}"
 
-        async def delete_cell(args: dict) -> str:
-            cell_id = args["cell_id"]
         async def delete_cell(args: dict) -> str:
             cell_id = args["cell_id"]
 
@@ -388,8 +379,6 @@ class AgentHarness:
 
         async def stop_cell(args: dict) -> str:
             cell_id = args["cell_id"]
-        async def stop_cell(args: dict) -> str:
-            cell_id = args["cell_id"]
             params = {"cell_id": cell_id}
 
             result = await self.atomic_operation("stop_cell", params)
@@ -398,7 +387,6 @@ class AgentHarness:
                 return f"Stopped cell {cell_id}"
             return f"Failed to stop cell {cell_id}: {result.get('error', 'Unknown error')}"
 
-        async def delete_all_cells(args: dict) -> str:
         async def delete_all_cells(args: dict) -> str:
             context_result = await self.atomic_operation("get_context", {})
             if context_result.get("status") != "success":
@@ -450,9 +438,6 @@ class AgentHarness:
 
             return summary
 
-        async def send_plan_update(args: dict) -> str:
-            plan = args["plan"]
-            plan_diff = args.get("plan_diff")
 
         async def set_widget(args: dict) -> str:
             updates = args.get("updates")
@@ -517,7 +502,6 @@ class AgentHarness:
                 return msg
             return f"Failed to deliver plan update: {result.get('error', 'Unknown error')}"
 
-        async def start_new_plan(args: dict) -> str:
         async def start_new_plan(args: dict) -> str:
             self.set_mode(Mode.planning)
             return "Started new planning session"
