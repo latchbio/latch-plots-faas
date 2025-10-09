@@ -6,7 +6,7 @@ This is the **authoritative step-by-step pipeline** for AtlasxOmics experiment. 
 2. **Experiment Setup** - Ask users to confirm if they want to perform analysis on **gene activity score AnnData** (recommended) or **motif enrichment scores AnnData**. 
 3. **Clustering (workflow only)** - Confirm if clustering applies to all cells or a subset (subset = a single sample, condition, or lasso-selected region). Then launch the AtlasXOmics clustering workflow using `w_workflow(wf_name="wf.__init__.opt_workflow", ...)` **Never use scanpy.tl.leiden** or any ad-hoc clustering. 
 9. **Differential Gene Activity or Motif Enrichment Comparison** - Use `w_workflow(wf_name="wf.__init__.compare_workflow", ...)`
-10. **Cell Type Annotation** - assign biological meaning to clusters using gene sets. 
+10. **Gene Set Scoring & Cell Type Annotation** - assign biological meaning to clusters using gene sets. **By default, infer the best gene sets to use from general biological knowledge of the tissue or experiment.**
 
 The section below defines detailed guidelines for each of the above steps. 
 
