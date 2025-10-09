@@ -5,22 +5,14 @@ import socket
 import sys
 import traceback
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
 from textwrap import dedent
 from typing import Literal
 
-from claude_agent_sdk import (
-    ClaudeAgentOptions,
-    ClaudeSDKClient,
-    create_sdk_mcp_server,
-    tool,
-)
-from claude_agent_sdk.types import (
-    AssistantMessage,
-    TextBlock,
-    ToolUseBlock,
-)
+import anthropic
+from anthropic.types import MessageParam, ToolParam, ToolUseBlock
 from config_loader import build_full_instruction
 from lplots import _inject
 from pydantic import BaseModel
@@ -86,15 +78,24 @@ class AgentHarness:
     conn: SocketIoThread
     initialized: bool = False
     api_key: str | None = None
-    client: ClaudeSDKClient | None = None
+    client: anthropic.AsyncAnthropic | None = None
+    conversation_history: list[MessageParam] = field(default_factory=list)
     mode: Mode = Mode.planning
     pending_operations: dict[str, asyncio.Future] = field(default_factory=dict)
     executing_cells: set[str] = field(default_factory=set)
-    tools: list = field(default_factory=list)
+    tools: list[ToolParam] = field(default_factory=list)
+    tool_map: dict[str, Callable] = field(default_factory=dict)
     active_tasks: set[asyncio.Task] = field(default_factory=set)
     error_fixes_in_progress: set[str] = field(default_factory=set)
     operation_counter: int = 0
     instructions_context: str = ""
+    current_structured_output: NotebookResponse | None = None
+
+    mode_config: dict[Mode, tuple[str, int | None]] = field(default_factory=lambda: {
+        Mode.planning: ("claude-sonnet-4-5-20250929", 4096),
+        Mode.executing: ("claude-sonnet-4-5-20250929", 1024),
+        Mode.debugging: ("claude-sonnet-4-5-20250929", 2048),
+    })
 
     async def send(self, msg: dict[str, object]) -> None:
         msg_type = msg.get("type", "unknown")
@@ -141,25 +142,48 @@ class AgentHarness:
         self.mode = mode
         print(f"[agent] Mode changed to {mode.value}")
 
+    def _last_assistant_msg_has_thinking(self) -> bool:
+        for msg in self.conversation_history[::-1]:
+            if msg.get("role") != "assistant":
+                continue
+
+            content = msg.get("content", [])
+            if not isinstance(content, list):
+                return False
+
+            has_thinking = False
+            has_text = False
+
+            for block in content:
+                if isinstance(block, dict):
+                    block_type = block.get("type")
+                else:
+                    block_type = getattr(block, "type", None)
+
+                if block_type in ("thinking", "redacted_thinking"):
+                    has_thinking = True
+                elif block_type == "text":
+                    has_text = True
+
+            if has_thinking:
+                return True
+            if has_text:
+                return False
+
+        return False
+
     def init_tools(self) -> None:
-        @tool(
-            "create_cell",
-            "Create a new code cell at specified position.",
-            {
-                "position": int,
-                "code": str,
-                "title": str,
-                "auto_run": bool,
-            }
-        )
-        async def create_cell(args: dict) -> dict:
+        self.tools = []
+        self.tool_map = {}
+
+        async def create_cell(args: dict) -> str:
             position = args["position"]
             code = args["code"]
             title = args["title"]
             auto_run = args.get("auto_run", True)
 
             if position < 0:
-                return {"content": [{"type": "text", "text": "Error: Position must be non-negative"}]}
+                return "Error: Position must be non-negative"
 
             if AGENT_DEBUG:
                 print(f'[tool] create_cell pos={position} title="{title}"')
@@ -178,23 +202,15 @@ class AgentHarness:
                 msg = f"Created cell at position {position} (ID: {cell_id}, Title: {title})"
                 if AGENT_DEBUG:
                     print(f"[tool] create_cell -> {msg}")
-                return {"content": [{"type": "text", "text": msg}]}
-            return {"content": [{"type": "text", "text": f"Failed to create cell: {result.get('error', 'Unknown error')}"}]}
+                return msg
+            return f"Failed to create cell: {result.get('error', 'Unknown error')}"
 
-        @tool(
-            "create_markdown_cell",
-            "Create a new markdown cell at specified position.",
-            {
-                "position": int,
-                "code": str,
-            }
-        )
-        async def create_markdown_cell(args: dict) -> dict:
+        async def create_markdown_cell(args: dict) -> str:
             position = args["position"]
             code = args["code"]
 
             if position < 0:
-                return {"content": [{"type": "text", "text": "Error: Position must be non-negative"}]}
+                return "Error: Position must be non-negative"
 
             if AGENT_DEBUG:
                 code_preview = code[:60] + "..." if len(code) > 60 else code
@@ -212,19 +228,10 @@ class AgentHarness:
                 msg = f"Created markdown cell at position {position} (ID: {cell_id})"
                 if AGENT_DEBUG:
                     print(f"[tool] create_markdown_cell -> {msg}")
-                return {"content": [{"type": "text", "text": msg}]}
-            return {"content": [{"type": "text", "text": f"Failed to create cell: {result.get('error', 'Unknown error')}"}]}
+                return msg
+            return f"Failed to create cell: {result.get('error', 'Unknown error')}"
 
-        @tool(
-            "edit_cell",
-            "Replace the contents of an existing cell.",
-            {
-                "cell_id": str,
-                "new_code": str,
-                "auto_run": bool,
-            }
-        )
-        async def edit_cell(args: dict) -> dict:
+        async def edit_cell(args: dict) -> str:
             cell_id = args["cell_id"]
             new_code = args["new_code"]
             auto_run = args.get("auto_run", True)
@@ -243,17 +250,10 @@ class AgentHarness:
                 msg = f"Cell {cell_id} edited successfully"
                 if AGENT_DEBUG:
                     print(f"[tool] edit_cell -> {msg}")
-                return {"content": [{"type": "text", "text": msg}]}
-            return {"content": [{"type": "text", "text": f"Failed to edit cell: {result.get('error', 'Unknown error')}"}]}
+                return msg
+            return f"Failed to edit cell: {result.get('error', 'Unknown error')}"
 
-        @tool(
-            "delete_cell",
-            "Remove a cell from the notebook.",
-            {
-                "cell_id": str,
-            }
-        )
-        async def delete_cell(args: dict) -> dict:
+        async def delete_cell(args: dict) -> str:
             cell_id = args["cell_id"]
 
             if AGENT_DEBUG:
@@ -275,17 +275,10 @@ class AgentHarness:
                     msg = f"Cell {cell_id} deleted. No cells remain in notebook."
                 if AGENT_DEBUG:
                     print(f"[tool] delete_cell -> {msg}")
-                return {"content": [{"type": "text", "text": msg}]}
-            return {"content": [{"type": "text", "text": f"Failed to delete cell: {result.get('error', 'Unknown error')}"}]}
+                return msg
+            return f"Failed to delete cell: {result.get('error', 'Unknown error')}"
 
-        @tool(
-            "run_cell",
-            "Execute a specific cell.",
-            {
-                "cell_id": str,
-            }
-        )
-        async def run_cell(args: dict) -> dict:
+        async def run_cell(args: dict) -> str:
             cell_id = args["cell_id"]
             params = {"cell_id": cell_id}
 
@@ -296,34 +289,22 @@ class AgentHarness:
             })
             self.executing_cells.add(cell_id)
 
-            return {"content": [{"type": "text", "text": f"Cell {cell_id} execution started"}]}
+            return f"Cell {cell_id} execution started"
 
-        @tool(
-            "stop_cell",
-            "Stop execution of a specific cell.",
-            {
-                "cell_id": str,
-            }
-        )
-        async def stop_cell(args: dict) -> dict:
+        async def stop_cell(args: dict) -> str:
             cell_id = args["cell_id"]
             params = {"cell_id": cell_id}
 
             result = await self.atomic_operation("stop_cell", params)
             if result.get("status") == "success":
                 self.executing_cells.discard(cell_id)
-                return {"content": [{"type": "text", "text": f"Stopped cell {cell_id}"}]}
-            return {"content": [{"type": "text", "text": f"Failed to stop cell {cell_id}: {result.get('error', 'Unknown error')}"}]}
+                return f"Stopped cell {cell_id}"
+            return f"Failed to stop cell {cell_id}: {result.get('error', 'Unknown error')}"
 
-        @tool(
-            "delete_all_cells",
-            "Delete all cells in the notebook efficiently.",
-            {}
-        )
-        async def delete_all_cells(args: dict) -> dict:
+        async def delete_all_cells(args: dict) -> str:
             context_result = await self.atomic_operation("get_context", {})
             if context_result.get("status") != "success":
-                return {"content": [{"type": "text", "text": "Failed to get notebook context"}]}
+                return "Failed to get notebook context"
 
             cells = context_result.get("context", {}).get("cells", [])
             deleted_count = 0
@@ -335,19 +316,14 @@ class AgentHarness:
                     if result.get("status") == "success":
                         deleted_count += 1
 
-            return {"content": [{"type": "text", "text": f"Deleted {deleted_count} cells from the notebook"}]}
+            return f"Deleted {deleted_count} cells from the notebook"
 
-        @tool(
-            "get_notebook_context",
-            "Get the current state of the notebook including all cells and their content.",
-            {}
-        )
-        async def get_notebook_context(args: dict) -> dict:
+        async def get_notebook_context(args: dict) -> str:
             params = {}
 
             result = await self.atomic_operation("get_context", params)
             if result.get("status") != "success":
-                return {"content": [{"type": "text", "text": f"Failed to get context: {result.get('error', 'Unknown error')}"}]}
+                return f"Failed to get context: {result.get('error', 'Unknown error')}"
 
             context = result.get("context", {})
             cell_count = context.get("cell_count", 0)
@@ -368,17 +344,9 @@ class AgentHarness:
                 if source_preview:
                     summary += f": {source_preview}"
 
-            return {"content": [{"type": "text", "text": summary}]}
+            return summary
 
-        @tool(
-            "send_plan_update",
-            "Send plan state update to the frontend.",
-            {
-                "plan": list,
-                "plan_diff": list,
-            }
-        )
-        async def send_plan_update(args: dict) -> dict:
+        async def send_plan_update(args: dict) -> str:
             plan = args["plan"]
             plan_diff = args.get("plan_diff")
 
@@ -389,7 +357,7 @@ class AgentHarness:
                 plan_items = [PlanItem(**item) for item in plan]
                 plan_diff_items = [PlanDiff(**item) for item in (plan_diff or [])]
             except Exception as e:
-                return {"content": [{"type": "text", "text": f"Invalid plan data: {e}"}]}
+                return f"Invalid plan data: {e}"
 
             plan_payload = {
                 "plan": [item.model_dump() for item in plan_items],
@@ -401,64 +369,327 @@ class AgentHarness:
                 msg = "Plan update delivered"
                 if AGENT_DEBUG:
                     print(f"[tool] send_plan_update -> {msg}")
-                return {"content": [{"type": "text", "text": msg}]}
-            return {"content": [{"type": "text", "text": f"Failed to deliver plan update: {result.get('error', 'Unknown error')}"}]}
+                return msg
+            return f"Failed to deliver plan update: {result.get('error', 'Unknown error')}"
 
-        @tool(
-            "start_new_plan",
-            "Start a new planning session.",
-            {}
-        )
-        async def start_new_plan(args: dict) -> dict:
+        async def start_new_plan(args: dict) -> str:
             self.set_mode(Mode.planning)
-            return {"content": [{"type": "text", "text": "Started new planning session"}]}
+            return "Started new planning session"
 
-        @tool(
-            "submit_response",
-            "Submit the final response with plan, plan_diff, summary, and questions. Call this at the end of every response.",
-            {
-                "plan": list,
-                "plan_diff": list,
-                "summary": list,
-                "questions": list,
+        async def submit_response(args: dict) -> str:
+            try:
+                summary = args.get("summary")
+                if not isinstance(summary, list):
+                    summary = None
+
+                questions = args.get("questions")
+                if not isinstance(questions, list):
+                    questions = None
+
+                self.current_structured_output = NotebookResponse(
+                    plan=[PlanItem(**item) for item in args.get("plan", [])],
+                    plan_diff=[PlanDiff(**item) for item in args.get("plan_diff", [])],
+                    summary=summary,
+                    questions=questions
+                )
+
+                if AGENT_DEBUG:
+                    print(f"[tool] submit_response stored structured output")
+
+                return "Response submitted successfully"
+            except Exception as e:
+                print(f"[tool] submit_response error: {e}")
+                return f"Error submitting response: {e!s}"
+
+        self.tools.append({
+            "name": "create_cell",
+            "description": "Create a new code cell at specified position.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "position": {"type": "integer", "description": "Position to insert the cell"},
+                    "code": {"type": "string", "description": "Python code for the cell"},
+                    "title": {"type": "string", "description": "Title for the cell"},
+                    "auto_run": {"type": "boolean", "description": "Whether to run the cell after creation", "default": True},
+                },
+                "required": ["position", "code", "title"],
+            },
+        })
+        self.tool_map["create_cell"] = create_cell
+
+        self.tools.append({
+            "name": "create_markdown_cell",
+            "description": "Create a new markdown cell at specified position.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "position": {"type": "integer", "description": "Position to insert the cell"},
+                    "code": {"type": "string", "description": "Markdown content"},
+                },
+                "required": ["position", "code"],
+            },
+        })
+        self.tool_map["create_markdown_cell"] = create_markdown_cell
+
+        self.tools.append({
+            "name": "edit_cell",
+            "description": "Replace the contents of an existing cell.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "cell_id": {"type": "string", "description": "ID of the cell to edit"},
+                    "new_code": {"type": "string", "description": "New code/content for the cell"},
+                    "auto_run": {"type": "boolean", "description": "Whether to run the cell after editing", "default": True},
+                },
+                "required": ["cell_id", "new_code"],
+            },
+        })
+        self.tool_map["edit_cell"] = edit_cell
+
+        self.tools.append({
+            "name": "delete_cell",
+            "description": "Remove a cell from the notebook.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "cell_id": {"type": "string", "description": "ID of the cell to delete"},
+                },
+                "required": ["cell_id"],
+            },
+        })
+        self.tool_map["delete_cell"] = delete_cell
+
+        self.tools.append({
+            "name": "run_cell",
+            "description": "Execute a specific cell.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "cell_id": {"type": "string", "description": "ID of the cell to run"},
+                },
+                "required": ["cell_id"],
+            },
+        })
+        self.tool_map["run_cell"] = run_cell
+
+        self.tools.append({
+            "name": "stop_cell",
+            "description": "Stop execution of a specific cell.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "cell_id": {"type": "string", "description": "ID of the cell to stop"},
+                },
+                "required": ["cell_id"],
+            },
+        })
+        self.tool_map["stop_cell"] = stop_cell
+
+        self.tools.append({
+            "name": "delete_all_cells",
+            "description": "Delete all cells in the notebook efficiently.",
+            "input_schema": {
+                "type": "object",
+                "properties": {},
+            },
+        })
+        self.tool_map["delete_all_cells"] = delete_all_cells
+
+        self.tools.append({
+            "name": "get_notebook_context",
+            "description": "Get the current state of the notebook including all cells and their content.",
+            "input_schema": {
+                "type": "object",
+                "properties": {},
+            },
+        })
+        self.tool_map["get_notebook_context"] = get_notebook_context
+
+        self.tools.append({
+            "name": "send_plan_update",
+            "description": "Send plan state update to the frontend.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "plan": {"type": "array", "description": "List of plan items"},
+                    "plan_diff": {"type": "array", "description": "List of plan diff items"},
+                },
+                "required": ["plan", "plan_diff"],
+            },
+        })
+        self.tool_map["send_plan_update"] = send_plan_update
+
+        self.tools.append({
+            "name": "start_new_plan",
+            "description": "Start a new planning session.",
+            "input_schema": {
+                "type": "object",
+                "properties": {},
+            },
+        })
+        self.tool_map["start_new_plan"] = start_new_plan
+
+        self.tools.append({
+            "name": "submit_response",
+            "description": "Submit the final response with plan, plan_diff, summary, and questions. Call this at the end of every response.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "plan": {"type": "array", "description": "List of plan items"},
+                    "plan_diff": {"type": "array", "description": "List of plan diff items"},
+                    "summary": {"type": "array", "description": "List of summary bullet points or null"},
+                    "questions": {"type": "array", "description": "List of questions for the user or null"},
+                },
+                "required": ["plan", "plan_diff", "summary", "questions"],
+            },
+        })
+        self.tool_map["submit_response"] = submit_response
+
+    async def _run_agent_conversation(self, user_message: str) -> list[str]:
+        assert self.client is not None, "Client not initialized"
+
+        model, thinking_budget = self.mode_config.get(self.mode, ("claude-sonnet-4-5-20250929", 1024))
+
+        self.conversation_history.append({
+            "role": "user",
+            "content": user_message,
+        })
+
+        text_responses = []
+        turn = 0
+
+        while True:
+            turn += 1
+
+            if AGENT_DEBUG:
+                print(f"[agent] Turn {turn}, mode={self.mode}, thinking_budget={thinking_budget}")
+
+            if thinking_budget is not None:
+                max_tokens = thinking_budget + 4096
+            else:
+                max_tokens = 4096
+
+            system_prompt = build_full_instruction(self.instructions_context)
+
+            kwargs = {
+                "model": model,
+                "max_tokens": max_tokens,
+                "system": system_prompt,
+                "messages": self.conversation_history,
+                "tools": self.tools,
             }
-        )
-        async def submit_response(args: dict) -> dict:
-            return {"content": [{"type": "text", "text": "Response submitted"}]}
 
-        notebook_tools = create_sdk_mcp_server(
-            name="notebook",
-            version="1.0.0",
-            tools=[
-                create_cell,
-                create_markdown_cell,
-                edit_cell,
-                delete_cell,
-                run_cell,
-                stop_cell,
-                delete_all_cells,
-                get_notebook_context,
-                send_plan_update,
-                start_new_plan,
-                submit_response,
-            ]
-        )
+            use_beta_api = False
+            if thinking_budget is not None and (len(self.conversation_history) == 1 or self._last_assistant_msg_has_thinking()):
+                kwargs["thinking"] = {
+                    "type": "enabled",
+                    "budget_tokens": thinking_budget,
+                }
+                kwargs["betas"] = ["interleaved-thinking-2025-05-14"]
+                use_beta_api = True
 
-        self.tools = [
-            create_cell,
-            create_markdown_cell,
-            edit_cell,
-            delete_cell,
-            run_cell,
-            stop_cell,
-            delete_all_cells,
-            get_notebook_context,
-            send_plan_update,
-            start_new_plan,
-            submit_response,
-        ]
+            try:
+                if use_beta_api:
+                    response = await self.client.beta.messages.create(**kwargs)
+                else:
+                    response = await self.client.messages.create(**kwargs)
+            except Exception as e:
+                print(f"[agent] API error: {e}", flush=True)
+                await self.send({
+                    "type": "agent_error",
+                    "error": f"API error: {e!s}",
+                    "fatal": False
+                })
+                break
 
-        return notebook_tools
+            assistant_msg = {
+                "role": "assistant",
+                "content": response.content,
+            }
+            self.conversation_history.append(assistant_msg)
+
+            for block in response.content:
+                if isinstance(block, dict):
+                    block_type = block.get("type")
+                    block_text = block.get("text")
+                else:
+                    block_type = getattr(block, "type", None)
+                    block_text = getattr(block, "text", None)
+
+                if block_type == "text" and block_text:
+                    text_responses.append(block_text)
+                elif block_type in ("thinking", "redacted_thinking"):
+                    if AGENT_DEBUG:
+                        thinking_text = block.get("thinking") if isinstance(block, dict) else getattr(block, "thinking", None)
+                        if thinking_text:
+                            print(f"[agent] Thinking:\n{thinking_text}")
+                        else:
+                            print(f"[agent] Thinking block present (redacted)")
+
+            if response.stop_reason == "end_turn":
+                if AGENT_DEBUG:
+                    print("[agent] Conversation ended (end_turn)")
+                break
+            elif response.stop_reason == "tool_use":
+                tool_results = []
+
+                for block in response.content:
+                    if isinstance(block, dict):
+                        block_type = block.get("type")
+                    else:
+                        block_type = getattr(block, "type", None)
+
+                    if block_type == "tool_use":
+                        tool_id = block.get("id") if isinstance(block, dict) else block.id
+                        tool_name = block.get("name") if isinstance(block, dict) else block.name
+                        tool_input = block.get("input") if isinstance(block, dict) else block.input
+
+                        if AGENT_DEBUG:
+                            print(f"[agent] Executing tool: {tool_name} (id={tool_id})")
+
+                        handler = self.tool_map.get(tool_name)
+                        if handler:
+                            try:
+                                result = await handler(tool_input)
+                                tool_results.append({
+                                    "type": "tool_result",
+                                    "tool_use_id": tool_id,
+                                    "content": result,
+                                })
+                            except Exception as e:
+                                print(f"[agent] Tool error: {tool_name}: {e}", flush=True)
+                                tool_results.append({
+                                    "type": "tool_result",
+                                    "tool_use_id": tool_id,
+                                    "content": f"Error executing tool: {e!s}",
+                                    "is_error": True,
+                                })
+                        else:
+                            tool_results.append({
+                                "type": "tool_result",
+                                "tool_use_id": tool_id,
+                                "content": f"Unknown tool: {tool_name}",
+                                "is_error": True,
+                            })
+
+                if tool_results:
+                    self.conversation_history.append({
+                        "role": "user",
+                        "content": tool_results,
+                    })
+                else:
+                    if AGENT_DEBUG:
+                        print("[agent] No tool results, ending conversation")
+                    break
+            elif response.stop_reason == "max_tokens":
+                print("[agent] Hit max tokens, ending conversation", flush=True)
+                break
+            else:
+                if AGENT_DEBUG:
+                    print(f"[agent] Unknown stop reason: {response.stop_reason}")
+                break
+
+        return text_responses
 
     async def handle_init(self, msg: dict[str, object]) -> None:
         print("[agent] Initializing", flush=True)
@@ -474,21 +705,12 @@ class AgentHarness:
             return
 
         try:
-            os.environ["ANTHROPIC_API_KEY"] = self.api_key
-
             context = msg.get("context", "")
             self.instructions_context = context
 
-            notebook_tools = self.init_tools()
+            self.init_tools()
 
-            options = ClaudeAgentOptions(
-                mcp_servers={"notebook": notebook_tools},
-                allowed_tools=["mcp__notebook__*", "web_search", "web_fetch"],
-                system_prompt=build_full_instruction(context)
-            )
-
-            self.client = ClaudeSDKClient(options=options)
-            await self.client.connect()
+            self.client = anthropic.AsyncAnthropic(api_key=self.api_key)
 
             self.initialized = True
             await self.send({
@@ -512,61 +734,8 @@ class AgentHarness:
         assert self.client is not None, "Client not initialized"
 
         try:
-            previous_ops = self.operation_counter
-
-            await self.client.query(query)
-
-            responses = []
-            structured_output = None
-
-            async for message in self.client.receive_response():
-                if isinstance(message, AssistantMessage):
-                    for block in message.content:
-                        if isinstance(block, TextBlock):
-                            responses.append(block.text)
-                            if AGENT_DEBUG:
-                                print(f"[agent] Text response: {block.text}...")
-                        elif isinstance(block, ToolUseBlock):
-                            if block.name == "mcp__notebook__submit_response":
-                                try:
-                                    if AGENT_DEBUG:
-                                        print(f"[agent] submit_response input: {block.input}")
-
-                                    def parse_field(value, field_name):
-                                        if value is None:
-                                            return None
-                                        if isinstance(value, str):
-                                            if value.lower() in ("null", "none", ""):
-                                                return None
-                                            try:
-                                                parsed = json.loads(value)
-                                                return parsed
-                                            except json.JSONDecodeError:
-                                                print(f"[agent] Warning: {field_name} is a string that couldn't be parsed: {value}")
-                                                return None
-                                        return value
-
-                                    summary = parse_field(block.input.get("summary"), "summary")
-                                    questions = parse_field(block.input.get("questions"), "questions")
-                                    plan_data = parse_field(block.input.get("plan", []), "plan") or []
-                                    plan_diff_data = parse_field(block.input.get("plan_diff", []), "plan_diff") or []
-
-                                    structured_output = NotebookResponse(
-                                        plan=[PlanItem(**item) if isinstance(item, dict) else PlanItem(id="", description=str(item), status="todo") for item in plan_data],
-                                        plan_diff=[PlanDiff(**item) if isinstance(item, dict) else PlanDiff(action="add", id="", description=str(item)) for item in plan_diff_data],
-                                        summary=summary,
-                                        questions=questions
-                                    )
-                                    if AGENT_DEBUG:
-                                        print("[agent] Extracted structured output from submit_response")
-                                except Exception as e:
-                                    print(f"[agent] Error parsing submit_response: {e}")
-                                    if AGENT_DEBUG:
-                                        import traceback
-                                        traceback.print_exc()
-
-            if self.mode == Mode.planning and self.operation_counter > previous_ops:
-                self.set_mode(Mode.executing)
+            self.current_structured_output = None
+            responses = await self._run_agent_conversation(query)
 
             if self.mode == Mode.executing:
                 self.set_mode(Mode.planning)
@@ -581,8 +750,8 @@ class AgentHarness:
             if request_id is not None:
                 response_msg["request_id"] = request_id
 
-            if structured_output is not None:
-                response_msg["structured_output"] = structured_output.model_dump()
+            if self.current_structured_output is not None:
+                response_msg["structured_output"] = self.current_structured_output.model_dump()
 
             await self.send(response_msg)
 
@@ -662,15 +831,10 @@ class AgentHarness:
                 Be concise and fix the issue directly.
             """)
 
-            previous_mode = self.mode
             self.set_mode(Mode.debugging)
 
             try:
-                await self.client.query(fix_query)
-
-                async for message in self.client.receive_response():
-                    if AGENT_DEBUG:
-                        print(f"[agent] Fix iteration: {type(message).__name__}")
+                await self._run_agent_conversation(fix_query)
 
                 await self.send({
                     "type": "agent_error_fixed",
@@ -680,7 +844,7 @@ class AgentHarness:
                 print(f"[agent] Successfully fixed error in cell {cell_id}")
 
             finally:
-                self.set_mode(previous_mode)
+                self.set_mode(Mode.planning)
 
         except Exception as e:
             print(f"[agent] Failed to fix error in cell {cell_id}: {e}")

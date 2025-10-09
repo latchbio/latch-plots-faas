@@ -5,6 +5,7 @@ from textwrap import dedent
 
 config_path = Path(__file__).parent / "agent_config"
 
+
 def load_config_module(module_name: str):
     config_file = config_path / f"{module_name}.py"
 
@@ -17,6 +18,7 @@ def load_config_module(module_name: str):
     spec.loader.exec_module(module)
 
     return module
+
 
 def build_full_instruction(initial_context: str) -> str:
     try:
@@ -61,3 +63,6 @@ def build_full_instruction(initial_context: str) -> str:
     instruction_parts.append(f"\n<notebook_context>\n{initial_context}\n</notebook_context>\n")
 
     return dedent("\n".join(instruction_parts))
+
+
+print(build_full_instruction(""))
