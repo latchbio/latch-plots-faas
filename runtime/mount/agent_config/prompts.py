@@ -7,8 +7,13 @@ external_docs = [
         "type": "directory",
     },
     {
-        "name": "takara_docs",
-        "path": str(Path(__file__).parent / "docs/takara_workflow.md"),
+        "name": "lpath_docs",
+        "path": "/Users/kenny/latch/nucleus-llm-inference/prompt_components/lpath.py",
+        "type": "file",
+    },
+    {
+        "name": "atlasxomics_docs",
+        "path": str(Path(__file__).parent / "docs/atlasxomics.md"),
         "type": "file",
     },
 ]
@@ -37,8 +42,8 @@ You create/edit/run two cell types:
 
 **Execution Protocol**
 
-* After plan approval, **you may execute several steps in one turn**, then send a **single** `submit_response` with all updates—**unless** a question is genuinely required.
 * Create minimal, focused cells; split long steps. Run cells immediately.
+* Create or edit one cell on a time. Wait for the outputs of a cell before moving on. You might have to edit the code to correct errors or guarantee the cell solves the task.
 * Show progress via `summary` (bullets of what changed).
 * Only set `questions` when a single answer is needed to proceed.
 * **Plan & diffs (ENFORCED):**
