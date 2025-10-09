@@ -41,10 +41,10 @@ def setup_environment_and_paths():
         "LATCH_SANDBOX_ROOT": str(latch_dir),
     })
 
-    if not os.environ.get("OPENAI_API_KEY"):
-        print("\n Error: OPENAI_API_KEY not set")
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        print("\n Error: ANTHROPIC_API_KEY not set")
         print("   The agent REQUIRES an API key to function.")
-        print("   Set it with: export OPENAI_API_KEY=your_key_here")
+        print("   Set it with: export ANTHROPIC_API_KEY=your_key_here")
         print("   Then restart the server.\n")
         sys.exit(1)
 
@@ -140,6 +140,20 @@ async def run_server():
         asyncio.create_task(stream_output(entrypoint.a_proc.proc.stdout, ""))
         asyncio.create_task(stream_output(entrypoint.a_proc.proc.stderr, "[stderr] "))
         print(f"[run_local] Agent subprocess started, PID: {entrypoint.a_proc.proc.pid}", flush=True)
+
+        await conn_a.send({"type": "init"})
+
+        print("[run_local] Waiting for agent ready message...")
+        while True:
+            msg = await conn_a.recv()
+            if msg.get("type") == "ready":
+                print("[run_local] Agent ready")
+                break
+
+        print("[run_local] Starting message handler")
+        entrypoint.async_tasks.append(
+            asyncio.create_task(entrypoint.handle_agent_messages(entrypoint.a_proc.conn_a))
+        )
 
     entrypoint.start_agent_proc = patched_start_agent_proc
 

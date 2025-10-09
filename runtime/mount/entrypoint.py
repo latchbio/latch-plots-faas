@@ -417,16 +417,19 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
 
 
 async def handle_agent_messages(conn_a: SocketIo) -> None:
-    assert current_agent_ctx is not None
-    print("Starting agent message listener")
+    print("[entrypoint] Starting agent message listener")
     while True:
         msg = await conn_a.recv()
-        print("[entrypoint] Agent >", msg)
+        print(f"[entrypoint] Agent > {msg.get('type', 'unknown')}")
+
+        if current_agent_ctx is None:
+            print("[entrypoint] No websocket client connected, skipping message")
+            continue
 
         try:
             await current_agent_ctx.send_message(orjson.dumps(msg).decode())
-        except:
-            pass
+        except Exception as e:
+            print(f"[entrypoint] Error forwarding message: {e}")
 
 
 async def start_kernel_proc() -> None:
@@ -511,9 +514,9 @@ async def start_agent_proc() -> None:
         asyncio.create_task(handle_agent_messages(a_proc.conn_a))
     )
 
-    log_path = Path('/var/log/agent.log')
+    log_path = Path("/var/log/agent.log")
     log_path.parent.mkdir(parents=True, exist_ok=True)
-    a_proc.log_file = open(log_path, 'a')
+    a_proc.log_file = open(log_path, "a")
 
     print("Starting agent subprocess")
     a_proc.proc = await asyncio.create_subprocess_exec(
@@ -549,16 +552,19 @@ async def stop_kernel_proc() -> None:
 
 async def stop_agent_proc() -> None:
     proc = a_proc.proc
-    if proc is not None and proc.returncode is None:
-        try:
-            proc.terminate()
-            await asyncio.wait_for(proc.wait(), timeout=2)
-        except TimeoutError:
-            print("Error terminating agent process")
-            proc.kill()
-            await proc.wait()
-        except ProcessLookupError:
-            pass
+    if proc is not None:
+        if proc.returncode is None:
+            try:
+                proc.terminate()
+                await asyncio.wait_for(proc.wait(), timeout=2)
+            except TimeoutError:
+                print("Error terminating agent process")
+                proc.kill()
+                await proc.wait()
+            except ProcessLookupError:
+                pass
+        else:
+            print(f"[entrypoint] Agent process already exited with code {proc.returncode}")
 
     if a_proc.log_file is not None:
         a_proc.log_file.close()
