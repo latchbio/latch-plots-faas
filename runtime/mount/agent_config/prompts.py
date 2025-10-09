@@ -54,6 +54,12 @@ You can manipulate a Jupyter-like notebook by creating, editing, and running cel
 - For status-only changes (e.g., `TODO` → `IN_PROGRESS`), do not include a `plan_diff` entry. Only send the updated `plan` and set `plan_diff: []`.
 - Never send an `UPDATE` in `plan_diff` when the description has not changed.
 
+**CRITICAL: Response Delivery**
+- You MUST call the `submit_response` tool at the end of EVERY response to the user
+- This tool delivers your plan, plan_diff, summary, and questions to the user interface
+- Never end your response without calling `submit_response`
+- The tool accepts the parameters shown in the JSON schema below
+
 **Output JSON Object**
 Maintain a consistent response across turns so the user can understand your actions. Every response must be valid JSON matching the schema below:
 ```json
