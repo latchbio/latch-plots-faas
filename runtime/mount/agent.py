@@ -94,6 +94,7 @@ class AgentHarness:
     conversation_task: asyncio.Task | None = None
     conversation_running: bool = False
     system_prompt: str = ""
+    current_turn_cancelled: bool = False
 
     mode_config: dict[Mode, tuple[str, int | None]] = field(default_factory=lambda: {
         Mode.planning: ("claude-sonnet-4-5-20250929", 4096),
@@ -217,40 +218,48 @@ class AgentHarness:
             if AGENT_DEBUG:
                 print("[agent] Stop signal received")
 
-    async def _send_agent_result(self) -> None:
+    async def _send_agent_result(self, cancelled: bool = False) -> None:
         if not self.current_request_id:
             return
 
         if self.mode == Mode.executing:
             self.set_mode(Mode.planning)
 
-        text_responses = []
-        for msg in reversed(self.conversation_history):
-            if msg.get("role") == "user":
-                break
-            if msg.get("role") == "assistant":
-                for block in msg.get("content", []):
-                    block_type = (block.get("type") if isinstance(block, dict)
-                                 else getattr(block, "type", None))
-                    block_text = (block.get("text") if isinstance(block, dict)
-                                 else getattr(block, "text", None))
-                    if block_type == "text" and block_text:
-                        text_responses.insert(0, block_text)
+        if cancelled:
+            response_msg = {
+                "type": "agent_result",
+                "status": "cancelled",
+                "responses": [],
+                "mode": self.mode.value,
+                "request_id": self.current_request_id,
+            }
+        else:
+            text_responses = []
+            for msg in reversed(self.conversation_history):
+                if msg.get("role") == "user":
+                    break
+                if msg.get("role") == "assistant":
+                    for block in msg.get("content", []):
+                        block_type = (block.get("type") if isinstance(block, dict)
+                                     else getattr(block, "type", None))
+                        block_text = (block.get("text") if isinstance(block, dict)
+                                     else getattr(block, "text", None))
+                        if block_type == "text" and block_text:
+                            text_responses.insert(0, block_text)
 
-        response_msg = {
-            "type": "agent_result",
-            "status": "success",
-            "responses": text_responses,
-            "mode": self.mode.value,
-            "request_id": self.current_request_id,
-        }
+            response_msg = {
+                "type": "agent_result",
+                "status": "success",
+                "responses": text_responses,
+                "mode": self.mode.value,
+                "request_id": self.current_request_id,
+            }
 
-        if self.current_structured_output is not None:
-            response_msg["structured_output"] = self.current_structured_output.model_dump()
-            self.current_structured_output = None
+            if self.current_structured_output is not None:
+                response_msg["structured_output"] = self.current_structured_output.model_dump()
+                self.current_structured_output = None
 
         await self.send(response_msg)
-
         self.current_request_id = None
 
     def init_tools(self) -> None:
@@ -640,6 +649,7 @@ class AgentHarness:
             if not self.conversation_running:
                 break
 
+            self.current_turn_cancelled = False
             turn += 1
 
             model, thinking_budget = self.mode_config.get(self.mode, ("claude-sonnet-4-5-20250929", 1024))
@@ -703,6 +713,21 @@ class AgentHarness:
                         else:
                             print(f"[agent] Thinking block present (redacted)")
 
+            if self.current_turn_cancelled:
+                if AGENT_DEBUG:
+                    print("[agent] Turn cancelled after API response")
+                if self.conversation_history and self.conversation_history[-1].get("role") == "assistant":
+                    has_tool_use = any(
+                        (block.get("type") if isinstance(block, dict) else getattr(block, "type", None)) == "tool_use"
+                        for block in self.conversation_history[-1].get("content", [])
+                    )
+                    if has_tool_use:
+                        if AGENT_DEBUG:
+                            print("[agent] Removing incomplete assistant message with tool_use")
+                        self.conversation_history.pop()
+                await self._send_agent_result(cancelled=True)
+                continue
+
             if response.stop_reason == "end_turn":
                 if AGENT_DEBUG:
                     print("[agent] Turn ended, sending agent_result")
@@ -717,6 +742,9 @@ class AgentHarness:
                         block_type = getattr(block, "type", None)
 
                     if block_type == "tool_use":
+                        if self.current_turn_cancelled:
+                            break
+
                         tool_id = block.get("id") if isinstance(block, dict) else block.id
                         tool_name = block.get("name") if isinstance(block, dict) else block.name
                         tool_input = block.get("input") if isinstance(block, dict) else block.input
@@ -748,6 +776,13 @@ class AgentHarness:
                                 "content": f"Unknown tool: {tool_name}",
                                 "is_error": True,
                             })
+
+                if self.current_turn_cancelled:
+                    if AGENT_DEBUG:
+                        print("[agent] Tool execution cancelled, removing incomplete assistant message")
+                    self.conversation_history.pop()
+                    await self._send_agent_result(cancelled=True)
+                    continue
 
                 if tool_results:
                     self.conversation_history.append({
@@ -820,14 +855,7 @@ class AgentHarness:
         request_id = msg.get("request_id", "unknown")
         print(f"[agent] Cancelling request {request_id}")
 
-        self.conversation_running = False
-
-        if self.conversation_task and not self.conversation_task.done():
-            self.conversation_task.cancel()
-            try:
-                await self.conversation_task
-            except asyncio.CancelledError:
-                pass
+        self.current_turn_cancelled = True
 
     async def accept(self) -> None:
         msg = await self.conn.recv()
