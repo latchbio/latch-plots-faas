@@ -20,6 +20,7 @@ from utils import auth_token_sdk, nucleus_url
 sandbox_root = os.environ.get("LATCH_SANDBOX_ROOT")
 if sandbox_root:
     import pathlib
+
     original_path_new = pathlib.Path.__new__
 
     def patched_path_new(cls, *args, **kwargs):
@@ -93,11 +94,13 @@ class AgentHarness:
     conversation_running: bool = False
     system_prompt: str = ""
 
-    mode_config: dict[Mode, tuple[str, int | None]] = field(default_factory=lambda: {
-        Mode.planning: ("claude-sonnet-4-5-20250929", 4096),
-        Mode.executing: ("claude-sonnet-4-5-20250929", 1024),
-        Mode.debugging: ("claude-sonnet-4-5-20250929", 2048),
-    })
+    mode_config: dict[Mode, tuple[str, int | None]] = field(
+        default_factory=lambda: {
+            Mode.planning: ("claude-sonnet-4-5-20250929", 4096),
+            Mode.executing: ("claude-sonnet-4-5-20250929", 1024),
+            Mode.debugging: ("claude-sonnet-4-5-20250929", 2048),
+        }
+    )
 
     async def send(self, msg: dict[str, object]) -> None:
         msg_type = msg.get("type", "unknown")
@@ -107,7 +110,12 @@ class AgentHarness:
     async def atomic_operation(self, action: str, params: dict) -> dict:
         self.operation_counter += 1
 
-        if self.mode == Mode.planning and action in {"create_cell", "edit_cell", "run_cell", "delete_cell"}:
+        if self.mode == Mode.planning and action in {
+            "create_cell",
+            "edit_cell",
+            "run_cell",
+            "delete_cell",
+        }:
             self.set_mode(Mode.executing)
 
         tx_id = f"tx_{uuid.uuid4().hex[:12]}"
@@ -118,7 +126,12 @@ class AgentHarness:
         try:
             if AGENT_DEBUG:
                 print(f"[agent] -> {action}")
-            await self.send({"type": "agent_action", "action": action, "params": params, "tx_id": tx_id})
+            await self.send({
+                "type": "agent_action",
+                "action": action,
+                "params": params,
+                "tx_id": tx_id,
+            })
         except Exception as e:
             self.pending_operations.pop(tx_id, None)
             return {"status": "error", "error": f"Send failed: {e!s}"}
@@ -181,7 +194,11 @@ class AgentHarness:
         if not isinstance(content, list):
             return False
         for block in content:
-            block_type = block.get("type") if isinstance(block, dict) else getattr(block, "type", None)
+            block_type = (
+                block.get("type")
+                if isinstance(block, dict)
+                else getattr(block, "type", None)
+            )
             if block_type in ("thinking", "redacted_thinking"):
                 return True
         return False
@@ -213,7 +230,9 @@ class AgentHarness:
                     print(f"[agent] Cell {cell_id} succeeded")
             else:
                 exception = msg.get("exception", "Unknown error")
-                result_content = f"✗ Cell {cell_id} execution failed:\n```\n{exception}\n```"
+                result_content = (
+                    f"✗ Cell {cell_id} execution failed:\n```\n{exception}\n```"
+                )
                 if AGENT_DEBUG:
                     print(f"[agent] Cell {cell_id} failed")
 
@@ -240,10 +259,16 @@ class AgentHarness:
                 break
             if msg.get("role") == "assistant":
                 for block in msg.get("content", []):
-                    block_type = (block.get("type") if isinstance(block, dict)
-                                 else getattr(block, "type", None))
-                    block_text = (block.get("text") if isinstance(block, dict)
-                                 else getattr(block, "text", None))
+                    block_type = (
+                        block.get("type")
+                        if isinstance(block, dict)
+                        else getattr(block, "type", None)
+                    )
+                    block_text = (
+                        block.get("text")
+                        if isinstance(block, dict)
+                        else getattr(block, "text", None)
+                    )
                     if block_type == "text" and block_text:
                         text_responses.insert(0, block_text)
 
@@ -256,7 +281,9 @@ class AgentHarness:
         }
 
         if self.current_structured_output is not None:
-            response_msg["structured_output"] = self.current_structured_output.model_dump()
+            response_msg["structured_output"] = (
+                self.current_structured_output.model_dump()
+            )
             self.current_structured_output = None
 
         await self.send(response_msg)
@@ -304,13 +331,11 @@ class AgentHarness:
 
             if AGENT_DEBUG:
                 code_preview = code[:60] + "..." if len(code) > 60 else code
-                print(f"[tool] create_markdown_cell pos={position} code={code_preview!r}")
+                print(
+                    f"[tool] create_markdown_cell pos={position} code={code_preview!r}"
+                )
 
-            params = {
-                "position": position,
-                "cell_type": "markdown",
-                "source": code,
-            }
+            params = {"position": position, "cell_type": "markdown", "source": code}
 
             result = await self.atomic_operation("create_markdown_cell", params)
             if result.get("status") == "success":
@@ -328,11 +353,7 @@ class AgentHarness:
             if AGENT_DEBUG:
                 print(f"[tool] edit_cell id={cell_id}")
 
-            params = {
-                "cell_id": cell_id,
-                "source": new_code,
-                "auto_run": True
-            }
+            params = {"cell_id": cell_id, "source": new_code, "auto_run": True}
 
             result = await self.atomic_operation("edit_cell", params)
             if result.get("status") == "success":
@@ -356,7 +377,9 @@ class AgentHarness:
                 cell_count = result.get("cell_count", 0)
 
                 if remaining:
-                    cell_list = ", ".join([f"{c['index']}: {c['cell_type']}" for c in remaining[:5]])
+                    cell_list = ", ".join([
+                        f"{c['index']}: {c['cell_type']}" for c in remaining[:5]
+                    ])
                     if len(remaining) > 5:
                         cell_list += f", ... ({len(remaining) - 5} more)"
                     msg = f"Cell {cell_id} deleted. {cell_count} cells remain: [{cell_list}]"
@@ -388,7 +411,9 @@ class AgentHarness:
             if result.get("status") == "success":
                 self.executing_cells.discard(cell_id)
                 return f"Stopped cell {cell_id}"
-            return f"Failed to stop cell {cell_id}: {result.get('error', 'Unknown error')}"
+            return (
+                f"Failed to stop cell {cell_id}: {result.get('error', 'Unknown error')}"
+            )
 
         async def delete_all_cells(args: dict) -> str:
             context_result = await self.atomic_operation("get_context", {})
@@ -401,7 +426,9 @@ class AgentHarness:
             for cell in reversed(cells):
                 cell_id = cell.get("cell_id")
                 if cell_id:
-                    result = await self.atomic_operation("delete_cell", {"cell_id": cell_id})
+                    result = await self.atomic_operation(
+                        "delete_cell", {"cell_id": cell_id}
+                    )
                     if result.get("status") == "success":
                         deleted_count += 1
 
@@ -440,7 +467,9 @@ class AgentHarness:
             plan_diff = args.get("plan_diff")
 
             if AGENT_DEBUG:
-                print(f"[tool] send_plan_update plan_items={len(plan)} diff_items={len(plan_diff or [])}")
+                print(
+                    f"[tool] send_plan_update plan_items={len(plan)} diff_items={len(plan_diff or [])}"
+                )
 
             try:
                 plan_items = [PlanItem(**item) for item in plan]
@@ -459,7 +488,9 @@ class AgentHarness:
                 if AGENT_DEBUG:
                     print(f"[tool] send_plan_update -> {msg}")
                 return msg
-            return f"Failed to deliver plan update: {result.get('error', 'Unknown error')}"
+            return (
+                f"Failed to deliver plan update: {result.get('error', 'Unknown error')}"
+            )
 
         async def start_new_plan(args: dict) -> str:
             self.set_mode(Mode.planning)
@@ -479,7 +510,7 @@ class AgentHarness:
                     plan=[PlanItem(**item) for item in args.get("plan", [])],
                     plan_diff=[PlanDiff(**item) for item in args.get("plan_diff", [])],
                     summary=summary,
-                    questions=questions
+                    questions=questions,
                 )
 
                 if AGENT_DEBUG:
@@ -496,8 +527,14 @@ class AgentHarness:
             "input_schema": {
                 "type": "object",
                 "properties": {
-                    "position": {"type": "integer", "description": "Position to insert the cell"},
-                    "code": {"type": "string", "description": "Python code for the cell"},
+                    "position": {
+                        "type": "integer",
+                        "description": "Position to insert the cell",
+                    },
+                    "code": {
+                        "type": "string",
+                        "description": "Python code for the cell",
+                    },
                     "title": {"type": "string", "description": "Title for the cell"},
                 },
                 "required": ["position", "code", "title"],
@@ -511,7 +548,10 @@ class AgentHarness:
             "input_schema": {
                 "type": "object",
                 "properties": {
-                    "position": {"type": "integer", "description": "Position to insert the cell"},
+                    "position": {
+                        "type": "integer",
+                        "description": "Position to insert the cell",
+                    },
                     "code": {"type": "string", "description": "Markdown content"},
                 },
                 "required": ["position", "code"],
@@ -525,8 +565,14 @@ class AgentHarness:
             "input_schema": {
                 "type": "object",
                 "properties": {
-                    "cell_id": {"type": "string", "description": "ID of the cell to edit"},
-                    "new_code": {"type": "string", "description": "New code/content for the cell"},
+                    "cell_id": {
+                        "type": "string",
+                        "description": "ID of the cell to edit",
+                    },
+                    "new_code": {
+                        "type": "string",
+                        "description": "New code/content for the cell",
+                    },
                 },
                 "required": ["cell_id", "new_code"],
             },
@@ -539,7 +585,10 @@ class AgentHarness:
             "input_schema": {
                 "type": "object",
                 "properties": {
-                    "cell_id": {"type": "string", "description": "ID of the cell to delete"},
+                    "cell_id": {
+                        "type": "string",
+                        "description": "ID of the cell to delete",
+                    }
                 },
                 "required": ["cell_id"],
             },
@@ -552,7 +601,10 @@ class AgentHarness:
             "input_schema": {
                 "type": "object",
                 "properties": {
-                    "cell_id": {"type": "string", "description": "ID of the cell to run"},
+                    "cell_id": {
+                        "type": "string",
+                        "description": "ID of the cell to run",
+                    }
                 },
                 "required": ["cell_id"],
             },
@@ -565,7 +617,10 @@ class AgentHarness:
             "input_schema": {
                 "type": "object",
                 "properties": {
-                    "cell_id": {"type": "string", "description": "ID of the cell to stop"},
+                    "cell_id": {
+                        "type": "string",
+                        "description": "ID of the cell to stop",
+                    }
                 },
                 "required": ["cell_id"],
             },
@@ -575,20 +630,14 @@ class AgentHarness:
         self.tools.append({
             "name": "delete_all_cells",
             "description": "Delete all cells in the notebook efficiently.",
-            "input_schema": {
-                "type": "object",
-                "properties": {},
-            },
+            "input_schema": {"type": "object", "properties": {}},
         })
         self.tool_map["delete_all_cells"] = delete_all_cells
 
         self.tools.append({
             "name": "get_notebook_context",
             "description": "Get the current state of the notebook including all cells and their content.",
-            "input_schema": {
-                "type": "object",
-                "properties": {},
-            },
+            "input_schema": {"type": "object", "properties": {}},
         })
         self.tool_map["get_notebook_context"] = get_notebook_context
 
@@ -599,7 +648,10 @@ class AgentHarness:
                 "type": "object",
                 "properties": {
                     "plan": {"type": "array", "description": "List of plan items"},
-                    "plan_diff": {"type": "array", "description": "List of plan diff items"},
+                    "plan_diff": {
+                        "type": "array",
+                        "description": "List of plan diff items",
+                    },
                 },
                 "required": ["plan", "plan_diff"],
             },
@@ -609,10 +661,7 @@ class AgentHarness:
         self.tools.append({
             "name": "start_new_plan",
             "description": "Start a new planning session.",
-            "input_schema": {
-                "type": "object",
-                "properties": {},
-            },
+            "input_schema": {"type": "object", "properties": {}},
         })
         self.tool_map["start_new_plan"] = start_new_plan
 
@@ -623,9 +672,18 @@ class AgentHarness:
                 "type": "object",
                 "properties": {
                     "plan": {"type": "array", "description": "List of plan items"},
-                    "plan_diff": {"type": "array", "description": "List of plan diff items"},
-                    "summary": {"type": "array", "description": "List of summary bullet points or null"},
-                    "questions": {"type": "array", "description": "List of questions for the user or null"},
+                    "plan_diff": {
+                        "type": "array",
+                        "description": "List of plan diff items",
+                    },
+                    "summary": {
+                        "type": "array",
+                        "description": "List of summary bullet points or null",
+                    },
+                    "questions": {
+                        "type": "array",
+                        "description": "List of questions for the user or null",
+                    },
                 },
                 "required": ["plan", "plan_diff", "summary", "questions"],
             },
@@ -639,7 +697,10 @@ class AgentHarness:
         turn = 0
 
         while self.conversation_running:
-            if not self.conversation_history or self.conversation_history[-1]["role"] == "assistant":
+            if (
+                not self.conversation_history
+                or self.conversation_history[-1]["role"] == "assistant"
+            ):
                 await self._wait_for_message()
                 continue
 
@@ -648,10 +709,14 @@ class AgentHarness:
 
             turn += 1
 
-            model, thinking_budget = self.mode_config.get(self.mode, ("claude-sonnet-4-5-20250929", 1024))
+            model, thinking_budget = self.mode_config.get(
+                self.mode, ("claude-sonnet-4-5-20250929", 1024)
+            )
 
             if AGENT_DEBUG:
-                print(f"[agent] Turn {turn}, mode={self.mode}, thinking_budget={thinking_budget}")
+                print(
+                    f"[agent] Turn {turn}, mode={self.mode}, thinking_budget={thinking_budget}"
+                )
 
             if thinking_budget is not None:
                 max_tokens = thinking_budget + 4096
@@ -676,8 +741,12 @@ class AgentHarness:
                 "tools": self.tools,
             }
 
-            has_any_thinking = any(self._message_has_thinking(m) for m in clean_messages)
-            first_turn = len(clean_messages) == 1 and clean_messages[0].get("role") == "user"
+            has_any_thinking = any(
+                self._message_has_thinking(m) for m in clean_messages
+            )
+            first_turn = (
+                len(clean_messages) == 1 and clean_messages[0].get("role") == "user"
+            )
 
             use_beta_api = False
             if thinking_budget is not None and (first_turn or has_any_thinking):
@@ -698,14 +767,11 @@ class AgentHarness:
                 await self.send({
                     "type": "agent_error",
                     "error": f"API error: {e!s}",
-                    "fatal": False
+                    "fatal": False,
                 })
                 continue
 
-            assistant_msg = {
-                "role": "assistant",
-                "content": response.content,
-            }
+            assistant_msg = {"role": "assistant", "content": response.content}
             self.conversation_history.append(assistant_msg)
 
             for block in response.content:
@@ -716,9 +782,17 @@ class AgentHarness:
 
                 if block_type in ("thinking", "redacted_thinking"):
                     if AGENT_DEBUG:
-                        thinking_text = block.get("thinking") if isinstance(block, dict) else getattr(block, "thinking", None)
+                        thinking_text = (
+                            block.get("thinking")
+                            if isinstance(block, dict)
+                            else getattr(block, "thinking", None)
+                        )
                         if thinking_text:
                             print(f"[agent] Thinking:\n{thinking_text}")
+                            await self.send({
+                                "type": "agent_thinking",
+                                "thoughts": thinking_text,
+                            })
                         else:
                             print("[agent] Thinking block present (redacted)")
 
@@ -736,9 +810,17 @@ class AgentHarness:
                         block_type = getattr(block, "type", None)
 
                     if block_type == "tool_use":
-                        tool_id = block.get("id") if isinstance(block, dict) else block.id
-                        tool_name = block.get("name") if isinstance(block, dict) else block.name
-                        tool_input = block.get("input") if isinstance(block, dict) else block.input
+                        tool_id = (
+                            block.get("id") if isinstance(block, dict) else block.id
+                        )
+                        tool_name = (
+                            block.get("name") if isinstance(block, dict) else block.name
+                        )
+                        tool_input = (
+                            block.get("input")
+                            if isinstance(block, dict)
+                            else block.input
+                        )
 
                         if AGENT_DEBUG:
                             print(f"[agent] Executing tool: {tool_name} (id={tool_id})")
@@ -753,7 +835,9 @@ class AgentHarness:
                                     "content": result,
                                 })
                             except Exception as e:
-                                print(f"[agent] Tool error: {tool_name}: {e}", flush=True)
+                                print(
+                                    f"[agent] Tool error: {tool_name}: {e}", flush=True
+                                )
                                 tool_results.append({
                                     "type": "tool_result",
                                     "tool_use_id": tool_id,
@@ -795,16 +879,13 @@ class AgentHarness:
             self.client = anthropic.AsyncAnthropic(
                 api_key="dummy",
                 base_url=f"{nucleus_url}/infer/plots-agent/anthropic",
-                default_headers={"Authorization": auth_token_sdk}
+                default_headers={"Authorization": auth_token_sdk},
             )
 
             self.system_prompt = build_full_instruction(self.instructions_context)
 
             self.initialized = True
-            await self.send({
-                "type": "agent_status",
-                "status": "ready"
-            })
+            await self.send({"type": "agent_status", "status": "ready"})
             print("[agent] Initialization complete", flush=True)
 
             self.conversation_task = asyncio.create_task(self.run_agent_loop())
@@ -812,7 +893,7 @@ class AgentHarness:
             await self.send({
                 "type": "agent_error",
                 "error": f"Failed to initialize: {e!s}",
-                "fatal": True
+                "fatal": True,
             })
 
     async def handle_query(self, msg: dict[str, object]) -> None:
@@ -897,6 +978,7 @@ async def main() -> None:
     loop = asyncio.get_running_loop()
 
     from datetime import datetime
+
     print(f"{datetime.now().isoformat()} [agent] Starting", flush=True)
 
     sock = socket.socket(family=socket.AF_UNIX, fileno=int(sys.argv[-1]))
