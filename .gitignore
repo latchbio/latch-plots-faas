@@ -6,3 +6,5 @@ __pycache__
 .pdm-python
 /.envrc
 /.venv
+
+sandbox
