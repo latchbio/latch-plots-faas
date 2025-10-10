@@ -701,7 +701,7 @@ class AgentHarness:
             self.init_tools()
 
             self.client = anthropic.AsyncAnthropic(
-                base_url=f"{nucleus_url}/agent/anthropic/v1",
+                base_url=f"{nucleus_url}/infer/plots-agent/anthropic/v1",
                 default_headers={"Authorization": auth_token_sdk}
             )
 
