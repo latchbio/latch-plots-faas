@@ -3,12 +3,12 @@ from pathlib import Path
 external_docs = [
     {
         "name": "plots_docs",
-        "path": "/Users/hannahle/Documents/GitHub/nucleus-llm-inference/prompt_components/plots_docs",
+        "path": str(Path(__file__).parent / "docs/plots_docs"),
         "type": "directory",
     },
     {
         "name": "lpath_docs",
-        "path": "/Users/hannahle/Documents/GitHub/nucleus-llm-inference/prompt_components/lpath.py",
+        "path": str(Path(__file__).parent / "docs/lpath.py"),
         "type": "file",
     },
     {
