@@ -261,7 +261,6 @@ class AgentHarness:
             position = args["position"]
             code = args["code"]
             title = args["title"]
-            auto_run = args.get("auto_run", True)
 
             if position < 0:
                 return "Error: Position must be non-negative"
@@ -274,7 +273,7 @@ class AgentHarness:
                 "cell_type": "code",
                 "source": code,
                 "title": title,
-                "auto_run": auto_run,
+                "auto_run": True,
             }
 
             result = await self.atomic_operation("create_cell", params)
@@ -315,7 +314,6 @@ class AgentHarness:
         async def edit_cell(args: dict) -> str:
             cell_id = args["cell_id"]
             new_code = args["new_code"]
-            auto_run = args.get("auto_run", True)
 
             if AGENT_DEBUG:
                 print(f"[tool] edit_cell id={cell_id}")
@@ -323,7 +321,7 @@ class AgentHarness:
             params = {
                 "cell_id": cell_id,
                 "source": new_code,
-                "auto_run": auto_run
+                "auto_run": True
             }
 
             result = await self.atomic_operation("edit_cell", params)
@@ -484,14 +482,13 @@ class AgentHarness:
 
         self.tools.append({
             "name": "create_cell",
-            "description": "Create a new code cell at specified position.",
+            "description": "Create a new code cell at specified position. The cell will automatically run after creation.",
             "input_schema": {
                 "type": "object",
                 "properties": {
                     "position": {"type": "integer", "description": "Position to insert the cell"},
                     "code": {"type": "string", "description": "Python code for the cell"},
                     "title": {"type": "string", "description": "Title for the cell"},
-                    "auto_run": {"type": "boolean", "description": "Whether to run the cell after creation", "default": True},
                 },
                 "required": ["position", "code", "title"],
             },
@@ -514,13 +511,12 @@ class AgentHarness:
 
         self.tools.append({
             "name": "edit_cell",
-            "description": "Replace the contents of an existing cell.",
+            "description": "Replace the contents of an existing cell. The cell will automatically run after editing.",
             "input_schema": {
                 "type": "object",
                 "properties": {
                     "cell_id": {"type": "string", "description": "ID of the cell to edit"},
                     "new_code": {"type": "string", "description": "New code/content for the cell"},
-                    "auto_run": {"type": "boolean", "description": "Whether to run the cell after editing", "default": True},
                 },
                 "required": ["cell_id", "new_code"],
             },
