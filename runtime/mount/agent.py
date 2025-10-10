@@ -713,17 +713,7 @@ class AgentHarness:
 
             if response.stop_reason == "end_turn":
                 if AGENT_DEBUG:
-                    print("[agent] Turn ended without submit_response, synthesizing structured output")
-
-                if self.current_structured_output is None:
-                    self.current_structured_output = NotebookResponse(
-                        plan=[],
-                        plan_diff=[],
-                        summary=None,
-                        questions=None
-                    )
-
-                await self._send_agent_result()
+                    print("[agent] Turn ended without submit_response - model should always call submit_response per prompt")
             elif response.stop_reason == "tool_use":
                 tool_results = []
                 called_submit_response = False
