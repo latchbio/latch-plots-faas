@@ -174,6 +174,18 @@ class AgentHarness:
 
         return False
 
+    def _message_has_thinking(self, msg: dict) -> bool:
+        if msg.get("role") != "assistant":
+            return False
+        content = msg.get("content", [])
+        if not isinstance(content, list):
+            return False
+        for block in content:
+            block_type = block.get("type") if isinstance(block, dict) else getattr(block, "type", None)
+            if block_type in ("thinking", "redacted_thinking"):
+                return True
+        return False
+
     async def _wait_for_message(self) -> None:
         msg = await self.pending_messages.get()
 
@@ -646,16 +658,29 @@ class AgentHarness:
             else:
                 max_tokens = 4096
 
+            def _has_content(m: dict) -> bool:
+                c = m.get("content")
+                if isinstance(c, str):
+                    return bool(c.strip())
+                if isinstance(c, list):
+                    return len(c) > 0
+                return False
+
+            clean_messages = [m for m in self.conversation_history if _has_content(m)]
+
             kwargs = {
                 "model": model,
                 "max_tokens": max_tokens,
                 "system": self.system_prompt,
-                "messages": self.conversation_history,
+                "messages": clean_messages,
                 "tools": self.tools,
             }
 
+            has_any_thinking = any(self._message_has_thinking(m) for m in clean_messages)
+            first_turn = len(clean_messages) == 1 and clean_messages[0].get("role") == "user"
+
             use_beta_api = False
-            if thinking_budget is not None and (len(self.conversation_history) == 1 or self._last_assistant_msg_has_thinking()):
+            if thinking_budget is not None and (first_turn or has_any_thinking):
                 kwargs["thinking"] = {
                     "type": "enabled",
                     "budget_tokens": thinking_budget,
