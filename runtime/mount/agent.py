@@ -87,6 +87,7 @@ class AgentHarness:
     instructions_context: str = ""
     current_structured_output: NotebookResponse | None = None
     current_request_id: str | None = None
+    should_auto_continue: bool = False
 
     pending_messages: asyncio.Queue = field(default_factory=asyncio.Queue)
     conversation_task: asyncio.Task | None = None
@@ -231,6 +232,9 @@ class AgentHarness:
         if not self.current_request_id:
             return
 
+        should_continue = self.should_auto_continue
+        self.should_auto_continue = False
+
         if self.mode == Mode.executing:
             self.set_mode(Mode.planning)
 
@@ -256,12 +260,27 @@ class AgentHarness:
         }
 
         if self.current_structured_output is not None:
-            response_msg["structured_output"] = self.current_structured_output.model_dump()
+            structured = self.current_structured_output.model_dump()
+            response_msg["structured_output"] = structured
+
+            print(f"[agent] Sending agent_result with structured_output:")
+            print(f"  - plan: {len(structured.get('plan', []))} items")
+            print(f"  - plan_diff: {len(structured.get('plan_diff', []))} items")
+            for diff in structured.get('plan_diff', []):
+                print(f"    - [{diff.get('action')}] {diff.get('id')}: {diff.get('description')}")
+
             self.current_structured_output = None
 
         await self.send(response_msg)
 
-        self.current_request_id = None
+        if should_continue:
+            if AGENT_DEBUG:
+                print("[agent] Auto-continuing as requested by model")
+            await self.pending_messages.put({
+                "type": "user_query",
+                "content": "Continue with the next step.",
+                "request_id": self.current_request_id,
+            })
 
     def init_tools(self) -> None:
         self.tools = []
@@ -435,36 +454,6 @@ class AgentHarness:
 
             return summary
 
-        async def send_plan_update(args: dict) -> str:
-            plan = args["plan"]
-            plan_diff = args.get("plan_diff")
-
-            if AGENT_DEBUG:
-                print(f"[tool] send_plan_update plan_items={len(plan)} diff_items={len(plan_diff or [])}")
-
-            try:
-                plan_items = [PlanItem(**item) for item in plan]
-                plan_diff_items = [PlanDiff(**item) for item in (plan_diff or [])]
-            except Exception as e:
-                return f"Invalid plan data: {e}"
-
-            plan_payload = {
-                "plan": [item.model_dump() for item in plan_items],
-                "plan_diff": [item.model_dump() for item in plan_diff_items],
-            }
-
-            result = await self.atomic_operation("plan_update", plan_payload)
-            if result.get("status") == "success":
-                msg = "Plan update delivered"
-                if AGENT_DEBUG:
-                    print(f"[tool] send_plan_update -> {msg}")
-                return msg
-            return f"Failed to deliver plan update: {result.get('error', 'Unknown error')}"
-
-        async def start_new_plan(args: dict) -> str:
-            self.set_mode(Mode.planning)
-            return "Started new planning session"
-
         async def submit_response(args: dict) -> str:
             try:
                 summary = args.get("summary")
@@ -475,19 +464,38 @@ class AgentHarness:
                 if not isinstance(questions, list):
                     questions = None
 
+                should_continue = args.get("continue", False)
+
+                plan_items = args.get("plan", [])
+                plan_diff_items = args.get("plan_diff", [])
+
+                print(f"[tool] submit_response called with:")
+                print(f"  - plan: {len(plan_items)} items")
+                for item in plan_items:
+                    print(f"    - [{item.get('status')}] {item.get('id')}: {item.get('description')}")
+                print(f"  - plan_diff: {len(plan_diff_items)} items")
+                for diff in plan_diff_items:
+                    print(f"    - [{diff.get('action')}] {diff.get('id')}: {diff.get('description')}")
+                print(f"  - continue: {should_continue}")
+
                 self.current_structured_output = NotebookResponse(
-                    plan=[PlanItem(**item) for item in args.get("plan", [])],
-                    plan_diff=[PlanDiff(**item) for item in args.get("plan_diff", [])],
+                    plan=[PlanItem(**item) for item in plan_items],
+                    plan_diff=[PlanDiff(**item) for item in plan_diff_items],
                     summary=summary,
                     questions=questions
                 )
 
-                if AGENT_DEBUG:
-                    print("[tool] submit_response stored structured output")
+                if should_continue and self.executing_cells:
+                    print(f"[tool] Cannot continue - {len(self.executing_cells)} cells still executing: {self.executing_cells}")
+                    self.should_auto_continue = False
+                else:
+                    self.should_auto_continue = should_continue
 
                 return "Response submitted successfully"
             except Exception as e:
                 print(f"[tool] submit_response error: {e}")
+                import traceback
+                traceback.print_exc()
                 return f"Error submitting response: {e!s}"
 
         self.tools.append({
@@ -593,32 +601,8 @@ class AgentHarness:
         self.tool_map["get_notebook_context"] = get_notebook_context
 
         self.tools.append({
-            "name": "send_plan_update",
-            "description": "Send plan state update to the frontend.",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "plan": {"type": "array", "description": "List of plan items"},
-                    "plan_diff": {"type": "array", "description": "List of plan diff items"},
-                },
-                "required": ["plan", "plan_diff"],
-            },
-        })
-        self.tool_map["send_plan_update"] = send_plan_update
-
-        self.tools.append({
-            "name": "start_new_plan",
-            "description": "Start a new planning session.",
-            "input_schema": {
-                "type": "object",
-                "properties": {},
-            },
-        })
-        self.tool_map["start_new_plan"] = start_new_plan
-
-        self.tools.append({
             "name": "submit_response",
-            "description": "Submit the final response with plan, plan_diff, summary, and questions. Call this at the end of every response.",
+            "description": "Submit the final response with plan, plan_diff, summary, and questions. Call this at the end of every turn.",
             "input_schema": {
                 "type": "object",
                 "properties": {
@@ -626,6 +610,11 @@ class AgentHarness:
                     "plan_diff": {"type": "array", "description": "List of plan diff items"},
                     "summary": {"type": "array", "description": "List of summary bullet points or null"},
                     "questions": {"type": "array", "description": "List of questions for the user or null"},
+                    "continue": {
+                        "type": "boolean",
+                        "description": "Set to true to immediately continue to the next step without waiting for user input. Set to false when waiting for user input or when all work is complete.",
+                        "default": False
+                    },
                 },
                 "required": ["plan", "plan_diff", "summary", "questions"],
             },
@@ -724,10 +713,20 @@ class AgentHarness:
 
             if response.stop_reason == "end_turn":
                 if AGENT_DEBUG:
-                    print("[agent] Turn ended, sending agent_result")
+                    print("[agent] Turn ended without submit_response, synthesizing structured output")
+
+                if self.current_structured_output is None:
+                    self.current_structured_output = NotebookResponse(
+                        plan=[],
+                        plan_diff=[],
+                        summary=None,
+                        questions=None
+                    )
+
                 await self._send_agent_result()
             elif response.stop_reason == "tool_use":
                 tool_results = []
+                called_submit_response = False
 
                 for block in response.content:
                     if isinstance(block, dict):
@@ -739,6 +738,9 @@ class AgentHarness:
                         tool_id = block.get("id") if isinstance(block, dict) else block.id
                         tool_name = block.get("name") if isinstance(block, dict) else block.name
                         tool_input = block.get("input") if isinstance(block, dict) else block.input
+
+                        if tool_name == "submit_response":
+                            called_submit_response = True
 
                         if AGENT_DEBUG:
                             print(f"[agent] Executing tool: {tool_name} (id={tool_id})")
@@ -775,6 +777,11 @@ class AgentHarness:
                     })
                 elif AGENT_DEBUG:
                     print("[agent] No tool results")
+
+                if called_submit_response:
+                    if AGENT_DEBUG:
+                        print("[agent] submit_response called, sending agent_result")
+                    await self._send_agent_result()
             elif response.stop_reason == "max_tokens":
                 print("[agent] Hit max tokens", flush=True)
                 await self._send_agent_result()
