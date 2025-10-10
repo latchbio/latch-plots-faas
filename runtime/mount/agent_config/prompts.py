@@ -3,12 +3,12 @@ from pathlib import Path
 external_docs = [
     {
         "name": "plots_docs",
-        "path": "/Users/kenny/latch/nucleus-llm-inference/prompt_components/plots_docs",
+        "path": "/Users/hannahle/Documents/GitHub/nucleus-llm-inference/prompt_components/plots_docs",
         "type": "directory",
     },
     {
         "name": "lpath_docs",
-        "path": "/Users/kenny/latch/nucleus-llm-inference/prompt_components/lpath.py",
+        "path": "/Users/hannahle/Documents/GitHub/nucleus-llm-inference/prompt_components/lpath.py",
         "type": "file",
     },
     {
@@ -44,7 +44,7 @@ You create/edit/run two cell types:
 
 * Create minimal, focused cells; split long steps. Run cells immediately.
 * Create or edit one cell on a time. Wait for the outputs of a cell before moving on. You might have to edit the code to correct errors or guarantee the cell solves the task.
-* Show progress via `summary` (bullets of what changed).
+* Whenever a cell finishes running or a plan step is completed, set `summary` to describe the current progress and clearly state the next step.
 * Only set `questions` when a single answer is needed to proceed.
 
 **Plan & diffs (ENFORCED):**
@@ -80,7 +80,7 @@ e **Success gating (cells → step):** Never claim a step succeeded or mark it `
   * Use **`w_text_output`** for brief textual status or outcomes within a transformation cell.
   * Use **`w_logs_display` + `submit_widget_state()`** to stream progress for long-running steps (timers/status), not `print`.
   * Display dataframes using the **table widget**; do not use `display`.
-  * Every chart must render via the **plot widget**.
+  * Every chart must render via the **plot widget**. Include a biological summary of each plot using markdown cells.
 * Reserve `print` only for minimal debugging that is also surfaced via the log widget.
 
 **Data Ingestion**
@@ -91,9 +91,9 @@ e **Success gating (cells → step):** Never claim a step succeeded or mark it `
 
 * **Use `w_h5`** to *explore* AnnData/H5AD/Zarr (UMAP/TSNE, spatial views, selections).
   Triggers: an `AnnData` in scope, a `.h5ad`/spatial zarr path, or explicit AnnData exploration request.
-* For **derived summaries** (e.g., counts per cluster, QC metrics) → Plotly and render via the **plot widget** (not `display`).
+* For **derived summaries** (e.g., counts per cluster, QC metrics) → Plotly and render via the **plot widget** (`w_plot`, not `display`).
 * If both are needed, do both: `w_h5` for exploration + Plotly widgets for summaries.
-* Every plot must render through the **Plots plot widget**.
+* Every plot must render through the **`w_plot`** widget. 
 
 **Save Checkpoints (Stronger Throttle)**
 Prompt to save to **Latch Data** after milestones (QC done; graph+clusters; DR; annotations; DE) **only if**:
@@ -106,13 +106,15 @@ Prompt to save to **Latch Data** after milestones (QC done; graph+clusters; DR; 
 
 * Self-contained (imports, definitions, variable creation).
 * Verify variables exist (`globals()`), otherwise create them in the same cell or ask one clarifying question and pause.
-* Use the **table widget** for dataframes; **plot widget** for figures; **w_text_output** for brief text; **w_logs_display** for progress.
+* Use the **w_table** widget for dataframes; **w_plot** widget for figures; **w_text_output** for brief text; **w_logs_display** for progress.
+* Use widgets from **lplots.widgets** to expose parameters to users. Whenever possible, set sensible default widget values. 
 * For long tasks, split into steps and show status via the log widget.
 
 **Assay Intake**
 
 * First, identify the spatial assay (e.g., Takara Seeker/Trekker, Visium, Xenium, MERFISH).
 * If it’s **Takara Seeker/Trekker**, follow <takara_docs> specifics.
+* If it's **AtlasxOmics**, follow <atlasxomics_docs> specifics.
 
 **Final Requirement**
 
