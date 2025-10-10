@@ -1,5 +1,4 @@
 import asyncio
-import json
 import os
 import socket
 import sys
@@ -8,11 +7,10 @@ import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
-from textwrap import dedent
 from typing import Literal
 
 import anthropic
-from anthropic.types import MessageParam, ToolParam, ToolUseBlock
+from anthropic.types import MessageParam, ToolParam
 from config_loader import build_full_instruction
 from lplots import _inject
 from pydantic import BaseModel
@@ -473,7 +471,7 @@ class AgentHarness:
                 )
 
                 if AGENT_DEBUG:
-                    print(f"[tool] submit_response stored structured output")
+                    print("[tool] submit_response stored structured output")
 
                 return "Response submitted successfully"
             except Exception as e:
@@ -697,7 +695,7 @@ class AgentHarness:
                         if thinking_text:
                             print(f"[agent] Thinking:\n{thinking_text}")
                         else:
-                            print(f"[agent] Thinking block present (redacted)")
+                            print("[agent] Thinking block present (redacted)")
 
             if response.stop_reason == "end_turn":
                 if AGENT_DEBUG:
@@ -750,9 +748,8 @@ class AgentHarness:
                         "role": "user",
                         "content": tool_results,
                     })
-                else:
-                    if AGENT_DEBUG:
-                        print("[agent] No tool results")
+                elif AGENT_DEBUG:
+                    print("[agent] No tool results")
             elif response.stop_reason == "max_tokens":
                 print("[agent] Hit max tokens", flush=True)
                 await self._send_agent_result()
@@ -804,7 +801,6 @@ class AgentHarness:
             "content": query,
             "request_id": request_id,
         })
-
 
     async def handle_cancel(self, msg: dict[str, object]) -> None:
         request_id = msg.get("request_id", "unknown")
