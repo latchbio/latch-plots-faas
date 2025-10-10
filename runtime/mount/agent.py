@@ -717,14 +717,9 @@ class AgentHarness:
                 if AGENT_DEBUG:
                     print("[agent] Turn cancelled after API response")
                 if self.conversation_history and self.conversation_history[-1].get("role") == "assistant":
-                    has_tool_use = any(
-                        (block.get("type") if isinstance(block, dict) else getattr(block, "type", None)) == "tool_use"
-                        for block in self.conversation_history[-1].get("content", [])
-                    )
-                    if has_tool_use:
-                        if AGENT_DEBUG:
-                            print("[agent] Removing incomplete assistant message with tool_use")
-                        self.conversation_history.pop()
+                    if AGENT_DEBUG:
+                        print("[agent] Removing cancelled assistant message")
+                    self.conversation_history.pop()
                 await self._send_agent_result(cancelled=True)
                 continue
 
