@@ -8,16 +8,22 @@ This is the **authoritative step-by-step pipeline** for AtlasxOmics experiment. 
 4. **Differential Gene Activity or Motif Enrichment Comparison** - Use `w_workflow(wf_name="wf.__init__.compare_workflow", ...)`
 5.  **Cell Type Annotation** - assign biological meaning to clusters using gene sets. 
 
-The section below defines detailed guidelines for each of the above steps. 
+The section below defines detailed guidelines for each of the above steps.
+
+### **Workflow Rules**
+When the step requires launching a workflow:
+- **Always render a form** with `lplots.widgets`  for all workflow inputs. Pre-populate each widget with sensible `default` whenever possible.
+- **Do not** hardcode values the in the dictionary.
+- Parse user responses, normalize formats, and construct the params dictionary exactly as shown in example.
+- **Always use the exact `version` provided in workflow code example.**  
+- **Always include `w.value` at the end**
 
 ### **Data Loading**: 
-- Load the motif and gene H5AD into two adata objects and view them with `w_h5` widget. 
-- The structure of the AtlasXOmics input folder is standard, so assume and check that `combined_sm_ge.h5ad` and `combined_sm_motifs.h5ad` exist, without asking users to confirm. 
+- Identify the correct node ID for either `combined_sm_ge.h5ad` (gene activity scores) or `combined_sm_motifs.h5ad` (motif enrichment), and load the file using the `LPath` API.
+- After loading, always display the AnnData object with the `w_h5` widget.
 
 ### **Clustering (workflow only)**: 
 - Use `w_workflow` to launch the AtlasXOmics clustering workflow.
-- **Always render a form** with widgets for all required inputs.
-- Parse user responses, normalize formats, and construct the params dictionary exactly as shown in example.
 - If the user want to cluster only a subset of the AnnData, include the optional parameter `adata_subset` (as a LatchFile) in params. Otherwise, omit it entirely.
 
 ### Clustering Workflow Parameters
@@ -147,33 +153,52 @@ if value['lasso_points']:
 # Proceed to create an `adata_subset` based on lasso-selected points
 ```
 
-### Differential Gene Activity or Motif Enrichment Comparison Workflow
+### **Differential Gene Activity or Motif Enrichment Comparison (workflow only)**
+- Use `w_workflow` to launch the AtlasXOmics comparison workflow.  
+- Automatically infer the correct grouping column from `adata.obs` (`condition`, `sample`, or `cluster`).  
+- Programmatically generate and upload a `compare_config.json` file as a `LatchFile` for workflow input.
 
-#### Required User Inputs: 
-**Always create a form with widgets to collect user inputs**:
-- `project_name`: a string for project name
-- `groupings`: A `LatchFile` named `compare_config.json` that stores a dictionary with two keys: `groupA` and `groupB`. Each key has a list of AnnData cell barcodes as values. 
-- `archrprokect`: A `LatchDir` that stores an ArchR project on Latch Data. The folder often ends with `_ArchRProject`. 
+### Comparison Workflow Parameters
+
+#### **Required**
+- `project_name` *(str)*  
+  Name for the output folder.
+
+- `groupings` *(LatchFile)*  
+  A JSON file (`compare_config.json`) containing two keys:  
+  - `groupA`: list of AnnData cell barcodes for the first group  
+  - `groupB`: list of AnnData cell barcodes for the second group  
+
+- `archrproject` *(LatchDir)*  
+  Path to an ArchR project directory on Latch Data (usually ends with `_ArchRProject`).
+
+- `genome` *(Enum)*  
+  Either `"hg38"` or `"mm10"`.
+
+#### Example Implementation
 
 ```python
+from latch.types import LatchFile, LatchDir
+from lplots.widgets.workflow import w_workflow
+
 params = {
-        "project_name": "USER_INPUT",
-        "groupings": LatchFile(remote_bcs.path),
-        "archrproject": LatchDir(archrproj_dir.path),
-        "genome": "hg38" # Can be "hg38" or "mm10"
-    }
-    
+    "project_name": "my_comparison",
+    "groupings": LatchFile("latch:///compare_config.json"),
+    "archrproject": LatchDir("latch:///Kostallari_SOW313_ATAC_ArchRProject"),
+    "genome": "hg38",
+}
+
 w = w_workflow(
     wf_name="wf.__init__.compare_workflow",
     version="0.7.1-8484d6-wip-4ae938",
     params=params,
-    label="Launch Workflow"
+    label="Launch Comparison Workflow"
 )
 
 execution = w.value
 ```
 
-**Constructing groupings for Differential Comparison**
+#### How to construct `compare_config.json`
 To run a comparison workflow, you must generate a `compare_config.json` file that defines which cells belong to each group.
 
 What to Ask the User:

@@ -124,7 +124,7 @@ Prompt to save to **Latch Data** after milestones (QC done; graph+clusters; DR; 
 * Self-contained (imports, definitions, variable creation).
 * Verify variables exist (`globals()`), otherwise create them in the same cell or ask one clarifying question and pause.
 * Use the **w_table** widget for dataframes; **w_plot** widget for figures; **w_text_output** for brief text; **w_logs_display** for progress.
-* Use widgets from **lplots.widgets** to expose parameters to users. Whenever possible, set sensible default widget values. 
+* Use widgets from the `lplots` library to collect user parameters (API at {plots_docs}). Always prefill widgets with sensible default values when possible.
 * For long tasks, split into steps and show status via the log widget.
 
 **Assay Intake**
