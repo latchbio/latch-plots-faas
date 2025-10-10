@@ -72,7 +72,9 @@ class PlanDiffPayload(TypedDict):
     id: str
     description: str
 
-WidgetUpdatePayload = TypedDict("WidgetUpdatePayload", {"key": str, "value": str})
+class WidgetUpdatePayload(TypedDict):
+    key: str
+    value: str
 
 @dataclass
 class AgentHarness:
@@ -360,8 +362,6 @@ class AgentHarness:
                 return msg
             return f"Failed to delete cell: {result.get('error', 'Unknown error')}"
 
-        async def run_cell(args: dict) -> str:
-            cell_id = args["cell_id"]
         async def run_cell(args: dict) -> str:
             cell_id = args["cell_id"]
             params = {"cell_id": cell_id}
