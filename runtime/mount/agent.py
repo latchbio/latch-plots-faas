@@ -665,8 +665,10 @@ class AgentHarness:
 
             try:
                 if use_beta_api:
+                    print("Using beta API")
                     response = await self.client.beta.messages.create(**kwargs)
                 else:
+                    print("Using standard API")
                     response = await self.client.messages.create(**kwargs)
             except Exception as e:
                 print(f"[agent] API error: {e}", flush=True)
