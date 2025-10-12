@@ -906,20 +906,15 @@ class AgentHarness:
             widget_summaries = []
             for widget in widgets:
                 widget_key = widget.get("key") or "?"
-                widget_id = widget.get("widget_id") or widget_key
-                label = widget.get("label") or ""
-                value_preview = widget.get("value_preview")
-                widget_type = widget.get("type")
+                widget_type = widget.get("type") or "unknown"
+                widget_value = widget.get("value") or ""
+                widget_label = widget.get("label") or ""
                 
-                widget_desc = f"key={widget_key}"
-                if widget_type:
-                    widget_desc += f", type={widget_type}"
-                if widget_id != widget_key:
-                    widget_desc += f", id={widget_id}"
-                if label:
-                    widget_desc += f" ({label})"
-                if value_preview:
-                    widget_desc += f" = {value_preview}"
+                widget_desc = f"key={widget_key}, type={widget_type}"
+                if widget_value:
+                    widget_desc += f", value={widget_value}"
+                if widget_label:
+                    widget_desc += f", label={widget_label}"
                 widget_summaries.append(widget_desc)
             
             return ", ".join(widget_summaries)
