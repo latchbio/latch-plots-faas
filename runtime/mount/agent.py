@@ -72,10 +72,6 @@ class PlanDiffPayload(TypedDict):
     id: str
     description: str
 
-class WidgetUpdatePayload(TypedDict):
-    key: str
-    value: str
-
 @dataclass
 class AgentHarness:
     conn: SocketIoThread
@@ -437,41 +433,33 @@ class AgentHarness:
 
 
         async def set_widget(args: dict) -> str:
-            updates = args.get("updates")
-            if not updates:
-                return "No widget updates provided"
+            key = args.get("key")
+            if not key:
+                return "Widget key is required"
 
-            updates_dict: dict[str, object] = {}
-            payload_updates: list[WidgetUpdatePayload] = []
+            value_json = args.get("value")
+            if not value_json:
+                return "Widget value is required"
 
             if AGENT_DEBUG:
-                print(f"[tool] set_widget updates={updates}")
+                print(f"[tool] set_widget key={key} value={value_json}")
 
-            for item in updates:
-                key = item.get("key")
-                if not key:
-                    return "Widget updates must include a 'key'"
+            try:
+                parsed_value = json.loads(value_json)
+            except json.JSONDecodeError:
+                parsed_value = value_json
 
-                value_json = item.get("value")
-                if not value_json:
-                    return "Widget updates must include a 'value'"
-
-                try:
-                    parsed_value = json.loads(value_json)
-                except json.JSONDecodeError:
-                    parsed_value = value_json
-
-                updates_dict[key] = parsed_value
-                payload_updates.append({"key": key, "value": json.dumps(parsed_value)})
-
-            params = {"widget_updates": payload_updates}
+            params = {
+                "key": key,
+                "value": json.dumps(parsed_value)
+            }
+            
             result = await self.atomic_operation("set_widget", params)
 
             if result.get("status") == "success":
-                applied_keys = ", ".join(updates_dict.keys())
-                return f"Updated widget values for: {applied_keys}"
+                return f"Updated widget value for: {key}"
 
-            return f"Failed to update widget values: {result.get('error', 'Unknown error')}"
+            return f"Failed to update widget value: {result.get('error', 'Unknown error')}"
 
         async def send_plan_update(args: dict) -> str:
             plan = args["plan"]
@@ -674,24 +662,20 @@ class AgentHarness:
 
         self.tools.append({
                     "name": "set_widget",
-                    "description": "Set widget values by widget key.",
+                    "description": "Set a single widget value by widget key.",
                     "input_schema": {
                         "type": "object",
                         "properties": {
-                            "updates": {
-                                "type": "array",
-                                "description": "List of widget updates with keys and JSON-serializable values.",
-                                "items": {
-                                    "type": "object",
-                                    "properties": {
-                                        "key": {"type": "string", "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"},
-                                        "value": {"type": "string", "description": "JSON-serializable value string"},
-                                    },
-                                    "required": ["key", "value"],
-                                },
+                            "key": {
+                                "type": "string",
+                                "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
+                            },
+                            "value": {
+                                "type": "string",
+                                "description": "JSON-serializable value string"
                             },
                         },
-                        "required": ["updates"],
+                        "required": ["key", "value"],
                     },
                 })
         self.tool_map["set_widget"] = set_widget
