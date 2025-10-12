@@ -72,6 +72,7 @@ class PlanDiffPayload(TypedDict):
     id: str
     description: str
 
+
 @dataclass
 class AgentHarness:
     conn: SocketIoThread
