@@ -475,7 +475,7 @@ class AgentHarness:
             try:
                 parsed_value = json.loads(value_json)
             except json.JSONDecodeError:
-                parsed_value = value_json
+                return f"Failed to update widget value: invalid JSON for '{key}'"
 
             params = {
                 "key": key,
