@@ -33,6 +33,11 @@ if nucleus_url_path.exists():
 else:
     nucleus_url = "https://nucleus.latch.bio"
 
+pod_id_path = latch_p / "id"
+pod_id: int | None = None
+if pod_id_path.exists():
+    pod_id = int(pod_id_path.read_text())
+
 sess: ClientSession | None = None
 
 KernelSnapshotStatus = Literal["done", "progress", "start", "error"]
