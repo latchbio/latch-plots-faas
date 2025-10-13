@@ -459,7 +459,6 @@ class AgentHarness:
 
             return summary
 
-
         async def set_widget(args: dict) -> str:
             key = args.get("key")
             if not key:
