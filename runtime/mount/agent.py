@@ -7,6 +7,7 @@ import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
+from pathlib import Path
 from typing import Literal
 
 import anthropic
@@ -72,6 +73,48 @@ class PlanDiffPayload(TypedDict):
     description: str
 
 
+class SerializedTextBlock(TypedDict):
+    type: Literal["text"]
+    text: str
+
+
+class SerializedThinkingBlock(TypedDict):
+    type: Literal["thinking"]
+    thinking: str
+
+
+class SerializedRedactedThinkingBlock(TypedDict):
+    type: Literal["redacted_thinking"]
+
+
+class SerializedToolUseBlock(TypedDict):
+    type: Literal["tool_use"]
+    id: str
+    name: str
+    input: dict
+
+
+class SerializedToolResultBlock(TypedDict):
+    type: Literal["tool_result"]
+    tool_use_id: str
+    content: str
+    is_error: bool
+
+
+SerializedContentBlock = SerializedTextBlock | SerializedThinkingBlock | SerializedRedactedThinkingBlock | SerializedToolUseBlock | SerializedToolResultBlock
+
+
+class SerializedMessage(TypedDict):
+    role: Literal["user", "assistant"]
+    content: list[SerializedContentBlock] | str
+
+
+class ConversationHistoryFile(TypedDict):
+    version: Literal[1]
+    last_updated: str
+    messages: list[SerializedMessage]
+
+
 @dataclass
 class AgentHarness:
     conn: SocketIoThread
@@ -104,6 +147,113 @@ class AgentHarness:
         msg_type = msg.get("type", "unknown")
         print(f"[agent] Sending message: {msg_type}", flush=True)
         await self.conn.send(msg)
+
+    def _get_history_file_path(self) -> Path:
+        latch_p = Path(os.environ.get("LATCH_SANDBOX_ROOT", "/root/.latch"))
+        return latch_p / "conversation_history.json"
+
+    def _serialize_content(self, content: list | str) -> list[SerializedContentBlock] | str:
+        if isinstance(content, str):
+            return content
+
+        serialized: list[SerializedContentBlock] = []
+        for block in content:
+            if isinstance(block, dict):
+                serialized.append(block)
+            elif hasattr(block, "type"):
+                if block.type == "text":
+                    serialized.append({"type": "text", "text": block.text})
+                elif block.type == "thinking":
+                    serialized.append({"type": "thinking", "thinking": block.thinking})
+                elif block.type == "redacted_thinking":
+                    serialized.append({"type": "redacted_thinking"})
+                elif block.type == "tool_use":
+                    serialized.append({
+                        "type": "tool_use",
+                        "id": block.id,
+                        "name": block.name,
+                        "input": block.input
+                    })
+                elif block.type == "tool_result":
+                    serialized.append({
+                        "type": "tool_result",
+                        "tool_use_id": block.tool_use_id,
+                        "content": block.content,
+                        "is_error": getattr(block, "is_error", False)
+                    })
+            else:
+                serialized.append({"type": "text", "text": str(block)})
+        return serialized
+
+    def _serialize_message(self, message: MessageParam) -> SerializedMessage:
+        return {
+            "role": message["role"],
+            "content": self._serialize_content(message["content"])
+        }
+
+    def _deserialize_message(self, message: SerializedMessage) -> MessageParam:
+        return {
+            "role": message["role"],
+            "content": message["content"]
+        }
+
+    def _load_conversation_history(self) -> None:
+        history_file = self._get_history_file_path()
+
+        if not history_file.exists():
+            print("[agent] No existing conversation history found", flush=True)
+            return
+
+        try:
+            import json
+
+            with open(history_file, "r") as f:
+                data: ConversationHistoryFile = json.load(f)
+
+            if data.get("version") != 1:
+                print(f"[agent] Unknown history version: {data.get('version')}", flush=True)
+                return
+
+            messages = [self._deserialize_message(msg) for msg in data.get("messages", [])]
+            self.conversation_history = messages
+
+            print(f"[agent] Loaded {len(messages)} messages from history (last updated: {data.get('last_updated')})", flush=True)
+        except Exception as e:
+            print(f"[agent] Error loading conversation history: {e}", flush=True)
+            self.conversation_history = []
+
+    def _save_conversation_history(self) -> None:
+        history_file = self._get_history_file_path()
+
+        try:
+            import json
+            from datetime import datetime, timezone
+
+            data: ConversationHistoryFile = {
+                "version": 1,
+                "last_updated": datetime.now(timezone.utc).isoformat(),
+                "messages": [self._serialize_message(msg) for msg in self.conversation_history]
+            }
+
+            with open(history_file, "w") as f:
+                json.dump(data, f, indent=2)
+
+            if AGENT_DEBUG:
+                print(f"[agent] Saved {len(self.conversation_history)} messages to history", flush=True)
+        except Exception as e:
+            print(f"[agent] Error saving conversation history: {e}", flush=True)
+
+    def _clear_conversation_history(self) -> None:
+        history_file = self._get_history_file_path()
+
+        try:
+            if history_file.exists():
+                history_file.unlink()
+
+            self.conversation_history = []
+            print("[agent] Conversation history cleared", flush=True)
+        except Exception as e:
+            print(f"[agent] Error clearing conversation history: {e}", flush=True)
 
     async def atomic_operation(self, action: str, params: dict) -> dict:
         self.operation_counter += 1
@@ -199,6 +349,7 @@ class AgentHarness:
                 "role": "user",
                 "content": msg["content"],
             })
+            self._save_conversation_history()
 
             if AGENT_DEBUG:
                 content_preview = msg["content"][:100]
@@ -222,6 +373,7 @@ class AgentHarness:
                 "role": "user",
                 "content": result_content,
             })
+            self._save_conversation_history()
 
         elif msg_type == "stop":
             self.conversation_running = False
@@ -696,6 +848,7 @@ class AgentHarness:
                 "content": response.content,
             }
             self.conversation_history.append(assistant_msg)
+            self._save_conversation_history()
 
             for block in response.content:
                 if isinstance(block, dict):
@@ -765,6 +918,7 @@ class AgentHarness:
                         "role": "user",
                         "content": tool_results,
                     })
+                    self._save_conversation_history()
                 elif AGENT_DEBUG:
                     print("[agent] No tool results")
 
@@ -796,6 +950,8 @@ class AgentHarness:
             )
 
             self.system_prompt = build_full_instruction(self.instructions_context)
+
+            self._load_conversation_history()
 
             self.initialized = True
             await self.send({
@@ -837,6 +993,13 @@ class AgentHarness:
             except asyncio.CancelledError:
                 pass
 
+    async def handle_clear_history(self, msg: dict[str, object]) -> None:
+        print("[agent] Clearing conversation history")
+        self._clear_conversation_history()
+        await self.send({
+            "type": "history_cleared",
+        })
+
     async def accept(self) -> None:
         msg = await self.conn.recv()
         msg_type = msg.get("type")
@@ -858,6 +1021,10 @@ class AgentHarness:
                 request_id = msg.get("request_id", "unknown")
                 print(f"[agent] Cancel: {request_id}")
             await self.handle_cancel(msg)
+        elif msg_type == "agent_clear_history":
+            if AGENT_DEBUG:
+                print("[agent] Clear history request")
+            await self.handle_clear_history(msg)
         elif msg_type == "agent_action_response":
             if AGENT_DEBUG:
                 action = msg.get("action", "unknown")
