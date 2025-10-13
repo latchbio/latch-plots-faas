@@ -63,6 +63,3 @@ def build_full_instruction(initial_context: str) -> str:
     instruction_parts.append(f"\n<notebook_context>\n{initial_context}\n</notebook_context>\n")
 
     return dedent("\n".join(instruction_parts))
-
-
-print(build_full_instruction(""))

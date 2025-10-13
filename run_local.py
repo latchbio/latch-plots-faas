@@ -16,10 +16,16 @@ def setup_environment_and_paths():
     latch_dir = root_dir / ".latch"
     latch_dir.mkdir(exist_ok=True)
 
-    (latch_dir / "token").write_text("local-dev-token")
+    user_latch_token = Path.home() / ".latch" / "token"
+    if user_latch_token.exists():
+        token = user_latch_token.read_text().strip()
+    else:
+        token = "local-dev-token"
+
+    (latch_dir / "token").write_text(token)
     (latch_dir / "id").write_text("99999")
     (latch_dir / "session-id").write_text("local-session-123")
-    (latch_dir / "nucleus-url").write_text("http://localhost")
+    (latch_dir / "nucleus-url").write_text("https://nucleus.latch.bio")
 
     os.environ.update({
         "DD_VERSION": "local-dev",

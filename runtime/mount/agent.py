@@ -1,5 +1,4 @@
 import asyncio
-import json
 import os
 import socket
 import sys
@@ -8,15 +7,15 @@ import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
-from textwrap import dedent
 from typing import Literal
 
 import anthropic
-from anthropic.types import MessageParam, ToolParam, ToolUseBlock
+from anthropic.types import MessageParam, ToolParam
 from config_loader import build_full_instruction
 from lplots import _inject
 from pydantic import BaseModel
 from socketio_thread import SocketIoThread
+from utils import auth_token_sdk, nucleus_url
 
 sandbox_root = os.environ.get("LATCH_SANDBOX_ROOT")
 if sandbox_root:
@@ -77,7 +76,6 @@ class PlanDiffPayload(TypedDict):
 class AgentHarness:
     conn: SocketIoThread
     initialized: bool = False
-    api_key: str | None = None
     client: anthropic.AsyncAnthropic | None = None
     conversation_history: list[MessageParam] = field(default_factory=list)
     mode: Mode = Mode.planning
@@ -89,6 +87,7 @@ class AgentHarness:
     instructions_context: str = ""
     current_structured_output: NotebookResponse | None = None
     current_request_id: str | None = None
+    should_auto_continue: bool = False
 
     pending_messages: asyncio.Queue = field(default_factory=asyncio.Queue)
     conversation_task: asyncio.Task | None = None
@@ -176,6 +175,18 @@ class AgentHarness:
 
         return False
 
+    def _message_has_thinking(self, msg: dict) -> bool:
+        if msg.get("role") != "assistant":
+            return False
+        content = msg.get("content", [])
+        if not isinstance(content, list):
+            return False
+        for block in content:
+            block_type = block.get("type") if isinstance(block, dict) else getattr(block, "type", None)
+            if block_type in ("thinking", "redacted_thinking"):
+                return True
+        return False
+
     async def _wait_for_message(self) -> None:
         msg = await self.pending_messages.get()
 
@@ -221,6 +232,9 @@ class AgentHarness:
         if not self.current_request_id:
             return
 
+        should_continue = self.should_auto_continue
+        self.should_auto_continue = False
+
         if self.mode == Mode.executing:
             self.set_mode(Mode.planning)
 
@@ -246,12 +260,27 @@ class AgentHarness:
         }
 
         if self.current_structured_output is not None:
-            response_msg["structured_output"] = self.current_structured_output.model_dump()
+            structured = self.current_structured_output.model_dump()
+            response_msg["structured_output"] = structured
+
+            print(f"[agent] Sending agent_result with structured_output:")
+            print(f"  - plan: {len(structured.get('plan', []))} items")
+            print(f"  - plan_diff: {len(structured.get('plan_diff', []))} items")
+            for diff in structured.get('plan_diff', []):
+                print(f"    - [{diff.get('action')}] {diff.get('id')}: {diff.get('description')}")
+
             self.current_structured_output = None
 
         await self.send(response_msg)
 
-        self.current_request_id = None
+        if should_continue:
+            if AGENT_DEBUG:
+                print("[agent] Auto-continuing as requested by model")
+            await self.pending_messages.put({
+                "type": "user_query",
+                "content": "Continue with the next step.",
+                "request_id": self.current_request_id,
+            })
 
     def init_tools(self) -> None:
         self.tools = []
@@ -261,7 +290,6 @@ class AgentHarness:
             position = args["position"]
             code = args["code"]
             title = args["title"]
-            auto_run = args.get("auto_run", True)
 
             if position < 0:
                 return "Error: Position must be non-negative"
@@ -274,7 +302,7 @@ class AgentHarness:
                 "cell_type": "code",
                 "source": code,
                 "title": title,
-                "auto_run": auto_run,
+                "auto_run": True,
             }
 
             result = await self.atomic_operation("create_cell", params)
@@ -315,7 +343,6 @@ class AgentHarness:
         async def edit_cell(args: dict) -> str:
             cell_id = args["cell_id"]
             new_code = args["new_code"]
-            auto_run = args.get("auto_run", True)
 
             if AGENT_DEBUG:
                 print(f"[tool] edit_cell id={cell_id}")
@@ -323,7 +350,7 @@ class AgentHarness:
             params = {
                 "cell_id": cell_id,
                 "source": new_code,
-                "auto_run": auto_run
+                "auto_run": True
             }
 
             result = await self.atomic_operation("edit_cell", params)
@@ -462,36 +489,6 @@ class AgentHarness:
 
             return f"Failed to update widget value: {result.get('error', 'Unknown error')}"
 
-        async def send_plan_update(args: dict) -> str:
-            plan = args["plan"]
-            plan_diff = args.get("plan_diff")
-
-            if AGENT_DEBUG:
-                print(f"[tool] send_plan_update plan_items={len(plan)} diff_items={len(plan_diff or [])}")
-
-            try:
-                plan_items = [PlanItem(**item) for item in plan]
-                plan_diff_items = [PlanDiff(**item) for item in (plan_diff or [])]
-            except Exception as e:
-                return f"Invalid plan data: {e}"
-
-            plan_payload = {
-                "plan": [item.model_dump() for item in plan_items],
-                "plan_diff": [item.model_dump() for item in plan_diff_items],
-            }
-
-            result = await self.atomic_operation("plan_update", plan_payload)
-            if result.get("status") == "success":
-                msg = "Plan update delivered"
-                if AGENT_DEBUG:
-                    print(f"[tool] send_plan_update -> {msg}")
-                return msg
-            return f"Failed to deliver plan update: {result.get('error', 'Unknown error')}"
-
-        async def start_new_plan(args: dict) -> str:
-            self.set_mode(Mode.planning)
-            return "Started new planning session"
-
         async def submit_response(args: dict) -> str:
             try:
                 summary = args.get("summary")
@@ -502,31 +499,49 @@ class AgentHarness:
                 if not isinstance(questions, list):
                     questions = None
 
+                should_continue = args.get("continue", False)
+
+                plan_items = args.get("plan", [])
+                plan_diff_items = args.get("plan_diff", [])
+
+                print(f"[tool] submit_response called with:")
+                print(f"  - plan: {len(plan_items)} items")
+                for item in plan_items:
+                    print(f"    - [{item.get('status')}] {item.get('id')}: {item.get('description')}")
+                print(f"  - plan_diff: {len(plan_diff_items)} items")
+                for diff in plan_diff_items:
+                    print(f"    - [{diff.get('action')}] {diff.get('id')}: {diff.get('description')}")
+                print(f"  - continue: {should_continue}")
+
                 self.current_structured_output = NotebookResponse(
-                    plan=[PlanItem(**item) for item in args.get("plan", [])],
-                    plan_diff=[PlanDiff(**item) for item in args.get("plan_diff", [])],
+                    plan=[PlanItem(**item) for item in plan_items],
+                    plan_diff=[PlanDiff(**item) for item in plan_diff_items],
                     summary=summary,
                     questions=questions
                 )
 
-                if AGENT_DEBUG:
-                    print(f"[tool] submit_response stored structured output")
+                if should_continue and self.executing_cells:
+                    print(f"[tool] Cannot continue - {len(self.executing_cells)} cells still executing: {self.executing_cells}")
+                    self.should_auto_continue = False
+                else:
+                    self.should_auto_continue = should_continue
 
                 return "Response submitted successfully"
             except Exception as e:
                 print(f"[tool] submit_response error: {e}")
+                import traceback
+                traceback.print_exc()
                 return f"Error submitting response: {e!s}"
 
         self.tools.append({
             "name": "create_cell",
-            "description": "Create a new code cell at specified position.",
+            "description": "Create a new code cell at specified position. The cell will automatically run after creation.",
             "input_schema": {
                 "type": "object",
                 "properties": {
                     "position": {"type": "integer", "description": "Position to insert the cell"},
                     "code": {"type": "string", "description": "Python code for the cell"},
                     "title": {"type": "string", "description": "Title for the cell"},
-                    "auto_run": {"type": "boolean", "description": "Whether to run the cell after creation", "default": True},
                 },
                 "required": ["position", "code", "title"],
             },
@@ -549,13 +564,12 @@ class AgentHarness:
 
         self.tools.append({
             "name": "edit_cell",
-            "description": "Replace the contents of an existing cell.",
+            "description": "Replace the contents of an existing cell. The cell will automatically run after editing.",
             "input_schema": {
                 "type": "object",
                 "properties": {
                     "cell_id": {"type": "string", "description": "ID of the cell to edit"},
                     "new_code": {"type": "string", "description": "New code/content for the cell"},
-                    "auto_run": {"type": "boolean", "description": "Whether to run the cell after editing", "default": True},
                 },
                 "required": ["cell_id", "new_code"],
             },
@@ -622,32 +636,29 @@ class AgentHarness:
         self.tool_map["get_notebook_context"] = get_notebook_context
 
         self.tools.append({
-            "name": "send_plan_update",
-            "description": "Send plan state update to the frontend.",
+            "name": "submit_response",
+            "description": "Submit the final response with plan, plan_diff, summary, and questions. Call this at the end of every turn.",
             "input_schema": {
                 "type": "object",
                 "properties": {
                     "plan": {"type": "array", "description": "List of plan items"},
                     "plan_diff": {"type": "array", "description": "List of plan diff items"},
+                    "summary": {"type": "array", "description": "List of summary bullet points or null"},
+                    "questions": {"type": "array", "description": "List of questions for the user or null"},
+                    "continue": {
+                        "type": "boolean",
+                        "description": "Set to true to immediately continue to the next step without waiting for user input. Set to false when waiting for user input or when all work is complete.",
+                        "default": False
+                    },
                 },
-                "required": ["plan", "plan_diff"],
+                "required": ["plan", "plan_diff", "summary", "questions"],
             },
         })
-        self.tool_map["send_plan_update"] = send_plan_update
-
-        self.tools.append({
-            "name": "start_new_plan",
-            "description": "Start a new planning session.",
-            "input_schema": {
-                "type": "object",
-                "properties": {},
-            },
-        })
-        self.tool_map["start_new_plan"] = start_new_plan
+        self.tool_map["submit_response"] = submit_response
 
         self.tools.append({
             "name": "submit_response",
-            "description": "Submit the final response with plan, plan_diff, summary, and questions. Call this at the end of every response.",
+            "description": "Submit the final response with plan, plan_diff, summary, and questions. Call this at the end of every turn.",
             "input_schema": {
                 "type": "object",
                 "properties": {
@@ -707,16 +718,29 @@ class AgentHarness:
             else:
                 max_tokens = 4096
 
+            def _has_content(m: dict) -> bool:
+                c = m.get("content")
+                if isinstance(c, str):
+                    return bool(c.strip())
+                if isinstance(c, list):
+                    return len(c) > 0
+                return False
+
+            clean_messages = [m for m in self.conversation_history if _has_content(m)]
+
             kwargs = {
                 "model": model,
                 "max_tokens": max_tokens,
                 "system": self.system_prompt,
-                "messages": self.conversation_history,
+                "messages": clean_messages,
                 "tools": self.tools,
             }
 
+            has_any_thinking = any(self._message_has_thinking(m) for m in clean_messages)
+            first_turn = len(clean_messages) == 1 and clean_messages[0].get("role") == "user"
+
             use_beta_api = False
-            if thinking_budget is not None and (len(self.conversation_history) == 1 or self._last_assistant_msg_has_thinking()):
+            if thinking_budget is not None and (first_turn or has_any_thinking):
                 kwargs["thinking"] = {
                     "type": "enabled",
                     "budget_tokens": thinking_budget,
@@ -756,14 +780,14 @@ class AgentHarness:
                         if thinking_text:
                             print(f"[agent] Thinking:\n{thinking_text}")
                         else:
-                            print(f"[agent] Thinking block present (redacted)")
+                            print("[agent] Thinking block present (redacted)")
 
             if response.stop_reason == "end_turn":
                 if AGENT_DEBUG:
-                    print("[agent] Turn ended, sending agent_result")
-                await self._send_agent_result()
+                    print("[agent] Turn ended without submit_response - model should always call submit_response per prompt")
             elif response.stop_reason == "tool_use":
                 tool_results = []
+                called_submit_response = False
 
                 for block in response.content:
                     if isinstance(block, dict):
@@ -775,6 +799,9 @@ class AgentHarness:
                         tool_id = block.get("id") if isinstance(block, dict) else block.id
                         tool_name = block.get("name") if isinstance(block, dict) else block.name
                         tool_input = block.get("input") if isinstance(block, dict) else block.input
+
+                        if tool_name == "submit_response":
+                            called_submit_response = True
 
                         if AGENT_DEBUG:
                             print(f"[agent] Executing tool: {tool_name} (id={tool_id})")
@@ -809,9 +836,13 @@ class AgentHarness:
                         "role": "user",
                         "content": tool_results,
                     })
-                else:
+                elif AGENT_DEBUG:
+                    print("[agent] No tool results")
+
+                if called_submit_response:
                     if AGENT_DEBUG:
-                        print("[agent] No tool results")
+                        print("[agent] submit_response called, sending agent_result")
+                    await self._send_agent_result()
             elif response.stop_reason == "max_tokens":
                 print("[agent] Hit max tokens", flush=True)
                 await self._send_agent_result()
@@ -823,23 +854,17 @@ class AgentHarness:
     async def handle_init(self, msg: dict[str, object]) -> None:
         print("[agent] Initializing", flush=True)
 
-        self.api_key = os.environ.get("ANTHROPIC_API_KEY")
-
-        if not self.api_key:
-            await self.send({
-                "type": "agent_error",
-                "error": "ANTHROPIC_API_KEY not set",
-                "fatal": True
-            })
-            return
-
         try:
             context = msg.get("context", "")
             self.instructions_context = context
 
             self.init_tools()
 
-            self.client = anthropic.AsyncAnthropic(api_key=self.api_key)
+            self.client = anthropic.AsyncAnthropic(
+                api_key="dummy",
+                base_url=f"{nucleus_url}/infer/plots-agent/anthropic",
+                default_headers={"Authorization": auth_token_sdk}
+            )
 
             self.system_prompt = build_full_instruction(self.instructions_context)
 
@@ -869,7 +894,6 @@ class AgentHarness:
             "content": query,
             "request_id": request_id,
         })
-
 
     async def handle_cancel(self, msg: dict[str, object]) -> None:
         request_id = msg.get("request_id", "unknown")

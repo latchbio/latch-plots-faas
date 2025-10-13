@@ -1,5 +1,6 @@
 import base64
 import io
+import os
 import sys
 from enum import Enum
 from pathlib import Path
@@ -17,13 +18,14 @@ from yarl import URL
 sys.path.append(str(Path(__file__).parent.parent.absolute()))
 from config import config
 
-latch_p = Path("/root/.latch")
+latch_p = Path(os.environ.get("LATCH_SANDBOX_ROOT", "/root/.latch"))
 sdk_token_path = latch_p / "token"
 if sdk_token_path.exists():
     sdk_token = sdk_token_path.read_text()
 else:
     sdk_token = ""
 auth_token_sdk = f"Latch-SDK-Token {sdk_token}"
+
 
 nucleus_url_path = latch_p / "nucleus-url"
 if nucleus_url_path.exists():

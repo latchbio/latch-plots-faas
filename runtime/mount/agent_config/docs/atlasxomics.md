@@ -2,83 +2,135 @@
 
 This is the **authoritative step-by-step pipeline** for AtlasxOmics experiment. Follow steps in order. 
 
-1. **Data Loading** - load data using **Scanpy** and `w_h5`.
+1. **Data Loading** - load data using **Scanpy** and display it with `w_h5`.
 2. **Experiment Setup** - Ask users to confirm if they want to perform analysis on **gene activity score AnnData** (recommended) or **motif enrichment scores AnnData**. 
-3. **Clustering (workflow only)** - Confirm if clustering applies to all cells or a subset (subset = a single sample, condition, or lasso-selected region). Then launch the AtlasXOmics clustering workflow using `w_workflow(wf_name="wf.__init__.opt_workflow", ...)` **Never use scanpy.tl.leiden** or any ad-hoc clustering. 
-9. **Differential Gene Activity or Motif Enrichment Comparison** - Use `w_workflow(wf_name="wf.__init__.compare_workflow", ...)`
-10. **Cell Type Annotation** - assign biological meaning to clusters using gene sets. 
+3. **Clustering (workflow only)** - Confirm if clustering applies to all cells or a subset (subset = a single sample, condition, or lasso-selected region). Then launch the AtlasXOmics clustering workflow using `w_workflow(wf_name="wf.__init__.opt_workflow", ...)`. Fallback to `scanpy` only if this fails.
+4. **Differential Gene Activity or Motif Enrichment Comparison** - Use `w_workflow(wf_name="wf.__init__.compare_workflow", ...)`
+5.  **Cell Type Annotation** - assign biological meaning to clusters using gene sets. 
 
-The section below defines detailed guidelines for each of the above steps. 
+The section below defines detailed guidelines for each of the above steps.
+
+### **Workflow Rules**
+When the step requires launching a workflow:
+- **Always render a form** with `lplots.widgets`  for all workflow inputs. Pre-populate each widget with sensible `default` whenever possible.
+- **Do not** hardcode values the in the dictionary.
+- Parse user responses, normalize formats, and construct the params dictionary exactly as shown in example.
+- **Always use the exact `version` provided in workflow code example.**  
+- **Always include `w.value` at the end**
 
 ### **Data Loading**: 
-- Load the motif and gene H5AD into two adata objects and view them with `w_h5` widget. 
-- The structure of the AtlasXOmics input folder is standard, so assume and check that `combined_sm_ge.h5ad` and `combined_sm_motifs.h5ad` exist, without asking users to confirm. 
+- Identify the correct node ID for either `combined_sm_ge.h5ad` (gene activity scores) or `combined_sm_motifs.h5ad` (motif enrichment), and load the file using the `LPath` API.
+- After loading, always display the AnnData object with the `w_h5` widget.
 
 ### **Clustering (workflow only)**: 
-- If users want to perform clustering, launch the AtlasXOmics clustering workflow using the `w_workflow` widget. 
-- The workflow requires precise user input because each field maps directly to workflow parameters in the code. **Always output a form with widgets for users to fill out required inputs**. 
-- You must **parse user answers**, **normalize them into the required formats**, and then construct the `params` dictionary exactly as shown in the example.  
-- If the user specifies they want to cluster only a subset of the AnnData, include the optional parameter `adata_subset` (as a LatchFile) in params. Otherwise, omit it entirely.
+- Use `w_workflow` to launch the AtlasXOmics clustering workflow.
+- If the user want to cluster only a subset of the AnnData, include the optional parameter `adata_subset` (as a LatchFile) in params. Otherwise, omit it entirely.
 
-#### Required User Inputs
-- `run_id`: An identifier for the Run.
-- `fragments_file`: A file on Latch Data. A BED-like, tab-delimited file in which each row contains an ATAC-seq fragment.
-- `condition` (optional): An experimental Condition descriptor (i.e., "control", 'diseased').
-- `spatial_dir`: A directory on Latch Data, containing tissue images and experiment metadata.
-- `genome`: Can either be "hg38" for humans or "mm10" for mouse 
-- `adata_subset (optional)`: A LatchFile representing the subset of the AnnData to cluster.
+### Clustering Workflow Parameters
+
+#### **Required**
+- `project_name` *(str)*  
+  Name for the output folder.
+
+- `genome` *(Enum)*  
+  One of: `"hg38"`, `"mm10"`, `"rnor6"`.
+
+- `runs` *(List[Run])*  
+  List of individual sample inputs, each with:
+  - `run_id` *(str)* — Sample identifier  
+  - `fragments_file` *(LatchFile)* — BED-like file of ATAC-seq fragments  
+  - `spatial_dir` *(LatchDir)* — Tissue image + metadata folder  
+  - `condition` *(str, optional)* — e.g., `"control"` or `"diseased"`
+
+#### **Optional**
+- `adata_subsetted_file` *(LatchFile)*  
+  Subset AnnData to cluster (omit if clustering full object)
+
+- `tile_size` *(int)*  
+  Genomic bin size (default: `5000`)
+
+- `n_features` *(List[int])*  
+  Top accessible tiles to use, e.g., `[25000]`
+
+- `resolution` *(List[float])*  
+  Clustering resolution, e.g., `[1.0]`
+
+- `varfeat_iters` *(List[int])*  
+  Iterations for variable feature selection, e.g., `[1]`
+
+- `n_comps` *(List[int])*  
+  Dimensionality reduction components, e.g., `[30]`
+
+- `min_cluster_size` *(int)*  
+  Minimum cells per cluster
+
+- `min_tss` *(float)*  
+  Minimum TSS enrichment score per cell
+
+- `min_frags` *(int)*  
+  Minimum fragments per cell
+
+- `pt_size` *(int or None)*  
+  Point size override for spatial plots
+
+- `qc_pt_size` *(int or None)*  
+  Point size override for QC spatial plots
 
 Use the code below as a template. The code will generate a "Launch" button.
-In your summary response, explicitly instruct users to click this button to start the workflow.
+Instruct users to click this button to start the workflow.
                      
 #### Example Implementation
 
 ```python
-from lplots.widgets.workflow import w_workflow
+from dataclasses import dataclass
+from enum import Enum
 from latch.types import LatchFile, LatchDir
 from lplots.widgets.workflow import w_workflow
-import sys
-import importlib.util
 
-# Import statements
-utils_path = "/opt/latch/plots-faas/optimize_snap/wf/utils.py"
-spec = importlib.util.spec_from_file_location("wf_utils", utils_path)
-wf_utils = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(wf_utils)
+class Genome(Enum):
+    mm10 = "mm10"
+    hg38 = "hg38"
+    rnor6 = "rnor6"
 
-Genome = wf_utils.Genome
-Run = wf_utils.Run
+@dataclass
+class Run:
+    run_id: str
+    fragments_file: LatchFile
+    condition: str = "None"
+    spatial_dir: LatchDir = LatchDir(
+        "latch:///spatials/demo/spatial/"
+    )
 
+r = Run(
+  run_id = "D02297_NG07294", 
+  fragments_file = LatchFile("latch://38438.account/Kosta/Raw_Data/D02297_NG07294/chromap_output/fragments.tsv.gz"),
+  condition = "None",
+  spatial_dir = LatchDir("latch://38438.account/Kosta/Raw_Data/D02297_NG07294/spatial")
+)
 params = {
-    "project_name": "Test Project",
-    "runs": [
-        Run(
-            run_id="D02301_NG07297",
-            fragments_file=LatchFile("latch://38438.account/chromap_output/fragments.tsv.gz"),
-            condition="Healthy",
-            spatial_dir=LatchDir(
-                "latch://38438.account/spatial"
-            )
-          )
-    ],
-    "adata_subset": LatchFile("latch://38438.account/adata_subset.h5ad"), 
-    "genome": Genome["hg38"],
-    "resolution": [1.0],
-    "tile_size": 5000, # default
-    "n_features": [25000], # default
-    "varfeat_iters": [1], # default
-    "n_comps": [30], # default
-    "min_cluster_size": 20, # default
-    "min_tss": 2.0, # default
-    "min_frags": 10 # default
+     "runs": [r], # number of runs in list = number of samples
+     "adata_subsetted_file": LatchFile("latch://38438.account/Kosta/cell_subset/adata_hsc_subset.h5ad"),
+     "genome": Genome.hg38,
+     "project_name": "test_w_workflow",
+     "tile_size": 5000,
+     "n_features": [25000],
+     "resolution": [1.0],
+     "varfeat_iters": [1],
+     "n_comps": [30],
+     "min_cluster_size": 20,
+     "min_tss": 2.0,
+     "min_frags": 10,
+     "pt_size": None,
+     "qc_pt_size": None,
 }
 
 w = w_workflow(
-    wf_name="wf.__init__.opt_workflow",
-    version="0.3.5-f10e3c-wip-9a1d7b",
-    params=params,
-    label="Run Clustering Workflow",
+  wf_name="wf.__init__.opt_workflow",
+  version="0.3.5-b94751",
+  params=params,
+  label="Run clustering workflow",
 )
+
 execution = w.value
 ```
 
@@ -101,33 +153,52 @@ if value['lasso_points']:
 # Proceed to create an `adata_subset` based on lasso-selected points
 ```
 
-### Differential Gene Activity or Motif Enrichment Comparison Workflow
+### **Differential Gene Activity or Motif Enrichment Comparison (workflow only)**
+- Use `w_workflow` to launch the AtlasXOmics comparison workflow.  
+- Automatically infer the correct grouping column from `adata.obs` (`condition`, `sample`, or `cluster`).  
+- Programmatically generate and upload a `compare_config.json` file as a `LatchFile` for workflow input.
 
-#### Required User Inputs: 
-**Always create a form with widgets to collect user inputs**:
-- `project_name`: a string for project name
-- `groupings`: A `LatchFile` named `compare_config.json` that stores a dictionary with two keys: `groupA` and `groupB`. Each key has a list of AnnData cell barcodes as values. 
-- `archrprokect`: A `LatchDir` that stores an ArchR project on Latch Data. The folder often ends with `_ArchRProject`. 
+### Comparison Workflow Parameters
+
+#### **Required**
+- `project_name` *(str)*  
+  Name for the output folder.
+
+- `groupings` *(LatchFile)*  
+  A JSON file (`compare_config.json`) containing two keys:  
+  - `groupA`: list of AnnData cell barcodes for the first group  
+  - `groupB`: list of AnnData cell barcodes for the second group  
+
+- `archrproject` *(LatchDir)*  
+  Path to an ArchR project directory on Latch Data (usually ends with `_ArchRProject`).
+
+- `genome` *(Enum)*  
+  Either `"hg38"` or `"mm10"`.
+
+#### Example Implementation
 
 ```python
+from latch.types import LatchFile, LatchDir
+from lplots.widgets.workflow import w_workflow
+
 params = {
-        "project_name": "USER_INPUT",
-        "groupings": LatchFile(remote_bcs.path),
-        "archrproject": LatchDir(archrproj_dir.path),
-        "genome": "hg38" # Can be "hg38" or "mm10"
-    }
-    
+    "project_name": "my_comparison",
+    "groupings": LatchFile("latch:///compare_config.json"),
+    "archrproject": LatchDir("latch:///Kostallari_SOW313_ATAC_ArchRProject"),
+    "genome": "hg38",
+}
+
 w = w_workflow(
     wf_name="wf.__init__.compare_workflow",
     version="0.7.1-8484d6-wip-4ae938",
     params=params,
-    label="Launch Workflow"
+    label="Launch Comparison Workflow"
 )
 
 execution = w.value
 ```
 
-**Constructing groupings for Differential Comparison**
+#### How to construct `compare_config.json`
 To run a comparison workflow, you must generate a `compare_config.json` file that defines which cells belong to each group.
 
 What to Ask the User:
