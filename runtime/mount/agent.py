@@ -657,22 +657,6 @@ class AgentHarness:
         self.tool_map["submit_response"] = submit_response
 
         self.tools.append({
-            "name": "submit_response",
-            "description": "Submit the final response with plan, plan_diff, summary, and questions. Call this at the end of every turn.",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "plan": {"type": "array", "description": "List of plan items"},
-                    "plan_diff": {"type": "array", "description": "List of plan diff items"},
-                    "summary": {"type": "array", "description": "List of summary bullet points or null"},
-                    "questions": {"type": "array", "description": "List of questions for the user or null"},
-                },
-                "required": ["plan", "plan_diff", "summary", "questions"],
-            },
-        })
-        self.tool_map["submit_response"] = submit_response
-
-        self.tools.append({
                     "name": "set_widget",
                     "description": "Set a single widget value by widget key.",
                     "input_schema": {
