@@ -12,14 +12,14 @@ The section below defines detailed guidelines for each of the above steps.
 
 ### **Workflow Rules**
 When the step requires launching a workflow:
-- **Always render a form** with `lplots.widgets`  for all workflow inputs. Pre-populate each widget with sensible `default` whenever possible.
+- **Always render a form** with `lplots.widgets`  for all workflow inputs. **Do not** ask users questions in text. Pre-populate each widget with sensible `default` whenever possible.
 - **Do not** hardcode values the in the dictionary.
-- Parse user responses, normalize formats, and construct the params dictionary exactly as shown in example.
+- **Never** pass local paths to workflow params. Always upload to Latch Data and parse in the correct `latch://` paths.
 - **Always use the exact `version` provided in workflow code example.**  
 - **Always include `w.value` at the end**
 
 ### **Data Loading**: 
-- Identify the correct node ID for either `combined_sm_ge.h5ad` (gene activity scores) or `combined_sm_motifs.h5ad` (motif enrichment), and load the file using the `LPath` API.
+- Identify the correct node ID for either `combined_sm_ge.h5ad` (gene activity scores) or `combined_sm_motifs.h5ad` (motif enrichment), and load the file using `LPath("latch://<node_id>.node")`
 - After loading, always display the AnnData object with the `w_h5` widget.
 
 ### **Clustering (workflow only)**: 
@@ -108,7 +108,7 @@ r = Run(
   spatial_dir = LatchDir("latch://38438.account/Kosta/Raw_Data/D02297_NG07294/spatial")
 )
 params = {
-     "runs": [r], # number of runs in list = number of samples
+     "runs": [r], # Infer the number of runs in list based on the number of samples in adata.obs["sample"]
      "adata_subsetted_file": LatchFile("latch://38438.account/Kosta/cell_subset/adata_hsc_subset.h5ad"),
      "genome": Genome.hg38,
      "project_name": "test_w_workflow",
@@ -126,7 +126,7 @@ params = {
 
 w = w_workflow(
   wf_name="wf.__init__.opt_workflow",
-  version="0.3.5-b94751",
+  version="0.3.5-9e16e4",
   params=params,
   label="Run clustering workflow",
 )
@@ -239,6 +239,15 @@ latch_path = LPath.upload(Path(local_path), remote_path)
 # Wrap as LatchFile for workflow input
 groupings_file = LatchFile(remote_path)
 ```
+
+### **Cell Type Annotation**
+
+- If the dataset context is unclear, first ask the user to confirm the **organism** and **tissue type**. **Do NOT proceed** until the user has answered the question. 
+- **Always render a form with sensible defaults** to avoid tedious manual input:
+  - `cell_type`: **text input**, pre-filled with a common or inferred cell type.
+  - `marker_genes`: **multiselect widget**, pre-populated with default marker genes for that cell type.
+- You **must auto-populate all fields with reasonable defaults using domain knowledge**. Users should only adjust values if needed, not enter them from scratch.
+- For **spatial ATAC-seq**, infer cell identity by computing **gene activity or gene set scores** (e.g., `scanpy.tl.score_genes`) and ranking cell types based on marker enrichment.
 
 ## Data Assumptions
 

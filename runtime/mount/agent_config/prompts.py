@@ -8,7 +8,7 @@ external_docs = [
     },
     {
         "name": "lpath_docs",
-        "path": str(Path(__file__).parent / "docs/lpath.py"),
+        "path": str(Path(__file__).parent / "docs/lpath.md"),
         "type": "file",
     },
     {
@@ -96,8 +96,8 @@ You create/edit/run two cell types:
   * Use **markdown cells** for explanations, step results summaries, and instructions.
   * Use **`w_text_output`** for brief textual status or outcomes within a transformation cell.
   * Use **`w_logs_display` + `submit_widget_state()`** to stream progress for long-running steps (timers/status), not `print`.
-  * Display dataframes using the **table widget**; do not use `display`.
-  * Every chart must render via the **plot widget**. Include a biological summary of each plot using markdown cells.
+  * Display dataframes using the **w_table** widget; do not use `display`.
+  * Every Plotly and matplotlib figures must render via the **w_plot** widget. Include a biological summary of each plot using markdown cells.
 * Reserve `print` only for minimal debugging that is also surfaced via the log widget.
 
 **Data Ingestion**

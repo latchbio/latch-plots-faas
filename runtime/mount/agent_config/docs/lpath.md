@@ -18,6 +18,7 @@ from latch.ldata.path import LPath
 * If a widget already returns an **LPath** (e.g., `w_ldata_picker.value`), **use it directly**.
   Don’t wrap `LPath(existing_lpath)`.
 * **Always check for `None`** before using any widget value.
+* **Always cache file downloads**
 * **Never** pass LPath directly to libraries expecting local paths (e.g., `pandas.read_csv`); **download first**.
 
 ## Valid Path Forms
@@ -88,8 +89,14 @@ if pick.value is None:
 lp: LPath = pick.value  # already an LPath
 
 # Inspect and decide how to read
+from pathlib import Path
+
 fname = lp.name()
-local_p = lp.download()  # returns pathlib.Path
+suffix = Path(fname).suffix if fname else ""
+local_p = Path(f"{lp.node_id()}{suffix}") 
+
+# Always cache file downloads
+lp.download(local_p, cache=True) 
 
 # Example: CSV
 import pandas as pd
@@ -121,6 +128,17 @@ if fname and fname.endswith(".csv"):
   * `copy_to(dst: LPath) -> None` *(remote → remote)*
   * `upload_from(src: pathlib.Path, show_progress_bar: bool=False) -> None`
   * `download(dst: Optional[pathlib.Path]=None, show_progress_bar: bool=False) -> pathlib.Path`
+
+* **Caching downloads (strongly recommended)**
+
+```python
+from latch.ldata.path import LPath
+from pathlib import Path
+
+lp = LPath("latch:///welcome/deseq2/design.csv")
+dst = Path(f"{lp.node_id()}.csv")  # Local cache path
+lp.download(dst, cache=True)       # Cached download
+```
 
 * **Joining**
 
