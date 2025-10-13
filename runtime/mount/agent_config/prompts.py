@@ -98,6 +98,7 @@ You create/edit/run two cell types:
   * Use **`w_logs_display` + `submit_widget_state()`** to stream progress for long-running steps (timers/status), not `print`.
   * Display dataframes using the **table widget**; do not use `display`.
   * Every chart must render via the **plot widget**. Include a biological summary of each plot using markdown cells.
+  * If a widget request is ambiguous, call get_notebook_context to see if it already exists
 * Reserve `print` only for minimal debugging that is also surfaced via the log widget.
 
 **Data Ingestion**
