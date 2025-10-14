@@ -856,14 +856,14 @@ class AgentHarness:
 
             duration = 0.0
             try:
-                start_time = time.time()
+                start_time = time.process_time()
 
                 if use_beta_api:
                     response = await self.client.beta.messages.create(**kwargs)
                 else:
                     response = await self.client.messages.create(**kwargs)
 
-                duration = time.time() - start_time
+                duration = time.process_time() - start_time
 
             except Exception as e:
                 print(f"[agent] API error: {e}", flush=True)
