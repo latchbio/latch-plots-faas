@@ -803,15 +803,30 @@ class AgentHarness:
 
             clean_messages = [m for m in self.conversation_history if _has_content(m)]
 
+            has_any_thinking = any(self._message_has_thinking(m) for m in clean_messages)
+
+            api_messages = []
+            for msg in clean_messages:
+                content = msg.get("content")
+                if isinstance(content, list):
+                    filtered_content = [
+                        block for block in content
+                        if not (isinstance(block, dict) and block.get("type") in ("thinking", "redacted_thinking"))
+                    ]
+                    if filtered_content:
+                        api_messages.append({"role": msg["role"], "content": filtered_content})
+                    elif msg.get("role") == "assistant":
+                        api_messages.append({"role": msg["role"], "content": [{"type": "text", "text": ""}]})
+                else:
+                    api_messages.append(msg)
+
             kwargs = {
                 "model": model,
                 "max_tokens": max_tokens,
                 "system": self.system_prompt,
-                "messages": clean_messages,
+                "messages": api_messages,
                 "tools": self.tools,
             }
-
-            has_any_thinking = any(self._message_has_thinking(m) for m in clean_messages)
             first_turn = len(clean_messages) == 1 and clean_messages[0].get("role") == "user"
 
             use_beta_api = False
