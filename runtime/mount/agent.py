@@ -192,36 +192,6 @@ class AgentHarness:
             "content": self._serialize_content(message["content"])
         }
 
-    def _deserialize_message(self, message: SerializedMessage) -> MessageParam:
-        content = message["content"]
-
-        if isinstance(content, list):
-            filtered_content = []
-            for block in content:
-                if isinstance(block, dict):
-                    block_type = block.get("type")
-                    if block_type in ("thinking", "redacted_thinking"):
-                        continue
-                    filtered_content.append(block)
-                else:
-                    filtered_content.append(block)
-
-            if not filtered_content:
-                return {
-                    "role": message["role"],
-                    "content": ""
-                }
-
-            return {
-                "role": message["role"],
-                "content": filtered_content
-            }
-
-        return {
-            "role": message["role"],
-            "content": content
-        }
-
     def _load_conversation_history(self) -> None:
         history_file = self._get_history_file_path()
 
@@ -239,10 +209,9 @@ class AgentHarness:
                 print(f"[agent] Unknown history version: {data.get('version')}", flush=True)
                 return
 
-            messages = [self._deserialize_message(msg) for msg in data.get("messages", [])]
-            self.conversation_history = messages
+            self.conversation_history = data.get("messages", [])
 
-            print(f"[agent] Loaded {len(messages)} messages from history (last updated: {data.get('last_updated')})", flush=True)
+            print(f"[agent] Loaded {len(self.conversation_history)} messages from history (last updated: {data.get('last_updated')})", flush=True)
         except Exception as e:
             print(f"[agent] Error loading conversation history: {e}", flush=True)
             self.conversation_history = []
