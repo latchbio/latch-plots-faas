@@ -193,9 +193,33 @@ class AgentHarness:
         }
 
     def _deserialize_message(self, message: SerializedMessage) -> MessageParam:
+        content = message["content"]
+
+        if isinstance(content, list):
+            filtered_content = []
+            for block in content:
+                if isinstance(block, dict):
+                    block_type = block.get("type")
+                    if block_type in ("thinking", "redacted_thinking"):
+                        continue
+                    filtered_content.append(block)
+                else:
+                    filtered_content.append(block)
+
+            if not filtered_content:
+                return {
+                    "role": message["role"],
+                    "content": ""
+                }
+
+            return {
+                "role": message["role"],
+                "content": filtered_content
+            }
+
         return {
             "role": message["role"],
-            "content": message["content"]
+            "content": content
         }
 
     def _load_conversation_history(self) -> None:
