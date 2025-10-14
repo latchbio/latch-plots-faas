@@ -871,17 +871,17 @@ class AgentHarness:
                     block_type = getattr(block, "type", None)
 
                 if block_type in ("thinking", "redacted_thinking"):
-                    if AGENT_DEBUG:
-                        thinking_text = block.get("thinking") if isinstance(block, dict) else getattr(block, "thinking", None)
-                        if thinking_text:
+                    thinking_text = block.get("thinking") if isinstance(block, dict) else getattr(block, "thinking", None)
+                    if thinking_text:
+                        if AGENT_DEBUG:
                             print(f"[agent] Thinking:\n{thinking_text}")
-                            await self.send({
-                                "type": "agent_thinking",
-                                "thoughts": thinking_text,
-                                "duration": duration,
-                            })
-                        else:
-                            print("[agent] Thinking block present (redacted)")
+                        await self.send({
+                            "type": "agent_thinking",
+                            "thoughts": thinking_text,
+                            "duration": duration,
+                        })
+                    else:
+                        print("[agent] Thinking block present (redacted)")
 
             if response.stop_reason == "end_turn":
                 if AGENT_DEBUG:
