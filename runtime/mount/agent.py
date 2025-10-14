@@ -2,6 +2,7 @@ import asyncio
 import os
 import socket
 import sys
+import time
 import traceback
 import uuid
 from collections.abc import Callable
@@ -829,11 +830,17 @@ class AgentHarness:
                 kwargs["betas"] = ["interleaved-thinking-2025-05-14"]
                 use_beta_api = True
 
+            duration = 0.0
             try:
+                start_time = time.time()
+
                 if use_beta_api:
                     response = await self.client.beta.messages.create(**kwargs)
                 else:
                     response = await self.client.messages.create(**kwargs)
+
+                duration = time.time() - start_time
+
             except Exception as e:
                 print(f"[agent] API error: {e}", flush=True)
                 await self.send({
@@ -861,6 +868,11 @@ class AgentHarness:
                         thinking_text = block.get("thinking") if isinstance(block, dict) else getattr(block, "thinking", None)
                         if thinking_text:
                             print(f"[agent] Thinking:\n{thinking_text}")
+                            await self.send({
+                                "type": "agent_thinking",
+                                "thoughts": thinking_text,
+                                "duration": duration,
+                            })
                         else:
                             print("[agent] Thinking block present (redacted)")
 
