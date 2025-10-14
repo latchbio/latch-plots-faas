@@ -2,6 +2,7 @@ import asyncio
 import os
 import socket
 import sys
+import time
 import traceback
 import uuid
 from collections.abc import Callable
@@ -191,36 +192,6 @@ class AgentHarness:
             "content": self._serialize_content(message["content"])
         }
 
-    def _deserialize_message(self, message: SerializedMessage) -> MessageParam:
-        content = message["content"]
-
-        if isinstance(content, list):
-            filtered_content = []
-            for block in content:
-                if isinstance(block, dict):
-                    block_type = block.get("type")
-                    if block_type in ("thinking", "redacted_thinking"):
-                        continue
-                    filtered_content.append(block)
-                else:
-                    filtered_content.append(block)
-
-            if not filtered_content:
-                return {
-                    "role": message["role"],
-                    "content": ""
-                }
-
-            return {
-                "role": message["role"],
-                "content": filtered_content
-            }
-
-        return {
-            "role": message["role"],
-            "content": content
-        }
-
     def _load_conversation_history(self) -> None:
         history_file = self._get_history_file_path()
 
@@ -238,10 +209,9 @@ class AgentHarness:
                 print(f"[agent] Unknown history version: {data.get('version')}", flush=True)
                 return
 
-            messages = [self._deserialize_message(msg) for msg in data.get("messages", [])]
-            self.conversation_history = messages
+            self.conversation_history = data.get("messages", [])
 
-            print(f"[agent] Loaded {len(messages)} messages from history (last updated: {data.get('last_updated')})", flush=True)
+            print(f"[agent] Loaded {len(self.conversation_history)} messages from history (last updated: {data.get('last_updated')})", flush=True)
         except Exception as e:
             print(f"[agent] Error loading conversation history: {e}", flush=True)
             self.conversation_history = []
@@ -833,15 +803,30 @@ class AgentHarness:
 
             clean_messages = [m for m in self.conversation_history if _has_content(m)]
 
+            has_any_thinking = any(self._message_has_thinking(m) for m in clean_messages)
+
+            api_messages = []
+            for msg in clean_messages:
+                content = msg.get("content")
+                if isinstance(content, list):
+                    filtered_content = [
+                        block for block in content
+                        if not (isinstance(block, dict) and block.get("type") in ("thinking", "redacted_thinking"))
+                    ]
+                    if filtered_content:
+                        api_messages.append({"role": msg["role"], "content": filtered_content})
+                    elif msg.get("role") == "assistant":
+                        api_messages.append({"role": msg["role"], "content": [{"type": "text", "text": ""}]})
+                else:
+                    api_messages.append(msg)
+
             kwargs = {
                 "model": model,
                 "max_tokens": max_tokens,
                 "system": self.system_prompt,
-                "messages": clean_messages,
+                "messages": api_messages,
                 "tools": self.tools,
             }
-
-            has_any_thinking = any(self._message_has_thinking(m) for m in clean_messages)
             first_turn = len(clean_messages) == 1 and clean_messages[0].get("role") == "user"
 
             use_beta_api = False
@@ -854,10 +839,15 @@ class AgentHarness:
                 use_beta_api = True
 
             try:
+                start_time = time.process_time()
+
                 if use_beta_api:
                     response = await self.client.beta.messages.create(**kwargs)
                 else:
                     response = await self.client.messages.create(**kwargs)
+
+                duration = time.process_time() - start_time
+
             except Exception as e:
                 print(f"[agent] API error: {e}", flush=True)
                 await self.send({
@@ -881,12 +871,17 @@ class AgentHarness:
                     block_type = getattr(block, "type", None)
 
                 if block_type in ("thinking", "redacted_thinking"):
-                    if AGENT_DEBUG:
-                        thinking_text = block.get("thinking") if isinstance(block, dict) else getattr(block, "thinking", None)
-                        if thinking_text:
+                    thinking_text = block.get("thinking") if isinstance(block, dict) else getattr(block, "thinking", None)
+                    if thinking_text:
+                        if AGENT_DEBUG:
                             print(f"[agent] Thinking:\n{thinking_text}")
-                        else:
-                            print("[agent] Thinking block present (redacted)")
+                        await self.send({
+                            "type": "agent_thinking",
+                            "thoughts": thinking_text,
+                            "duration": duration,
+                        })
+                    else:
+                        print("[agent] Thinking block present (redacted)")
 
             if response.stop_reason == "end_turn":
                 if AGENT_DEBUG:

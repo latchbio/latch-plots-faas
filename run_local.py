@@ -47,13 +47,6 @@ def setup_environment_and_paths():
         "LATCH_SANDBOX_ROOT": str(latch_dir),
     })
 
-    if not os.environ.get("ANTHROPIC_API_KEY"):
-        print("\n Error: ANTHROPIC_API_KEY not set")
-        print("   The agent REQUIRES an API key to function.")
-        print("   Set it with: export ANTHROPIC_API_KEY=your_key_here")
-        print("   Then restart the server.\n")
-        sys.exit(1)
-
     import pathlib
     original_path_new = pathlib.Path.__new__
 
