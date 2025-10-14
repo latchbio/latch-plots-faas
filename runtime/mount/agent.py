@@ -854,7 +854,6 @@ class AgentHarness:
                 kwargs["betas"] = ["interleaved-thinking-2025-05-14"]
                 use_beta_api = True
 
-            duration = 0.0
             try:
                 start_time = time.process_time()
 
