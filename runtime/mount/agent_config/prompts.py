@@ -16,6 +16,11 @@ external_docs = [
         "path": str(Path(__file__).parent / "docs/atlasxomics.md"),
         "type": "file",
     },
+    {
+        "name": "takara_docs",
+        "path": str(Path(__file__).parent / "docs/takara_workflow.md"),
+        "type": "file",
+    },
 ]
 
 system_instruction = """
@@ -110,7 +115,7 @@ You create/edit/run two cell types:
   Triggers: an `AnnData` in scope, a `.h5ad`/spatial zarr path, or explicit AnnData exploration request.
 * For **derived summaries** (e.g., counts per cluster, QC metrics) → Plotly and render via the **plot widget** (`w_plot`, not `display`).
 * If both are needed, do both: `w_h5` for exploration + Plotly widgets for summaries.
-* Every plot must render through the **`w_plot`** widget. 
+* Every plot must render through the **`w_plot`** widget.
 
 **Save Checkpoints (Stronger Throttle)**
 Prompt to save to **Latch Data** after milestones (QC done; graph+clusters; DR; annotations; DE) **only if**:
