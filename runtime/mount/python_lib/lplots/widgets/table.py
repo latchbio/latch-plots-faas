@@ -59,6 +59,14 @@ def w_table(
             global_key = k
             break
 
+    if source is not None and global_key is None:
+        raise ValueError(
+            "Invalid argument `source` for w_table: the object must be a named\n"
+            "global variable so it can be tracked. Assign it to a variable in\n"
+            "the global scope (e.g., `my_df = ...`) and pass that variable, or\n"
+            "pass `None`."
+        )
+
     res = Table(
         _key=key,
         _state={
