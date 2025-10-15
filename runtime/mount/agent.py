@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 import socket
 import sys
@@ -569,15 +570,44 @@ class AgentHarness:
                 cell_type = cell.get("cell_type", "unknown")
                 status = cell.get("status", "idle")
                 source = cell.get("source", "")
+                tf_id = cell.get("tf_id", "?")
 
                 source_preview = source[:500] + "..." if len(source) > 500 else source
                 source_preview = source_preview.replace("\n", " ")
 
-                summary += f"\n[{index}] ({cell_type}, {status}, id: {cell_id})"
+                summary += f"\n[{index}] ({cell_type}, {status}, cell_id: {cell_id}, tf_id: {tf_id})"
                 if source_preview:
                     summary += f": {source_preview}"
 
+                widget_summary = self._format_widget_summaries(cell.get("widgets") or [])
+                if widget_summary:
+                    summary += f"\n  Widgets: {widget_summary}"
+
             return summary
+
+        async def set_widget(args: dict) -> str:
+            key = args.get("key")
+            if not key:
+                return "Widget key is required"
+
+            value = args.get("value")
+            if value is None:
+                return "Widget value is required"
+
+            if AGENT_DEBUG:
+                print(f"[tool] set_widget key={key} value={value!r}")
+
+            params = {
+                "key": key,
+                "value": json.dumps(value)
+            }
+            
+            result = await self.atomic_operation("set_widget", params)
+
+            if result.get("status") == "success":
+                return f"Updated widget value for: {key}"
+
+            return f"Failed to update widget value: {result.get('error', 'Unknown error')}"
 
         async def submit_response(args: dict) -> str:
             try:
@@ -745,6 +775,25 @@ class AgentHarness:
             },
         })
         self.tool_map["submit_response"] = submit_response
+
+        self.tools.append({
+                    "name": "set_widget",
+                    "description": "Set a single widget value by widget key.",
+                    "input_schema": {
+                        "type": "object",
+                        "properties": {
+                            "key": {
+                                "type": "string",
+                                "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
+                            },
+                            "value": {
+                                "description": "JSON-serializable value"
+                            },
+                        },
+                        "required": ["key", "value"],
+                    },
+                })
+        self.tool_map["set_widget"] = set_widget
 
     async def run_agent_loop(self) -> None:
         assert self.client is not None, "Client not initialized"
@@ -1017,6 +1066,26 @@ class AgentHarness:
                 await self.conversation_task
             except asyncio.CancelledError:
                 pass
+    
+    def _format_widget_summaries(self, widgets: list[dict]) -> str:
+            if not widgets:
+                return ""
+            
+            widget_summaries = []
+            for widget in widgets:
+                widget_key = widget.get("key") or "?"
+                widget_type = widget.get("type") or "unknown"
+                widget_value = widget.get("value") or ""
+                widget_label = widget.get("label") or ""
+                
+                widget_desc = f"key={widget_key}, type={widget_type}"
+                if widget_value:
+                    widget_desc += f", value={widget_value}"
+                if widget_label:
+                    widget_desc += f", label={widget_label}"
+                widget_summaries.append(widget_desc)
+            
+            return ", ".join(widget_summaries)
 
     async def handle_clear_history(self, msg: dict[str, object]) -> None:
         print("[agent] Clearing conversation history")
