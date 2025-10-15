@@ -58,6 +58,7 @@ class NotebookResponse(BaseModel):
     plan_diff: list[PlanDiff]
     summary: list[str] | None = None
     questions: list[str] | None = None
+    next_status: Literal["executing", "fixing", "thinking", "awaiting_user_response", "awaiting_cell_execution", "done"]
 
 
 from datetime import UTC
@@ -390,6 +391,7 @@ class AgentHarness:
             response_msg["structured_output"] = structured
 
             print("[agent] Sending agent_result with structured_output:")
+            print(f"  - next_status: {structured.get('next_status')}")
             print(f"  - plan: {len(structured.get('plan', []))} items")
             print(f"  - plan_diff: {len(structured.get('plan_diff', []))} items")
             for diff in structured.get("plan_diff", []):
@@ -619,6 +621,12 @@ class AgentHarness:
                 if not isinstance(questions, list):
                     questions = None
 
+                next_status = args.get("next_status")
+                if not isinstance(next_status, str) or next_status not in {"executing", "fixing", "thinking", "awaiting_user_response", "awaiting_cell_execution", "done"}:
+                    if AGENT_DEBUG:
+                        print(f"[agent] Invalid next_status: {next_status}")
+                    return "Please provide a valid next_status"
+
                 should_continue = args.get("continue", False)
 
                 plan_items = args.get("plan", [])
@@ -637,7 +645,8 @@ class AgentHarness:
                     plan=[PlanItem(**item) for item in plan_items],
                     plan_diff=[PlanDiff(**item) for item in plan_diff_items],
                     summary=summary,
-                    questions=questions
+                    questions=questions,
+                    next_status=next_status,
                 )
 
                 if should_continue and self.executing_cells:
@@ -757,7 +766,7 @@ class AgentHarness:
 
         self.tools.append({
             "name": "submit_response",
-            "description": "Submit the final response with plan, plan_diff, summary, and questions. Call this at the end of every turn.",
+            "description": "Submit the final response with plan, plan_diff, summary, next_status, and questions. Call this at the end of every turn.",
             "input_schema": {
                 "type": "object",
                 "properties": {
@@ -765,6 +774,7 @@ class AgentHarness:
                     "plan_diff": {"type": "array", "description": "List of plan diff items"},
                     "summary": {"type": "array", "description": "List of summary bullet points or null"},
                     "questions": {"type": "array", "description": "List of questions for the user or null"},
+                    "next_status": {"type": "string", "description": "What the agent will do next", "enum": ["executing", "fixing", "thinking", "awaiting_user_response", "awaiting_cell_execution", "awaiting_user_widget_input", "done"]},
                     "continue": {
                         "type": "boolean",
                         "description": "Set to true to immediately continue to the next step without waiting for user input. Set to false when waiting for user input or when all work is complete.",
@@ -1019,12 +1029,23 @@ class AgentHarness:
                 })
                 self._save_conversation_history()
 
+                question = f"Session resumed. I found an incomplete task: {preview}...\n\nWould you like me to continue?"
+                resume_plan = NotebookResponse(
+                    plan=[],
+                    plan_diff=[],
+                    questions=[question],
+                    next_status="awaiting_user_response",
+                    summary=None,
+                )
+
                 await self.send({
                     "type": "agent_result",
                     "status": "success",
-                    "responses": [f"Session resumed. I found an incomplete task: {preview}...\n\nWould you like me to continue?"],
+                    "responses": [question],
+                    "structured_output": resume_plan,
                     "mode": "planning",
                     "request_id": "resume"
+
                 })
 
             self.initialized = True

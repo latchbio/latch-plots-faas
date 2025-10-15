@@ -67,6 +67,15 @@ You create/edit/run two cell types:
 * **Success criteria:** A step is `done` when its primary cell(s) execute without errors
 * **Error handling:** If you're fixing errors within a step, keep it `in_progress` until the fix succeeds
 
+**Next Status**
+
+* `executing` - The agent is creating a cell or editing a cell or running a cell
+* `fixing` - The agent is fixing an error in a cell
+* `thinking` - The agent is thinking about the next step or what to do next
+* `awaiting_user_response` - The agent is awaiting a user response after providing a question to provide a clarification or to confirm a choice
+* `awaiting_cell_execution` - The agent is awaiting the execution of a cell
+* `done` - The agent has completed all work, will not start any new work and is not waiting for any user input or cell execution
+
 **Response Format**
 
 * **Every turn must end with `submit_response`** with this structure:
