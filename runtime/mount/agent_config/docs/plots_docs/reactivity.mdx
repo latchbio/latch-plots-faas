@@ -31,6 +31,16 @@ x_now = value.sample() # snapshot; no subscription
 value(20)              # schedules re-runs of subscribers
 ```
 
+Calling `.value` on a widget both retrieves the user input and subscribes the current cell to the cell where the widget is defined.
+
+```python
+## Cell 1 – Create widget
+text_input = w_text_input(label="Input")
+
+## Cell 2 – Access value (subscribes to Cell 1)
+text_input_value = text_input.value
+```
+
 **Immutability rule**
 Signals store a reference; internal mutation is invisible. Copy when “updating”:
 

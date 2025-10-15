@@ -3,11 +3,13 @@ import json
 import os
 import socket
 import sys
+import time
 import traceback
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
+from pathlib import Path
 from typing import Literal
 
 import anthropic
@@ -16,7 +18,7 @@ from config_loader import build_full_instruction
 from lplots import _inject
 from pydantic import BaseModel
 from socketio_thread import SocketIoThread
-from utils import auth_token_sdk, nucleus_url
+from utils import auth_token_sdk, nucleus_url, pod_id
 
 sandbox_root = os.environ.get("LATCH_SANDBOX_ROOT")
 if sandbox_root:
@@ -73,6 +75,48 @@ class PlanDiffPayload(TypedDict):
     description: str
 
 
+class SerializedTextBlock(TypedDict):
+    type: Literal["text"]
+    text: str
+
+
+class SerializedThinkingBlock(TypedDict):
+    type: Literal["thinking"]
+    thinking: str
+
+
+class SerializedRedactedThinkingBlock(TypedDict):
+    type: Literal["redacted_thinking"]
+
+
+class SerializedToolUseBlock(TypedDict):
+    type: Literal["tool_use"]
+    id: str
+    name: str
+    input: dict
+
+
+class SerializedToolResultBlock(TypedDict):
+    type: Literal["tool_result"]
+    tool_use_id: str
+    content: str
+    is_error: bool
+
+
+SerializedContentBlock = SerializedTextBlock | SerializedThinkingBlock | SerializedRedactedThinkingBlock | SerializedToolUseBlock | SerializedToolResultBlock
+
+
+class SerializedMessage(TypedDict):
+    role: Literal["user", "assistant"]
+    content: list[SerializedContentBlock] | str
+
+
+class ConversationHistoryFile(TypedDict):
+    version: Literal[1]
+    last_updated: str
+    messages: list[SerializedMessage]
+
+
 @dataclass
 class AgentHarness:
     conn: SocketIoThread
@@ -105,6 +149,106 @@ class AgentHarness:
         msg_type = msg.get("type", "unknown")
         print(f"[agent] Sending message: {msg_type}", flush=True)
         await self.conn.send(msg)
+
+    def _get_history_file_path(self) -> Path:
+        latch_p = Path(os.environ.get("LATCH_SANDBOX_ROOT", "/root/.latch"))
+        return latch_p / "conversation_history.json"
+
+    def _serialize_content(self, content: list | str) -> list[SerializedContentBlock] | str:
+        if isinstance(content, str):
+            return content
+
+        serialized: list[SerializedContentBlock] = []
+        for block in content:
+            if isinstance(block, dict):
+                serialized.append(block)
+            elif hasattr(block, "type"):
+                if block.type == "text":
+                    serialized.append({"type": "text", "text": block.text})
+                elif block.type == "thinking":
+                    serialized.append({"type": "thinking", "thinking": block.thinking})
+                elif block.type == "redacted_thinking":
+                    serialized.append({"type": "redacted_thinking"})
+                elif block.type == "tool_use":
+                    serialized.append({
+                        "type": "tool_use",
+                        "id": block.id,
+                        "name": block.name,
+                        "input": block.input
+                    })
+                elif block.type == "tool_result":
+                    serialized.append({
+                        "type": "tool_result",
+                        "tool_use_id": block.tool_use_id,
+                        "content": block.content,
+                        "is_error": getattr(block, "is_error", False)
+                    })
+            else:
+                serialized.append({"type": "text", "text": str(block)})
+        return serialized
+
+    def _serialize_message(self, message: MessageParam) -> SerializedMessage:
+        return {
+            "role": message["role"],
+            "content": self._serialize_content(message["content"])
+        }
+
+    def _load_conversation_history(self) -> None:
+        history_file = self._get_history_file_path()
+
+        if not history_file.exists():
+            print("[agent] No existing conversation history found", flush=True)
+            return
+
+        try:
+            import json
+
+            with open(history_file, "r") as f:
+                data: ConversationHistoryFile = json.load(f)
+
+            if data.get("version") != 1:
+                print(f"[agent] Unknown history version: {data.get('version')}", flush=True)
+                return
+
+            self.conversation_history = data.get("messages", [])
+
+            print(f"[agent] Loaded {len(self.conversation_history)} messages from history (last updated: {data.get('last_updated')})", flush=True)
+        except Exception as e:
+            print(f"[agent] Error loading conversation history: {e}", flush=True)
+            self.conversation_history = []
+
+    def _save_conversation_history(self) -> None:
+        history_file = self._get_history_file_path()
+
+        try:
+            import json
+            from datetime import datetime, timezone
+
+            data: ConversationHistoryFile = {
+                "version": 1,
+                "last_updated": datetime.now(timezone.utc).isoformat(),
+                "messages": [self._serialize_message(msg) for msg in self.conversation_history]
+            }
+
+            with open(history_file, "w") as f:
+                json.dump(data, f, indent=2)
+
+            if AGENT_DEBUG:
+                print(f"[agent] Saved {len(self.conversation_history)} messages to history", flush=True)
+        except Exception as e:
+            print(f"[agent] Error saving conversation history: {e}", flush=True)
+
+    def _clear_conversation_history(self) -> None:
+        history_file = self._get_history_file_path()
+
+        try:
+            if history_file.exists():
+                history_file.unlink()
+
+            self.conversation_history = []
+            print("[agent] Conversation history cleared", flush=True)
+        except Exception as e:
+            print(f"[agent] Error clearing conversation history: {e}", flush=True)
 
     async def atomic_operation(self, action: str, params: dict) -> dict:
         self.operation_counter += 1
@@ -200,6 +344,7 @@ class AgentHarness:
                 "role": "user",
                 "content": msg["content"],
             })
+            self._save_conversation_history()
 
             if AGENT_DEBUG:
                 content_preview = msg["content"][:100]
@@ -223,6 +368,7 @@ class AgentHarness:
                 "role": "user",
                 "content": result_content,
             })
+            self._save_conversation_history()
 
         elif msg_type == "stop":
             self.conversation_running = False
@@ -712,15 +858,30 @@ class AgentHarness:
 
             clean_messages = [m for m in self.conversation_history if _has_content(m)]
 
+            has_any_thinking = any(self._message_has_thinking(m) for m in clean_messages)
+
+            api_messages = []
+            for msg in clean_messages:
+                content = msg.get("content")
+                if isinstance(content, list):
+                    filtered_content = [
+                        block for block in content
+                        if not (isinstance(block, dict) and block.get("type") in ("thinking", "redacted_thinking"))
+                    ]
+                    if filtered_content:
+                        api_messages.append({"role": msg["role"], "content": filtered_content})
+                    elif msg.get("role") == "assistant":
+                        api_messages.append({"role": msg["role"], "content": [{"type": "text", "text": ""}]})
+                else:
+                    api_messages.append(msg)
+
             kwargs = {
                 "model": model,
                 "max_tokens": max_tokens,
                 "system": self.system_prompt,
-                "messages": clean_messages,
+                "messages": api_messages,
                 "tools": self.tools,
             }
-
-            has_any_thinking = any(self._message_has_thinking(m) for m in clean_messages)
             first_turn = len(clean_messages) == 1 and clean_messages[0].get("role") == "user"
 
             use_beta_api = False
@@ -733,10 +894,15 @@ class AgentHarness:
                 use_beta_api = True
 
             try:
+                start_time = time.process_time()
+
                 if use_beta_api:
                     response = await self.client.beta.messages.create(**kwargs)
                 else:
                     response = await self.client.messages.create(**kwargs)
+
+                duration = time.process_time() - start_time
+
             except Exception as e:
                 print(f"[agent] API error: {e}", flush=True)
                 await self.send({
@@ -751,6 +917,7 @@ class AgentHarness:
                 "content": response.content,
             }
             self.conversation_history.append(assistant_msg)
+            self._save_conversation_history()
 
             for block in response.content:
                 if isinstance(block, dict):
@@ -759,12 +926,17 @@ class AgentHarness:
                     block_type = getattr(block, "type", None)
 
                 if block_type in ("thinking", "redacted_thinking"):
-                    if AGENT_DEBUG:
-                        thinking_text = block.get("thinking") if isinstance(block, dict) else getattr(block, "thinking", None)
-                        if thinking_text:
+                    thinking_text = block.get("thinking") if isinstance(block, dict) else getattr(block, "thinking", None)
+                    if thinking_text:
+                        if AGENT_DEBUG:
                             print(f"[agent] Thinking:\n{thinking_text}")
-                        else:
-                            print("[agent] Thinking block present (redacted)")
+                        await self.send({
+                            "type": "agent_thinking",
+                            "thoughts": thinking_text,
+                            "duration": duration,
+                        })
+                    else:
+                        print("[agent] Thinking block present (redacted)")
 
             if response.stop_reason == "end_turn":
                 if AGENT_DEBUG:
@@ -820,6 +992,7 @@ class AgentHarness:
                         "role": "user",
                         "content": tool_results,
                     })
+                    self._save_conversation_history()
                 elif AGENT_DEBUG:
                     print("[agent] No tool results")
 
@@ -847,10 +1020,12 @@ class AgentHarness:
             self.client = anthropic.AsyncAnthropic(
                 api_key="dummy",
                 base_url=f"{nucleus_url}/infer/plots-agent/anthropic",
-                default_headers={"Authorization": auth_token_sdk}
+                default_headers={"Authorization": auth_token_sdk, "Pod-Id": str(pod_id)}
             )
 
             self.system_prompt = build_full_instruction(self.instructions_context)
+
+            self._load_conversation_history()
 
             self.initialized = True
             await self.send({
@@ -912,6 +1087,13 @@ class AgentHarness:
             
             return ", ".join(widget_summaries)
 
+    async def handle_clear_history(self, msg: dict[str, object]) -> None:
+        print("[agent] Clearing conversation history")
+        self._clear_conversation_history()
+        await self.send({
+            "type": "history_cleared",
+        })
+
     async def accept(self) -> None:
         msg = await self.conn.recv()
         msg_type = msg.get("type")
@@ -933,6 +1115,10 @@ class AgentHarness:
                 request_id = msg.get("request_id", "unknown")
                 print(f"[agent] Cancel: {request_id}")
             await self.handle_cancel(msg)
+        elif msg_type == "agent_clear_history":
+            if AGENT_DEBUG:
+                print("[agent] Clear history request")
+            await self.handle_clear_history(msg)
         elif msg_type == "agent_action_response":
             if AGENT_DEBUG:
                 action = msg.get("action", "unknown")

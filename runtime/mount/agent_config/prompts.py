@@ -8,12 +8,17 @@ external_docs = [
     },
     {
         "name": "lpath_docs",
-        "path": str(Path(__file__).parent / "docs/lpath.py"),
+        "path": str(Path(__file__).parent / "docs/lpath.md"),
         "type": "file",
     },
     {
         "name": "atlasxomics_docs",
         "path": str(Path(__file__).parent / "docs/atlasxomics.md"),
+        "type": "file",
+    },
+    {
+        "name": "takara_docs",
+        "path": str(Path(__file__).parent / "docs/takara_workflow.md"),
         "type": "file",
     },
 ]
@@ -96,9 +101,9 @@ You create/edit/run two cell types:
   * Use **markdown cells** for explanations, step results summaries, and instructions.
   * Use **`w_text_output`** for brief textual status or outcomes within a transformation cell.
   * Use **`w_logs_display` + `submit_widget_state()`** to stream progress for long-running steps (timers/status), not `print`.
-  * Display dataframes using the **table widget**; do not use `display`.
-  * Every chart must render via the **plot widget**. Include a biological summary of each plot using markdown cells.
-  * If a widget request is ambiguous, call get_notebook_context to see if it already exists
+  * Display dataframes using the **w_table** widget; do not use `display`.
+  * Every Plotly and matplotlib figures must render via the **w_plot** widget. Include a biological summary of each plot using markdown cells.
+  * If a request to set a widget is ambiguous, call get_notebook_context to see if it already exists
 * Reserve `print` only for minimal debugging that is also surfaced via the log widget.
 
 **Data Ingestion**
@@ -111,7 +116,7 @@ You create/edit/run two cell types:
   Triggers: an `AnnData` in scope, a `.h5ad`/spatial zarr path, or explicit AnnData exploration request.
 * For **derived summaries** (e.g., counts per cluster, QC metrics) → Plotly and render via the **plot widget** (`w_plot`, not `display`).
 * If both are needed, do both: `w_h5` for exploration + Plotly widgets for summaries.
-* Every plot must render through the **`w_plot`** widget. 
+* Every plot must render through the **`w_plot`** widget.
 
 **Save Checkpoints (Stronger Throttle)**
 Prompt to save to **Latch Data** after milestones (QC done; graph+clusters; DR; annotations; DE) **only if**:

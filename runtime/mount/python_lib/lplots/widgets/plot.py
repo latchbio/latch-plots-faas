@@ -65,6 +65,14 @@ def w_plot(
             global_key = k
             break
 
+    if source is not None and global_key is None:
+        raise ValueError(
+            "Invalid argument `source` for w_plot: the object must be a named\n"
+            "global variable so it can be tracked. Assign it to a variable in\n"
+            "the global scope (e.g., `my_fig = ...`) and pass that variable, or\n"
+            "pass `None`."
+        )
+
     plot_title: str | None = None
     if isinstance(source, SubFigure | Figure):
         plot_title = source.axes[0].get_title()
