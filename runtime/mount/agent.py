@@ -590,21 +590,16 @@ class AgentHarness:
             if not key:
                 return "Widget key is required"
 
-            value_json = args.get("value")
-            if not value_json:
+            value = args.get("value")
+            if value is None:
                 return "Widget value is required"
 
             if AGENT_DEBUG:
-                print(f"[tool] set_widget key={key} value={value_json}")
-
-            try:
-                parsed_value = json.loads(value_json)
-            except json.JSONDecodeError:
-                return f"Failed to update widget value: invalid JSON for '{key}'"
+                print(f"[tool] set_widget key={key} value={value!r}")
 
             params = {
                 "key": key,
-                "value": json.dumps(parsed_value)
+                "value": json.dumps(value)
             }
             
             result = await self.atomic_operation("set_widget", params)
@@ -792,8 +787,7 @@ class AgentHarness:
                                 "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
                             },
                             "value": {
-                                "type": "string",
-                                "description": "JSON-serializable value string"
+                                "description": "JSON-serializable value"
                             },
                         },
                         "required": ["key", "value"],
