@@ -59,6 +59,8 @@ class NotebookResponse(BaseModel):
     questions: list[str] | None = None
 
 
+from datetime import UTC
+
 from typing_extensions import TypedDict
 
 
@@ -202,7 +204,7 @@ class AgentHarness:
         try:
             import json
 
-            with open(history_file, "r") as f:
+            with open(history_file) as f:
                 data: ConversationHistoryFile = json.load(f)
 
             if data.get("version") != 1:
@@ -210,6 +212,13 @@ class AgentHarness:
                 return
 
             self.conversation_history = data.get("messages", [])
+
+            for msg in self.conversation_history:
+                content = msg.get("content")
+                if isinstance(content, list):
+                    for block in content:
+                        if isinstance(block, dict) and block.get("type") in ("thinking", "redacted_thinking"):
+                            block["_loaded_from_history"] = True
 
             print(f"[agent] Loaded {len(self.conversation_history)} messages from history (last updated: {data.get('last_updated')})", flush=True)
         except Exception as e:
@@ -221,11 +230,11 @@ class AgentHarness:
 
         try:
             import json
-            from datetime import datetime, timezone
+            from datetime import datetime
 
             data: ConversationHistoryFile = {
                 "version": 1,
-                "last_updated": datetime.now(timezone.utc).isoformat(),
+                "last_updated": datetime.now(UTC).isoformat(),
                 "messages": [self._serialize_message(msg) for msg in self.conversation_history]
             }
 
@@ -288,36 +297,6 @@ class AgentHarness:
 
         self.mode = mode
         print(f"[agent] Mode changed to {mode.value}")
-
-    def _last_assistant_msg_has_thinking(self) -> bool:
-        for msg in self.conversation_history[::-1]:
-            if msg.get("role") != "assistant":
-                continue
-
-            content = msg.get("content", [])
-            if not isinstance(content, list):
-                return False
-
-            has_thinking = False
-            has_text = False
-
-            for block in content:
-                if isinstance(block, dict):
-                    block_type = block.get("type")
-                else:
-                    block_type = getattr(block, "type", None)
-
-                if block_type in ("thinking", "redacted_thinking"):
-                    has_thinking = True
-                elif block_type == "text":
-                    has_text = True
-
-            if has_thinking:
-                return True
-            if has_text:
-                return False
-
-        return False
 
     def _message_has_thinking(self, msg: dict) -> bool:
         if msg.get("role") != "assistant":
@@ -409,10 +388,10 @@ class AgentHarness:
             structured = self.current_structured_output.model_dump()
             response_msg["structured_output"] = structured
 
-            print(f"[agent] Sending agent_result with structured_output:")
+            print("[agent] Sending agent_result with structured_output:")
             print(f"  - plan: {len(structured.get('plan', []))} items")
             print(f"  - plan_diff: {len(structured.get('plan_diff', []))} items")
-            for diff in structured.get('plan_diff', []):
+            for diff in structured.get("plan_diff", []):
                 print(f"    - [{diff.get('action')}] {diff.get('id')}: {diff.get('description')}")
 
             self.current_structured_output = None
@@ -615,7 +594,7 @@ class AgentHarness:
                 plan_items = args.get("plan", [])
                 plan_diff_items = args.get("plan_diff", [])
 
-                print(f"[tool] submit_response called with:")
+                print("[tool] submit_response called with:")
                 print(f"  - plan: {len(plan_items)} items")
                 for item in plan_items:
                     print(f"    - [{item.get('status')}] {item.get('id')}: {item.get('description')}")
@@ -803,15 +782,15 @@ class AgentHarness:
 
             clean_messages = [m for m in self.conversation_history if _has_content(m)]
 
-            has_any_thinking = any(self._message_has_thinking(m) for m in clean_messages)
-
             api_messages = []
             for msg in clean_messages:
                 content = msg.get("content")
                 if isinstance(content, list):
                     filtered_content = [
                         block for block in content
-                        if not (isinstance(block, dict) and block.get("type") in ("thinking", "redacted_thinking"))
+                        if not (isinstance(block, dict) and
+                                block.get("type") in ("thinking", "redacted_thinking") and
+                                block.get("_loaded_from_history"))
                     ]
                     if filtered_content:
                         api_messages.append({"role": msg["role"], "content": filtered_content})
@@ -827,10 +806,8 @@ class AgentHarness:
                 "messages": api_messages,
                 "tools": self.tools,
             }
-            first_turn = len(clean_messages) == 1 and clean_messages[0].get("role") == "user"
-
             use_beta_api = False
-            if thinking_budget is not None and (first_turn or has_any_thinking):
+            if thinking_budget is not None:
                 kwargs["thinking"] = {
                     "type": "enabled",
                     "budget_tokens": thinking_budget,
@@ -971,6 +948,35 @@ class AgentHarness:
             self.system_prompt = build_full_instruction(self.instructions_context)
 
             self._load_conversation_history()
+
+            has_pending_work = (
+                len(self.conversation_history) > 0 and
+                self.conversation_history[-1].get("role") == "user"
+            )
+
+            print(f"[agent] Checking for pending work: {has_pending_work} (history length: {len(self.conversation_history)})", flush=True)
+            if len(self.conversation_history) > 0:
+                last_msg = self.conversation_history[-1]
+                print(f"[agent] Last message role: {last_msg.get('role')}", flush=True)
+
+            if has_pending_work:
+                last_user_msg = self.conversation_history[-1]
+                content = last_user_msg.get("content", "")
+                preview = str(content)[:100] if isinstance(content, str) else "previous request"
+
+                self.conversation_history.append({
+                    "role": "assistant",
+                    "content": [{"type": "text", "text": f"I see we were interrupted while I was working on: {preview}...\n\nWould you like me to continue?"}]
+                })
+                self._save_conversation_history()
+
+                await self.send({
+                    "type": "agent_result",
+                    "status": "success",
+                    "responses": [f"Session resumed. I found an incomplete task: {preview}...\n\nWould you like me to continue?"],
+                    "mode": "planning",
+                    "request_id": "resume"
+                })
 
             self.initialized = True
             await self.send({
