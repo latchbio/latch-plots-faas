@@ -121,6 +121,7 @@ class ConversationHistoryFile(TypedDict):
 @dataclass
 class AgentHarness:
     conn: SocketIoThread
+    initial_query: str | None = None
     initialized: bool = False
     client: anthropic.AsyncAnthropic | None = None
     conversation_history: list[MessageParam] = field(default_factory=list)
@@ -986,6 +987,14 @@ class AgentHarness:
             print("[agent] Initialization complete", flush=True)
 
             self.conversation_task = asyncio.create_task(self.run_agent_loop())
+
+            if self.initial_query and not has_pending_work:
+                print(f"[agent] Sending initial query: {self.initial_query}", flush=True)
+                await self.pending_messages.put({
+                    "type": "user_query",
+                    "content": self.initial_query,
+                    "request_id": "eval_initial",
+                })
         except Exception as e:
             await self.send({
                 "type": "agent_error",
@@ -1082,13 +1091,20 @@ class AgentHarness:
 
 
 async def main() -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("socket_fd", type=int, help="Unix socket file descriptor")
+    parser.add_argument("--initial-query", type=str, help="Auto-send query on startup")
+    args = parser.parse_args()
+
     global loop
     loop = asyncio.get_running_loop()
 
     from datetime import datetime
     print(f"{datetime.now().isoformat()} [agent] Starting", flush=True)
 
-    sock = socket.socket(family=socket.AF_UNIX, fileno=int(sys.argv[-1]))
+    sock = socket.socket(family=socket.AF_UNIX, fileno=args.socket_fd)
     sock.setblocking(False)
 
     socket_io_thread = SocketIoThread(socket=sock)
@@ -1096,7 +1112,7 @@ async def main() -> None:
     try:
         socket_io_thread.initialized.wait()
 
-        harness = AgentHarness(conn=socket_io_thread)
+        harness = AgentHarness(conn=socket_io_thread, initial_query=args.initial_query)
         _inject.agent = harness
 
         await harness.send({"type": "ready"})

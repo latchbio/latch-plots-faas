@@ -65,7 +65,7 @@ kernel_snapshot_state = KernelSnapshotState()
 async_tasks: list[asyncio.Task] = []
 
 
-latch_p = Path("/root/.latch")
+latch_p = Path(os.environ.get("LATCH_SANDBOX_ROOT", "/root/.latch"))
 sdk_token = (latch_p / "token").read_text()
 auth_token_sdk = f"Latch-SDK-Token {sdk_token}"
 

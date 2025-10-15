@@ -1,0 +1,6 @@
+{
+  "id": "cluster_workflow_001",
+  "task": "Run a clustering analysis on this spatial transcriptomics dataset using the available clustering workflow.",
+  "data_node": "latch://38438.account/Kosta/Kostallari_SOW313_ATAC",
+  "judge_prompt": "Evaluate whether the agent correctly used the w_workflow widget to launch clustering. Check:\n\n1. Widget Usage: Did the agent use w_workflow widget to launch the clustering algorithm?\n2. Parameters: Did the agent create widgets for the workflow parameters (e.g., number of clusters, algorithm type)?\n3. Data Connection: Did the agent properly connect the latch data node to the workflow?\n4. Execution: Did the workflow get launched successfully?\n\nProvide a structured evaluation with:\n- score: 0.0 to 1.0 (0.0 = complete failure, 1.0 = perfect execution)\n- passed: boolean (true if score >= 0.7)\n- reasoning: detailed explanation of the score\n- successes: list of specific things done correctly\n- failures: list of specific things done incorrectly or missed\n\nNote: The agent should NOT write clustering code directly. It should use the workflow system."
+}
