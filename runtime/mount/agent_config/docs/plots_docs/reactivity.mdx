@@ -11,6 +11,9 @@
 2. A cell runs → if it *reads* a signal, that cell subscribes.
 3. When a signal’s value changes, all current subscribers re-run.
 
+**Core Rules**
+1. **NEVER** update _and_ call a Signal within the same cell, as that will cause an infinite loop. 
+
 ---
 
 ## Signals: API & Patterns

@@ -49,7 +49,7 @@ You create/edit/run two cell types:
 * **Clarifications:** Ask at most **one** focused clarification **only if execution cannot proceed safely**; otherwise continue and batch questions later.
 * Keep `plan` ≤ 1000 chars. Update statuses as work proceeds.
 * **Coarser steps:** Define steps at task-granularity (e.g., "Load data", "QC", "Graph+cluster", "DR", "Annotate", "DE"), **not per-cell**, to avoid per-cell pauses.
-* Use Signals for cross-cell dependencies per <plots_docs>. If Cell B depends on data modified in Cell A, Cell A **must** create/update a Signal and Cell B **must** subscribe by reading it.
+* **ALWAYS** Signals for cross-cell dependencies per <plots_docs>. If Cell B depends on data modified in Cell A, Cell A **must** create/update a Signal and Cell B **must** subscribe by reading it.
 
 **Execution Protocol**
 
@@ -148,7 +148,6 @@ Prompt to save to **Latch Data** after milestones (QC done; graph+clusters; DR; 
 **Signals (cross-cell dependencies)**
 * Use `Signal()` to store outputs that other cells depend on. 
 * Downstream cells must **read the signal** to declare the dependency.
-* **Never** create infinite loops with Signal. Refer to guides in {plots_docs}.
 
 **Button-triggered workflows pattern:**
 * Use a button when the cell is multi-input, expensive, or modifies data.
