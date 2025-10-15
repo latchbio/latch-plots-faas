@@ -4,6 +4,7 @@ import json
 import os
 import socket
 import sys
+import textwrap
 import time
 from pathlib import Path
 
@@ -31,6 +32,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from mount.socketio import SocketIo
 
+
 class EvalServer:
     def __init__(self, test_case: TestCase, latch_dir: Path):
         self.test_case = test_case
@@ -44,6 +46,8 @@ class EvalServer:
         self.agent_sock = None
         self.agent_conn = None
         self.websocket = None
+        self.notebook_context = None
+        self.cleanup_complete = False
 
     async def start_agent(self):
         print(f"[eval] Starting agent for test: {self.test_case.id}")
@@ -57,13 +61,27 @@ class EvalServer:
 
         agent_path = Path(__file__).parent.parent.parent / "agent.py"
 
+        data_context = ""
+        if self.test_case.data_node:
+            contextual_data = [{
+                "type": "File",
+                "path": self.test_case.data_node,
+                "id": self.test_case.data_node.replace("latch:///", "").replace(".csv", ""),
+            }]
+            data_context = f"\n\nHere is the context of the selected nodes the user would like to use: <ContextualNodeData>{json.dumps(contextual_data)}</ContextualNodeData>"
+
+        initial_query = textwrap.dedent(f"""
+            First, delete all cells in the notebook to start fresh. Then: {self.test_case.task}
+            {data_context}
+        """).strip()
+
         self.agent_proc = await asyncio.create_subprocess_exec(
             sys.executable,
             "-u",
             str(agent_path),
             str(sock_agent_fd),
             "--initial-query",
-            self.test_case.task,
+            initial_query,
             pass_fds=[sock_agent_fd],
             stdin=asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.PIPE,
@@ -93,13 +111,61 @@ class EvalServer:
         if msg.get("type") == "ready":
             print("[eval] Agent ready")
 
+    async def get_notebook_context_from_console(self):
+        print("[eval] Requesting notebook context from console...")
+
+        if not self.websocket:
+            print("[eval] Error: websocket is None")
+            return None
+
+        tx_id = "eval_get_context"
+        context_request = {
+            "type": "agent_action",
+            "action": "get_context",
+            "params": {},
+            "tx_id": tx_id
+        }
+
+        try:
+            await self.websocket.send(json.dumps(context_request))
+            print("[eval] Sent context request, waiting for response...")
+        except Exception as e:
+            print(f"[eval] Error sending context request: {e}")
+            return None
+
+        try:
+            response_msg = await asyncio.wait_for(self.websocket.recv(), timeout=5.0)
+            response = json.loads(response_msg)
+
+            print(f"[eval] Received response: type={response.get('type')}, tx_id={response.get('tx_id')}")
+
+            if response.get("tx_id") == tx_id and response.get("type") == "agent_action_response":
+                if response.get("status") == "success":
+                    context = response.get("context", {})
+                    print(f"[eval] Got notebook context: {len(context.get('cells', []))} cells")
+                    return context
+                else:
+                    print(f"[eval] Failed to get context: status={response.get('status')}, error={response.get('error')}")
+                    return None
+            else:
+                print(f"[eval] Unexpected response type: {response.get('type')}, expected 'agent_action_response'")
+                return None
+        except asyncio.TimeoutError:
+            print("[eval] Timeout waiting for notebook context")
+            return None
+        except Exception as e:
+            print(f"[eval] Error getting notebook context: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+
     async def stop_agent(self):
         if self.agent_proc:
             print("[eval] Stopping agent")
             try:
                 self.agent_proc.terminate()
                 await asyncio.wait_for(self.agent_proc.wait(), timeout=2)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 self.agent_proc.kill()
                 await self.agent_proc.wait()
 
@@ -160,16 +226,36 @@ class EvalServer:
                     break
                 await asyncio.sleep(1)
 
-            print("[eval] Test complete, stopping agent")
-            forward_task.cancel()
+            print("[eval] Test complete, stopping console→agent forwarding...")
             receive_task.cancel()
+            try:
+                await asyncio.wait_for(receive_task, timeout=0.1)
+            except (asyncio.CancelledError, asyncio.TimeoutError):
+                pass
+
+            print("[eval] Getting notebook context...")
+            self.notebook_context = await self.get_notebook_context_from_console()
+
+            if not self.notebook_context:
+                print("[eval] Warning: Failed to get notebook context, websocket may be closed")
+
+            print("[eval] Stopping agent→console forwarding...")
+            forward_task.cancel()
+            try:
+                await asyncio.wait_for(forward_task, timeout=0.1)
+            except (asyncio.CancelledError, asyncio.TimeoutError):
+                pass
 
             await self.stop_agent()
+
+            print("[eval] Cleanup complete")
+            self.cleanup_complete = True
         except Exception as e:
             print(f"[eval] Error in handle_console_connection: {e}")
             import traceback
             traceback.print_exc()
             await self.stop_agent()
+            self.cleanup_complete = True
             raise
 
     async def handle_agent_message(self, msg: dict):
@@ -195,9 +281,9 @@ class EvalServer:
                 await self.agent_conn.send(auto_response)
                 self.has_questions = False
                 self.agent_sent_result = False
-                print(f"[eval] Waiting for agent to respond to auto-answer...")
+                print("[eval] Waiting for agent to respond to auto-answer...")
             else:
-                print(f"[eval] Agent sent result (no questions)")
+                print("[eval] Agent sent result (no questions)")
 
         elif msg_type in ("start_cell", "cell_result"):
             cell_id = msg.get("cell_id")
@@ -217,23 +303,27 @@ class EvalServer:
 
         running_cells = [cid for cid, status in self.cell_status.items() if status == "running"]
         if running_cells:
+            print(f"[eval] Not done: {len(running_cells)} cells still running: {running_cells}")
             return False
 
         if self.last_message_time is None:
             return False
 
         idle_time = time.time() - self.last_message_time
-        if idle_time < 10:
+        if idle_time < 20:
+            if idle_time > 5:
+                print(f"[eval] Waiting for completion: idle for {idle_time:.1f}s (need 20s)")
             return False
 
         print(f"[eval] Completion detected: result sent, no questions, no running cells, idle for {idle_time:.1f}s")
         return True
 
+
 async def run_eval(test_case: TestCase, port: int, latch_dir: Path) -> TestResult:
     print(f"\n{'=' * 70}")
     print(f"Running eval: {test_case.id}")
     print(f"Listening on port: {port}")
-    print('=' * 70)
+    print("=" * 70)
 
     start_time = time.time()
 
@@ -248,21 +338,25 @@ async def run_eval(test_case: TestCase, port: int, latch_dir: Path) -> TestResul
         server.handle_console_connection,
         "localhost",
         port,
-        process_request=process_request
+        process_request=process_request,
+        max_size=10 * 1024 * 1024
     ):
         print(f"[eval] WebSocket server listening on ws://localhost:{port}/agent")
-        print(f"[eval] Connect your console to this URL")
+        print("[eval] Connect your console to this URL")
 
-        while not server.is_done():
+        while not server.cleanup_complete:
             await asyncio.sleep(1)
 
     duration_ms = (time.time() - start_time) * 1000
 
-    notebook_state = {
-        "cells": [],
-        "cell_status": server.cell_status,
-        "cell_last_run_outputs": {},
-    }
+    if not server.notebook_context:
+        error_msg = "Failed to retrieve notebook context from console. "
+        if not server.websocket:
+            error_msg += "Console never connected to the eval server. "
+        error_msg += "Make sure the console is connected to ws://localhost:{port}/agent before starting the eval."
+        raise RuntimeError(error_msg)
+
+    notebook_state = server.notebook_context
 
     test_result = TestResult(
         test_id=test_case.id,
@@ -271,10 +365,13 @@ async def run_eval(test_case: TestCase, port: int, latch_dir: Path) -> TestResul
         duration_ms=duration_ms,
     )
 
-    print(f"\n[eval] Eval completed in {duration_ms/1000:.2f}s")
+    print(f"\n[eval] Eval completed in {duration_ms / 1000:.2f}s")
     print(f"[eval] Total conversation turns: {len(server.conversation_history)}")
+    cells = notebook_state.get("cells", [])
+    print(f"[eval] Final notebook state: {len(cells)} cells")
 
     return test_result
+
 
 async def main():
     parser = argparse.ArgumentParser(description="Run agent eval server")
@@ -319,14 +416,14 @@ async def main():
         headers={"Authorization": auth_token_sdk, "Pod-Id": str(pod_id)}
     )
 
-    print(f"\n[eval] Judging result...")
+    print("\n[eval] Judging result...")
     eval_result = await judge.evaluate(test_case, result)
     result.eval_result = eval_result
 
     print(f"\n{'=' * 70}")
     print(f"Score: {eval_result.score:.2f}")
     print(f"Passed: {'✓ PASS' if eval_result.passed else '✗ FAIL'}")
-    print(f"\nReasoning:")
+    print("\nReasoning:")
     print(eval_result.reasoning)
     print(f"\nSuccesses ({len(eval_result.successes)}):")
     for success in eval_result.successes:
@@ -334,12 +431,13 @@ async def main():
     print(f"\nFailures ({len(eval_result.failures)}):")
     for failure in eval_result.failures:
         print(f"  ✗ {failure}")
-    print('=' * 70)
+    print("=" * 70)
 
     output_file = eval_dir / f"result_{test_case.id}.json"
     with open(output_file, "w") as f:
         json.dump(result.model_dump(), f, indent=2)
     print(f"\n[eval] Result saved to {output_file}")
+
 
 if __name__ == "__main__":
     asyncio.run(main())
