@@ -11,12 +11,15 @@ This is the **authoritative step-by-step pipeline** for AtlasxOmics experiment. 
 The section below defines detailed guidelines for each of the above steps.
 
 ### **Workflow Rules**
+
+<workflow_rules>
 When the step requires launching a workflow:
 - **Always render a form** with `lplots.widgets`  for all workflow inputs. **Do not** ask users questions in text. Pre-populate each widget with sensible `default` whenever possible.
 - **Do not** hardcode values the in the dictionary.
 - **Never** pass local paths to workflow params. Always upload to Latch Data and parse in the correct `latch://` paths.
 - **Always use the exact `version` provided in workflow code example.**  
 - **Always include `w.value` at the end**
+</workflow_rules>
 
 ### **Data Loading**: 
 - Identify the correct node ID for either `combined_sm_ge.h5ad` (gene activity scores) or `combined_sm_motifs.h5ad` (motif enrichment), and load the file using `LPath("latch://<node_id>.node")`
@@ -24,9 +27,11 @@ When the step requires launching a workflow:
 
 ### **Clustering (workflow only)**: 
 - Use `w_workflow` to launch the AtlasXOmics clustering workflow.
-- If the user want to cluster only a subset of the AnnData, include the optional parameter `adata_subset` (as a LatchFile) in params. Otherwise, omit it entirely.
+- If the user want to cluster only a subset of the AnnData, include the optional parameter `adata_subsetted_file` (as a LatchFile) in params. Otherwise, omit it entirely.
 
 ### Clustering Workflow Parameters
+
+- Strictly follow <workflow_rules>.
 
 #### **Required**
 - `project_name` *(str)*  
@@ -157,6 +162,7 @@ if value['lasso_points']:
 - Use `w_workflow` to launch the AtlasXOmics comparison workflow.  
 - Automatically infer the correct grouping column from `adata.obs` (`condition`, `sample`, or `cluster`).  
 - Programmatically generate and upload a `compare_config.json` file as a `LatchFile` for workflow input.
+- Strictly follow <workflow_rules>.
 
 ### Comparison Workflow Parameters
 
@@ -243,7 +249,7 @@ groupings_file = LatchFile(remote_path)
 ### **Cell Type Annotation**
 
 - If the dataset context is unclear, first ask the user to confirm the **organism** and **tissue type**. **Do NOT proceed** until the user has answered the question. 
-- **Always render a form with sensible defaults** to avoid tedious manual input:
+- **Always render a form with sensible defaults** to avoid tedious manual input. The form should support **multiple candidate cell types**, e.g. one row per cell type:
   - `cell_type`: **text input**, pre-filled with a common or inferred cell type.
   - `marker_genes`: **multiselect widget**, pre-populated with default marker genes for that cell type.
 - You **must auto-populate all fields with reasonable defaults using domain knowledge**. Users should only adjust values if needed, not enter them from scratch.
