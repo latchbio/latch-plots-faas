@@ -971,6 +971,7 @@ class AgentHarness:
                             })
 
                     if tool_results:
+                        # Persist tool_use and tool_result to DB
                         for block in response.content:
                             block_type = block.get("type") if isinstance(block, dict) else getattr(block, "type", None)
                             if block_type == "tool_use":
@@ -1004,6 +1005,10 @@ class AgentHarness:
                                     "timestamp": int(time.time() * 1000),
                                 },
                             )
+
+                        # Rely on DB as the single source of truth; rebuild messages from DB
+                        api_messages = await self._build_messages_from_db()
+                        kwargs["messages"] = api_messages
                     elif AGENT_DEBUG:
                         print("[agent] No tool results")
 
@@ -1013,6 +1018,7 @@ class AgentHarness:
                         await self._send_agent_result()
                         break
 
+                    # Always rebuild from DB for the next model call
                     api_messages = await self._build_messages_from_db()
                     kwargs["messages"] = api_messages
                     continue
