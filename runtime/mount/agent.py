@@ -564,6 +564,36 @@ class AgentHarness:
             
             return f"Failed to set h5 widget coloring: {result.get('error', 'Unknown error')}"
 
+        async def h5_set_background_image(args: dict) -> str:
+            widget_key = args.get("widget_key")
+            node_id = args.get("node_id")
+            name = args.get("name")
+            
+            print(f"[tool] h5_set_background_image widget_key={widget_key} node_id={node_id} name={name}")
+
+            if not widget_key:
+                print(f"[tool] h5_set_background_image widget_key is required")
+                return "Error: widget_key is required"
+            
+            if not node_id:
+                print(f"[tool] h5_set_background_image node_id is required")
+                return "Error: node_id is required"
+            
+            params = {
+                "widget_key": widget_key,
+                "node_id": node_id,
+            }
+            
+            if name:
+                params["name"] = name
+            
+            result = await self.atomic_operation("h5_set_background_image", params)
+            if result.get("status") == "success":
+                actual_name = result.get("name", name or "background image")
+                return f"Set background image '{actual_name}' for h5 widget"
+            print(f"[tool] h5_set_background_image failed: {result.get('error', 'Unknown error')}")
+            return f"Failed to set background image: {result.get('error', 'Unknown error')}"
+
         self.tools.append({
             "name": "create_cell",
             "description": "Create a new code cell at specified position. The cell will automatically run after creation.",
@@ -791,6 +821,30 @@ class AgentHarness:
             },
         })
         self.tool_map["h5_color_by_obs"] = h5_color_by_obs
+
+        self.tools.append({
+            "name": "h5_set_background_image",
+            "description": "Set a background image for an h5/AnnData widget from a user-attached file. The file must be an image type (jpg, jpeg, png, tiff). The image will be positioned and scaled automatically to match the spatial data coordinates.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "widget_key": {
+                        "type": "string",
+                        "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
+                    },
+                    "node_id": {
+                        "type": "string",
+                        "description": "The LData node ID of the image file to use as background. This should come from files attached by the user in the chat."
+                    },
+                    "name": {
+                        "type": "string",
+                        "description": "Optional display name for the background image, can include file extension (e.g., 'D02301_BF.tif'). If not provided, defaults to 'background image'."
+                    },
+                },
+                "required": ["widget_key", "node_id"],
+            },
+        })
+        self.tool_map["h5_set_background_image"] = h5_set_background_image
 
     async def run_agent_loop(self) -> None:
         assert self.client is not None, "Client not initialized"
