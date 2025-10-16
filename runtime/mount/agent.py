@@ -936,8 +936,6 @@ class AgentHarness:
                 })
                 continue
 
-            # No longer append to local file-based history; DB is source of truth.
-
             for block in response.content:
                 if isinstance(block, dict):
                     block_type = block.get("type")
@@ -1141,8 +1139,8 @@ class AgentHarness:
 
         return ", ".join(widget_summaries)
 
-    async def handle_clear_history(self, msg: dict[str, object]) -> None:
-        print("[agent] Clearing conversation history (DB)")
+    async def handle_clear_history(self) -> None:
+        print("[agent] Clearing conversation history")
         await self._mark_all_history_removed()
 
     async def accept(self) -> None:
@@ -1169,7 +1167,7 @@ class AgentHarness:
         elif msg_type == "agent_clear_history":
             if AGENT_DEBUG:
                 print("[agent] Clear history request")
-            await self.handle_clear_history(msg)
+            await self.handle_clear_history()
         elif msg_type == "agent_action_response":
             if AGENT_DEBUG:
                 action = msg.get("action", "unknown")
