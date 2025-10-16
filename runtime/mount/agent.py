@@ -258,7 +258,7 @@ class AgentHarness:
 
     async def _insert_history(self, *, event_type: str, payload: dict, request_id: str | None = None, tx_id: str | None = None) -> None:
         if self.agent_session_id is None:
-            raise RuntimeError("Agent session ID is not set")
+            raise RuntimeError("[insert history] Agent session ID is not set")
 
         variables = {
             "sessionId": str(self.agent_session_id),
@@ -282,7 +282,7 @@ class AgentHarness:
 
     async def _mark_all_history_removed(self) -> None:
         if self.agent_session_id is None:
-            raise RuntimeError("Agent session ID is not set")
+            raise RuntimeError("[mark all history removed] Agent session ID is not set")
 
         resp = await gql_query(
             auth=auth_token_sdk,
@@ -1065,7 +1065,7 @@ class AgentHarness:
             self.instructions_context = context
             session_id = msg.get("session_id")
             if session_id is None:
-                raise RuntimeError("Agent session ID is not set")
+                raise RuntimeError("[handle init] Agent session ID is not set")
 
             self.agent_session_id = int(session_id)
 
