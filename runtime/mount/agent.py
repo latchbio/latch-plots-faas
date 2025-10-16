@@ -567,9 +567,8 @@ class AgentHarness:
         async def h5_set_background_image(args: dict) -> str:
             widget_key = args.get("widget_key")
             node_id = args.get("node_id")
-            name = args.get("name")
             
-            print(f"[tool] h5_set_background_image widget_key={widget_key} node_id={node_id} name={name}")
+            print(f"[tool] h5_set_background_image widget_key={widget_key} node_id={node_id}")
 
             if not widget_key:
                 print(f"[tool] h5_set_background_image widget_key is required")
@@ -584,13 +583,9 @@ class AgentHarness:
                 "node_id": node_id,
             }
             
-            if name:
-                params["name"] = name
-            
             result = await self.atomic_operation("h5_set_background_image", params)
             if result.get("status") == "success":
-                actual_name = result.get("name", name or "background image")
-                return f"Set background image '{actual_name}' for h5 widget"
+                return f"Set background image for h5 widget using {node_id}"
             print(f"[tool] h5_set_background_image failed: {result.get('error', 'Unknown error')}")
             return f"Failed to set background image: {result.get('error', 'Unknown error')}"
 
@@ -835,10 +830,6 @@ class AgentHarness:
                     "node_id": {
                         "type": "string",
                         "description": "The LData node ID of the image file to use as background. This should come from files attached by the user in the chat."
-                    },
-                    "name": {
-                        "type": "string",
-                        "description": "Optional display name for the background image, can include file extension (e.g., 'D02301_BF.tif'). If not provided, defaults to 'background image'."
                     },
                 },
                 "required": ["widget_key", "node_id"],
