@@ -137,8 +137,6 @@ class AgentHarness:
     async def _build_messages_from_db(self) -> list[MessageParam]:
         history = await self._fetch_history_from_db()
         messages: list[MessageParam] = []
-        pending_tool_uses: list[dict] = []
-        pending_tool_results: list[dict] = []
 
         for item in history:
             t = item.get("type") if isinstance(item, dict) else None
@@ -151,50 +149,23 @@ class AgentHarness:
             elif t == "agent_action":
                 action = item.get("action") or {}
                 task = action.get("task")
-                def flush_tool_blocks() -> None:
-                    nonlocal pending_tool_uses, pending_tool_results
-                    if pending_tool_uses:
-                        messages.append({
-                            "role": "assistant",
-                            "content": pending_tool_uses,
-                        })
-                        pending_tool_uses = []
-                    if pending_tool_results:
-                        messages.append({
-                            "role": "user",
-                            "content": pending_tool_results,
-                        })
-                        pending_tool_results = []
-
                 if task == "tool_use":
-                    pending_tool_uses.append({
-                        "type": "tool_use",
-                        "id": action.get("id"),
-                        "name": action.get("name"),
-                        "input": action.get("input") or {},
-                    })
+                    name = action.get("name")
+                    input_obj = action.get("input")
+                    content = f"Tool use: {name} with input: {json.dumps(input_obj)[:2000]}"
+                    messages.append({"role": "assistant", "content": content})
                 elif task == "tool_result":
-                    pending_tool_results.append({
-                        "type": "tool_result",
-                        "tool_use_id": action.get("tool_use_id"),
-                        "content": str(action.get("content") or ""),
-                        "is_error": bool(action.get("is_error", False)),
-                    })
+                    content_text = action.get("content")
+                    is_error = action.get("is_error", False)
+                    prefix = "Tool error" if is_error else "Tool result"
+                    content = f"{prefix}: {str(content_text)[:2000]}"
+                    messages.append({"role": "assistant", "content": content})
                 elif task in {"create_cell", "edit_cell", "delete_cell", "run_cell", "stop_cell", "create_markdown_cell", "set_widget", "cell_result"}:
-                    flush_tool_blocks()
                     summary = json.dumps(action)[:2000]
                     messages.append({"role": "assistant", "content": f"Action: {summary}"})
                 elif task == "plan_update":
-                    flush_tool_blocks()
                     messages.append({"role": "assistant", "content": "Plan updated."})
             elif t == "agent_result":
-                if pending_tool_uses or pending_tool_results:
-                    if pending_tool_uses:
-                        messages.append({"role": "assistant", "content": pending_tool_uses})
-                        pending_tool_uses = []
-                    if pending_tool_results:
-                        messages.append({"role": "user", "content": pending_tool_results})
-                        pending_tool_results = []
                 so = item.get("structured_output")
                 if isinstance(so, dict):
                     plan = so.get("plan") or []
@@ -216,11 +187,6 @@ class AgentHarness:
                     text = "\n\n".join(parts).strip()
                     if text:
                         messages.append({"role": "assistant", "content": text})
-
-        if pending_tool_uses:
-            messages.append({"role": "assistant", "content": pending_tool_uses})
-        if pending_tool_results:
-            messages.append({"role": "user", "content": pending_tool_results})
 
         return messages
 
@@ -393,6 +359,9 @@ class AgentHarness:
                 print("[agent] Stop signal received")
 
     async def _send_agent_result(self) -> None:
+        if not self.current_request_id:
+            return
+
         should_continue = self.should_auto_continue
         self.should_auto_continue = False
 
@@ -864,67 +833,52 @@ class AgentHarness:
                 use_beta_api = True
 
             try:
-                process_tools = False
-                while True:
-                    start_time = time.process_time()
+                start_time = time.process_time()
 
-                    if use_beta_api:
-                        response = await self.client.beta.messages.create(**kwargs)
-                    else:
-                        response = await self.client.messages.create(**kwargs)
+                if use_beta_api:
+                    response = await self.client.beta.messages.create(**kwargs)
+                else:
+                    response = await self.client.messages.create(**kwargs)
 
-                    duration = time.process_time() - start_time
+                duration = time.process_time() - start_time
 
-                    for block in response.content:
-                        if isinstance(block, dict):
-                            block_type = block.get("type")
-                        else:
-                            block_type = getattr(block, "type", None)
+            except Exception as e:
+                print(f"[agent] API error: {e}", flush=True)
+                await self.send({
+                    "type": "agent_error",
+                    "error": f"API error: {e!s}",
+                    "fatal": False
+                })
+                continue
 
-                        if block_type in ("thinking", "redacted_thinking"):
-                            thinking_text = block.get("thinking") if isinstance(block, dict) else getattr(block, "thinking", None)
-                            if thinking_text:
-                                if AGENT_DEBUG:
-                                    print(f"[agent] Thinking:\n{thinking_text}")
-                                await self._insert_history(
-                                    event_type="agent_thinking",
-                                    payload={
-                                        "type": "agent_thinking",
-                                        "thoughts": thinking_text,
-                                        "duration": duration,
-                                        "timestamp": int(time.time() * 1000),
-                                    },
-                                )
-                            else:
-                                print("[agent] Thinking block present (redacted)")
+            for block in response.content:
+                if isinstance(block, dict):
+                    block_type = block.get("type")
+                else:
+                    block_type = getattr(block, "type", None)
 
-                    if response.stop_reason == "tool_use":
-                        process_tools = True
-                        break
-
-                    if response.stop_reason == "end_turn":
+                if block_type in ("thinking", "redacted_thinking"):
+                    thinking_text = block.get("thinking") if isinstance(block, dict) else getattr(block, "thinking", None)
+                    if thinking_text:
                         if AGENT_DEBUG:
-                            print("[agent] Turn ended without submit_response; emitting agent_result to close the turn")
-                        await self._send_agent_result()
-                        process_tools = False
-                        break
+                            print(f"[agent] Thinking:\n{thinking_text}")
+                        await self._insert_history(
+                            event_type="agent_thinking",
+                            payload={
+                            "type": "agent_thinking",
+                            "thoughts": thinking_text,
+                            "duration": duration,
+                                "timestamp": int(time.time() * 1000),
+                            },
+                        )
+                    else:
+                        print("[agent] Thinking block present (redacted)")
 
-                    if response.stop_reason == "max_tokens":
-                        print("[agent] Hit max tokens", flush=True)
-                        await self._send_agent_result()
-                        process_tools = False
-                        break
-
-                    if AGENT_DEBUG:
-                        print(f"[agent] Unknown stop reason: {response.stop_reason}")
-                    await self._send_agent_result()
-                    process_tools = False
-                    break
-
-                if not process_tools:
-                    # End of turn; wait for next user/kernel event
-                    continue
-
+            if response.stop_reason == "end_turn":
+                if AGENT_DEBUG:
+                    print("[agent] Turn ended without submit_response; emitting agent_result to close the turn")
+                await self._send_agent_result()
+            elif response.stop_reason == "tool_use":
                 tool_results = []
                 called_submit_response = False
 
@@ -970,66 +924,54 @@ class AgentHarness:
                                 "is_error": True,
                             })
 
-                    if tool_results:
-                        # Persist tool_use and tool_result to DB
-                        for block in response.content:
-                            block_type = block.get("type") if isinstance(block, dict) else getattr(block, "type", None)
-                            if block_type == "tool_use":
-                                tool_id = block.get("id") if isinstance(block, dict) else block.id
-                                tool_name = block.get("name") if isinstance(block, dict) else block.name
-                                tool_input = block.get("input") if isinstance(block, dict) else block.input
-                                await self._insert_history(
-                                    event_type="agent_action",
-                                    payload={
-                                        "type": "agent_action",
-                                        "action": {
-                                            "task": "tool_use",
-                                            "id": tool_id,
-                                            "name": tool_name,
-                                            "input": tool_input,
-                                        },
-                                        "timestamp": int(time.time() * 1000),
-                                    },
-                                )
-                        for tr in tool_results:
+                if tool_results:
+                    for block in response.content:
+                        block_type = block.get("type") if isinstance(block, dict) else getattr(block, "type", None)
+                        if block_type == "tool_use":
+                            tool_id = block.get("id") if isinstance(block, dict) else block.id
+                            tool_name = block.get("name") if isinstance(block, dict) else block.name
+                            tool_input = block.get("input") if isinstance(block, dict) else block.input
                             await self._insert_history(
                                 event_type="agent_action",
                                 payload={
                                     "type": "agent_action",
                                     "action": {
-                                        "task": "tool_result",
-                                        "tool_use_id": tr.get("tool_use_id"),
-                                        "content": tr.get("content"),
-                                        "is_error": tr.get("is_error", False),
+                                        "task": "tool_use",
+                                        "id": tool_id,
+                                        "name": tool_name,
+                                        "input": tool_input,
                                     },
                                     "timestamp": int(time.time() * 1000),
                                 },
                             )
+                    for tr in tool_results:
+                        await self._insert_history(
+                            event_type="agent_action",
+                            payload={
+                                "type": "agent_action",
+                                "action": {
+                                    "task": "tool_result",
+                                    "tool_use_id": tr.get("tool_use_id"),
+                                    "content": tr.get("content"),
+                                    "is_error": tr.get("is_error", False),
+                                },
+                                "timestamp": int(time.time() * 1000),
+                            },
+                        )
+                elif AGENT_DEBUG:
+                    print("[agent] No tool results")
 
-                        # Rely on DB as the single source of truth; rebuild messages from DB
-                        api_messages = await self._build_messages_from_db()
-                        kwargs["messages"] = api_messages
-                    elif AGENT_DEBUG:
-                        print("[agent] No tool results")
-
-                    if called_submit_response:
-                        if AGENT_DEBUG:
-                            print("[agent] submit_response called, sending agent_result")
-                        await self._send_agent_result()
-                        break
-
-                    # Always rebuild from DB for the next model call
-                    api_messages = await self._build_messages_from_db()
-                    kwargs["messages"] = api_messages
-                    continue
-            except Exception as e:
-                print(f"[agent] API error: {e}", flush=True)
-                await self.send({
-                    "type": "agent_error",
-                    "error": f"API error: {e!s}",
-                    "fatal": False
-                })
-                continue
+                if called_submit_response:
+                    if AGENT_DEBUG:
+                        print("[agent] submit_response called, sending agent_result")
+                    await self._send_agent_result()
+            elif response.stop_reason == "max_tokens":
+                print("[agent] Hit max tokens", flush=True)
+                await self._send_agent_result()
+            else:
+                if AGENT_DEBUG:
+                    print(f"[agent] Unknown stop reason: {response.stop_reason}")
+                await self._send_agent_result()
 
     async def handle_init(self, msg: dict[str, object]) -> None:
         print("[agent] Initializing", flush=True)
