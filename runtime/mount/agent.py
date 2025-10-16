@@ -13,6 +13,8 @@ from typing import Literal
 
 import anthropic
 from anthropic.types import MessageParam, ToolParam
+from anthropic.types.beta.beta_message import BetaMessage
+from anthropic.types.message import Message
 from config_loader import build_full_instruction
 from lplots import _inject
 from pydantic import BaseModel
@@ -874,9 +876,9 @@ class AgentHarness:
                 start_time = time.process_time()
 
                 if use_beta_api:
-                    response = await self.client.beta.messages.create(**kwargs)
+                    response: BetaMessage = await self.client.beta.messages.create(**kwargs)
                 else:
-                    response = await self.client.messages.create(**kwargs)
+                    response: Message = await self.client.messages.create(**kwargs)
 
                 duration = time.process_time() - start_time
 
@@ -889,21 +891,15 @@ class AgentHarness:
                 })
                 continue
 
-            # Persist exact anthropic response so future turns can be reconstructed without
-            # lossy event mapping.
-            try:
-                await self._insert_history(
-                    event_type="anthropic_message",
-                    payload={
-                        "type": "anthropic_message",
-                        "role": "assistant",
-                        "content": response.content,
-                        "timestamp": int(time.time() * 1000),
-                    },
-                )
-            except Exception:
-                # Non-fatal; continue with event-style persistence below
-                pass
+            await self._insert_history(
+                event_type="anthropic_message",
+                payload={
+                    "type": "anthropic_message",
+                    "role": "assistant",
+                    "content": response.to_json().get("content"),
+                    "timestamp": int(time.time() * 1000),
+                },
+            )
 
             for block in response.content:
                 if isinstance(block, dict):
@@ -985,7 +981,7 @@ class AgentHarness:
                             tool_id = block.get("id") if isinstance(block, dict) else block.id
                             tool_name = block.get("name") if isinstance(block, dict) else block.name
                             tool_input = block.get("input") if isinstance(block, dict) else block.input
-                            await self._insert_history(
+                        await self._insert_history(
                                 event_type="agent_action",
                                 payload={
                                     "type": "agent_action",
@@ -998,8 +994,7 @@ class AgentHarness:
                                     "timestamp": int(time.time() * 1000),
                                 },
                             )
-                    # Persist the exact user tool_result message shape too
-                    try:
+
                         await self._insert_history(
                             event_type="anthropic_message",
                             payload={
@@ -1009,8 +1004,7 @@ class AgentHarness:
                                 "timestamp": int(time.time() * 1000),
                             },
                         )
-                    except Exception:
-                        pass
+
                     for tr in tool_results:
                         await self._insert_history(
                             event_type="agent_action",
