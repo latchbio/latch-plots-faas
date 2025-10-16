@@ -105,7 +105,7 @@ class Run:
     spatial_dir: LatchDir
     condition: str = "None"
 
-# 1) User picks the top-level remote folder (returns LPath)
+# 1) Expose widget for user to pick the top-level remote folder (returns LPath)
 raw_data_dir = w_ldata_picker(label="Raw Data Directory")
 if raw_data_dir.value is None:
     w_text_output(
@@ -294,6 +294,7 @@ groupings_file = LatchFile(remote_path)
   - `cell_type`: **text input**, pre-filled with a common or inferred cell type.
   - `marker_genes`: **multiselect widget**, pre-populated with default marker genes for that cell type.
 - You **must auto-populate all fields with reasonable defaults using domain knowledge**. Users should only adjust values if needed, not enter them from scratch.
+- Add a **button** after the form to trigger gene set scoring. 
 - For **spatial ATAC-seq**, infer cell identity by computing **gene activity or gene set scores** (e.g., `scanpy.tl.score_genes`) and ranking cell types based on marker enrichment.
 
 ## Data Assumptions

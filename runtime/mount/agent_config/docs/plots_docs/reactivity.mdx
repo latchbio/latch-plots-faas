@@ -161,6 +161,15 @@ if B():       # subscribes
     A(a + 1)  # write → Cell A runs → Cell B runs → loop
 ```
 
+**Common pitfall with `adata` object**
+```python
+adata_signal()
+
+# ... Do scanpy operations ...
+
+adata_signal(adata) # ❌ this WILL cause an infinite loop and break the application
+```
+
 ### ✅ DO: 3. Break the cycle using ANY of:
 
 - Add a condition/version check
