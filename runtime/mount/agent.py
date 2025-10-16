@@ -31,7 +31,7 @@ if sandbox_root:
 
     pathlib.Path.__new__ = patched_path_new
 
-AGENT_DEBUG = os.environ.get("AGENT_DEBUG") == "1"
+AGENT_DEBUG = True
 
 
 class Mode(Enum):
