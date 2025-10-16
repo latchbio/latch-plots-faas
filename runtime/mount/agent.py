@@ -150,16 +150,25 @@ class AgentHarness:
                 action = item.get("action") or {}
                 task = action.get("task")
                 if task == "tool_use":
-                    name = action.get("name")
-                    input_obj = action.get("input")
-                    content = f"Tool use: {name} with input: {json.dumps(input_obj)[:2000]}"
-                    messages.append({"role": "assistant", "content": content})
+                    # No-op for message reconstruction. The assistant's tool_use
+                    # was already emitted in the prior API response; we only need
+                    # to return tool_result blocks back to the model on the next call.
+                    pass
                 elif task == "tool_result":
                     content_text = action.get("content")
                     is_error = action.get("is_error", False)
-                    prefix = "Tool error" if is_error else "Tool result"
-                    content = f"{prefix}: {str(content_text)[:2000]}"
-                    messages.append({"role": "assistant", "content": content})
+                    tool_use_id = action.get("tool_use_id")
+                    if tool_use_id is not None:
+                        # Return an actual tool_result block so the model can continue.
+                        messages.append({
+                            "role": "user",
+                            "content": [{
+                                "type": "tool_result",
+                                "tool_use_id": tool_use_id,
+                                "content": str(content_text) if content_text is not None else "",
+                                **({"is_error": True} if is_error else {}),
+                            }],
+                        })
                 elif task in {"create_cell", "edit_cell", "delete_cell", "run_cell", "stop_cell", "create_markdown_cell", "set_widget", "cell_result"}:
                     summary = json.dumps(action)[:2000]
                     messages.append({"role": "assistant", "content": f"Action: {summary}"})
@@ -306,6 +315,12 @@ class AgentHarness:
         msg = await self.pending_messages.get()
 
         msg_type = msg.get("type")
+
+        # Internal no-op used to advance the loop after tool execution/results
+        if msg_type == "resume":
+            if AGENT_DEBUG:
+                print("[agent] Resuming turn after tool results")
+            return
 
         if msg_type == "user_query":
             self.current_request_id = msg.get("request_id")
@@ -965,6 +980,10 @@ class AgentHarness:
                     if AGENT_DEBUG:
                         print("[agent] submit_response called, sending agent_result")
                     await self._send_agent_result()
+                else:
+                    # Continue the turn by prompting the loop to run another
+                    # round with the updated DB-backed history (tool use + results)
+                    await self.pending_messages.put({"type": "resume"})
             elif response.stop_reason == "max_tokens":
                 print("[agent] Hit max tokens", flush=True)
                 await self._send_agent_result()
