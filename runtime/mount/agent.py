@@ -9,7 +9,6 @@ import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
-from pathlib import Path
 from typing import Literal
 
 import anthropic
@@ -61,8 +60,6 @@ class NotebookResponse(BaseModel):
     next_status: Literal["executing", "fixing", "thinking", "awaiting_user_response", "awaiting_cell_execution", "done"]
 
 
-from datetime import UTC
-
 from typing_extensions import TypedDict
 
 
@@ -78,46 +75,7 @@ class PlanDiffPayload(TypedDict):
     description: str
 
 
-class SerializedTextBlock(TypedDict):
-    type: Literal["text"]
-    text: str
-
-
-class SerializedThinkingBlock(TypedDict):
-    type: Literal["thinking"]
-    thinking: str
-
-
-class SerializedRedactedThinkingBlock(TypedDict):
-    type: Literal["redacted_thinking"]
-
-
-class SerializedToolUseBlock(TypedDict):
-    type: Literal["tool_use"]
-    id: str
-    name: str
-    input: dict
-
-
-class SerializedToolResultBlock(TypedDict):
-    type: Literal["tool_result"]
-    tool_use_id: str
-    content: str
-    is_error: bool
-
-
-SerializedContentBlock = SerializedTextBlock | SerializedThinkingBlock | SerializedRedactedThinkingBlock | SerializedToolUseBlock | SerializedToolResultBlock
-
-
-class SerializedMessage(TypedDict):
-    role: Literal["user", "assistant"]
-    content: list[SerializedContentBlock] | str
-
-
-class ConversationHistoryFile(TypedDict):
-    version: Literal[1]
-    last_updated: str
-    messages: list[SerializedMessage]
+"""Deprecated file-based history types removed."""
 
 
 @dataclass
@@ -125,7 +83,6 @@ class AgentHarness:
     conn: SocketIoThread
     initialized: bool = False
     client: anthropic.AsyncAnthropic | None = None
-    conversation_history: list[MessageParam] = field(default_factory=list)
     mode: Mode = Mode.planning
     pending_operations: dict[str, asyncio.Future] = field(default_factory=dict)
     executing_cells: set[str] = field(default_factory=set)
@@ -154,107 +111,84 @@ class AgentHarness:
         print(f"[agent] Sending message: {msg_type}", flush=True)
         await self.conn.send(msg)
 
-    def _get_history_file_path(self) -> Path:
-        latch_p = Path(os.environ.get("LATCH_SANDBOX_ROOT", "/root/.latch"))
-        return latch_p / "conversation_history.json"
-
-    def _serialize_content(self, content: list | str) -> list[SerializedContentBlock] | str:
-        if isinstance(content, str):
-            return content
-
-        serialized: list[SerializedContentBlock] = []
-        for block in content:
-            if isinstance(block, dict):
-                serialized.append(block)
-            elif hasattr(block, "type"):
-                if block.type == "text":
-                    serialized.append({"type": "text", "text": block.text})
-                elif block.type == "thinking":
-                    serialized.append({"type": "thinking", "thinking": block.thinking})
-                elif block.type == "redacted_thinking":
-                    serialized.append({"type": "redacted_thinking"})
-                elif block.type == "tool_use":
-                    serialized.append({
-                        "type": "tool_use",
-                        "id": block.id,
-                        "name": block.name,
-                        "input": block.input
-                    })
-                elif block.type == "tool_result":
-                    serialized.append({
-                        "type": "tool_result",
-                        "tool_use_id": block.tool_use_id,
-                        "content": block.content,
-                        "is_error": getattr(block, "is_error", False)
-                    })
-            else:
-                serialized.append({"type": "text", "text": str(block)})
-        return serialized
-
-    def _serialize_message(self, message: MessageParam) -> SerializedMessage:
-        return {
-            "role": message["role"],
-            "content": self._serialize_content(message["content"])
-        }
-
-    def _load_conversation_history(self) -> None:
-        history_file = self._get_history_file_path()
-
-        if not history_file.exists():
-            print("[agent] No existing conversation history found", flush=True)
-            return
-
-        try:
-            import json
-
-            with open(history_file) as f:
-                data: ConversationHistoryFile = json.load(f)
-
-            if data.get("version") != 1:
-                print(f"[agent] Unknown history version: {data.get('version')}", flush=True)
-                return
-
-            self.conversation_history = data.get("messages", [])
-
-            for msg in self.conversation_history:
-                content = msg.get("content")
-                if isinstance(content, list):
-                    for block in content:
-                        if isinstance(block, dict) and block.get("type") in ("thinking", "redacted_thinking"):
-                            block["_loaded_from_history"] = True
-
-            print(f"[agent] Loaded {len(self.conversation_history)} messages from history (last updated: {data.get('last_updated')})", flush=True)
-        except Exception as e:
-            print(f"[agent] Error loading conversation history: {e}", flush=True)
-            self.conversation_history = []
-
-    def _save_conversation_history(self) -> None:
-        history_file = self._get_history_file_path()
-
-        try:
-            import json
-            from datetime import datetime
-
-            data: ConversationHistoryFile = {
-                "version": 1,
-                "last_updated": datetime.now(UTC).isoformat(),
-                "messages": [self._serialize_message(msg) for msg in self.conversation_history]
-            }
-
-            with open(history_file, "w") as f:
-                json.dump(data, f, indent=2)
-
-            if AGENT_DEBUG:
-                print(f"[agent] Saved {len(self.conversation_history)} messages to history", flush=True)
-        except Exception as e:
-            print(f"[agent] Error saving conversation history: {e}", flush=True)
-
     async def _notify_history_updated(self, *, request_id: str | None = None) -> None:
         await self.send({
             "type": "agent_history_updated",
             "session_id": str(self.agent_session_id) if self.agent_session_id is not None else None,
             **({"request_id": request_id} if request_id else {}),
         })
+
+    async def _fetch_history_from_db(self) -> list[dict]:
+        assert self.agent_session_id is not None
+        resp = await gql_query(
+            auth=auth_token_sdk,
+            query="""
+                query AgentHistory($sessionId: BigInt!) {
+                    agentHistories(condition: {sessionId: $sessionId, removed: false}, orderBy: ID_ASC) {
+                        nodes { id payload }
+                    }
+                }
+            """,
+            variables={"sessionId": str(self.agent_session_id)},
+        )
+        nodes = resp.get("data", {}).get("agentHistories", {}).get("nodes", [])
+        return [n.get("payload") for n in nodes if n.get("payload")]
+
+    async def _build_messages_from_db(self) -> list[MessageParam]:
+        history = await self._fetch_history_from_db()
+        messages: list[MessageParam] = []
+
+        for item in history:
+            t = item.get("type") if isinstance(item, dict) else None
+            if t == "agent_query":
+                q = item.get("query", "")
+                if q:
+                    messages.append({"role": "user", "content": q})
+            elif t == "agent_thinking":
+                pass
+            elif t == "agent_action":
+                action = item.get("action") or {}
+                task = action.get("task")
+                if task == "tool_use":
+                    name = action.get("name")
+                    input_obj = action.get("input")
+                    content = f"Tool use: {name} with input: {json.dumps(input_obj)[:2000]}"
+                    messages.append({"role": "assistant", "content": content})
+                elif task == "tool_result":
+                    content_text = action.get("content")
+                    is_error = action.get("is_error", False)
+                    prefix = "Tool error" if is_error else "Tool result"
+                    content = f"{prefix}: {str(content_text)[:2000]}"
+                    messages.append({"role": "assistant", "content": content})
+                elif task in {"create_cell", "edit_cell", "delete_cell", "run_cell", "stop_cell", "create_markdown_cell", "set_widget", "cell_result"}:
+                    summary = json.dumps(action)[:2000]
+                    messages.append({"role": "assistant", "content": f"Action: {summary}"})
+                elif task == "plan_update":
+                    messages.append({"role": "assistant", "content": "Plan updated."})
+            elif t == "agent_result":
+                so = item.get("structured_output")
+                if isinstance(so, dict):
+                    plan = so.get("plan") or []
+                    summary = so.get("summary") or []
+                    questions = so.get("questions") or []
+
+                    parts: list[str] = []
+                    if plan:
+                        plan_lines = [
+                            f"[{p.get('status', '?')}] {p.get('id', '?')}: {p.get('description', '')}"
+                            for p in plan if isinstance(p, dict)
+                        ]
+                        parts.append("Plan:\n" + "\n".join(plan_lines))
+                    if summary:
+                        parts.append("Summary:\n" + "\n".join(map(str, summary)))
+                    if questions:
+                        parts.append("Questions:\n" + "\n".join(map(str, questions)))
+
+                    text = "\n\n".join(parts).strip()
+                    if text:
+                        messages.append({"role": "assistant", "content": text})
+
+        return messages
 
     async def _insert_history(self, *, event_type: str, payload: dict, request_id: str | None = None, tx_id: str | None = None) -> None:
         if self.agent_session_id is None:
@@ -856,10 +790,7 @@ class AgentHarness:
         turn = 0
 
         while self.conversation_running:
-            if not self.conversation_history or self.conversation_history[-1]["role"] == "assistant":
-                await self._wait_for_message()
-                continue
-
+            await self._wait_for_message()
             if not self.conversation_running:
                 break
 
@@ -883,24 +814,7 @@ class AgentHarness:
                     return len(c) > 0
                 return False
 
-            clean_messages = [m for m in self.conversation_history if _has_content(m)]
-
-            api_messages = []
-            for msg in clean_messages:
-                content = msg.get("content")
-                if isinstance(content, list):
-                    filtered_content = [
-                        block for block in content
-                        if not (isinstance(block, dict) and
-                                block.get("type") in ("thinking", "redacted_thinking") and
-                                block.get("_loaded_from_history"))
-                    ]
-                    if filtered_content:
-                        api_messages.append({"role": msg["role"], "content": filtered_content})
-                    elif msg.get("role") == "assistant":
-                        api_messages.append({"role": msg["role"], "content": [{"type": "text", "text": ""}]})
-                else:
-                    api_messages.append(msg)
+            api_messages = await self._build_messages_from_db()
 
             kwargs = {
                 "model": model,
@@ -962,7 +876,8 @@ class AgentHarness:
 
             if response.stop_reason == "end_turn":
                 if AGENT_DEBUG:
-                    print("[agent] Turn ended without submit_response - model should always call submit_response per prompt")
+                    print("[agent] Turn ended without submit_response; emitting agent_result to close the turn")
+                await self._send_agent_result()
             elif response.stop_reason == "tool_use":
                 tool_results = []
                 called_submit_response = False
