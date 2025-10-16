@@ -382,6 +382,7 @@ class AgentHarness:
                     "type": "agent_query",
                     "request_id": self.current_request_id,
                     "query": msg["content"],
+                    "timestamp": int(time.time() * 1000),
                 },
                 request_id=self.current_request_id,
             )
