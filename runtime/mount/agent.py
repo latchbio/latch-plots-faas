@@ -546,6 +546,24 @@ class AgentHarness:
             
             return f"Failed to filter h5 widget: {result.get('error', 'Unknown error')}"
 
+        async def h5_color_by_obs(args: dict) -> str:
+            widget_key = args.get("widget_key")
+            obs_key = args.get("obs_key")
+            
+            if AGENT_DEBUG:
+                print(f"[tool] h5_color_by_obs widget_key={widget_key} obs_key={obs_key}")
+            
+            params = {
+                "widget_key": widget_key,
+                "obs_key": obs_key
+            }
+            
+            result = await self.atomic_operation("h5_color_by_obs", params)
+            if result.get("status") == "success":
+                return f"Set h5 widget to color by {obs_key}"
+            
+            return f"Failed to set h5 widget coloring: {result.get('error', 'Unknown error')}"
+
         self.tools.append({
             "name": "create_cell",
             "description": "Create a new code cell at specified position. The cell will automatically run after creation.",
@@ -753,6 +771,26 @@ class AgentHarness:
             },
         })
         self.tool_map["h5_show_only_obs_category"] = h5_show_only_obs_category
+
+        self.tools.append({
+            "name": "h5_color_by_obs",
+            "description": "Set an h5/AnnData widget to color observations by a specific observation key.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "widget_key": {
+                        "type": "string",
+                        "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
+                    },
+                    "obs_key": {
+                        "type": "string",
+                        "description": "The observation key to color by"
+                    },
+                },
+                "required": ["widget_key", "obs_key"],
+            },
+        })
+        self.tool_map["h5_color_by_obs"] = h5_color_by_obs
 
     async def run_agent_loop(self) -> None:
         assert self.client is not None, "Client not initialized"
