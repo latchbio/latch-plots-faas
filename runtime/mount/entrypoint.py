@@ -530,8 +530,6 @@ async def start_agent_proc() -> None:
         preexec_fn=lambda: os.nice(5),
     )
 
-    await conn_a.send({"type": "init"})
-
 
 async def stop_kernel_proc() -> None:
     ready_ev.clear()
