@@ -99,6 +99,7 @@ class AgentHarness:
     conversation_running: bool = False
     system_prompt: str = ""
     agent_session_id: int | None = None
+    pending_action_context: dict[str, dict] = field(default_factory=dict)
 
     mode_config: dict[Mode, tuple[str, int | None]] = field(default_factory=lambda: {
         Mode.planning: ("claude-sonnet-4-5-20250929", 4096),
@@ -136,86 +137,17 @@ class AgentHarness:
 
     async def _build_messages_from_db(self) -> list[MessageParam]:
         history = await self._fetch_history_from_db()
-        messages: list[MessageParam] = []
-
-        pending_tool_uses: list[dict] = []
+        anthropic_messages: list[MessageParam] = []
 
         for item in history:
             t = item.get("type") if isinstance(item, dict) else None
-            if t == "agent_query":
-                q = item.get("query", "")
-                if q:
-                    messages.append({"role": "user", "content": q})
-            elif t == "agent_thinking":
-                pass
-            elif t == "agent_action":
-                action = item.get("action") or {}
-                task = action.get("task")
-                if task == "tool_use":
-                    tool_id = action.get("id")
-                    tool_name = action.get("name")
-                    tool_input = action.get("input")
-                    if tool_id is not None and tool_name is not None:
-                        pending_tool_uses.append({
-                            "type": "tool_use",
-                            "id": tool_id,
-                            "name": tool_name,
-                            "input": tool_input if isinstance(tool_input, dict) else {},
-                        })
-                    continue
-                if task == "tool_result":
-                    content_text = action.get("content")
-                    is_error = action.get("is_error", False)
-                    tool_use_id = action.get("tool_use_id")
-                    if tool_use_id is not None:
-                        # Ensure the last assistant message is the tool_use block(s)
-                        if pending_tool_uses:
-                            messages.append({
-                                "role": "assistant",
-                                "content": pending_tool_uses,
-                            })
-                            pending_tool_uses = []
-                        # Then provide the corresponding tool_result in the next user message
-                        messages.append({
-                            "role": "user",
-                            "content": [{
-                                "type": "tool_result",
-                                "tool_use_id": tool_use_id,
-                                "content": str(content_text) if content_text is not None else "",
-                                **({"is_error": True} if is_error else {}),
-                            }],
-                        })
-                    continue
+            if t == "anthropic_message":
+                role = item.get("role")
+                content = item.get("content")
+                if role in ("user", "assistant") and (isinstance(content, (str, list))):
+                    anthropic_messages.append({"role": role, "content": content})
 
-                if task in {"create_cell", "edit_cell", "delete_cell", "run_cell", "stop_cell", "create_markdown_cell", "set_widget", "cell_result"}:
-                    summary = json.dumps(action)[:2000]
-                    messages.append({"role": "assistant", "content": f"Action: {summary}"})
-                elif task == "plan_update":
-                    messages.append({"role": "assistant", "content": "Plan updated."})
-            elif t == "agent_result":
-                so = item.get("structured_output")
-                if isinstance(so, dict):
-                    plan = so.get("plan") or []
-                    summary = so.get("summary") or []
-                    questions = so.get("questions") or []
-
-                    parts: list[str] = []
-                    if plan:
-                        plan_lines = [
-                            f"[{p.get('status', '?')}] {p.get('id', '?')}: {p.get('description', '')}"
-                            for p in plan if isinstance(p, dict)
-                        ]
-                        parts.append("Plan:\n" + "\n".join(plan_lines))
-                    if summary:
-                        parts.append("Summary:\n" + "\n".join(map(str, summary)))
-                    if questions:
-                        parts.append("Questions:\n" + "\n".join(map(str, questions)))
-
-                    text = "\n\n".join(parts).strip()
-                    if text:
-                        messages.append({"role": "assistant", "content": text})
-
-        return messages
+        return anthropic_messages
 
     async def _insert_history(self, *, event_type: str, payload: dict, request_id: str | None = None, tx_id: str | None = None) -> None:
         if self.agent_session_id is None:
@@ -291,6 +223,8 @@ class AgentHarness:
         try:
             if AGENT_DEBUG:
                 print(f"[agent] -> {action}")
+            # Track action+params for history once we receive the response
+            self.pending_action_context[tx_id] = {"action": action, "params": params}
             await self.send({"type": "agent_action", "action": action, "params": params, "tx_id": tx_id})
         except Exception as e:
             self.pending_operations.pop(tx_id, None)
@@ -309,6 +243,76 @@ class AgentHarness:
         fut = self.pending_operations.get(tx_id)
         if fut and not fut.done():
             fut.set_result(msg)
+
+        # Persist a normalized agent_action history event mirroring the previous
+        # frontend behavior, when possible.
+        ctx = self.pending_action_context.pop(tx_id, None)
+        if ctx is not None:
+            try:
+                action_name = ctx.get("action")
+                params = ctx.get("params", {})
+                status = msg.get("status")
+                if status != "success":
+                    return
+
+                payload_action: dict | None = None
+                if action_name == "create_cell":
+                    payload_action = {
+                        "task": "create_cell",
+                        "cell_id": msg.get("cell_id"),
+                        "tf_id": msg.get("tf_id"),
+                        "auto_run": params.get("auto_run", False),
+                        "source": params.get("source"),
+                        "position": params.get("position"),
+                        "cell_name": params.get("title"),
+                    }
+                elif action_name == "create_markdown_cell":
+                    payload_action = {
+                        "task": "create_markdown_cell",
+                        "cell_id": msg.get("cell_id"),
+                        "source": params.get("source"),
+                    }
+                elif action_name == "edit_cell":
+                    payload_action = {
+                        "task": "edit_cell",
+                        "cell_id": params.get("cell_id"),
+                        "source": params.get("source"),
+                    }
+                elif action_name == "run_cell":
+                    payload_action = {
+                        "task": "run_cell",
+                        "cell_id": params.get("cell_id"),
+                        **({"tf_id": msg.get("tf_id")} if msg.get("tf_id") else {}),
+                    }
+                elif action_name == "stop_cell":
+                    payload_action = {
+                        "task": "stop_cell",
+                        "cell_id": params.get("cell_id"),
+                        **({"tf_id": msg.get("tf_id")} if msg.get("tf_id") else {}),
+                    }
+                elif action_name == "set_widget":
+                    value = params.get("value")
+                    try:
+                        parsed_value = json.loads(value) if isinstance(value, str) else value
+                    except Exception:
+                        parsed_value = None
+                    payload_action = {
+                        "task": "set_widget",
+                        "widget_key": params.get("key"),
+                        **({"widget_value": parsed_value} if parsed_value is not None else {}),
+                    }
+
+                if payload_action is not None:
+                    await self._insert_history(
+                        event_type="agent_action",
+                        payload={
+                            "type": "agent_action",
+                            "action": payload_action,
+                            "timestamp": int(time.time() * 1000),
+                        },
+                    )
+            except Exception:
+                pass
 
     def set_mode(self, mode: Mode) -> None:
         if mode == self.mode:
@@ -343,12 +347,13 @@ class AgentHarness:
         if msg_type == "user_query":
             self.current_request_id = msg.get("request_id")
 
+            # Persist exact user message for reconstruction
             await self._insert_history(
-                event_type="agent_query",
+                event_type="anthropic_message",
                 payload={
-                    "type": "agent_query",
-                    "request_id": self.current_request_id,
-                    "query": msg["content"],
+                    "type": "anthropic_message",
+                    "role": "user",
+                    "content": msg["content"],
                     "timestamp": int(time.time() * 1000),
                 },
                 request_id=self.current_request_id,
@@ -884,6 +889,22 @@ class AgentHarness:
                 })
                 continue
 
+            # Persist exact anthropic response so future turns can be reconstructed without
+            # lossy event mapping.
+            try:
+                await self._insert_history(
+                    event_type="anthropic_message",
+                    payload={
+                        "type": "anthropic_message",
+                        "role": "assistant",
+                        "content": response.content,
+                        "timestamp": int(time.time() * 1000),
+                    },
+                )
+            except Exception:
+                # Non-fatal; continue with event-style persistence below
+                pass
+
             for block in response.content:
                 if isinstance(block, dict):
                     block_type = block.get("type")
@@ -977,6 +998,19 @@ class AgentHarness:
                                     "timestamp": int(time.time() * 1000),
                                 },
                             )
+                    # Persist the exact user tool_result message shape too
+                    try:
+                        await self._insert_history(
+                            event_type="anthropic_message",
+                            payload={
+                                "type": "anthropic_message",
+                                "role": "user",
+                                "content": tool_results,
+                                "timestamp": int(time.time() * 1000),
+                            },
+                        )
+                    except Exception:
+                        pass
                     for tr in tool_results:
                         await self._insert_history(
                             event_type="agent_action",
