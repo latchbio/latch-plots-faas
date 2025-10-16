@@ -359,9 +359,6 @@ class AgentHarness:
                 print("[agent] Stop signal received")
 
     async def _send_agent_result(self) -> None:
-        if not self.current_request_id:
-            return
-
         should_continue = self.should_auto_continue
         self.should_auto_continue = False
 
