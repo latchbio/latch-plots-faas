@@ -138,6 +138,8 @@ class AgentHarness:
         history = await self._fetch_history_from_db()
         messages: list[MessageParam] = []
 
+        pending_tool_uses: list[dict] = []
+
         for item in history:
             t = item.get("type") if isinstance(item, dict) else None
             if t == "agent_query":
@@ -150,16 +152,30 @@ class AgentHarness:
                 action = item.get("action") or {}
                 task = action.get("task")
                 if task == "tool_use":
-                    # No-op for message reconstruction. The assistant's tool_use
-                    # was already emitted in the prior API response; we only need
-                    # to return tool_result blocks back to the model on the next call.
-                    pass
-                elif task == "tool_result":
+                    tool_id = action.get("id")
+                    tool_name = action.get("name")
+                    tool_input = action.get("input")
+                    if tool_id is not None and tool_name is not None:
+                        pending_tool_uses.append({
+                            "type": "tool_use",
+                            "id": tool_id,
+                            "name": tool_name,
+                            "input": tool_input if isinstance(tool_input, dict) else {},
+                        })
+                    continue
+                if task == "tool_result":
                     content_text = action.get("content")
                     is_error = action.get("is_error", False)
                     tool_use_id = action.get("tool_use_id")
                     if tool_use_id is not None:
-                        # Return an actual tool_result block so the model can continue.
+                        # Ensure the last assistant message is the tool_use block(s)
+                        if pending_tool_uses:
+                            messages.append({
+                                "role": "assistant",
+                                "content": pending_tool_uses,
+                            })
+                            pending_tool_uses = []
+                        # Then provide the corresponding tool_result in the next user message
                         messages.append({
                             "role": "user",
                             "content": [{
@@ -169,7 +185,9 @@ class AgentHarness:
                                 **({"is_error": True} if is_error else {}),
                             }],
                         })
-                elif task in {"create_cell", "edit_cell", "delete_cell", "run_cell", "stop_cell", "create_markdown_cell", "set_widget", "cell_result"}:
+                    continue
+
+                if task in {"create_cell", "edit_cell", "delete_cell", "run_cell", "stop_cell", "create_markdown_cell", "set_widget", "cell_result"}:
                     summary = json.dumps(action)[:2000]
                     messages.append({"role": "assistant", "content": f"Action: {summary}"})
                 elif task == "plan_update":
