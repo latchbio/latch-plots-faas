@@ -150,16 +150,39 @@ class AgentHarness:
                 action = item.get("action") or {}
                 task = action.get("task")
                 if task == "tool_use":
+                    # Reconstruct an assistant tool_use block so the next call can pair a user tool_result
+                    tool_id = action.get("id")
                     name = action.get("name")
-                    input_obj = action.get("input")
-                    content = f"Tool use: {name} with input: {json.dumps(input_obj)[:2000]}"
-                    messages.append({"role": "assistant", "content": content})
+                    input_obj = action.get("input") or {}
+                    if tool_id is not None and name is not None:
+                        messages.append({
+                            "role": "assistant",
+                            "content": [
+                                {
+                                    "type": "tool_use",
+                                    "id": str(tool_id),
+                                    "name": str(name),
+                                    "input": input_obj,
+                                }
+                            ],
+                        })
                 elif task == "tool_result":
+                    # Reconstruct a user tool_result block linked by tool_use_id
+                    tool_use_id = action.get("tool_use_id")
                     content_text = action.get("content")
-                    is_error = action.get("is_error", False)
-                    prefix = "Tool error" if is_error else "Tool result"
-                    content = f"{prefix}: {str(content_text)[:2000]}"
-                    messages.append({"role": "assistant", "content": content})
+                    is_error = bool(action.get("is_error", False))
+                    if tool_use_id is not None:
+                        messages.append({
+                            "role": "user",
+                            "content": [
+                                {
+                                    "type": "tool_result",
+                                    "tool_use_id": str(tool_use_id),
+                                    "content": str(content_text) if content_text is not None else "",
+                                    "is_error": is_error,
+                                }
+                            ],
+                        })
                 elif task in {"create_cell", "edit_cell", "delete_cell", "run_cell", "stop_cell", "create_markdown_cell", "set_widget", "cell_result"}:
                     summary = json.dumps(action)[:2000]
                     messages.append({"role": "assistant", "content": f"Action: {summary}"})
@@ -378,6 +401,9 @@ class AgentHarness:
             request_id=self.current_request_id,
         )
         self.current_structured_output = None
+
+        if AGENT_DEBUG:
+            print(f"[agent] agent_result recorded (continue={should_continue})")
 
         if should_continue:
             if AGENT_DEBUG:
@@ -859,6 +885,7 @@ class AgentHarness:
                                         "duration": duration,
                                         "timestamp": int(time.time() * 1000),
                                     },
+                                    request_id=self.current_request_id,
                                 )
                             else:
                                 print("[agent] Thinking block present (redacted)")
@@ -941,6 +968,7 @@ class AgentHarness:
                                         },
                                         "timestamp": int(time.time() * 1000),
                                     },
+                                    request_id=self.current_request_id,
                                 )
                         for tr in tool_results:
                             await self._insert_history(
@@ -955,6 +983,7 @@ class AgentHarness:
                                     },
                                     "timestamp": int(time.time() * 1000),
                                 },
+                                request_id=self.current_request_id,
                             )
                     elif AGENT_DEBUG:
                         print("[agent] No tool results")
