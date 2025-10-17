@@ -908,7 +908,7 @@ class AgentHarness:
                 payload={
                     "type": "anthropic_message",
                     "role": "assistant",
-                    "content": response.to_json().get("content"),
+                    "content": response.model_dump()["content"],
                     "timestamp": int(time.time() * 1000),
                 },
             )
