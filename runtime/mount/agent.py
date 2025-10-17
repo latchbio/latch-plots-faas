@@ -414,6 +414,8 @@ class AgentHarness:
 
         if self.current_structured_output is not None:
             structured = self.current_structured_output.model_dump()
+            if AGENT_DEBUG:
+                print(f"[agent] Storing structured_output with next_status={structured.get('next_status')}")
             await self._insert_history(
                 event_type="structured_output",
                 payload={
@@ -424,6 +426,9 @@ class AgentHarness:
                 request_id=self.current_request_id,
             )
             self.current_structured_output = None
+        else:
+            if AGENT_DEBUG:
+                print("[agent] Warning: _send_structured_output called but current_structured_output is None")
 
         await self._notify_history_updated(request_id=self.current_request_id)
 
@@ -656,12 +661,15 @@ class AgentHarness:
                 plan_diff_items = args.get("plan_diff", [])
 
                 print("[tool] submit_response called with:")
+                print(f"  - next_status: {next_status}")
                 print(f"  - plan: {len(plan_items)} items")
                 for item in plan_items:
                     print(f"    - [{item.get('status')}] {item.get('id')}: {item.get('description')}")
                 print(f"  - plan_diff: {len(plan_diff_items)} items")
                 for diff in plan_diff_items:
                     print(f"    - [{diff.get('action')}] {diff.get('id')}: {diff.get('description')}")
+                print(f"  - summary: {summary}")
+                print(f"  - questions: {questions}")
                 print(f"  - continue: {should_continue}")
 
                 self.current_structured_output = NotebookResponse(
