@@ -33,7 +33,7 @@ if sandbox_root:
 
     pathlib.Path.__new__ = patched_path_new
 
-AGENT_DEBUG = True
+AGENT_DEBUG = os.environ.get("AGENT_DEBUG") == "1"
 
 
 class Mode(Enum):
@@ -77,9 +77,6 @@ class PlanDiffPayload(TypedDict):
     description: str
 
 
-"""Deprecated file-based history types removed."""
-
-
 @dataclass
 class AgentHarness:
     conn: SocketIoThread
@@ -101,7 +98,6 @@ class AgentHarness:
     conversation_running: bool = False
     system_prompt: str = ""
     agent_session_id: int | None = None
-    pending_action_context: dict[str, dict] = field(default_factory=dict)
 
     mode_config: dict[Mode, tuple[str, int | None]] = field(default_factory=lambda: {
         Mode.planning: ("claude-sonnet-4-5-20250929", 4096),
@@ -146,17 +142,16 @@ class AgentHarness:
             if t == "anthropic_message":
                 role = item.get("role")
                 content = item.get("content")
-                if role in ("user", "assistant") and (isinstance(content, (str, list))):
+                if role in {"user", "assistant"} and (isinstance(content, (str, list))):
                     anthropic_messages.append({"role": role, "content": content})
 
         if AGENT_DEBUG:
             print(f"[agent] Built {len(anthropic_messages)} messages from DB", flush=True)
-        
+
         return anthropic_messages
 
     async def _insert_history(self, *, event_type: str, payload: dict, request_id: str | None = None, tx_id: str | None = None) -> None:
-        if self.agent_session_id is None:
-            raise RuntimeError("[insert history] Agent session ID is not set")
+        assert self.agent_session_id is not None
 
         variables = {
             "sessionId": str(self.agent_session_id),
@@ -179,8 +174,7 @@ class AgentHarness:
         await self._notify_history_updated(request_id=request_id)
 
     async def _mark_all_history_removed(self) -> None:
-        if self.agent_session_id is None:
-            raise RuntimeError("[mark all history removed] Agent session ID is not set")
+        assert self.agent_session_id is not None
 
         resp = await gql_query(
             auth=auth_token_sdk,
@@ -228,8 +222,6 @@ class AgentHarness:
         try:
             if AGENT_DEBUG:
                 print(f"[agent] -> {action}")
-            # Track action+params for history once we receive the response
-            self.pending_action_context[tx_id] = {"action": action, "params": params}
             await self.send({"type": "agent_action", "action": action, "params": params, "tx_id": tx_id})
         except Exception as e:
             self.pending_operations.pop(tx_id, None)
@@ -249,76 +241,6 @@ class AgentHarness:
         if fut and not fut.done():
             fut.set_result(msg)
 
-        # Persist a normalized agent_action history event mirroring the previous
-        # frontend behavior, when possible.
-        ctx = self.pending_action_context.pop(tx_id, None)
-        if ctx is not None:
-            try:
-                action_name = ctx.get("action")
-                params = ctx.get("params", {})
-                status = msg.get("status")
-                if status != "success":
-                    return
-
-                payload_action: dict | None = None
-                if action_name == "create_cell":
-                    payload_action = {
-                        "task": "create_cell",
-                        "cell_id": msg.get("cell_id"),
-                        "tf_id": msg.get("tf_id"),
-                        "auto_run": params.get("auto_run", False),
-                        "source": params.get("source"),
-                        "position": params.get("position"),
-                        "cell_name": params.get("title"),
-                    }
-                elif action_name == "create_markdown_cell":
-                    payload_action = {
-                        "task": "create_markdown_cell",
-                        "cell_id": msg.get("cell_id"),
-                        "source": params.get("source"),
-                    }
-                elif action_name == "edit_cell":
-                    payload_action = {
-                        "task": "edit_cell",
-                        "cell_id": params.get("cell_id"),
-                        "source": params.get("source"),
-                    }
-                elif action_name == "run_cell":
-                    payload_action = {
-                        "task": "run_cell",
-                        "cell_id": params.get("cell_id"),
-                        **({"tf_id": msg.get("tf_id")} if msg.get("tf_id") else {}),
-                    }
-                elif action_name == "stop_cell":
-                    payload_action = {
-                        "task": "stop_cell",
-                        "cell_id": params.get("cell_id"),
-                        **({"tf_id": msg.get("tf_id")} if msg.get("tf_id") else {}),
-                    }
-                elif action_name == "set_widget":
-                    value = params.get("value")
-                    try:
-                        parsed_value = json.loads(value) if isinstance(value, str) else value
-                    except Exception:
-                        parsed_value = None
-                    payload_action = {
-                        "task": "set_widget",
-                        "widget_key": params.get("key"),
-                        **({"widget_value": parsed_value} if parsed_value is not None else {}),
-                    }
-
-                if payload_action is not None:
-                    await self._insert_history(
-                        event_type="agent_action",
-                        payload={
-                            "type": "agent_action",
-                            "action": payload_action,
-                            "timestamp": int(time.time() * 1000),
-                        },
-                    )
-            except Exception:
-                pass
-
     def set_mode(self, mode: Mode) -> None:
         if mode == self.mode:
             return
@@ -333,7 +255,6 @@ class AgentHarness:
         if AGENT_DEBUG:
             print(f"[agent] _wait_for_message: got message type={msg_type}", flush=True)
 
-        # Internal no-op used to advance the loop after tool execution/results
         if msg_type == "resume":
             if AGENT_DEBUG:
                 print("[agent] Resuming turn after tool results", flush=True)
@@ -873,22 +794,19 @@ class AgentHarness:
             else:
                 max_tokens = 4096
 
-            # Check if thinking API is compatible with conversation history
-            # When thinking is enabled, the last assistant message must start with a thinking block
             can_use_thinking = True
             if thinking_budget is not None and len(api_messages) > 0:
-                # Find the last assistant message
                 last_assistant_msg = None
                 for msg in reversed(api_messages):
                     if msg.get("role") == "assistant":
                         last_assistant_msg = msg
                         break
-                
+
                 if last_assistant_msg:
                     content = last_assistant_msg.get("content", [])
                     if isinstance(content, list) and len(content) > 0:
                         first_block_type = content[0].get("type") if isinstance(content[0], dict) else None
-                        if first_block_type not in ("thinking", "redacted_thinking"):
+                        if first_block_type not in {"thinking", "redacted_thinking"}:
                             can_use_thinking = False
                             if AGENT_DEBUG:
                                 print(f"[agent] Cannot use thinking API: last assistant message starts with {first_block_type}, not thinking", flush=True)
@@ -1045,8 +963,6 @@ class AgentHarness:
                         print("[agent] submit_response called, completing turn")
                     await self._send_structured_output()
                 else:
-                    # Continue the turn by prompting the loop to run another
-                    # round with the updated DB-backed history (tool use + results)
                     await self.pending_messages.put({"type": "resume"})
             elif response.stop_reason == "max_tokens":
                 print("[agent] Hit max tokens", flush=True)
@@ -1078,7 +994,6 @@ class AgentHarness:
 
             self.system_prompt = build_full_instruction(self.instructions_context)
 
-            # Check for pending work from previous session
             messages = await self._build_messages_from_db()
             has_pending_work = len(messages) > 0 and messages[-1].get("role") == "user"
 
@@ -1087,7 +1002,6 @@ class AgentHarness:
                 content = last_user_msg.get("content", "")
                 preview = str(content)[:100] if isinstance(content, str) else "previous request"
 
-                # Insert assistant message offering to continue
                 await self._insert_history(
                     event_type="anthropic_message",
                     payload={
@@ -1098,7 +1012,6 @@ class AgentHarness:
                     },
                 )
 
-                # Send structured output asking if user wants to continue
                 await self._insert_history(
                     event_type="structured_output",
                     payload={
