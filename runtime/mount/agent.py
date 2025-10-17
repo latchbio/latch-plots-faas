@@ -933,6 +933,87 @@ class AgentHarness:
                 )
                 await self._notify_history_updated()
 
+            has_asked_to_resume = False
+            if len(messages) > 0 and messages[-1].get("role") == "user":
+                last_content = messages[-1].get("content")
+                if isinstance(last_content, list):
+                    for block in last_content:
+                        if isinstance(block, dict) and block.get("type") == "tool_result":
+                            tool_use_id = block.get("tool_use_id")
+                            if isinstance(tool_use_id, str) and tool_use_id.startswith("resume_"):
+                                has_asked_to_resume = True
+                                break
+
+            has_pending_work = False
+            for history_msg in reversed(messages):
+                if history_msg.get("role") != "assistant":
+                    continue
+
+                content = history_msg.get("content")
+                if not isinstance(content, list):
+                    continue
+
+                for block in content:
+                    if not isinstance(block, dict):
+                        continue
+
+                    if block.get("type") == "tool_use" and block.get("name") == "submit_response":
+                        tool_id = block.get("id", "")
+                        if tool_id.startswith("resume_"):
+                            continue
+
+                        tool_input = block.get("input", {})
+                        next_status = tool_input.get("next_status")
+                        has_pending_work = next_status != "done"
+                        break
+
+                break
+
+            if has_pending_work and not has_asked_to_resume:
+                resume_tool_id = f"resume_{uuid.uuid4().hex[:12]}"
+
+                await self._insert_history(
+                    event_type="anthropic_message",
+                    payload={
+                        "type": "anthropic_message",
+                        "role": "assistant",
+                        "content": [
+                            {"type": "text", "text": "I see we were interrupted."},
+                            {
+                                "type": "tool_use",
+                                "id": resume_tool_id,
+                                "name": "submit_response",
+                                "input": {
+                                    "plan": [],
+                                    "plan_diff": [],
+                                    "questions": "Would you like me to continue?",
+                                    "next_status": "awaiting_user_response",
+                                }
+                            }
+                        ],
+                        "timestamp": int(time.time() * 1000),
+                    },
+                )
+
+                await self._insert_history(
+                    event_type="anthropic_message",
+                    payload={
+                        "type": "anthropic_message",
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "tool_result",
+                                "tool_use_id": resume_tool_id,
+                                "content": "Response submitted successfully"
+
+                            }
+
+                        ],
+                        "timestamp": int(time.time() * 1000),
+                    },
+                )
+                await self._notify_history_updated()
+
             self.initialized = True
             await self.send({
                 "type": "agent_status",
