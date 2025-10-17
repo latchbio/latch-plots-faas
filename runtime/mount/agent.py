@@ -865,6 +865,8 @@ class AgentHarness:
             tool_use_ids = set()
             tool_result_ids = set()
 
+            print(f"[agent] Checking for pending tools in {len(messages)} messages", flush=True)
+
             for history_msg in messages:
                 content = history_msg.get("content")
                 if not isinstance(content, list):
@@ -878,12 +880,16 @@ class AgentHarness:
                         tool_id = block.get("id")
                         if tool_id:
                             tool_use_ids.add(tool_id)
+                            print(f"[agent]   Found tool_use: id={tool_id}, name={block.get('name')}", flush=True)
                     elif block.get("type") == "tool_result":
                         tool_use_id = block.get("tool_use_id")
                         if tool_use_id:
                             tool_result_ids.add(tool_use_id)
+                            print(f"[agent]   Found tool_result: tool_use_id={tool_use_id}", flush=True)
 
             pending_tool_ids = tool_use_ids - tool_result_ids
+
+            print(f"[agent] Tool use count: {len(tool_use_ids)}, Tool result count: {len(tool_result_ids)}, Pending: {len(pending_tool_ids)}", flush=True)
 
             if pending_tool_ids:
                 print(f"[agent] Found {len(pending_tool_ids)} pending tool calls, closing them", flush=True)
