@@ -933,6 +933,9 @@ class AgentHarness:
                 )
                 await self._notify_history_updated()
 
+            # Check resume conditions
+            print(f"[agent] Checking resume conditions with {len(messages)} messages", flush=True)
+
             has_asked_to_resume = False
             if len(messages) > 0 and messages[-1].get("role") == "user":
                 last_content = messages[-1].get("content")
@@ -942,6 +945,7 @@ class AgentHarness:
                             tool_use_id = block.get("tool_use_id")
                             if isinstance(tool_use_id, str) and tool_use_id.startswith("resume_"):
                                 has_asked_to_resume = True
+                                print("[agent] Already asked to resume", flush=True)
                                 break
 
             has_pending_work = False
@@ -960,16 +964,21 @@ class AgentHarness:
                     if block.get("type") == "tool_use" and block.get("name") == "submit_response":
                         tool_id = block.get("id", "")
                         if tool_id.startswith("resume_"):
+                            print(f"[agent] Skipping resume submit_response: {tool_id}", flush=True)
                             continue
 
                         tool_input = block.get("input", {})
                         next_status = tool_input.get("next_status")
                         has_pending_work = next_status != "done"
+                        print(f"[agent] Found last submit_response: next_status={next_status}, has_pending_work={has_pending_work}", flush=True)
                         break
 
                 break
 
+            print(f"[agent] Resume decision: has_pending_work={has_pending_work}, has_asked_to_resume={has_asked_to_resume}", flush=True)
+
             if has_pending_work and not has_asked_to_resume:
+                print("[agent] Creating resume message", flush=True)
                 resume_tool_id = f"resume_{uuid.uuid4().hex[:12]}"
 
                 await self._insert_history(
