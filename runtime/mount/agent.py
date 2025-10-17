@@ -993,7 +993,7 @@ class AgentHarness:
                             tool_id = block.get("id") if isinstance(block, dict) else block.id
                             tool_name = block.get("name") if isinstance(block, dict) else block.name
                             tool_input = block.get("input") if isinstance(block, dict) else block.input
-                        await self._insert_history(
+                            await self._insert_history(
                                 event_type="agent_action",
                                 payload={
                                     "type": "agent_action",
@@ -1007,15 +1007,15 @@ class AgentHarness:
                                 },
                             )
 
-                        await self._insert_history(
-                            event_type="anthropic_message",
-                            payload={
-                                "type": "anthropic_message",
-                                "role": "user",
-                                "content": tool_results,
-                                "timestamp": int(time.time() * 1000),
-                            },
-                        )
+                    await self._insert_history(
+                        event_type="anthropic_message",
+                        payload={
+                            "type": "anthropic_message",
+                            "role": "user",
+                            "content": tool_results,
+                            "timestamp": int(time.time() * 1000),
+                        },
+                    )
 
                     for tr in tool_results:
                         await self._insert_history(
