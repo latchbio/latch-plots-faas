@@ -339,15 +339,20 @@ class AgentHarness:
         msg = await self.pending_messages.get()
 
         msg_type = msg.get("type")
+        if AGENT_DEBUG:
+            print(f"[agent] _wait_for_message: got message type={msg_type}", flush=True)
 
         # Internal no-op used to advance the loop after tool execution/results
         if msg_type == "resume":
             if AGENT_DEBUG:
-                print("[agent] Resuming turn after tool results")
+                print("[agent] Resuming turn after tool results", flush=True)
             return
 
         if msg_type == "user_query":
             self.current_request_id = msg.get("request_id")
+
+            if AGENT_DEBUG:
+                print(f"[agent] About to insert history for user query", flush=True)
 
             # Persist exact user message for reconstruction
             await self._insert_history(
@@ -363,7 +368,7 @@ class AgentHarness:
 
             if AGENT_DEBUG:
                 content_preview = msg["content"][:100]
-                print(f"[agent] User query received: {content_preview}...")
+                print(f"[agent] User query received: {content_preview}...", flush=True)
 
         elif msg_type == "cell_result":
             cell_id = msg["cell_id"]
@@ -828,9 +833,16 @@ class AgentHarness:
 
         self.conversation_running = True
         turn = 0
+        
+        if AGENT_DEBUG:
+            print("[agent] run_agent_loop started", flush=True)
 
         while self.conversation_running:
+            if AGENT_DEBUG:
+                print(f"[agent] Loop iteration, about to wait for message", flush=True)
             await self._wait_for_message()
+            if AGENT_DEBUG:
+                print(f"[agent] Returned from _wait_for_message, conversation_running={self.conversation_running}", flush=True)
             if not self.conversation_running:
                 break
 
@@ -839,7 +851,7 @@ class AgentHarness:
             model, thinking_budget = self.mode_config.get(self.mode, ("claude-sonnet-4-5-20250929", 1024))
 
             if AGENT_DEBUG:
-                print(f"[agent] Turn {turn}, mode={self.mode}, thinking_budget={thinking_budget}")
+                print(f"[agent] Turn {turn}, mode={self.mode}, thinking_budget={thinking_budget}", flush=True)
 
             if thinking_budget is not None:
                 max_tokens = thinking_budget + 4096
@@ -1068,6 +1080,16 @@ class AgentHarness:
             print("[agent] Initialization complete", flush=True)
 
             self.conversation_task = asyncio.create_task(self.run_agent_loop())
+            
+            # Add done callback to log any exceptions
+            def _task_done_callback(task: asyncio.Task):
+                try:
+                    task.result()
+                except Exception as e:
+                    print(f"[agent] conversation_task raised exception: {e}", flush=True)
+                    traceback.print_exc()
+            
+            self.conversation_task.add_done_callback(_task_done_callback)
         except Exception as e:
             await self.send({
                 "type": "agent_error",
@@ -1079,13 +1101,15 @@ class AgentHarness:
         query = msg.get("query", "")
         request_id = msg.get("request_id")
 
-        print(f"[agent] Processing query: {query}...")
+        print(f"[agent] Processing query: {query}...", flush=True)
+        print(f"[agent] conversation_task status: {self.conversation_task}, done={self.conversation_task.done() if self.conversation_task else 'N/A'}, running={self.conversation_running}", flush=True)
 
         await self.pending_messages.put({
             "type": "user_query",
             "content": query,
             "request_id": request_id,
         })
+        print(f"[agent] Message put into queue, queue size: {self.pending_messages.qsize()}", flush=True)
 
     async def handle_cancel(self, msg: dict[str, object]) -> None:
         request_id = msg.get("request_id", "unknown")
