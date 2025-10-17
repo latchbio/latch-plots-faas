@@ -9,7 +9,6 @@ import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Literal
 
 import anthropic
 from anthropic.types import MessageParam, ToolParam
@@ -17,7 +16,6 @@ from anthropic.types.beta.beta_message import BetaMessage
 from anthropic.types.message import Message
 from config_loader import build_full_instruction
 from lplots import _inject
-from pydantic import BaseModel
 from socketio_thread import SocketIoThread
 from utils import auth_token_sdk, gql_query, nucleus_url, pod_id
 
@@ -42,41 +40,6 @@ class Mode(Enum):
     debugging = "debugging"
 
 
-class PlanItem(BaseModel):
-    id: str
-    description: str
-    status: Literal["todo", "in_progress", "done"]
-
-
-class PlanDiff(BaseModel):
-    action: Literal["add", "update", "complete"]
-    id: str
-    description: str | None = None
-
-
-class NotebookResponse(BaseModel):
-    plan: list[PlanItem]
-    plan_diff: list[PlanDiff]
-    summary: list[str] | None = None
-    questions: list[str] | None = None
-    next_status: Literal["executing", "fixing", "thinking", "awaiting_user_response", "awaiting_cell_execution", "awaiting_user_widget_input", "done"]
-
-
-from typing_extensions import TypedDict
-
-
-class PlanItemPayload(TypedDict):
-    id: str
-    description: str
-    status: Literal["todo", "in_progress", "done"]
-
-
-class PlanDiffPayload(TypedDict):
-    action: Literal["add", "update", "complete"]
-    id: str
-    description: str
-
-
 @dataclass
 class AgentHarness:
     conn: SocketIoThread
@@ -89,7 +52,6 @@ class AgentHarness:
     tool_map: dict[str, Callable] = field(default_factory=dict)
     operation_counter: int = 0
     instructions_context: str = ""
-    current_structured_output: NotebookResponse | None = None
     current_request_id: str | None = None
     should_auto_continue: bool = False
 
@@ -348,7 +310,8 @@ class AgentHarness:
             if AGENT_DEBUG:
                 print("[agent] Stop signal received")
 
-    async def _send_structured_output(self) -> None:
+    async def _complete_turn(self) -> None:
+        """Complete the current turn and handle auto-continuation."""
         if not self.current_request_id:
             return
 
@@ -357,17 +320,6 @@ class AgentHarness:
 
         if self.mode == Mode.executing:
             self.set_mode(Mode.planning)
-
-        # Structured output is now stored as part of the submit_response tool result
-        # in the anthropic_message, so we don't need a separate insert here
-        if self.current_structured_output is not None:
-            if AGENT_DEBUG:
-                structured = self.current_structured_output.model_dump()
-                print(f"[agent] Structured output with next_status={structured.get('next_status')}, request_id={self.current_request_id}")
-            self.current_structured_output = None
-        else:
-            if AGENT_DEBUG:
-                print("[agent] Warning: _send_structured_output called but current_structured_output is None")
 
         await self._notify_history_updated(request_id=self.current_request_id)
 
@@ -611,14 +563,7 @@ class AgentHarness:
                 print(f"  - questions: {questions}")
                 print(f"  - continue: {should_continue}")
 
-                self.current_structured_output = NotebookResponse(
-                    plan=[PlanItem(**item) for item in plan_items],
-                    plan_diff=[PlanDiff(**item) for item in plan_diff_items],
-                    summary=summary,
-                    questions=questions,
-                    next_status=next_status,
-                )
-
+                # Track whether to auto-continue
                 if should_continue and self.executing_cells:
                     print(f"[tool] Cannot continue - {len(self.executing_cells)} cells still executing: {self.executing_cells}")
                     self.should_auto_continue = False
@@ -911,7 +856,7 @@ class AgentHarness:
             if response.stop_reason == "end_turn":
                 if AGENT_DEBUG:
                     print("[agent] Turn ended without submit_response; completing turn")
-                await self._send_structured_output()
+                await self._complete_turn()
             elif response.stop_reason == "tool_use":
                 tool_results = []
                 called_submit_response = False
@@ -975,16 +920,16 @@ class AgentHarness:
                 if called_submit_response:
                     if AGENT_DEBUG:
                         print("[agent] submit_response called, completing turn")
-                    await self._send_structured_output()
+                    await self._complete_turn()
                 else:
                     await self.pending_messages.put({"type": "resume"})
             elif response.stop_reason == "max_tokens":
                 print("[agent] Hit max tokens", flush=True)
-                await self._send_structured_output()
+                await self._complete_turn()
             else:
                 if AGENT_DEBUG:
                     print(f"[agent] Unknown stop reason: {response.stop_reason}")
-                await self._send_structured_output()
+                await self._complete_turn()
 
     async def handle_init(self, msg: dict[str, object]) -> None:
         print("[agent] Initializing", flush=True)
