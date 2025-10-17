@@ -995,7 +995,27 @@ class AgentHarness:
             self.system_prompt = build_full_instruction(self.instructions_context)
 
             messages = await self._build_messages_from_db()
-            has_pending_work = len(messages) > 0 and messages[-1].get("role") == "user"
+            has_pending_work = False
+
+            if len(messages) > 0 and messages[-1].get("role") == "user":
+                history = await self._fetch_history_from_db()
+
+                last_structured_output = None
+                for item in reversed(history):
+                    if item.get("type") == "structured_output":
+                        last_structured_output = item
+                        break
+
+                if last_structured_output is None:
+                    has_pending_work = True
+                else:
+                    next_status = last_structured_output.get("next_status")
+                    if next_status != "done":
+                        has_pending_work = True
+                        if AGENT_DEBUG:
+                            print(f"[agent] Found incomplete work with next_status={next_status}", flush=True)
+                    elif AGENT_DEBUG:
+                        print("[agent] Previous session ended with status 'done' - no resume needed", flush=True)
 
             if has_pending_work:
                 last_user_msg = messages[-1]
