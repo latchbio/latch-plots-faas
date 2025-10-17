@@ -812,7 +812,7 @@ class AgentHarness:
                                 "is_error": True,
                             })
 
-                if tool_results.length > 0:
+                if len(tool_results) > 0:
                     await self._insert_history(
                         event_type="anthropic_message",
                         payload={
@@ -982,14 +982,12 @@ class AgentHarness:
         request_id = msg.get("request_id")
 
         print(f"[agent] Processing query: {query}...", flush=True)
-        print(f"[agent] conversation_task status: {self.conversation_task}, done={self.conversation_task.done() if self.conversation_task else 'N/A'}, running={self.conversation_running}", flush=True)
 
         await self.pending_messages.put({
             "type": "user_query",
             "content": query,
             "request_id": request_id,
         })
-        print(f"[agent] Message put into queue, queue size: {self.pending_messages.qsize()}", flush=True)
 
     async def handle_cancel(self, msg: dict[str, object]) -> None:
         request_id = msg.get("request_id", "unknown")
