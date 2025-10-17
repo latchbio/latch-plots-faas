@@ -911,6 +911,7 @@ class AgentHarness:
                         "timestamp": int(time.time() * 1000),
                     },
                 )
+                await self._notify_history_updated()
 
             self.initialized = True
             await self.send({
