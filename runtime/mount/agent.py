@@ -415,12 +415,13 @@ class AgentHarness:
         if self.current_structured_output is not None:
             structured = self.current_structured_output.model_dump()
             if AGENT_DEBUG:
-                print(f"[agent] Storing structured_output with next_status={structured.get('next_status')}")
+                print(f"[agent] Storing structured_output with next_status={structured.get('next_status')}, request_id={self.current_request_id}")
             await self._insert_history(
                 event_type="structured_output",
                 payload={
                     "type": "structured_output",
                     **structured,
+                    "request_id": self.current_request_id,
                     "timestamp": int(time.time() * 1000),
                 },
                 request_id=self.current_request_id,
