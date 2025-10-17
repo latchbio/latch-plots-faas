@@ -963,12 +963,14 @@ class AgentHarness:
                     continue
 
                 print(f"[agent]   Content has {len(content)} blocks", flush=True)
+                found_submit_response = False
                 for block in content:
                     if not isinstance(block, dict):
                         continue
 
                     block_type = block.get("type")
-                    print(f"[agent]     Block type: {block_type}", flush=True)
+                    block_name = block.get("name", "N/A")
+                    print(f"[agent]     Block: type={block_type}, name={block_name}", flush=True)
 
                     if block.get("type") == "tool_use" and block.get("name") == "submit_response":
                         tool_id = block.get("id", "")
@@ -980,9 +982,12 @@ class AgentHarness:
                         next_status = tool_input.get("next_status")
                         has_pending_work = next_status != "done"
                         print(f"[agent] Found last submit_response: id={tool_id}, next_status={next_status}, has_pending_work={has_pending_work}", flush=True)
+                        found_submit_response = True
                         break
 
-                break
+                # Keep searching until we find a submit_response
+                if found_submit_response:
+                    break
 
             print(f"[agent] Resume decision: has_pending_work={has_pending_work}, has_asked_to_resume={has_asked_to_resume}", flush=True)
 
