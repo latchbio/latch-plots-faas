@@ -326,18 +326,6 @@ class AgentHarness:
         self.mode = mode
         print(f"[agent] Mode changed to {mode.value}")
 
-    def _message_has_thinking(self, msg: dict) -> bool:
-        if msg.get("role") != "assistant":
-            return False
-        content = msg.get("content", [])
-        if not isinstance(content, list):
-            return False
-        for block in content:
-            block_type = block.get("type") if isinstance(block, dict) else getattr(block, "type", None)
-            if block_type in ("thinking", "redacted_thinking"):
-                return True
-        return False
-
     async def _wait_for_message(self) -> None:
         msg = await self.pending_messages.get()
 
@@ -414,7 +402,7 @@ class AgentHarness:
             if AGENT_DEBUG:
                 print("[agent] Stop signal received")
 
-    async def _send_agent_result(self) -> None:
+    async def _send_structured_output(self) -> None:
         if not self.current_request_id:
             return
 
@@ -424,19 +412,20 @@ class AgentHarness:
         if self.mode == Mode.executing:
             self.set_mode(Mode.planning)
 
-        structured = self.current_structured_output.model_dump() if self.current_structured_output is not None else None
-        await self._insert_history(
-            event_type="agent_result",
-            payload={
-            "type": "agent_result",
-            "request_id": self.current_request_id,
-                "responses": [],
-                **({"structured_output": structured} if structured else {}),
-                "timestamp": int(time.time() * 1000),
-            },
-            request_id=self.current_request_id,
-        )
-        self.current_structured_output = None
+        if self.current_structured_output is not None:
+            structured = self.current_structured_output.model_dump()
+            await self._insert_history(
+                event_type="structured_output",
+                payload={
+                    "type": "structured_output",
+                    **structured,
+                    "timestamp": int(time.time() * 1000),
+                },
+                request_id=self.current_request_id,
+            )
+            self.current_structured_output = None
+
+        await self._notify_history_updated(request_id=self.current_request_id)
 
         if should_continue:
             if AGENT_DEBUG:
@@ -857,6 +846,12 @@ class AgentHarness:
             if not self.conversation_running:
                 break
 
+            api_messages = await self._build_messages_from_db()
+            if not api_messages or api_messages[-1].get("role") != "user":
+                if AGENT_DEBUG:
+                    print("[agent] Last message is not from user, waiting for next message", flush=True)
+                continue
+
             turn += 1
 
             model, thinking_budget = self.mode_config.get(self.mode, ("claude-sonnet-4-5-20250929", 1024))
@@ -868,16 +863,6 @@ class AgentHarness:
                 max_tokens = thinking_budget + 4096
             else:
                 max_tokens = 4096
-
-            def _has_content(m: dict) -> bool:
-                c = m.get("content")
-                if isinstance(c, str):
-                    return bool(c.strip())
-                if isinstance(c, list):
-                    return len(c) > 0
-                return False
-
-            api_messages = await self._build_messages_from_db()
 
             # Check if thinking API is compatible with conversation history
             # When thinking is enabled, the last assistant message must start with a thinking block
@@ -916,19 +901,18 @@ class AgentHarness:
                 use_beta_api = True
 
             try:
-                start_time = time.process_time()
+                start_time = time.time()
 
                 if use_beta_api:
                     response: BetaMessage = await self.client.beta.messages.create(**kwargs)
                 else:
                     response: Message = await self.client.messages.create(**kwargs)
 
-                duration = time.process_time() - start_time
+                duration = time.time() - start_time
 
             except Exception as e:
                 print(f"[agent] API error: {e}", flush=True)
-                
-                # Log the messages that caused the error for debugging
+
                 print(f"[agent] API call failed with {len(api_messages)} messages", flush=True)
                 for i, msg in enumerate(api_messages):
                     role = msg.get("role", "?")
@@ -942,7 +926,7 @@ class AgentHarness:
                             print(f"    Block {j}: {block_type}", flush=True)
                     else:
                         print(f"  Message {i} ({role}): unknown content type={type(content)}", flush=True)
-                
+
                 await self.send({
                     "type": "agent_error",
                     "error": f"API error: {e!s}",
@@ -985,8 +969,8 @@ class AgentHarness:
 
             if response.stop_reason == "end_turn":
                 if AGENT_DEBUG:
-                    print("[agent] Turn ended without submit_response; emitting agent_result to close the turn")
-                await self._send_agent_result()
+                    print("[agent] Turn ended without submit_response; completing turn")
+                await self._send_structured_output()
             elif response.stop_reason == "tool_use":
                 tool_results = []
                 called_submit_response = False
@@ -1034,26 +1018,7 @@ class AgentHarness:
                             })
 
                 if tool_results:
-                    for block in response.content:
-                        block_type = block.get("type") if isinstance(block, dict) else getattr(block, "type", None)
-                        if block_type == "tool_use":
-                            tool_id = block.get("id") if isinstance(block, dict) else block.id
-                            tool_name = block.get("name") if isinstance(block, dict) else block.name
-                            tool_input = block.get("input") if isinstance(block, dict) else block.input
-                            await self._insert_history(
-                                event_type="agent_action",
-                                payload={
-                                    "type": "agent_action",
-                                    "action": {
-                                        "task": "tool_use",
-                                        "id": tool_id,
-                                        "name": tool_name,
-                                        "input": tool_input,
-                                    },
-                                    "timestamp": int(time.time() * 1000),
-                                },
-                            )
-
+                    # Store tool results as anthropic_message for API reconstruction
                     await self._insert_history(
                         event_type="anthropic_message",
                         payload={
@@ -1063,39 +1028,24 @@ class AgentHarness:
                             "timestamp": int(time.time() * 1000),
                         },
                     )
-
-                    for tr in tool_results:
-                        await self._insert_history(
-                            event_type="agent_action",
-                            payload={
-                                "type": "agent_action",
-                                "action": {
-                                    "task": "tool_result",
-                                    "tool_use_id": tr.get("tool_use_id"),
-                                    "content": tr.get("content"),
-                                    "is_error": tr.get("is_error", False),
-                                },
-                                "timestamp": int(time.time() * 1000),
-                            },
-                        )
                 elif AGENT_DEBUG:
                     print("[agent] No tool results")
 
                 if called_submit_response:
                     if AGENT_DEBUG:
-                        print("[agent] submit_response called, sending agent_result")
-                    await self._send_agent_result()
+                        print("[agent] submit_response called, completing turn")
+                    await self._send_structured_output()
                 else:
                     # Continue the turn by prompting the loop to run another
                     # round with the updated DB-backed history (tool use + results)
                     await self.pending_messages.put({"type": "resume"})
             elif response.stop_reason == "max_tokens":
                 print("[agent] Hit max tokens", flush=True)
-                await self._send_agent_result()
+                await self._send_structured_output()
             else:
                 if AGENT_DEBUG:
                     print(f"[agent] Unknown stop reason: {response.stop_reason}")
-                await self._send_agent_result()
+                await self._send_structured_output()
 
     async def handle_init(self, msg: dict[str, object]) -> None:
         print("[agent] Initializing", flush=True)
@@ -1118,6 +1068,41 @@ class AgentHarness:
             )
 
             self.system_prompt = build_full_instruction(self.instructions_context)
+
+            # Check for pending work from previous session
+            messages = await self._build_messages_from_db()
+            has_pending_work = len(messages) > 0 and messages[-1].get("role") == "user"
+
+            if has_pending_work:
+                last_user_msg = messages[-1]
+                content = last_user_msg.get("content", "")
+                preview = str(content)[:100] if isinstance(content, str) else "previous request"
+
+                # Insert assistant message offering to continue
+                await self._insert_history(
+                    event_type="anthropic_message",
+                    payload={
+                        "type": "anthropic_message",
+                        "role": "assistant",
+                        "content": [{"type": "text", "text": f"I see we were interrupted while I was working on: {preview}...\n\nWould you like me to continue?"}],
+                        "timestamp": int(time.time() * 1000),
+                    },
+                )
+
+                # Send structured output asking if user wants to continue
+                await self._insert_history(
+                    event_type="structured_output",
+                    payload={
+                        "type": "structured_output",
+                        "plan": [],
+                        "plan_diff": [],
+                        "questions": [f"Session resumed. I found an incomplete task: {preview}...\n\nWould you like me to continue?"],
+                        "next_status": "awaiting_user_response",
+                        "summary": None,
+                        "timestamp": int(time.time() * 1000),
+                    },
+                )
+                await self._notify_history_updated()
 
             self.initialized = True
             await self.send({
