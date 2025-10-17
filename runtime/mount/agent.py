@@ -681,14 +681,14 @@ class AgentHarness:
 
         self.tools.append({
             "name": "submit_response",
-            "description": "Submit the final response with plan, plan_diff, summary, next_status, and questions. Call this at the end of every turn.",
+            "description": "Submit the final response with plan, plan_diff, optional summary, next_status, and optional questions. Call this at the end of every turn.",
             "input_schema": {
                 "type": "object",
                 "properties": {
                     "plan": {"type": "array", "description": "List of plan items"},
                     "plan_diff": {"type": "array", "description": "List of plan diff items"},
-                    "summary": {"type": "array", "description": "List of summary bullet points or null"},
-                    "questions": {"type": "array", "description": "List of questions for the user or null"},
+                    "summary": {"type": "array", "description": "Optional list of summary bullet points. Omit if no summary needed."},
+                    "questions": {"type": "array", "description": "Optional list of questions for the user. Omit if no questions needed."},
                     "next_status": {"type": "string", "description": "What the agent will do next", "enum": ["executing", "fixing", "thinking", "awaiting_user_response", "awaiting_cell_execution", "awaiting_user_widget_input", "done"]},
                     "continue": {
                         "type": "boolean",
@@ -696,7 +696,7 @@ class AgentHarness:
                         "default": False
                     },
                 },
-                "required": ["plan", "plan_diff", "summary", "questions", "next_status"],
+                "required": ["plan", "plan_diff", "next_status"],
             },
         })
         self.tool_map["submit_response"] = submit_response
