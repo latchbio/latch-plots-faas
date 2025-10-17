@@ -926,9 +926,8 @@ class AgentHarness:
                                 "input": {
                                     "plan": [],
                                     "plan_diff": [],
-                                    "questions": [f"Session resumed. I found an incomplete task: {preview}...\n\nWould you like me to continue?"],
+                                    "questions": f"Session resumed. I found an incomplete task: {preview}...\n\nWould you like me to continue?",
                                     "next_status": "awaiting_user_response",
-                                    "summary": None,
                                 }
                             }
                         ],
