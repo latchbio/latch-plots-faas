@@ -147,27 +147,7 @@ class AgentHarness:
                 role = item.get("role")
                 content = item.get("content")
                 if role in ("user", "assistant") and (isinstance(content, (str, list))):
-                    # For assistant messages with list content, filter out thinking blocks
-                    # Thinking blocks are only for the current turn, not for conversation history
-                    if role == "assistant" and isinstance(content, list):
-                        filtered_content = [
-                            block for block in content
-                            if not (isinstance(block, dict) and block.get("type") in ("thinking", "redacted_thinking"))
-                        ]
-                        
-                        if AGENT_DEBUG:
-                            orig_types = [b.get("type") if isinstance(b, dict) else "?" for b in content]
-                            filtered_types = [b.get("type") if isinstance(b, dict) else "?" for b in filtered_content]
-                            if orig_types != filtered_types:
-                                print(f"[agent] Filtered thinking blocks: {orig_types} -> {filtered_types}", flush=True)
-                        
-                        # Only add message if there's content remaining after filtering
-                        if filtered_content:
-                            anthropic_messages.append({"role": role, "content": filtered_content})
-                        elif AGENT_DEBUG:
-                            print(f"[agent] Skipping assistant message with only thinking blocks", flush=True)
-                    else:
-                        anthropic_messages.append({"role": role, "content": content})
+                    anthropic_messages.append({"role": role, "content": content})
 
         if AGENT_DEBUG:
             print(f"[agent] Built {len(anthropic_messages)} messages from DB", flush=True)
@@ -899,6 +879,26 @@ class AgentHarness:
 
             api_messages = await self._build_messages_from_db()
 
+            # Check if thinking API is compatible with conversation history
+            # When thinking is enabled, the last assistant message must start with a thinking block
+            can_use_thinking = True
+            if thinking_budget is not None and len(api_messages) > 0:
+                # Find the last assistant message
+                last_assistant_msg = None
+                for msg in reversed(api_messages):
+                    if msg.get("role") == "assistant":
+                        last_assistant_msg = msg
+                        break
+                
+                if last_assistant_msg:
+                    content = last_assistant_msg.get("content", [])
+                    if isinstance(content, list) and len(content) > 0:
+                        first_block_type = content[0].get("type") if isinstance(content[0], dict) else None
+                        if first_block_type not in ("thinking", "redacted_thinking"):
+                            can_use_thinking = False
+                            if AGENT_DEBUG:
+                                print(f"[agent] Cannot use thinking API: last assistant message starts with {first_block_type}, not thinking", flush=True)
+
             kwargs = {
                 "model": model,
                 "max_tokens": max_tokens,
@@ -907,7 +907,7 @@ class AgentHarness:
                 "tools": self.tools,
             }
             use_beta_api = False
-            if thinking_budget is not None:
+            if thinking_budget is not None and can_use_thinking:
                 kwargs["thinking"] = {
                     "type": "enabled",
                     "budget_tokens": thinking_budget,
