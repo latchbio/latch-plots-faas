@@ -862,54 +862,44 @@ class AgentHarness:
             self.system_prompt = build_full_instruction(self.instructions_context)
 
             messages = await self._build_messages_from_db()
-            has_pending_work = False
 
+            has_asked_to_resume = False
             if len(messages) > 0 and messages[-1].get("role") == "user":
-                submit_response_tools: dict[str, dict] = {}
-                last_structured_output = None
-
-                for history_msg in reversed(messages):
-                    content = history_msg.get("content")
-                    if not isinstance(content, list):
-                        continue
-
-                    for block in content:
-                        if not isinstance(block, dict):
-                            continue
-
-                        block_type = block.get("type")
-
-                        if block_type == "tool_use" and block.get("name") == "submit_response":
-                            tool_id = block.get("id")
-                            tool_input = block.get("input")
-                            if tool_id is not None and tool_input is not None:
-                                submit_response_tools[tool_id] = tool_input
-
-                        elif block_type == "tool_result":
+                last_content = messages[-1].get("content")
+                if isinstance(last_content, list):
+                    for block in last_content:
+                        if isinstance(block, dict) and block.get("type") == "tool_result":
                             tool_use_id = block.get("tool_use_id")
-                            if tool_use_id is not None and tool_use_id in submit_response_tools:
-                                last_structured_output = submit_response_tools[tool_use_id]
+                            if isinstance(tool_use_id, str) and tool_use_id.startswith("resume_"):
+                                has_asked_to_resume = True
                                 break
 
-                    if last_structured_output is not None:
+            has_pending_work = False
+            for history_msg in reversed(messages):
+                if history_msg.get("role") != "assistant":
+                    continue
+
+                content = history_msg.get("content")
+                if not isinstance(content, list):
+                    continue
+
+                for block in content:
+                    if not isinstance(block, dict):
+                        continue
+
+                    if block.get("type") == "tool_use" and block.get("name") == "submit_response":
+                        tool_id = block.get("id", "")
+                        if tool_id.startswith("resume_"):
+                            continue
+
+                        tool_input = block.get("input", {})
+                        next_status = tool_input.get("next_status")
+                        has_pending_work = next_status != "done"
                         break
 
-                if last_structured_output is None:
-                    has_pending_work = True
-                else:
-                    next_status = last_structured_output.get("next_status")
-                    if next_status != "done":
-                        has_pending_work = True
-                        if AGENT_DEBUG:
-                            print(f"[agent] Found incomplete work with next_status={next_status}", flush=True)
-                    elif AGENT_DEBUG:
-                        print("[agent] Previous session ended with status 'done' - no resume needed", flush=True)
+                break
 
-            if has_pending_work:
-                last_user_msg = messages[-1]
-                content = last_user_msg.get("content", "")
-                preview = str(content)[:100] if isinstance(content, str) else "previous request"
-
+            if has_pending_work and not has_asked_to_resume:
                 resume_tool_id = f"resume_{uuid.uuid4().hex[:12]}"
 
                 await self._insert_history(
@@ -918,7 +908,7 @@ class AgentHarness:
                         "type": "anthropic_message",
                         "role": "assistant",
                         "content": [
-                            {"type": "text", "text": f"I see we were interrupted while I was working on: {preview}...\n\nWould you like me to continue?"},
+                            {"type": "text", "text": "I see we were interrupted."},
                             {
                                 "type": "tool_use",
                                 "id": resume_tool_id,
@@ -926,7 +916,7 @@ class AgentHarness:
                                 "input": {
                                     "plan": [],
                                     "plan_diff": [],
-                                    "questions": f"Session resumed. I found an incomplete task: {preview}...\n\nWould you like me to continue?",
+                                    "questions": "Would you like me to continue?",
                                     "next_status": "awaiting_user_response",
                                 }
                             }
