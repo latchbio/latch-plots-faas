@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import json
 import os
 import socket
@@ -172,6 +173,9 @@ class AgentHarness:
 
         try:
             return await asyncio.wait_for(response_future, timeout=10.0)
+        except asyncio.CancelledError:
+            print(f"[agent] Operation cancelled (session reinitialized): action={action}, tx_id={tx_id}", flush=True)
+            return {"status": "error", "error": "Operation cancelled - session reinitialized"}
         except TimeoutError:
             return {"status": "error", "error": "Operation timeout", "tx_id": tx_id}
         finally:
@@ -843,6 +847,22 @@ class AgentHarness:
         print("[agent] Initializing", flush=True)
 
         try:
+            if len(self.pending_operations) > 0:
+                print(f"[agent] Cancelling {len(self.pending_operations)} pending operations from previous session", flush=True)
+                for tx_id, future in self.pending_operations.items():
+                    if future.done():
+                        continue
+
+                    future.cancel()
+                    print(f"[agent]   Cancelled: {tx_id}", flush=True)
+
+            if self.conversation_task and not self.conversation_task.done():
+                print("[agent] Cancelling previous conversation task", flush=True)
+                self.conversation_running = False
+                self.conversation_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await self.conversation_task
+
             context = msg.get("context", "")
             self.instructions_context = context
             session_id = msg.get("session_id")
