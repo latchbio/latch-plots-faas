@@ -797,7 +797,7 @@ class AgentHarness:
                 else:
                     response: Message = await self.client.messages.create(**kwargs)
 
-                duration = time.time() - start_time
+                duration_seconds = time.time() - start_time
 
             except Exception as e:
                 print(f"[agent] API error: {e}", flush=True)
@@ -832,6 +832,7 @@ class AgentHarness:
                         "role": "assistant",
                         "content": response_content,
                         "timestamp": int(time.time() * 1000),
+                        "duration": duration_seconds,
                     },
                 )
             elif AGENT_DEBUG:
@@ -976,6 +977,9 @@ class AgentHarness:
                 content = last_user_msg.get("content", "")
                 preview = str(content)[:100] if isinstance(content, str) else "previous request"
 
+                # Generate consistent tool ID for resume flow
+                resume_tool_id = f"resume_{uuid.uuid4().hex[:12]}"
+
                 # Insert assistant message with resume question - the frontend will
                 # extract structured output from the submit_response tool call
                 await self._insert_history(
@@ -987,7 +991,7 @@ class AgentHarness:
                             {"type": "text", "text": f"I see we were interrupted while I was working on: {preview}...\n\nWould you like me to continue?"},
                             {
                                 "type": "tool_use",
-                                "id": f"resume_{uuid.uuid4().hex[:12]}",
+                                "id": resume_tool_id,
                                 "name": "submit_response",
                                 "input": {
                                     "plan": [],
@@ -1011,7 +1015,7 @@ class AgentHarness:
                         "content": [
                             {
                                 "type": "tool_result",
-                                "tool_use_id": f"resume_{uuid.uuid4().hex[:12]}",
+                                "tool_use_id": resume_tool_id,
                                 "content": "Response submitted successfully"
                             }
                         ],
