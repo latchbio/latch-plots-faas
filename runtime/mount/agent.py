@@ -142,8 +142,20 @@ class AgentHarness:
             if t == "anthropic_message":
                 role = item.get("role")
                 content = item.get("content")
-                if role in {"user", "assistant"} and (isinstance(content, (str, list))):
-                    anthropic_messages.append({"role": role, "content": content})
+                
+                # Skip messages with empty or invalid content
+                if role not in {"user", "assistant"}:
+                    continue
+                if not isinstance(content, (str, list)):
+                    continue
+                if isinstance(content, str) and not content.strip():
+                    print(f"[agent] WARNING: Skipping empty string message from DB (role={role})", flush=True)
+                    continue
+                if isinstance(content, list) and len(content) == 0:
+                    print(f"[agent] WARNING: Skipping empty list message from DB (role={role})", flush=True)
+                    continue
+                
+                anthropic_messages.append({"role": role, "content": content})
 
         if AGENT_DEBUG:
             print(f"[agent] Built {len(anthropic_messages)} messages from DB", flush=True)
@@ -861,12 +873,29 @@ class AgentHarness:
                 })
                 continue
 
+            # Ensure we don't store empty assistant messages
+            response_content = response.model_dump()["content"]
+            if not response_content or (isinstance(response_content, list) and len(response_content) == 0):
+                print(f"[agent] WARNING: API returned empty assistant message content!", flush=True)
+                print(f"[agent] stop_reason={response.stop_reason}", flush=True)
+                print(f"[agent] usage={response.usage}", flush=True)
+                print(f"[agent] model={response.model}", flush=True)
+                print(f"[agent] Full response: {response.model_dump()}", flush=True)
+                await self.send({
+                    "type": "agent_error",
+                    "error": f"API returned empty response (stop_reason: {response.stop_reason})",
+                    "fatal": False
+                })
+                # Send a structured output to unblock the UI
+                await self._send_structured_output()
+                continue
+            
             await self._insert_history(
                 event_type="anthropic_message",
                 payload={
                     "type": "anthropic_message",
                     "role": "assistant",
-                    "content": response.model_dump()["content"],
+                    "content": response_content,
                     "timestamp": int(time.time() * 1000),
                 },
             )
