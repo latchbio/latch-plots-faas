@@ -51,7 +51,7 @@ class PlanItem(BaseModel):
 class PlanDiff(BaseModel):
     action: Literal["add", "update", "complete"]
     id: str
-    description: str
+    description: str | None = None
 
 
 class NotebookResponse(BaseModel):
