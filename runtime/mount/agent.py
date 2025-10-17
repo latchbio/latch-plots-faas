@@ -112,43 +112,6 @@ class AgentHarness:
 
         return anthropic_messages
 
-    def _extract_structured_output_from_messages(self, messages: list[MessageParam]) -> dict | None:
-        """Extract the most recent structured output from submit_response tool results."""
-        for msg in reversed(messages):
-            if msg.get("role") != "user":
-                continue
-            content = msg.get("content")
-            if not isinstance(content, list):
-                continue
-
-            for block in content:
-                if not isinstance(block, dict):
-                    continue
-                if block.get("type") == "tool_result":
-                    # Look back through assistant messages to find the corresponding tool_use
-                    tool_use_id = block.get("tool_use_id")
-                    if not tool_use_id:
-                        continue
-
-                    # Search backwards for the tool_use with this ID
-                    for prev_msg in reversed(messages):
-                        if prev_msg.get("role") != "assistant":
-                            continue
-                        prev_content = prev_msg.get("content")
-                        if not isinstance(prev_content, list):
-                            continue
-
-                        for prev_block in prev_content:
-                            if not isinstance(prev_block, dict):
-                                continue
-                            if (prev_block.get("type") == "tool_use" and
-                                prev_block.get("id") == tool_use_id and
-                                prev_block.get("name") == "submit_response"):
-                                # Found the submit_response tool - extract the input
-                                return prev_block.get("input")
-
-        return None
-
     async def _insert_history(self, *, event_type: str, payload: dict, request_id: str | None = None, tx_id: str | None = None) -> None:
         assert self.agent_session_id is not None
 
@@ -175,36 +138,17 @@ class AgentHarness:
     async def _mark_all_history_removed(self) -> None:
         assert self.agent_session_id is not None
 
-        resp = await gql_query(
+        await gql_query(
             auth=auth_token_sdk,
             query="""
-                query AgentHistoryIds($sessionId: BigInt!) {
-                    agentHistories(condition: {sessionId: $sessionId, removed: false}) {
-                        nodes { id }
+                mutation ClearAgentHistory($sessionId: BigInt!) {
+                    clearAgentHistory(input: {argSessionId: $sessionId}) {
+                        clientMutationId
                     }
                 }
             """,
             variables={"sessionId": str(self.agent_session_id)},
         )
-        nodes = resp.get("data", {}).get("agentHistories", {}).get("nodes", [])
-
-        # todo(aidan): move to function to batch query
-        for n in nodes:
-            hid = n.get("id")
-            if hid is None:
-                continue
-
-            await gql_query(
-                auth=auth_token_sdk,
-                query="""
-                    mutation RemoveHistory($id: BigInt!) {
-                        updateAgentHistory(input: {id: $id, patch: {removed: true}}) {
-                            clientMutationId
-                        }
-                    }
-                """,
-                variables={"id": str(hid)},
-            )
         await self._notify_history_updated()
 
     async def atomic_operation(self, action: str, params: dict) -> dict:
@@ -218,31 +162,20 @@ class AgentHarness:
         response_future = loop.create_future()
         self.pending_operations[tx_id] = response_future
 
-        # Enhanced logging for debugging duplicates
-        print(f"[agent] atomic_operation START: action={action}, tx_id={tx_id}, op_counter={self.operation_counter}", flush=True)
-        if action in {"create_cell", "create_markdown_cell"}:
-            print(f"[agent]   Cell creation params: position={params.get('position')}, title={params.get('title', 'N/A')}, source_preview={params.get('source', '')[:100]}", flush=True)
-
         try:
             if AGENT_DEBUG:
                 print(f"[agent] -> {action}")
             await self.send({"type": "agent_action", "action": action, "params": params, "tx_id": tx_id})
-            print(f"[agent] atomic_operation SENT: action={action}, tx_id={tx_id}", flush=True)
         except Exception as e:
             self.pending_operations.pop(tx_id, None)
-            print(f"[agent] atomic_operation SEND_FAILED: action={action}, tx_id={tx_id}, error={e}", flush=True)
             return {"status": "error", "error": f"Send failed: {e!s}"}
 
         try:
-            result = await asyncio.wait_for(response_future, timeout=10.0)
-            print(f"[agent] atomic_operation RESPONSE: action={action}, tx_id={tx_id}, status={result.get('status')}", flush=True)
-            return result
+            return await asyncio.wait_for(response_future, timeout=10.0)
         except TimeoutError:
-            print(f"[agent] atomic_operation TIMEOUT: action={action}, tx_id={tx_id}", flush=True)
             return {"status": "error", "error": "Operation timeout", "tx_id": tx_id}
         finally:
             self.pending_operations.pop(tx_id, None)
-            print(f"[agent] atomic_operation END: action={action}, tx_id={tx_id}", flush=True)
 
     async def handle_action_response(self, msg: dict[str, object]) -> None:
         tx_id = msg.get("tx_id")
@@ -272,10 +205,6 @@ class AgentHarness:
         if msg_type == "user_query":
             self.current_request_id = msg.get("request_id")
 
-            if AGENT_DEBUG:
-                print(f"[agent] About to insert history for user query", flush=True)
-
-            # Persist exact user message for reconstruction
             await self._insert_history(
                 event_type="anthropic_message",
                 payload={
@@ -286,10 +215,6 @@ class AgentHarness:
                 },
                 request_id=self.current_request_id,
             )
-
-            if AGENT_DEBUG:
-                content_preview = msg["content"][:100]
-                print(f"[agent] User query received: {content_preview}...", flush=True)
 
         elif msg_type == "cell_result":
             cell_id = msg["cell_id"]
@@ -321,8 +246,7 @@ class AgentHarness:
                 print("[agent] Stop signal received")
 
     async def _complete_turn(self) -> None:
-        """Complete the current turn and handle auto-continuation."""
-        if not self.current_request_id:
+        if self.current_request_id is None:
             return
 
         should_continue = self.should_auto_continue
@@ -573,7 +497,6 @@ class AgentHarness:
                 print(f"  - questions: {questions}")
                 print(f"  - continue: {should_continue}")
 
-                # Track whether to auto-continue
                 if should_continue and self.executing_cells:
                     print(f"[tool] Cannot continue - {len(self.executing_cells)} cells still executing: {self.executing_cells}")
                     self.should_auto_continue = False
@@ -736,22 +659,13 @@ class AgentHarness:
         self.conversation_running = True
         turn = 0
 
-        if AGENT_DEBUG:
-            print("[agent] run_agent_loop started", flush=True)
-
         while self.conversation_running:
-            if AGENT_DEBUG:
-                print(f"[agent] Loop iteration, about to wait for message", flush=True)
             await self._wait_for_message()
-            if AGENT_DEBUG:
-                print(f"[agent] Returned from _wait_for_message, conversation_running={self.conversation_running}", flush=True)
             if not self.conversation_running:
                 break
 
             api_messages = await self._build_messages_from_db()
             if not api_messages or api_messages[-1].get("role") != "user":
-                if AGENT_DEBUG:
-                    print("[agent] Last message is not from user, waiting for next message", flush=True)
                 continue
 
             turn += 1
@@ -848,22 +762,6 @@ class AgentHarness:
             elif AGENT_DEBUG:
                 print(f"[agent] Skipping empty assistant message (stop_reason={response.stop_reason})", flush=True)
 
-            # Thinking blocks are already stored as part of the anthropic_message content
-            # So we don't need to store them separately
-            if AGENT_DEBUG:
-                for block in response.content:
-                    if isinstance(block, dict):
-                        block_type = block.get("type")
-                    else:
-                        block_type = getattr(block, "type", None)
-
-                    if block_type in ("thinking", "redacted_thinking"):
-                        thinking_text = block.get("thinking") if isinstance(block, dict) else getattr(block, "thinking", None)
-                        if thinking_text:
-                            print(f"[agent] Thinking:\n{thinking_text}")
-                        else:
-                            print("[agent] Thinking block present (redacted)")
-
             if response.stop_reason == "end_turn":
                 if AGENT_DEBUG:
                     print("[agent] Turn ended without submit_response; completing turn")
@@ -886,20 +784,13 @@ class AgentHarness:
                         if tool_name == "submit_response":
                             called_submit_response = True
 
-                        # Enhanced logging for tool execution
-                        print(f"[agent] TOOL_USE: name={tool_name}, id={tool_id}, turn={turn}", flush=True)
-                        if tool_name in {"create_cell", "create_markdown_cell"}:
-                            print(f"[agent]   TOOL_INPUT: {tool_input}", flush=True)
-
                         if AGENT_DEBUG:
                             print(f"[agent] Executing tool: {tool_name} (id={tool_id})")
 
                         handler = self.tool_map.get(tool_name)
                         if handler:
                             try:
-                                print(f"[agent] TOOL_EXECUTE_START: {tool_name}, id={tool_id}", flush=True)
                                 result = await handler(tool_input)
-                                print(f"[agent] TOOL_EXECUTE_END: {tool_name}, id={tool_id}, result_preview={str(result)[:100]}", flush=True)
                                 tool_results.append({
                                     "type": "tool_result",
                                     "tool_use_id": tool_id,
@@ -921,11 +812,7 @@ class AgentHarness:
                                 "is_error": True,
                             })
 
-                if tool_results:
-                    # Store tool results as anthropic_message for API reconstruction
-                    print(f"[agent] STORING_TOOL_RESULTS: count={len(tool_results)}, turn={turn}", flush=True)
-                    for tr in tool_results:
-                        print(f"[agent]   Tool result: tool_use_id={tr.get('tool_use_id')}, is_error={tr.get('is_error', False)}", flush=True)
+                if tool_results.length > 0:
                     await self._insert_history(
                         event_type="anthropic_message",
                         payload={
@@ -941,10 +828,8 @@ class AgentHarness:
                 if called_submit_response:
                     if AGENT_DEBUG:
                         print("[agent] submit_response called, completing turn")
-                    print(f"[agent] COMPLETING_TURN: turn={turn}", flush=True)
                     await self._complete_turn()
                 else:
-                    print(f"[agent] RESUMING_TURN: turn={turn}, queuing resume message", flush=True)
                     await self.pending_messages.put({"type": "resume"})
             elif response.stop_reason == "max_tokens":
                 print("[agent] Hit max tokens", flush=True)
@@ -980,8 +865,34 @@ class AgentHarness:
             has_pending_work = False
 
             if len(messages) > 0 and messages[-1].get("role") == "user":
-                # Extract structured output from messages to check if there's pending work
-                last_structured_output = self._extract_structured_output_from_messages(messages)
+                submit_response_tools: dict[str, dict] = {}
+                last_structured_output = None
+
+                for history_msg in reversed(messages):
+                    content = history_msg.get("content")
+                    if not isinstance(content, list):
+                        continue
+
+                    for block in content:
+                        if not isinstance(block, dict):
+                            continue
+
+                        block_type = block.get("type")
+
+                        if block_type == "tool_use" and block.get("name") == "submit_response":
+                            tool_id = block.get("id")
+                            tool_input = block.get("input")
+                            if tool_id is not None and tool_input is not None:
+                                submit_response_tools[tool_id] = tool_input
+
+                        elif block_type == "tool_result":
+                            tool_use_id = block.get("tool_use_id")
+                            if tool_use_id is not None and tool_use_id in submit_response_tools:
+                                last_structured_output = submit_response_tools[tool_use_id]
+                                break
+
+                    if last_structured_output is not None:
+                        break
 
                 if last_structured_output is None:
                     has_pending_work = True
@@ -999,11 +910,8 @@ class AgentHarness:
                 content = last_user_msg.get("content", "")
                 preview = str(content)[:100] if isinstance(content, str) else "previous request"
 
-                # Generate consistent tool ID for resume flow
                 resume_tool_id = f"resume_{uuid.uuid4().hex[:12]}"
 
-                # Insert assistant message with resume question - the frontend will
-                # extract structured output from the submit_response tool call
                 await self._insert_history(
                     event_type="anthropic_message",
                     payload={
@@ -1028,7 +936,6 @@ class AgentHarness:
                     },
                 )
 
-                # Add the corresponding tool result
                 await self._insert_history(
                     event_type="anthropic_message",
                     payload={
