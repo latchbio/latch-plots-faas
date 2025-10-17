@@ -949,17 +949,26 @@ class AgentHarness:
                                 break
 
             has_pending_work = False
+            assistant_count = 0
             for history_msg in reversed(messages):
                 if history_msg.get("role") != "assistant":
                     continue
 
+                assistant_count += 1
+                print(f"[agent] Checking assistant message #{assistant_count}", flush=True)
+
                 content = history_msg.get("content")
                 if not isinstance(content, list):
+                    print(f"[agent]   Content is not a list: {type(content)}", flush=True)
                     continue
 
+                print(f"[agent]   Content has {len(content)} blocks", flush=True)
                 for block in content:
                     if not isinstance(block, dict):
                         continue
+
+                    block_type = block.get("type")
+                    print(f"[agent]     Block type: {block_type}", flush=True)
 
                     if block.get("type") == "tool_use" and block.get("name") == "submit_response":
                         tool_id = block.get("id", "")
@@ -970,7 +979,7 @@ class AgentHarness:
                         tool_input = block.get("input", {})
                         next_status = tool_input.get("next_status")
                         has_pending_work = next_status != "done"
-                        print(f"[agent] Found last submit_response: next_status={next_status}, has_pending_work={has_pending_work}", flush=True)
+                        print(f"[agent] Found last submit_response: id={tool_id}, next_status={next_status}, has_pending_work={has_pending_work}", flush=True)
                         break
 
                 break
