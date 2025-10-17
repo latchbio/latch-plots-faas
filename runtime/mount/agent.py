@@ -218,21 +218,31 @@ class AgentHarness:
         response_future = loop.create_future()
         self.pending_operations[tx_id] = response_future
 
+        # Enhanced logging for debugging duplicates
+        print(f"[agent] atomic_operation START: action={action}, tx_id={tx_id}, op_counter={self.operation_counter}", flush=True)
+        if action in {"create_cell", "create_markdown_cell"}:
+            print(f"[agent]   Cell creation params: position={params.get('position')}, title={params.get('title', 'N/A')}, source_preview={params.get('source', '')[:100]}", flush=True)
+
         try:
             if AGENT_DEBUG:
                 print(f"[agent] -> {action}")
             await self.send({"type": "agent_action", "action": action, "params": params, "tx_id": tx_id})
+            print(f"[agent] atomic_operation SENT: action={action}, tx_id={tx_id}", flush=True)
         except Exception as e:
             self.pending_operations.pop(tx_id, None)
+            print(f"[agent] atomic_operation SEND_FAILED: action={action}, tx_id={tx_id}, error={e}", flush=True)
             return {"status": "error", "error": f"Send failed: {e!s}"}
 
         try:
             result = await asyncio.wait_for(response_future, timeout=10.0)
+            print(f"[agent] atomic_operation RESPONSE: action={action}, tx_id={tx_id}, status={result.get('status')}", flush=True)
             return result
         except TimeoutError:
+            print(f"[agent] atomic_operation TIMEOUT: action={action}, tx_id={tx_id}", flush=True)
             return {"status": "error", "error": "Operation timeout", "tx_id": tx_id}
         finally:
             self.pending_operations.pop(tx_id, None)
+            print(f"[agent] atomic_operation END: action={action}, tx_id={tx_id}", flush=True)
 
     async def handle_action_response(self, msg: dict[str, object]) -> None:
         tx_id = msg.get("tx_id")
@@ -876,13 +886,20 @@ class AgentHarness:
                         if tool_name == "submit_response":
                             called_submit_response = True
 
+                        # Enhanced logging for tool execution
+                        print(f"[agent] TOOL_USE: name={tool_name}, id={tool_id}, turn={turn}", flush=True)
+                        if tool_name in {"create_cell", "create_markdown_cell"}:
+                            print(f"[agent]   TOOL_INPUT: {tool_input}", flush=True)
+
                         if AGENT_DEBUG:
                             print(f"[agent] Executing tool: {tool_name} (id={tool_id})")
 
                         handler = self.tool_map.get(tool_name)
                         if handler:
                             try:
+                                print(f"[agent] TOOL_EXECUTE_START: {tool_name}, id={tool_id}", flush=True)
                                 result = await handler(tool_input)
+                                print(f"[agent] TOOL_EXECUTE_END: {tool_name}, id={tool_id}, result_preview={str(result)[:100]}", flush=True)
                                 tool_results.append({
                                     "type": "tool_result",
                                     "tool_use_id": tool_id,
@@ -906,6 +923,9 @@ class AgentHarness:
 
                 if tool_results:
                     # Store tool results as anthropic_message for API reconstruction
+                    print(f"[agent] STORING_TOOL_RESULTS: count={len(tool_results)}, turn={turn}", flush=True)
+                    for tr in tool_results:
+                        print(f"[agent]   Tool result: tool_use_id={tr.get('tool_use_id')}, is_error={tr.get('is_error', False)}", flush=True)
                     await self._insert_history(
                         event_type="anthropic_message",
                         payload={
@@ -921,8 +941,10 @@ class AgentHarness:
                 if called_submit_response:
                     if AGENT_DEBUG:
                         print("[agent] submit_response called, completing turn")
+                    print(f"[agent] COMPLETING_TURN: turn={turn}", flush=True)
                     await self._complete_turn()
                 else:
+                    print(f"[agent] RESUMING_TURN: turn={turn}, queuing resume message", flush=True)
                     await self.pending_messages.put({"type": "resume"})
             elif response.stop_reason == "max_tokens":
                 print("[agent] Hit max tokens", flush=True)
