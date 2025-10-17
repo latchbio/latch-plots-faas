@@ -59,7 +59,7 @@ class NotebookResponse(BaseModel):
     plan_diff: list[PlanDiff]
     summary: list[str] | None = None
     questions: list[str] | None = None
-    next_status: Literal["executing", "fixing", "thinking", "awaiting_user_response", "awaiting_cell_execution", "done"]
+    next_status: Literal["executing", "fixing", "thinking", "awaiting_user_response", "awaiting_cell_execution", "awaiting_user_widget_input", "done"]
 
 
 from typing_extensions import TypedDict
@@ -147,8 +147,20 @@ class AgentHarness:
                 role = item.get("role")
                 content = item.get("content")
                 if role in ("user", "assistant") and (isinstance(content, (str, list))):
+                    # Log assistant messages with list content to debug block ordering
+                    if AGENT_DEBUG and role == "assistant" and isinstance(content, list):
+                        block_types = [b.get("type") if isinstance(b, dict) else "?" for b in content]
+                        print(f"[agent] Reconstructed assistant message: {len(content)} blocks: {block_types}", flush=True)
+                        # Check for thinking block order issues
+                        has_thinking = any(bt in ("thinking", "redacted_thinking") for bt in block_types)
+                        if has_thinking and block_types[0] not in ("thinking", "redacted_thinking"):
+                            print(f"[agent] WARNING: Assistant message has thinking blocks but first block is {block_types[0]}", flush=True)
+                    
                     anthropic_messages.append({"role": role, "content": content})
 
+        if AGENT_DEBUG:
+            print(f"[agent] Built {len(anthropic_messages)} messages from DB", flush=True)
+        
         return anthropic_messages
 
     async def _insert_history(self, *, event_type: str, payload: dict, request_id: str | None = None, tx_id: str | None = None) -> None:
@@ -653,7 +665,7 @@ class AgentHarness:
                     questions = None
 
                 next_status = args.get("next_status")
-                if not isinstance(next_status, str) or next_status not in {"executing", "fixing", "thinking", "awaiting_user_response", "awaiting_cell_execution", "done"}:
+                if not isinstance(next_status, str) or next_status not in {"executing", "fixing", "thinking", "awaiting_user_response", "awaiting_cell_execution", "awaiting_user_widget_input", "done"}:
                     if AGENT_DEBUG:
                         print(f"[agent] Invalid next_status: {next_status}")
                     return "Please provide a valid next_status"
@@ -904,6 +916,22 @@ class AgentHarness:
 
             except Exception as e:
                 print(f"[agent] API error: {e}", flush=True)
+                
+                # Log the messages that caused the error for debugging
+                print(f"[agent] API call failed with {len(api_messages)} messages", flush=True)
+                for i, msg in enumerate(api_messages):
+                    role = msg.get("role", "?")
+                    content = msg.get("content", [])
+                    if isinstance(content, str):
+                        print(f"  Message {i} ({role}): string content, length={len(content)}", flush=True)
+                    elif isinstance(content, list):
+                        print(f"  Message {i} ({role}): {len(content)} blocks", flush=True)
+                        for j, block in enumerate(content):
+                            block_type = block.get("type") if isinstance(block, dict) else getattr(block, "type", "?")
+                            print(f"    Block {j}: {block_type}", flush=True)
+                    else:
+                        print(f"  Message {i} ({role}): unknown content type={type(content)}", flush=True)
+                
                 await self.send({
                     "type": "agent_error",
                     "error": f"API error: {e!s}",
