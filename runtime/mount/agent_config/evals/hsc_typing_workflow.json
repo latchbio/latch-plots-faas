@@ -1,0 +1,6 @@
+{
+    "id": "hsc_typing_workflow_1",
+    "task": "Identify hepatic stellate cells in this dataset",
+    "data_node": "latch://38438.account/Kosta/Kostallari_SOW313_ATAC",
+    "judge_prompt": "Evaluate whether the agent is able to identify hepatic stellate cells (HSC) in an AtlasxOmics dataset. \n\n    Check:\n    1. Identify marker genes and perform gene set scoring. \n    2. Perform celll type annotation for each cluster. \n    3. Among existing clusters in adata.obs[\"cluster\"], correctly identify cluster 5 as HSC."
+}

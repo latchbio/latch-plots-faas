@@ -1,0 +1,6 @@
+{
+    "id": "promoter_annotation_001",
+    "task": "Annotate promoter-associated peaks (TSS \u00b11 kb)",
+    "data_node": "latch://38438.account/Human_DRG_Price_plotsLite/Human_DRG_Price_plotsLite_ArchRProject",
+    "judge_prompt": "Evaluate whether the agent can perform promoter annotation on spatial ATAC-seq peaks.\n\n    Check:\n    1. Load spatial ATAC-seq peaks.\n    2. Define promoter regions as \u00b11 kb around the transcription start site (TSS) of genes.\n    3. Identify which peaks overlap promoter regions.\n    4. Return a list or count of promoter-associated peaks.\n    5. Provide at least one example of a peak-gene assignment (e.g. \u201cpeak overlaps promoter of ERBB4\u201d)."
+}

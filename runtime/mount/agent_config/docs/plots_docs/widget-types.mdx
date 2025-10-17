@@ -97,7 +97,6 @@ with w_grid(columns=12) as g:
 
 ```python
 from lplots.widgets.plot import w_plot
-# IMPORTANT: must be called at **global scope** (not inside a function)
 plot = w_plot(label="My Plot", source=fig_or_axes_or_plotly_fig, key=None)
 ```
 
@@ -134,6 +133,19 @@ v = viewer.value
 from lplots.widgets.logs import w_logs_display
 from lplots import submit_widget_state
 w_logs_display(); submit_widget_state()
+```
+
+---
+
+## Button
+
+```python
+from lplots.widgets.button import w_button
+
+button = w_button(label="Click Button to Run")
+
+if button.value:
+  # logic within `if` clause is only run when button is clicked
 ```
 
 ---
