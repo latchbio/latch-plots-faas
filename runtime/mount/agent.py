@@ -589,6 +589,31 @@ class AgentHarness:
             print(f"[tool] h5_set_background_image failed: {result.get('error', 'Unknown error')}")
             return f"Failed to set background image: {result.get('error', 'Unknown error')}"
 
+        async def h5_open_image_aligner(args: dict) -> str:
+            widget_key = args.get("widget_key")
+            background_image_id = args.get("background_image_id")
+            
+            print(f"[tool] h5_open_image_aligner widget_key={widget_key} background_image_id={background_image_id}")
+
+            if not widget_key:
+                print(f"[tool] h5_open_image_aligner widget_key is required")
+                return "Error: widget_key is required"
+            
+            if not background_image_id:
+                print(f"[tool] h5_open_image_aligner background_image_id is required")
+                return "Error: background_image_id is required"
+            
+            params = {
+                "widget_key": widget_key,
+                "background_image_id": background_image_id,
+            }
+            
+            result = await self.atomic_operation("h5_open_image_aligner", params)
+            if result.get("status") == "success":
+                return f"Opened image aligner for background image {background_image_id}"
+            print(f"[tool] h5_open_image_aligner failed: {result.get('error', 'Unknown error')}")
+            return f"Failed to open image aligner: {result.get('error', 'Unknown error')}"
+
         self.tools.append({
             "name": "create_cell",
             "description": "Create a new code cell at specified position. The cell will automatically run after creation.",
@@ -836,6 +861,26 @@ class AgentHarness:
             },
         })
         self.tool_map["h5_set_background_image"] = h5_set_background_image
+
+        self.tools.append({
+            "name": "h5_open_image_aligner",
+            "description": "Open the image alignment modal for a background image in an h5/AnnData widget.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "widget_key": {
+                        "type": "string",
+                        "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
+                    },
+                    "background_image_id": {
+                        "type": "string",
+                        "description": "The ID of the background image to align (typically the node_id)"
+                    },
+                },
+                "required": ["widget_key", "background_image_id"],
+            },
+        })
+        self.tool_map["h5_open_image_aligner"] = h5_open_image_aligner
 
     async def run_agent_loop(self) -> None:
         assert self.client is not None, "Client not initialized"
