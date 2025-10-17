@@ -147,16 +147,27 @@ class AgentHarness:
                 role = item.get("role")
                 content = item.get("content")
                 if role in ("user", "assistant") and (isinstance(content, (str, list))):
-                    # Log assistant messages with list content to debug block ordering
-                    if AGENT_DEBUG and role == "assistant" and isinstance(content, list):
-                        block_types = [b.get("type") if isinstance(b, dict) else "?" for b in content]
-                        print(f"[agent] Reconstructed assistant message: {len(content)} blocks: {block_types}", flush=True)
-                        # Check for thinking block order issues
-                        has_thinking = any(bt in ("thinking", "redacted_thinking") for bt in block_types)
-                        if has_thinking and block_types[0] not in ("thinking", "redacted_thinking"):
-                            print(f"[agent] WARNING: Assistant message has thinking blocks but first block is {block_types[0]}", flush=True)
-                    
-                    anthropic_messages.append({"role": role, "content": content})
+                    # For assistant messages with list content, filter out thinking blocks
+                    # Thinking blocks are only for the current turn, not for conversation history
+                    if role == "assistant" and isinstance(content, list):
+                        filtered_content = [
+                            block for block in content
+                            if not (isinstance(block, dict) and block.get("type") in ("thinking", "redacted_thinking"))
+                        ]
+                        
+                        if AGENT_DEBUG:
+                            orig_types = [b.get("type") if isinstance(b, dict) else "?" for b in content]
+                            filtered_types = [b.get("type") if isinstance(b, dict) else "?" for b in filtered_content]
+                            if orig_types != filtered_types:
+                                print(f"[agent] Filtered thinking blocks: {orig_types} -> {filtered_types}", flush=True)
+                        
+                        # Only add message if there's content remaining after filtering
+                        if filtered_content:
+                            anthropic_messages.append({"role": role, "content": filtered_content})
+                        elif AGENT_DEBUG:
+                            print(f"[agent] Skipping assistant message with only thinking blocks", flush=True)
+                    else:
+                        anthropic_messages.append({"role": role, "content": content})
 
         if AGENT_DEBUG:
             print(f"[agent] Built {len(anthropic_messages)} messages from DB", flush=True)
