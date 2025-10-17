@@ -815,7 +815,7 @@ class AgentHarness:
                         "default": False
                     },
                 },
-                "required": ["plan", "plan_diff", "summary", "questions"],
+                "required": ["plan", "plan_diff", "summary", "questions", "next_status"],
             },
         })
         self.tool_map["submit_response"] = submit_response
