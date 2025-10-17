@@ -467,11 +467,11 @@ class AgentHarness:
         async def submit_response(args: dict) -> str:
             try:
                 summary = args.get("summary")
-                if not isinstance(summary, list):
+                if summary is not None and not isinstance(summary, str):
                     summary = None
 
                 questions = args.get("questions")
-                if not isinstance(questions, list):
+                if questions is not None and not isinstance(questions, str):
                     questions = None
 
                 next_status = args.get("next_status")
@@ -620,8 +620,8 @@ class AgentHarness:
                 "properties": {
                     "plan": {"type": "array", "description": "List of plan items"},
                     "plan_diff": {"type": "array", "description": "List of plan diff items"},
-                    "summary": {"type": "array", "description": "Optional list of summary bullet points. Omit if no summary needed."},
-                    "questions": {"type": "array", "description": "Optional list of questions for the user. Omit if no questions needed."},
+                    "summary": {"type": "string", "description": "Optional summary text describing what was accomplished. Use markdown formatting with bullet points if needed. Omit if no summary needed."},
+                    "questions": {"type": "string", "description": "Optional question text for the user. Omit if no questions needed."},
                     "next_status": {"type": "string", "description": "What the agent will do next", "enum": ["executing", "fixing", "thinking", "awaiting_user_response", "awaiting_cell_execution", "awaiting_user_widget_input", "done"]},
                     "continue": {
                         "type": "boolean",
