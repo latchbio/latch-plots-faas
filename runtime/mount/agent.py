@@ -150,6 +150,43 @@ class AgentHarness:
 
         return anthropic_messages
 
+    def _extract_structured_output_from_messages(self, messages: list[MessageParam]) -> dict | None:
+        """Extract the most recent structured output from submit_response tool results."""
+        for msg in reversed(messages):
+            if msg.get("role") != "user":
+                continue
+            content = msg.get("content")
+            if not isinstance(content, list):
+                continue
+
+            for block in content:
+                if not isinstance(block, dict):
+                    continue
+                if block.get("type") == "tool_result":
+                    # Look back through assistant messages to find the corresponding tool_use
+                    tool_use_id = block.get("tool_use_id")
+                    if not tool_use_id:
+                        continue
+
+                    # Search backwards for the tool_use with this ID
+                    for prev_msg in reversed(messages):
+                        if prev_msg.get("role") != "assistant":
+                            continue
+                        prev_content = prev_msg.get("content")
+                        if not isinstance(prev_content, list):
+                            continue
+
+                        for prev_block in prev_content:
+                            if not isinstance(prev_block, dict):
+                                continue
+                            if (prev_block.get("type") == "tool_use" and
+                                prev_block.get("id") == tool_use_id and
+                                prev_block.get("name") == "submit_response"):
+                                # Found the submit_response tool - extract the input
+                                return prev_block.get("input")
+
+        return None
+
     async def _insert_history(self, *, event_type: str, payload: dict, request_id: str | None = None, tx_id: str | None = None) -> None:
         assert self.agent_session_id is not None
 
@@ -306,18 +343,6 @@ class AgentHarness:
                 },
             )
 
-            await self._insert_history(
-                event_type="agent_feedback",
-                payload={
-                    "type": "agent_feedback",
-                    "feedback_type": "cell_result",
-                    "cell_id": cell_id,
-                    "success": success,
-                    **({"exception": exception} if not success else {}),
-                    "timestamp": int(time.time() * 1000),
-                },
-            )
-
         elif msg_type == "stop":
             self.conversation_running = False
             if AGENT_DEBUG:
@@ -333,20 +358,12 @@ class AgentHarness:
         if self.mode == Mode.executing:
             self.set_mode(Mode.planning)
 
+        # Structured output is now stored as part of the submit_response tool result
+        # in the anthropic_message, so we don't need a separate insert here
         if self.current_structured_output is not None:
-            structured = self.current_structured_output.model_dump()
             if AGENT_DEBUG:
-                print(f"[agent] Storing structured_output with next_status={structured.get('next_status')}, request_id={self.current_request_id}")
-            await self._insert_history(
-                event_type="structured_output",
-                payload={
-                    "type": "structured_output",
-                    **structured,
-                    "request_id": self.current_request_id,
-                    "timestamp": int(time.time() * 1000),
-                },
-                request_id=self.current_request_id,
-            )
+                structured = self.current_structured_output.model_dump()
+                print(f"[agent] Structured output with next_status={structured.get('next_status')}, request_id={self.current_request_id}")
             self.current_structured_output = None
         else:
             if AGENT_DEBUG:
@@ -875,28 +892,21 @@ class AgentHarness:
             elif AGENT_DEBUG:
                 print(f"[agent] Skipping empty assistant message (stop_reason={response.stop_reason})", flush=True)
 
-            for block in response.content:
-                if isinstance(block, dict):
-                    block_type = block.get("type")
-                else:
-                    block_type = getattr(block, "type", None)
-
-                if block_type in ("thinking", "redacted_thinking"):
-                    thinking_text = block.get("thinking") if isinstance(block, dict) else getattr(block, "thinking", None)
-                    if thinking_text:
-                        if AGENT_DEBUG:
-                            print(f"[agent] Thinking:\n{thinking_text}")
-                        await self._insert_history(
-                            event_type="agent_thinking",
-                            payload={
-                            "type": "agent_thinking",
-                            "thoughts": thinking_text,
-                            "duration": duration,
-                                "timestamp": int(time.time() * 1000),
-                            },
-                        )
+            # Thinking blocks are already stored as part of the anthropic_message content
+            # So we don't need to store them separately
+            if AGENT_DEBUG:
+                for block in response.content:
+                    if isinstance(block, dict):
+                        block_type = block.get("type")
                     else:
-                        print("[agent] Thinking block present (redacted)")
+                        block_type = getattr(block, "type", None)
+
+                    if block_type in ("thinking", "redacted_thinking"):
+                        thinking_text = block.get("thinking") if isinstance(block, dict) else getattr(block, "thinking", None)
+                        if thinking_text:
+                            print(f"[agent] Thinking:\n{thinking_text}")
+                        else:
+                            print("[agent] Thinking block present (redacted)")
 
             if response.stop_reason == "end_turn":
                 if AGENT_DEBUG:
@@ -1002,13 +1012,8 @@ class AgentHarness:
             has_pending_work = False
 
             if len(messages) > 0 and messages[-1].get("role") == "user":
-                history = await self._fetch_history_from_db()
-
-                last_structured_output = None
-                for item in reversed(history):
-                    if item.get("type") == "structured_output":
-                        last_structured_output = item
-                        break
+                # Extract structured output from messages to check if there's pending work
+                last_structured_output = self._extract_structured_output_from_messages(messages)
 
                 if last_structured_output is None:
                     has_pending_work = True
@@ -1026,25 +1031,45 @@ class AgentHarness:
                 content = last_user_msg.get("content", "")
                 preview = str(content)[:100] if isinstance(content, str) else "previous request"
 
+                # Insert assistant message with resume question - the frontend will
+                # extract structured output from the submit_response tool call
                 await self._insert_history(
                     event_type="anthropic_message",
                     payload={
                         "type": "anthropic_message",
                         "role": "assistant",
-                        "content": [{"type": "text", "text": f"I see we were interrupted while I was working on: {preview}...\n\nWould you like me to continue?"}],
+                        "content": [
+                            {"type": "text", "text": f"I see we were interrupted while I was working on: {preview}...\n\nWould you like me to continue?"},
+                            {
+                                "type": "tool_use",
+                                "id": f"resume_{uuid.uuid4().hex[:12]}",
+                                "name": "submit_response",
+                                "input": {
+                                    "plan": [],
+                                    "plan_diff": [],
+                                    "questions": [f"Session resumed. I found an incomplete task: {preview}...\n\nWould you like me to continue?"],
+                                    "next_status": "awaiting_user_response",
+                                    "summary": None,
+                                }
+                            }
+                        ],
                         "timestamp": int(time.time() * 1000),
                     },
                 )
 
+                # Add the corresponding tool result
                 await self._insert_history(
-                    event_type="structured_output",
+                    event_type="anthropic_message",
                     payload={
-                        "type": "structured_output",
-                        "plan": [],
-                        "plan_diff": [],
-                        "questions": [f"Session resumed. I found an incomplete task: {preview}...\n\nWould you like me to continue?"],
-                        "next_status": "awaiting_user_response",
-                        "summary": None,
+                        "type": "anthropic_message",
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "tool_result",
+                                "tool_use_id": f"resume_{uuid.uuid4().hex[:12]}",
+                                "content": "Response submitted successfully"
+                            }
+                        ],
                         "timestamp": int(time.time() * 1000),
                     },
                 )
