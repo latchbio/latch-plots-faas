@@ -385,15 +385,23 @@ class AgentHarness:
                     print(f"[agent] Cell {cell_id} failed")
 
             await self._insert_history(
-                event_type="agent_action",
+                event_type="anthropic_message",
                 payload={
-                    "type": "agent_action",
-                    "action": {
-                        "task": "cell_result",
-                        "cell_id": cell_id,
-                        "success": success,
-                        **({"exception": exception} if not success else {}),
-                    },
+                    "type": "anthropic_message",
+                    "role": "user",
+                    "content": result_content,
+                    "timestamp": int(time.time() * 1000),
+                },
+            )
+
+            await self._insert_history(
+                event_type="agent_feedback",
+                payload={
+                    "type": "agent_feedback",
+                    "feedback_type": "cell_result",
+                    "cell_id": cell_id,
+                    "success": success,
+                    **({"exception": exception} if not success else {}),
                     "timestamp": int(time.time() * 1000),
                 },
             )
@@ -833,7 +841,7 @@ class AgentHarness:
 
         self.conversation_running = True
         turn = 0
-        
+
         if AGENT_DEBUG:
             print("[agent] run_agent_loop started", flush=True)
 
@@ -1080,15 +1088,14 @@ class AgentHarness:
             print("[agent] Initialization complete", flush=True)
 
             self.conversation_task = asyncio.create_task(self.run_agent_loop())
-            
-            # Add done callback to log any exceptions
-            def _task_done_callback(task: asyncio.Task):
+
+            def _task_done_callback(task: asyncio.Task) -> None:
                 try:
                     task.result()
                 except Exception as e:
                     print(f"[agent] conversation_task raised exception: {e}", flush=True)
                     traceback.print_exc()
-            
+
             self.conversation_task.add_done_callback(_task_done_callback)
         except Exception as e:
             await self.send({
@@ -1245,4 +1252,3 @@ if __name__ == "__main__":
         libc.prctl(PR_SET_NAME, b"agent")
 
     asyncio.run(main())
-
