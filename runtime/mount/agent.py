@@ -933,9 +933,7 @@ class AgentHarness:
                 )
                 await self._notify_history_updated()
 
-            # Check resume conditions
             print(f"[agent] Checking resume conditions with {len(messages)} messages", flush=True)
-
             has_asked_to_resume = False
             if len(messages) > 0 and messages[-1].get("role") == "user":
                 last_content = messages[-1].get("content")
@@ -949,50 +947,37 @@ class AgentHarness:
                                 break
 
             has_pending_work = False
-            assistant_count = 0
             for history_msg in reversed(messages):
                 if history_msg.get("role") != "assistant":
                     continue
-
-                assistant_count += 1
-                print(f"[agent] Checking assistant message #{assistant_count}", flush=True)
 
                 content = history_msg.get("content")
                 if not isinstance(content, list):
                     print(f"[agent]   Content is not a list: {type(content)}", flush=True)
                     continue
 
-                print(f"[agent]   Content has {len(content)} blocks", flush=True)
                 found_submit_response = False
                 for block in content:
                     if not isinstance(block, dict):
                         continue
 
-                    block_type = block.get("type")
-                    block_name = block.get("name", "N/A")
-                    print(f"[agent]     Block: type={block_type}, name={block_name}", flush=True)
-
                     if block.get("type") == "tool_use" and block.get("name") == "submit_response":
                         tool_id = block.get("id", "")
                         if tool_id.startswith("resume_"):
-                            print(f"[agent] Skipping resume submit_response: {tool_id}", flush=True)
                             continue
 
                         tool_input = block.get("input", {})
                         next_status = tool_input.get("next_status")
                         has_pending_work = next_status != "done"
-                        print(f"[agent] Found last submit_response: id={tool_id}, next_status={next_status}, has_pending_work={has_pending_work}", flush=True)
                         found_submit_response = True
                         break
 
-                # Keep searching until we find a submit_response
                 if found_submit_response:
                     break
 
             print(f"[agent] Resume decision: has_pending_work={has_pending_work}, has_asked_to_resume={has_asked_to_resume}", flush=True)
 
             if has_pending_work and not has_asked_to_resume:
-                print("[agent] Creating resume message", flush=True)
                 resume_tool_id = f"resume_{uuid.uuid4().hex[:12]}"
 
                 await self._insert_history(
