@@ -209,14 +209,21 @@ class AgentHarness:
         if msg_type == "user_query":
             self.current_request_id = msg.get("request_id")
 
+            payload = {
+                "type": "anthropic_message",
+                "role": "user",
+                "content": msg["content"],
+                "timestamp": int(time.time() * 1000),
+            }
+
+            if msg.get("display_query") is not None:
+                payload["display_query"] = msg["display_query"]
+            if msg.get("display_nodes") is not None:
+                payload["display_nodes"] = msg["display_nodes"]
+
             await self._insert_history(
                 event_type="anthropic_message",
-                payload={
-                    "type": "anthropic_message",
-                    "role": "user",
-                    "content": msg["content"],
-                    "timestamp": int(time.time() * 1000),
-                },
+                payload=payload,
                 request_id=self.current_request_id,
             )
 
@@ -1049,13 +1056,20 @@ class AgentHarness:
     async def handle_query(self, msg: dict[str, object]) -> None:
         query = msg.get("query", "")
         request_id = msg.get("request_id")
+        contextual_node_data = msg.get("contextual_node_data")
 
         print(f"[agent] Processing query: {query}...", flush=True)
 
+        full_query = query
+        if contextual_node_data:
+            full_query = f"{query} \n\nHere is the context of the selected nodes the user would like to use: <ContextualNodeData>{json.dumps(contextual_node_data)}</ContextualNodeData>"
+
         await self.pending_messages.put({
             "type": "user_query",
-            "content": query,
+            "content": full_query,
             "request_id": request_id,
+            "display_query": query,
+            "display_nodes": contextual_node_data,
         })
 
     async def handle_cancel(self, msg: dict[str, object]) -> None:
