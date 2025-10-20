@@ -55,6 +55,7 @@ class AgentHarness:
     instructions_context: str = ""
     current_request_id: str | None = None
     should_auto_continue: bool = False
+    pending_auto_continue: bool = False
 
     pending_messages: asyncio.Queue = field(default_factory=asyncio.Queue)
     conversation_task: asyncio.Task | None = None
@@ -244,6 +245,15 @@ class AgentHarness:
                 },
             )
 
+            if self.pending_auto_continue and not self.executing_cells:
+                print(f"[agent] All cells complete, resuming auto-continue (request_id={self.current_request_id})")
+                self.pending_auto_continue = False
+                await self.pending_messages.put({
+                    "type": "user_query",
+                    "content": "Continue with the next step.",
+                    "request_id": self.current_request_id,
+                })
+
         elif msg_type == "stop":
             self.conversation_running = False
             if AGENT_DEBUG:
@@ -255,6 +265,7 @@ class AgentHarness:
 
         should_continue = self.should_auto_continue
         self.should_auto_continue = False
+        self.pending_auto_continue = False
 
         if self.mode == Mode.executing:
             self.set_mode(Mode.planning)
@@ -502,10 +513,12 @@ class AgentHarness:
                 print(f"  - continue: {should_continue}")
 
                 if should_continue and self.executing_cells:
-                    print(f"[tool] Cannot continue - {len(self.executing_cells)} cells still executing: {self.executing_cells}")
+                    print(f"[tool] Deferring auto-continue - {len(self.executing_cells)} cells still executing: {self.executing_cells}")
                     self.should_auto_continue = False
+                    self.pending_auto_continue = True
                 else:
                     self.should_auto_continue = should_continue
+                    self.pending_auto_continue = False
 
                 return "Response submitted successfully"
             except Exception as e:
@@ -855,6 +868,9 @@ class AgentHarness:
 
                     future.cancel()
                     print(f"[agent]   Cancelled: {tx_id}", flush=True)
+
+            self.should_auto_continue = False
+            self.pending_auto_continue = False
 
             if self.conversation_task and not self.conversation_task.done():
                 print("[agent] Cancelling previous conversation task", flush=True)
