@@ -616,6 +616,61 @@ class AgentHarness:
             print(f"[tool] h5_open_image_aligner failed: {result.get('error', 'Unknown error')}")
             return f"Failed to open image aligner: {result.get('error', 'Unknown error')}"
 
+        async def h5_autoscale(args: dict) -> str:
+            widget_key = args.get("widget_key")
+            
+            print(f"[tool] h5_autoscale widget_key={widget_key}")
+
+            if not widget_key:
+                print(f"[tool] h5_autoscale widget_key is required")
+                return "Error: widget_key is required"
+            
+            params = {
+                "widget_key": widget_key,
+            }
+            
+            result = await self.atomic_operation("h5_autoscale", params)
+            if result.get("status") == "success":
+                return f"Autoscaled h5 widget {widget_key} to data bounds"
+            print(f"[tool] h5_autoscale failed: {result.get('error', 'Unknown error')}")
+            return f"Failed to autoscale h5 widget: {result.get('error', 'Unknown error')}"
+
+        async def h5_zoom(args: dict) -> str:
+            widget_key = args.get("widget_key")
+            direction = args.get("direction")
+            percentage = args.get("percentage")
+            
+            print(f"[tool] h5_zoom widget_key={widget_key} direction={direction} percentage={percentage}")
+
+            if not widget_key:
+                print(f"[tool] h5_zoom widget_key is required")
+                return "Error: widget_key is required"
+            
+            if not direction:
+                print(f"[tool] h5_zoom direction is required")
+                return "Error: direction is required"
+            
+            if direction not in ["in", "out"]:
+                print(f"[tool] h5_zoom invalid direction: {direction}")
+                return f"Error: direction must be 'in' or 'out', got '{direction}'"
+            
+            params = {
+                "widget_key": widget_key,
+                "direction": direction,
+            }
+            
+            if percentage is not None:
+                params["percentage"] = percentage
+            
+            result = await self.atomic_operation("h5_zoom", params)
+            if result.get("status") == "success":
+                zoom_desc = f"zoom {direction}"
+                if percentage is not None:
+                    zoom_desc += f" by {percentage}%"
+                return f"Applied {zoom_desc} to h5 widget {widget_key}"
+            print(f"[tool] h5_zoom failed: {result.get('error', 'Unknown error')}")
+            return f"Failed to zoom h5 widget: {result.get('error', 'Unknown error')}"
+
         async def h5_extract_summary(args: dict) -> str:
             asset_id = args.get("asset_id")
             
@@ -950,6 +1005,48 @@ class AgentHarness:
             },
         })
         self.tool_map["h5_open_image_aligner"] = h5_open_image_aligner
+
+        self.tools.append({
+            "name": "h5_autoscale",
+            "description": "Reset the plotted view in an h5/AnnData widget to Plotly's autoscaled data bounds.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "widget_key": {
+                        "type": "string",
+                        "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
+                    },
+                },
+                "required": ["widget_key"],
+            },
+        })
+        self.tool_map["h5_autoscale"] = h5_autoscale
+
+        self.tools.append({
+            "name": "h5_zoom",
+            "description": "Zoom the Plotly view in an h5/AnnData widget in or out from the current camera center.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "widget_key": {
+                        "type": "string",
+                        "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
+                    },
+                    "direction": {
+                        "type": "string",
+                        "enum": ["in", "out"],
+                        "description": "Zoom direction; use \"in\" to zoom closer, \"out\" to zoom farther"
+                    },
+                    "percentage": {
+                        "type": "number",
+                        "minimum": 0,
+                        "description": "Optional percentage change (e.g. 25 for ±25%); omitting uses the default Plotly zoom factor"
+                    },
+                },
+                "required": ["widget_key", "direction"],
+            },
+        })
+        self.tool_map["h5_zoom"] = h5_zoom
 
         self.tools.append({
             "name": "h5_extract_summary",
