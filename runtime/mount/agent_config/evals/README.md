@@ -1,6 +1,12 @@
 # Agent Evals
 
-This directory contains end-to-end evaluation tasks for the notebook agent.
+Automated testing harness for the notebook agent. Tests run the agent end-to-end in an isolated sandbox and use Claude to judge success.
+
+**Quick Start:**
+```bash
+python eval_server.py --eval simple_markdown.json
+# Then connect console to ws://localhost:8765/agent
+```
 
 ## Test Case Format
 
@@ -46,7 +52,7 @@ The console will communicate with its own kernel (wherever that's running), and 
    - Agent sent final result
    - No questions pending
    - No cells running
-   - Idle for 10 seconds
+   - Idle for 20 seconds
 7. **LLM Judge**: Claude evaluates the result with structured output
 8. **Results**: Score (0-1), pass/fail, successes, failures, reasoning
 

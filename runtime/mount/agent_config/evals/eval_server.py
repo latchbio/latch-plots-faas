@@ -311,8 +311,6 @@ class EvalServer:
 
         idle_time = time.time() - self.last_message_time
         if idle_time < 20:
-            if idle_time > 5:
-                print(f"[eval] Waiting for completion: idle for {idle_time:.1f}s (need 20s)")
             return False
 
         print(f"[eval] Completion detected: result sent, no questions, no running cells, idle for {idle_time:.1f}s")
