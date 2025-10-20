@@ -618,7 +618,7 @@ class AgentHarness:
 
         self.tools.append({
             "name": "submit_response",
-            "description": "Submit the final response with plan, plan_diff, questions, and a summary, along with optional next_status and continue. Call this at the end of every turn.",
+            "description": "Submit the final response with plan, plan_diff, optional summary, next_status, and optional questions. Call this at the end of every turn.",
             "input_schema": {
                 "type": "object",
                 "properties": {
@@ -633,7 +633,7 @@ class AgentHarness:
                         "default": False
                     },
                 },
-                "required": ["plan", "plan_diff", "summary", "questions"],
+                "required": ["plan", "plan_diff", "next_status"],
             },
         })
         self.tool_map["submit_response"] = submit_response
