@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import json
 import os
 import socket
@@ -9,16 +10,15 @@ import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
-from pathlib import Path
-from typing import Literal
 
-import anthropic
+from agent_utils.auto_install import anthropic
 from anthropic.types import MessageParam, ToolParam
+from anthropic.types.beta.beta_message import BetaMessage
+from anthropic.types.message import Message
 from config_loader import build_full_instruction
 from lplots import _inject
-from pydantic import BaseModel
 from socketio_thread import SocketIoThread
-from utils import auth_token_sdk, nucleus_url, pod_id
+from utils import auth_token_sdk, gql_query, nucleus_url, pod_id
 
 sandbox_root = os.environ.get("LATCH_SANDBOX_ROOT")
 if sandbox_root:
@@ -41,91 +41,11 @@ class Mode(Enum):
     debugging = "debugging"
 
 
-class PlanItem(BaseModel):
-    id: str
-    description: str
-    status: Literal["todo", "in_progress", "done"]
-
-
-class PlanDiff(BaseModel):
-    action: Literal["add", "update", "complete"]
-    id: str
-    description: str
-
-
-class NotebookResponse(BaseModel):
-    plan: list[PlanItem]
-    plan_diff: list[PlanDiff]
-    summary: list[str] | None = None
-    questions: list[str] | None = None
-    next_status: Literal["executing", "fixing", "thinking", "awaiting_user_response", "awaiting_cell_execution", "done"]
-
-
-from datetime import UTC
-
-from typing_extensions import TypedDict
-
-
-class PlanItemPayload(TypedDict):
-    id: str
-    description: str
-    status: Literal["todo", "in_progress", "done"]
-
-
-class PlanDiffPayload(TypedDict):
-    action: Literal["add", "update", "complete"]
-    id: str
-    description: str
-
-
-class SerializedTextBlock(TypedDict):
-    type: Literal["text"]
-    text: str
-
-
-class SerializedThinkingBlock(TypedDict):
-    type: Literal["thinking"]
-    thinking: str
-
-
-class SerializedRedactedThinkingBlock(TypedDict):
-    type: Literal["redacted_thinking"]
-
-
-class SerializedToolUseBlock(TypedDict):
-    type: Literal["tool_use"]
-    id: str
-    name: str
-    input: dict
-
-
-class SerializedToolResultBlock(TypedDict):
-    type: Literal["tool_result"]
-    tool_use_id: str
-    content: str
-    is_error: bool
-
-
-SerializedContentBlock = SerializedTextBlock | SerializedThinkingBlock | SerializedRedactedThinkingBlock | SerializedToolUseBlock | SerializedToolResultBlock
-
-
-class SerializedMessage(TypedDict):
-    role: Literal["user", "assistant"]
-    content: list[SerializedContentBlock] | str
-
-
-class ConversationHistoryFile(TypedDict):
-    version: Literal[1]
-    last_updated: str
-    messages: list[SerializedMessage]
-
-
 @dataclass
 class AgentHarness:
     conn: SocketIoThread
     initialized: bool = False
     client: anthropic.AsyncAnthropic | None = None
-    conversation_history: list[MessageParam] = field(default_factory=list)
     mode: Mode = Mode.planning
     pending_operations: dict[str, asyncio.Future] = field(default_factory=dict)
     executing_cells: set[str] = field(default_factory=set)
@@ -133,14 +53,15 @@ class AgentHarness:
     tool_map: dict[str, Callable] = field(default_factory=dict)
     operation_counter: int = 0
     instructions_context: str = ""
-    current_structured_output: NotebookResponse | None = None
     current_request_id: str | None = None
     should_auto_continue: bool = False
+    pending_auto_continue: bool = False
 
     pending_messages: asyncio.Queue = field(default_factory=asyncio.Queue)
     conversation_task: asyncio.Task | None = None
     conversation_running: bool = False
     system_prompt: str = ""
+    agent_session_id: int | None = None
 
     mode_config: dict[Mode, tuple[str, int | None]] = field(default_factory=lambda: {
         Mode.planning: ("claude-sonnet-4-5-20250929", 4096),
@@ -153,112 +74,121 @@ class AgentHarness:
         print(f"[agent] Sending message: {msg_type}", flush=True)
         await self.conn.send(msg)
 
-    def _get_history_file_path(self) -> Path:
-        latch_p = Path(os.environ.get("LATCH_SANDBOX_ROOT", "/root/.latch"))
-        return latch_p / "conversation_history.json"
+    async def _notify_history_updated(self, *, request_id: str | None = None) -> None:
+        await self.send({
+            "type": "agent_history_updated",
+            "session_id": str(self.agent_session_id) if self.agent_session_id is not None else None,
+            **({"request_id": request_id} if request_id else {}),
+        })
 
-    def _serialize_content(self, content: list | str) -> list[SerializedContentBlock] | str:
-        if isinstance(content, str):
-            return content
+    async def _fetch_history_from_db(self) -> list[dict]:
+        assert self.agent_session_id is not None
+        resp = await gql_query(
+            auth=auth_token_sdk,
+            query="""
+                query AgentHistory($sessionId: BigInt!) {
+                    agentHistories(condition: {sessionId: $sessionId, removed: false}, orderBy: ID_ASC) {
+                        nodes { id payload }
+                    }
+                }
+            """,
+            variables={"sessionId": str(self.agent_session_id)},
+        )
+        nodes = resp.get("data", {}).get("agentHistories", {}).get("nodes", [])
+        return [n.get("payload") for n in nodes if n.get("payload")]
 
-        serialized: list[SerializedContentBlock] = []
-        for block in content:
-            if isinstance(block, dict):
-                serialized.append(block)
-            elif hasattr(block, "type"):
-                if block.type == "text":
-                    serialized.append({"type": "text", "text": block.text})
-                elif block.type == "thinking":
-                    serialized.append({"type": "thinking", "thinking": block.thinking})
-                elif block.type == "redacted_thinking":
-                    serialized.append({"type": "redacted_thinking"})
-                elif block.type == "tool_use":
-                    serialized.append({
-                        "type": "tool_use",
-                        "id": block.id,
-                        "name": block.name,
-                        "input": block.input
-                    })
-                elif block.type == "tool_result":
-                    serialized.append({
-                        "type": "tool_result",
-                        "tool_use_id": block.tool_use_id,
-                        "content": block.content,
-                        "is_error": getattr(block, "is_error", False)
-                    })
-            else:
-                serialized.append({"type": "text", "text": str(block)})
-        return serialized
+    async def _build_messages_from_db(self) -> list[MessageParam]:
+        history = await self._fetch_history_from_db()
+        anthropic_messages: list[MessageParam] = []
 
-    def _serialize_message(self, message: MessageParam) -> SerializedMessage:
-        return {
-            "role": message["role"],
-            "content": self._serialize_content(message["content"])
+        for item in history:
+            t = item.get("type") if isinstance(item, dict) else None
+            if t == "anthropic_message":
+                role = item.get("role")
+                content = item.get("content")
+                if role in {"user", "assistant"} and (isinstance(content, (str, list))):
+                    anthropic_messages.append({"role": role, "content": content})
+
+        if AGENT_DEBUG:
+            print(f"[agent] Built {len(anthropic_messages)} messages from DB", flush=True)
+
+        return anthropic_messages
+
+    async def _insert_history(self, *, event_type: str, payload: dict, request_id: str | None = None, tx_id: str | None = None) -> None:
+        assert self.agent_session_id is not None
+
+        variables = {
+            "sessionId": str(self.agent_session_id),
+            "eventType": event_type,
+            "payload": payload,
+            "requestId": request_id,
+            "txId": tx_id,
         }
+        await gql_query(
+            auth=auth_token_sdk,
+            query="""
+                mutation CreateAgentHistory($sessionId: BigInt!, $eventType: String!, $payload: JSON!, $requestId: String, $txId: String) {
+                    createAgentHistory(input: {agentHistory: {sessionId: $sessionId, eventType: $eventType, payload: $payload, requestId: $requestId, txId: $txId}}) {
+                        clientMutationId
+                    }
+                }
+            """,
+            variables=variables,
+        )
+        await self._notify_history_updated(request_id=request_id)
 
-    def _load_conversation_history(self) -> None:
-        history_file = self._get_history_file_path()
+    async def _mark_all_history_removed(self) -> None:
+        assert self.agent_session_id is not None
 
-        if not history_file.exists():
-            print("[agent] No existing conversation history found", flush=True)
-            return
+        await gql_query(
+            auth=auth_token_sdk,
+            query="""
+                mutation ClearAgentHistory($sessionId: BigInt!) {
+                    clearAgentHistory(input: {argSessionId: $sessionId}) {
+                        clientMutationId
+                    }
+                }
+            """,
+            variables={"sessionId": str(self.agent_session_id)},
+        )
+        await self._notify_history_updated()
 
-        try:
-            import json
+    def _start_conversation_loop(self) -> None:
+        self.conversation_task = asyncio.create_task(self.run_agent_loop())
 
-            with open(history_file) as f:
-                data: ConversationHistoryFile = json.load(f)
+        def _task_done_callback(task: asyncio.Task) -> None:
+            try:
+                task.result()
+            except Exception as e:
+                print(f"[agent] conversation_task raised exception: {e}", flush=True)
+                traceback.print_exc()
 
-            if data.get("version") != 1:
-                print(f"[agent] Unknown history version: {data.get('version')}", flush=True)
-                return
+        self.conversation_task.add_done_callback(_task_done_callback)
 
-            self.conversation_history = data.get("messages", [])
+    async def _clear_running_state(self) -> None:
+        if len(self.pending_operations) > 0:
+            print(f"[agent] Cancelling {len(self.pending_operations)} pending operations", flush=True)
+            for tx_id, future in self.pending_operations.items():
+                if not future.done():
+                    future.cancel()
+                    print(f"[agent]   Cancelled: {tx_id}", flush=True)
+            self.pending_operations.clear()
 
-            for msg in self.conversation_history:
-                content = msg.get("content")
-                if isinstance(content, list):
-                    for block in content:
-                        if isinstance(block, dict) and block.get("type") in ("thinking", "redacted_thinking"):
-                            block["_loaded_from_history"] = True
+        if self.conversation_task and not self.conversation_task.done():
+            print("[agent] Cancelling conversation task", flush=True)
+            self.conversation_running = False
+            self.conversation_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self.conversation_task
+            self.conversation_task = None
 
-            print(f"[agent] Loaded {len(self.conversation_history)} messages from history (last updated: {data.get('last_updated')})", flush=True)
-        except Exception as e:
-            print(f"[agent] Error loading conversation history: {e}", flush=True)
-            self.conversation_history = []
+        while not self.pending_messages.empty():
+            try:
+                self.pending_messages.get_nowait()
+            except asyncio.QueueEmpty:
+                break
 
-    def _save_conversation_history(self) -> None:
-        history_file = self._get_history_file_path()
-
-        try:
-            import json
-            from datetime import datetime
-
-            data: ConversationHistoryFile = {
-                "version": 1,
-                "last_updated": datetime.now(UTC).isoformat(),
-                "messages": [self._serialize_message(msg) for msg in self.conversation_history]
-            }
-
-            with open(history_file, "w") as f:
-                json.dump(data, f, indent=2)
-
-            if AGENT_DEBUG:
-                print(f"[agent] Saved {len(self.conversation_history)} messages to history", flush=True)
-        except Exception as e:
-            print(f"[agent] Error saving conversation history: {e}", flush=True)
-
-    def _clear_conversation_history(self) -> None:
-        history_file = self._get_history_file_path()
-
-        try:
-            if history_file.exists():
-                history_file.unlink()
-
-            self.conversation_history = []
-            print("[agent] Conversation history cleared", flush=True)
-        except Exception as e:
-            print(f"[agent] Error clearing conversation history: {e}", flush=True)
+        print("[agent] Cleared running state", flush=True)
 
     async def atomic_operation(self, action: str, params: dict) -> dict:
         self.operation_counter += 1
@@ -280,10 +210,12 @@ class AgentHarness:
             return {"status": "error", "error": f"Send failed: {e!s}"}
 
         try:
-            result = await asyncio.wait_for(response_future, timeout=10.0)
-            return result
+            return await asyncio.wait_for(response_future, timeout=10.0)
+        except asyncio.CancelledError:
+            print(f"[agent] Operation cancelled (session reinitialized): action={action}, tx_id={tx_id}", flush=True)
+            return {"status": "error", "error": f"OPERATION FAILED: '{action}' was interrupted because the session was reinitialized. This operation did NOT complete. You must retry or inform the user."}
         except TimeoutError:
-            return {"status": "error", "error": "Operation timeout", "tx_id": tx_id}
+            return {"status": "error", "error": f"OPERATION FAILED: '{action}' timed out after 10 seconds. This operation did NOT complete.", "tx_id": tx_id}
         finally:
             self.pending_operations.pop(tx_id, None)
 
@@ -300,35 +232,40 @@ class AgentHarness:
         self.mode = mode
         print(f"[agent] Mode changed to {mode.value}")
 
-    def _message_has_thinking(self, msg: dict) -> bool:
-        if msg.get("role") != "assistant":
-            return False
-        content = msg.get("content", [])
-        if not isinstance(content, list):
-            return False
-        for block in content:
-            block_type = block.get("type") if isinstance(block, dict) else getattr(block, "type", None)
-            if block_type in ("thinking", "redacted_thinking"):
-                return True
-        return False
-
     async def _wait_for_message(self) -> None:
         msg = await self.pending_messages.get()
 
         msg_type = msg.get("type")
+        if AGENT_DEBUG:
+            print(f"[agent] _wait_for_message: got message type={msg_type}", flush=True)
+
+        if msg_type == "resume":
+            if AGENT_DEBUG:
+                print("[agent] Resuming turn after tool results", flush=True)
+            return
 
         if msg_type == "user_query":
             self.current_request_id = msg.get("request_id")
 
-            self.conversation_history.append({
+            payload = {
+                "type": "anthropic_message",
                 "role": "user",
                 "content": msg["content"],
-            })
-            self._save_conversation_history()
+                "timestamp": int(time.time() * 1000),
+            }
 
-            if AGENT_DEBUG:
-                content_preview = msg["content"][:100]
-                print(f"[agent] User query received: {content_preview}...")
+            if msg.get("display_query") is not None:
+                payload["display_query"] = msg["display_query"]
+            if msg.get("display_nodes") is not None:
+                payload["display_nodes"] = msg["display_nodes"]
+            if msg.get("hidden") is not None:
+                payload["hidden"] = msg["hidden"]
+
+            await self._insert_history(
+                event_type="anthropic_message",
+                payload=payload,
+                request_id=self.current_request_id,
+            )
 
         elif msg_type == "cell_result":
             cell_id = msg["cell_id"]
@@ -344,62 +281,43 @@ class AgentHarness:
                 if AGENT_DEBUG:
                     print(f"[agent] Cell {cell_id} failed")
 
-            self.conversation_history.append({
-                "role": "user",
-                "content": result_content,
-            })
-            self._save_conversation_history()
+            await self._insert_history(
+                event_type="anthropic_message",
+                payload={
+                    "type": "anthropic_message",
+                    "role": "user",
+                    "content": result_content,
+                    "timestamp": int(time.time() * 1000),
+                },
+            )
+
+            if self.pending_auto_continue and not self.executing_cells:
+                print(f"[agent] All cells complete, resuming auto-continue (request_id={self.current_request_id})")
+                self.pending_auto_continue = False
+                await self.pending_messages.put({
+                    "type": "user_query",
+                    "content": "Continue with the next step.",
+                    "request_id": self.current_request_id,
+                    "hidden": True,
+                })
 
         elif msg_type == "stop":
             self.conversation_running = False
             if AGENT_DEBUG:
                 print("[agent] Stop signal received")
 
-    async def _send_agent_result(self) -> None:
-        if not self.current_request_id:
+    async def _complete_turn(self) -> None:
+        if self.current_request_id is None:
             return
 
         should_continue = self.should_auto_continue
         self.should_auto_continue = False
+        self.pending_auto_continue = False
 
         if self.mode == Mode.executing:
             self.set_mode(Mode.planning)
 
-        text_responses = []
-        for msg in reversed(self.conversation_history):
-            if msg.get("role") == "user":
-                break
-            if msg.get("role") == "assistant":
-                for block in msg.get("content", []):
-                    block_type = (block.get("type") if isinstance(block, dict)
-                                 else getattr(block, "type", None))
-                    block_text = (block.get("text") if isinstance(block, dict)
-                                 else getattr(block, "text", None))
-                    if block_type == "text" and block_text:
-                        text_responses.insert(0, block_text)
-
-        response_msg = {
-            "type": "agent_result",
-            "status": "success",
-            "responses": text_responses,
-            "mode": self.mode.value,
-            "request_id": self.current_request_id,
-        }
-
-        if self.current_structured_output is not None:
-            structured = self.current_structured_output.model_dump()
-            response_msg["structured_output"] = structured
-
-            print("[agent] Sending agent_result with structured_output:")
-            print(f"  - next_status: {structured.get('next_status')}")
-            print(f"  - plan: {len(structured.get('plan', []))} items")
-            print(f"  - plan_diff: {len(structured.get('plan_diff', []))} items")
-            for diff in structured.get("plan_diff", []):
-                print(f"    - [{diff.get('action')}] {diff.get('id')}: {diff.get('description')}")
-
-            self.current_structured_output = None
-
-        await self.send(response_msg)
+        await self._notify_history_updated(request_id=self.current_request_id)
 
         if should_continue:
             if AGENT_DEBUG:
@@ -408,6 +326,7 @@ class AgentHarness:
                 "type": "user_query",
                 "content": "Continue with the next step.",
                 "request_id": self.current_request_id,
+                "hidden": True,
             })
 
     def init_tools(self) -> None:
@@ -540,7 +459,8 @@ class AgentHarness:
         async def delete_all_cells(args: dict) -> str:
             context_result = await self.atomic_operation("get_context", {})
             if context_result.get("status") != "success":
-                return "Failed to get notebook context"
+                error_msg = context_result.get("error", "Unknown error")
+                return f"Failed to delete cells: {error_msg}"
 
             cells = context_result.get("context", {}).get("cells", [])
             deleted_count = 0
@@ -599,11 +519,8 @@ class AgentHarness:
             if AGENT_DEBUG:
                 print(f"[tool] set_widget key={key} value={value!r}")
 
-            params = {
-                "key": key,
-                "value": json.dumps(value)
-            }
-            
+            params = {"key": key, "value": json.dumps(value)}
+
             result = await self.atomic_operation("set_widget", params)
 
             if result.get("status") == "success":
@@ -614,15 +531,15 @@ class AgentHarness:
         async def submit_response(args: dict) -> str:
             try:
                 summary = args.get("summary")
-                if not isinstance(summary, list):
+                if summary is not None and not isinstance(summary, str):
                     summary = None
 
                 questions = args.get("questions")
-                if not isinstance(questions, list):
+                if questions is not None and not isinstance(questions, str):
                     questions = None
 
                 next_status = args.get("next_status")
-                if not isinstance(next_status, str) or next_status not in {"executing", "fixing", "thinking", "awaiting_user_response", "awaiting_cell_execution", "done"}:
+                if not isinstance(next_status, str) or next_status not in {"executing", "fixing", "thinking", "awaiting_user_response", "awaiting_cell_execution", "awaiting_user_widget_input", "done"}:
                     if AGENT_DEBUG:
                         print(f"[agent] Invalid next_status: {next_status}")
                     return "Please provide a valid next_status"
@@ -633,27 +550,24 @@ class AgentHarness:
                 plan_diff_items = args.get("plan_diff", [])
 
                 print("[tool] submit_response called with:")
+                print(f"  - next_status: {next_status}")
                 print(f"  - plan: {len(plan_items)} items")
                 for item in plan_items:
                     print(f"    - [{item.get('status')}] {item.get('id')}: {item.get('description')}")
                 print(f"  - plan_diff: {len(plan_diff_items)} items")
                 for diff in plan_diff_items:
                     print(f"    - [{diff.get('action')}] {diff.get('id')}: {diff.get('description')}")
+                print(f"  - summary: {summary}")
+                print(f"  - questions: {questions}")
                 print(f"  - continue: {should_continue}")
 
-                self.current_structured_output = NotebookResponse(
-                    plan=[PlanItem(**item) for item in plan_items],
-                    plan_diff=[PlanDiff(**item) for item in plan_diff_items],
-                    summary=summary,
-                    questions=questions,
-                    next_status=next_status,
-                )
-
                 if should_continue and self.executing_cells:
-                    print(f"[tool] Cannot continue - {len(self.executing_cells)} cells still executing: {self.executing_cells}")
+                    print(f"[tool] Deferring auto-continue - {len(self.executing_cells)} cells still executing: {self.executing_cells}")
                     self.should_auto_continue = False
+                    self.pending_auto_continue = True
                 else:
                     self.should_auto_continue = should_continue
+                    self.pending_auto_continue = False
 
                 return "Response submitted successfully"
             except Exception as e:
@@ -766,14 +680,14 @@ class AgentHarness:
 
         self.tools.append({
             "name": "submit_response",
-            "description": "Submit the final response with plan, plan_diff, summary, next_status, and questions. Call this at the end of every turn.",
+            "description": "Submit the final response with plan, plan_diff, next_status, questions, and an optional summary. Call this at the end of every turn.",
             "input_schema": {
                 "type": "object",
                 "properties": {
                     "plan": {"type": "array", "description": "List of plan items"},
                     "plan_diff": {"type": "array", "description": "List of plan diff items"},
-                    "summary": {"type": "array", "description": "List of summary bullet points or null"},
-                    "questions": {"type": "array", "description": "List of questions for the user or null"},
+                    "summary": {"type": "string", "description": "Optional summary text describing what was accomplished. Use markdown formatting with bullet points if needed. Omit if no summary needed."},
+                    "questions": {"type": "string", "description": "Optional question text for the user. Omit if no questions needed."},
                     "next_status": {"type": "string", "description": "What the agent will do next", "enum": ["executing", "fixing", "thinking", "awaiting_user_response", "awaiting_cell_execution", "awaiting_user_widget_input", "done"]},
                     "continue": {
                         "type": "boolean",
@@ -781,7 +695,7 @@ class AgentHarness:
                         "default": False
                     },
                 },
-                "required": ["plan", "plan_diff", "summary", "questions"],
+                "required": ["plan", "plan_diff", "next_status"],
             },
         })
         self.tool_map["submit_response"] = submit_response
@@ -812,51 +726,42 @@ class AgentHarness:
         turn = 0
 
         while self.conversation_running:
-            if not self.conversation_history or self.conversation_history[-1]["role"] == "assistant":
-                await self._wait_for_message()
-                continue
-
+            await self._wait_for_message()
             if not self.conversation_running:
                 break
+
+            api_messages = await self._build_messages_from_db()
+            if not api_messages or api_messages[-1].get("role") != "user":
+                continue
 
             turn += 1
 
             model, thinking_budget = self.mode_config.get(self.mode, ("claude-sonnet-4-5-20250929", 1024))
 
             if AGENT_DEBUG:
-                print(f"[agent] Turn {turn}, mode={self.mode}, thinking_budget={thinking_budget}")
+                print(f"[agent] Turn {turn}, mode={self.mode}, thinking_budget={thinking_budget}", flush=True)
 
             if thinking_budget is not None:
                 max_tokens = thinking_budget + 4096
             else:
                 max_tokens = 4096
 
-            def _has_content(m: dict) -> bool:
-                c = m.get("content")
-                if isinstance(c, str):
-                    return bool(c.strip())
-                if isinstance(c, list):
-                    return len(c) > 0
-                return False
+            can_use_thinking = True
+            if thinking_budget is not None and len(api_messages) > 0:
+                last_assistant_msg = None
+                for msg in reversed(api_messages):
+                    if msg.get("role") == "assistant":
+                        last_assistant_msg = msg
+                        break
 
-            clean_messages = [m for m in self.conversation_history if _has_content(m)]
-
-            api_messages = []
-            for msg in clean_messages:
-                content = msg.get("content")
-                if isinstance(content, list):
-                    filtered_content = [
-                        block for block in content
-                        if not (isinstance(block, dict) and
-                                block.get("type") in ("thinking", "redacted_thinking") and
-                                block.get("_loaded_from_history"))
-                    ]
-                    if filtered_content:
-                        api_messages.append({"role": msg["role"], "content": filtered_content})
-                    elif msg.get("role") == "assistant":
-                        api_messages.append({"role": msg["role"], "content": [{"type": "text", "text": ""}]})
-                else:
-                    api_messages.append(msg)
+                if last_assistant_msg:
+                    content = last_assistant_msg.get("content", [])
+                    if isinstance(content, list) and len(content) > 0:
+                        first_block_type = content[0].get("type") if isinstance(content[0], dict) else None
+                        if first_block_type not in {"thinking", "redacted_thinking"}:
+                            can_use_thinking = False
+                            if AGENT_DEBUG:
+                                print(f"[agent] Cannot use thinking API: last assistant message starts with {first_block_type}, not thinking", flush=True)
 
             kwargs = {
                 "model": model,
@@ -866,7 +771,7 @@ class AgentHarness:
                 "tools": self.tools,
             }
             use_beta_api = False
-            if thinking_budget is not None:
+            if thinking_budget is not None and can_use_thinking:
                 kwargs["thinking"] = {
                     "type": "enabled",
                     "budget_tokens": thinking_budget,
@@ -875,17 +780,32 @@ class AgentHarness:
                 use_beta_api = True
 
             try:
-                start_time = time.process_time()
+                start_time = time.time()
 
                 if use_beta_api:
-                    response = await self.client.beta.messages.create(**kwargs)
+                    response: BetaMessage = await self.client.beta.messages.create(**kwargs)
                 else:
-                    response = await self.client.messages.create(**kwargs)
+                    response: Message = await self.client.messages.create(**kwargs)
 
-                duration = time.process_time() - start_time
+                duration_seconds = time.time() - start_time
 
             except Exception as e:
                 print(f"[agent] API error: {e}", flush=True)
+
+                print(f"[agent] API call failed with {len(api_messages)} messages", flush=True)
+                for i, msg in enumerate(api_messages):
+                    role = msg.get("role", "?")
+                    content = msg.get("content", [])
+                    if isinstance(content, str):
+                        print(f"  Message {i} ({role}): string content, length={len(content)}", flush=True)
+                    elif isinstance(content, list):
+                        print(f"  Message {i} ({role}): {len(content)} blocks", flush=True)
+                        for j, block in enumerate(content):
+                            block_type = block.get("type") if isinstance(block, dict) else getattr(block, "type", "?")
+                            print(f"    Block {j}: {block_type}", flush=True)
+                    else:
+                        print(f"  Message {i} ({role}): unknown content type={type(content)}", flush=True)
+
                 await self.send({
                     "type": "agent_error",
                     "error": f"API error: {e!s}",
@@ -893,35 +813,25 @@ class AgentHarness:
                 })
                 continue
 
-            assistant_msg = {
-                "role": "assistant",
-                "content": response.content,
-            }
-            self.conversation_history.append(assistant_msg)
-            self._save_conversation_history()
-
-            for block in response.content:
-                if isinstance(block, dict):
-                    block_type = block.get("type")
-                else:
-                    block_type = getattr(block, "type", None)
-
-                if block_type in ("thinking", "redacted_thinking"):
-                    thinking_text = block.get("thinking") if isinstance(block, dict) else getattr(block, "thinking", None)
-                    if thinking_text:
-                        if AGENT_DEBUG:
-                            print(f"[agent] Thinking:\n{thinking_text}")
-                        await self.send({
-                            "type": "agent_thinking",
-                            "thoughts": thinking_text,
-                            "duration": duration,
-                        })
-                    else:
-                        print("[agent] Thinking block present (redacted)")
+            response_content = response.model_dump()["content"]
+            if response_content is not None and (not isinstance(response_content, list) or len(response_content) > 0):
+                await self._insert_history(
+                    event_type="anthropic_message",
+                    payload={
+                        "type": "anthropic_message",
+                        "role": "assistant",
+                        "content": response_content,
+                        "timestamp": int(time.time() * 1000),
+                        "duration": duration_seconds,
+                    },
+                )
+            elif AGENT_DEBUG:
+                print(f"[agent] Skipping empty assistant message (stop_reason={response.stop_reason})", flush=True)
 
             if response.stop_reason == "end_turn":
                 if AGENT_DEBUG:
-                    print("[agent] Turn ended without submit_response - model should always call submit_response per prompt")
+                    print("[agent] Turn ended without submit_response; completing turn")
+                await self._complete_turn()
             elif response.stop_reason == "tool_use":
                 tool_results = []
                 called_submit_response = False
@@ -950,51 +860,74 @@ class AgentHarness:
                                 tool_results.append({
                                     "type": "tool_result",
                                     "tool_use_id": tool_id,
-                                    "content": result,
+                                    "content": json.dumps({
+                                        "summary": result,
+                                        "error": None,
+                                    }),
                                 })
                             except Exception as e:
                                 print(f"[agent] Tool error: {tool_name}: {e}", flush=True)
                                 tool_results.append({
                                     "type": "tool_result",
                                     "tool_use_id": tool_id,
-                                    "content": f"Error executing tool: {e!s}",
-                                    "is_error": True,
+                                    "content": json.dumps({
+                                        "summary": None,
+                                        "error": f"Error executing tool: {e!s}",
+                                    }),
                                 })
                         else:
                             tool_results.append({
                                 "type": "tool_result",
                                 "tool_use_id": tool_id,
-                                "content": f"Unknown tool: {tool_name}",
-                                "is_error": True,
+                                "content": json.dumps({
+                                    "summary": None,
+                                    "error": f"Unknown tool: {tool_name}",
+                                }),
                             })
 
-                if tool_results:
-                    self.conversation_history.append({
-                        "role": "user",
-                        "content": tool_results,
-                    })
-                    self._save_conversation_history()
+                if len(tool_results) > 0:
+                    await self._insert_history(
+                        event_type="anthropic_message",
+                        payload={
+                            "type": "anthropic_message",
+                            "role": "user",
+                            "content": tool_results,
+                            "timestamp": int(time.time() * 1000),
+                        },
+                    )
                 elif AGENT_DEBUG:
                     print("[agent] No tool results")
 
                 if called_submit_response:
                     if AGENT_DEBUG:
-                        print("[agent] submit_response called, sending agent_result")
-                    await self._send_agent_result()
+                        print("[agent] submit_response called, completing turn")
+                    await self._complete_turn()
+                else:
+                    await self.pending_messages.put({"type": "resume"})
             elif response.stop_reason == "max_tokens":
                 print("[agent] Hit max tokens", flush=True)
-                await self._send_agent_result()
+                await self._complete_turn()
             else:
                 if AGENT_DEBUG:
                     print(f"[agent] Unknown stop reason: {response.stop_reason}")
-                await self._send_agent_result()
+                await self._complete_turn()
 
     async def handle_init(self, msg: dict[str, object]) -> None:
         print("[agent] Initializing", flush=True)
 
         try:
+            await self._clear_running_state()
+
+            self.should_auto_continue = False
+            self.pending_auto_continue = False
+
             context = msg.get("context", "")
             self.instructions_context = context
+            session_id = msg.get("session_id")
+            if session_id is None:
+                raise RuntimeError(f"[handle init] Session ID is not set. Message: {msg}")
+
+            self.agent_session_id = int(session_id)
 
             self.init_tools()
 
@@ -1006,47 +939,59 @@ class AgentHarness:
 
             self.system_prompt = build_full_instruction(self.instructions_context)
 
-            self._load_conversation_history()
+            messages = await self._build_messages_from_db()
+            tool_use_ids = set()
+            tool_result_ids = set()
 
-            has_pending_work = (
-                len(self.conversation_history) > 0 and
-                self.conversation_history[-1].get("role") == "user"
-            )
+            print(f"[agent] Checking for pending tools in {len(messages)} messages", flush=True)
 
-            print(f"[agent] Checking for pending work: {has_pending_work} (history length: {len(self.conversation_history)})", flush=True)
-            if len(self.conversation_history) > 0:
-                last_msg = self.conversation_history[-1]
-                print(f"[agent] Last message role: {last_msg.get('role')}", flush=True)
+            for history_msg in messages:
+                content = history_msg.get("content")
+                if not isinstance(content, list):
+                    continue
 
-            if has_pending_work:
-                last_user_msg = self.conversation_history[-1]
-                content = last_user_msg.get("content", "")
-                preview = str(content)[:100] if isinstance(content, str) else "previous request"
+                for block in content:
+                    if not isinstance(block, dict):
+                        continue
 
-                self.conversation_history.append({
-                    "role": "assistant",
-                    "content": [{"type": "text", "text": f"I see we were interrupted while I was working on: {preview}...\n\nWould you like me to continue?"}]
-                })
-                self._save_conversation_history()
+                    if block.get("type") == "tool_use":
+                        tool_id = block.get("id")
+                        if tool_id:
+                            tool_use_ids.add(tool_id)
+                            print(f"[agent]   Found tool_use: id={tool_id}, name={block.get('name')}", flush=True)
+                    elif block.get("type") == "tool_result":
+                        tool_use_id = block.get("tool_use_id")
+                        if tool_use_id:
+                            tool_result_ids.add(tool_use_id)
+                            print(f"[agent]   Found tool_result: tool_use_id={tool_use_id}", flush=True)
 
-                question = f"Session resumed. I found an incomplete task: {preview}...\n\nWould you like me to continue?"
-                resume_plan = NotebookResponse(
-                    plan=[],
-                    plan_diff=[],
-                    questions=[question],
-                    next_status="awaiting_user_response",
-                    summary=None,
+            pending_tool_ids = tool_use_ids - tool_result_ids
+
+            print(f"[agent] Tool use count: {len(tool_use_ids)}, Tool result count: {len(tool_result_ids)}, Pending: {len(pending_tool_ids)}", flush=True)
+
+            if pending_tool_ids:
+                print(f"[agent] Found {len(pending_tool_ids)} pending tool calls, closing them", flush=True)
+
+                await self._insert_history(
+                    event_type="anthropic_message",
+                    payload={
+                        "type": "anthropic_message",
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "tool_result",
+                                "tool_use_id": tool_id,
+                                "content": json.dumps({
+                                    "summary": None,
+                                    "error": "Tool call cancelled - session was ended before completion",
+                                }),
+                            }
+                            for tool_id in pending_tool_ids
+                        ],
+                        "timestamp": int(time.time() * 1000),
+                    },
                 )
-
-                await self.send({
-                    "type": "agent_result",
-                    "status": "success",
-                    "responses": [question],
-                    "structured_output": resume_plan,
-                    "mode": "planning",
-                    "request_id": "resume"
-
-                })
+                await self._notify_history_updated()
 
             self.initialized = True
             await self.send({
@@ -1055,7 +1000,38 @@ class AgentHarness:
             })
             print("[agent] Initialization complete", flush=True)
 
-            self.conversation_task = asyncio.create_task(self.run_agent_loop())
+            self._start_conversation_loop()
+
+            most_recent_submit_response = None
+            for history_msg in reversed(messages):
+                if history_msg.get("role") == "assistant":
+                    content = history_msg.get("content")
+                    if isinstance(content, list):
+                        for block in content:
+                            if isinstance(block, dict) and block.get("type") == "tool_use" and block.get("name") == "submit_response":
+                                most_recent_submit_response = block.get("input", {})
+                                break
+                    if most_recent_submit_response is not None:
+                        break
+
+            if most_recent_submit_response is not None:
+                next_status = most_recent_submit_response.get("next_status")
+                waiting_states = {"awaiting_cell_execution", "awaiting_user_widget_input"}
+
+                if next_status in waiting_states:
+                    print(f"[agent] Reconnected while {next_status}, prompting LLM to check state and retry", flush=True)
+                    await self.pending_messages.put({
+                        "type": "user_query",
+                        "content": "The session was reconnected. You were waiting for an action to complete, but it may have finished or failed while offline. Please use get_notebook_context to check the current state, then retry any incomplete actions or continue with your plan.",
+                        "request_id": None,
+                        "hidden": True,
+                    })
+                else:
+                    print(f"[agent] Reconnected with status '{next_status}', staying idle", flush=True)
+
+            if len(messages) > 0 and messages[-1].get("role") == "user":
+                print("[agent] Incomplete turn detected, auto-resuming", flush=True)
+                await self.pending_messages.put({"type": "resume"})
         except Exception as e:
             await self.send({
                 "type": "agent_error",
@@ -1066,13 +1042,20 @@ class AgentHarness:
     async def handle_query(self, msg: dict[str, object]) -> None:
         query = msg.get("query", "")
         request_id = msg.get("request_id")
+        contextual_node_data = msg.get("contextual_node_data")
 
-        print(f"[agent] Processing query: {query}...")
+        print(f"[agent] Processing query: {query}...", flush=True)
+
+        full_query = query
+        if contextual_node_data:
+            full_query = f"{query} \n\nHere is the context of the selected nodes the user would like to use: <ContextualNodeData>{json.dumps(contextual_node_data)}</ContextualNodeData>"
 
         await self.pending_messages.put({
             "type": "user_query",
-            "content": query,
+            "content": full_query,
             "request_id": request_id,
+            "display_query": query,
+            "display_nodes": contextual_node_data,
         })
 
     async def handle_cancel(self, msg: dict[str, object]) -> None:
@@ -1087,33 +1070,31 @@ class AgentHarness:
                 await self.conversation_task
             except asyncio.CancelledError:
                 pass
-    
-    def _format_widget_summaries(self, widgets: list[dict]) -> str:
-            if not widgets:
-                return ""
-            
-            widget_summaries = []
-            for widget in widgets:
-                widget_key = widget.get("key") or "?"
-                widget_type = widget.get("type") or "unknown"
-                widget_value = widget.get("value") or ""
-                widget_label = widget.get("label") or ""
-                
-                widget_desc = f"key={widget_key}, type={widget_type}"
-                if widget_value:
-                    widget_desc += f", value={widget_value}"
-                if widget_label:
-                    widget_desc += f", label={widget_label}"
-                widget_summaries.append(widget_desc)
-            
-            return ", ".join(widget_summaries)
 
-    async def handle_clear_history(self, msg: dict[str, object]) -> None:
-        print("[agent] Clearing conversation history")
-        self._clear_conversation_history()
-        await self.send({
-            "type": "history_cleared",
-        })
+    def _format_widget_summaries(self, widgets: list[dict]) -> str:
+        if not widgets:
+            return ""
+
+        widget_summaries = []
+        for widget in widgets:
+            widget_key = widget.get("key") or "?"
+            widget_type = widget.get("type") or "unknown"
+            widget_value = widget.get("value") or ""
+            widget_label = widget.get("label") or ""
+
+            widget_desc = f"key={widget_key}, type={widget_type}"
+            if widget_value:
+                widget_desc += f", value={widget_value}"
+            if widget_label:
+                widget_desc += f", label={widget_label}"
+            widget_summaries.append(widget_desc)
+
+        return ", ".join(widget_summaries)
+
+    async def handle_clear_history(self) -> None:
+        await self._clear_running_state()
+        await self._mark_all_history_removed()
+        self._start_conversation_loop()
 
     async def accept(self) -> None:
         msg = await self.conn.recv()
@@ -1139,7 +1120,7 @@ class AgentHarness:
         elif msg_type == "agent_clear_history":
             if AGENT_DEBUG:
                 print("[agent] Clear history request")
-            await self.handle_clear_history(msg)
+            await self.handle_clear_history()
         elif msg_type == "agent_action_response":
             if AGENT_DEBUG:
                 action = msg.get("action", "unknown")
