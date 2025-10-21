@@ -993,6 +993,7 @@ class AgentHarness:
                         "type": "anthropic_message",
                         "role": "assistant",
                         "content": [
+                            {"type": "thinking", "thinking": "The session was interrupted. I should ask the user if they want to continue."},
                             {"type": "text", "text": "I see we were interrupted."},
                             {
                                 "type": "tool_use",
