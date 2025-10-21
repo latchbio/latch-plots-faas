@@ -566,6 +566,24 @@ class AgentHarness:
             
             return f"Failed to set h5 widget coloring: {result.get('error', 'Unknown error')}"
 
+        async def h5_set_selected_obsm_key(args: dict) -> str:
+            widget_key = args.get("widget_key")
+            obsm_key = args.get("obsm_key")
+            
+            if AGENT_DEBUG:
+                print(f"[tool] h5_set_selected_obsm_key widget_key={widget_key} obsm_key={obsm_key}")
+            
+            params = {
+                "widget_key": widget_key,
+                "obsm_key": obsm_key
+            }
+            
+            result = await self.atomic_operation("h5_set_selected_obsm_key", params)
+            if result.get("status") == "success":
+                return f"Set h5 widget to use obsm key {obsm_key}"
+            
+            return f"Failed to set h5 widget obsm key: {result.get('error', 'Unknown error')}"
+
         async def h5_set_background_image(args: dict) -> str:
             widget_key = args.get("widget_key")
             node_id = args.get("node_id")
@@ -965,6 +983,26 @@ class AgentHarness:
             },
         })
         self.tool_map["h5_color_by_obs"] = h5_color_by_obs
+
+        self.tools.append({
+            "name": "h5_set_selected_obsm_key",
+            "description": "Set the selected obsm key for an h5/AnnData widget to control which spatial coordinates are displayed.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "widget_key": {
+                        "type": "string",
+                        "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
+                    },
+                    "obsm_key": {
+                        "type": "string",
+                        "description": "The obsm key to use for embedding (e.g spatial, X_umap)"
+                    },
+                },
+                "required": ["widget_key", "obsm_key"],
+            },
+        })
+        self.tool_map["h5_set_selected_obsm_key"] = h5_set_selected_obsm_key
 
         self.tools.append({
             "name": "h5_set_background_image",
