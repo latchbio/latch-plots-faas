@@ -152,6 +152,18 @@ class AgentHarness:
         )
         await self._notify_history_updated()
 
+    def _start_conversation_loop(self) -> None:
+        self.conversation_task = asyncio.create_task(self.run_agent_loop())
+
+        def _task_done_callback(task: asyncio.Task) -> None:
+            try:
+                task.result()
+            except Exception as e:
+                print(f"[agent] conversation_task raised exception: {e}", flush=True)
+                traceback.print_exc()
+
+        self.conversation_task.add_done_callback(_task_done_callback)
+
     async def _clear_running_state(self) -> None:
         if len(self.pending_operations) > 0:
             print(f"[agent] Cancelling {len(self.pending_operations)} pending operations", flush=True)
@@ -962,7 +974,7 @@ class AgentHarness:
             })
             print("[agent] Initialization complete", flush=True)
 
-            self.conversation_task = asyncio.create_task(self.run_agent_loop())
+            self._start_conversation_loop()
 
             most_recent_submit_response = None
             for history_msg in reversed(messages):
@@ -994,15 +1006,6 @@ class AgentHarness:
             if len(messages) > 0 and messages[-1].get("role") == "user":
                 print("[agent] Incomplete turn detected, auto-resuming", flush=True)
                 await self.pending_messages.put({"type": "resume"})
-
-            def _task_done_callback(task: asyncio.Task) -> None:
-                try:
-                    task.result()
-                except Exception as e:
-                    print(f"[agent] conversation_task raised exception: {e}", flush=True)
-                    traceback.print_exc()
-
-            self.conversation_task.add_done_callback(_task_done_callback)
         except Exception as e:
             await self.send({
                 "type": "agent_error",
@@ -1065,6 +1068,7 @@ class AgentHarness:
     async def handle_clear_history(self) -> None:
         await self._clear_running_state()
         await self._mark_all_history_removed()
+        self._start_conversation_loop()
 
     async def accept(self) -> None:
         msg = await self.conn.recv()
