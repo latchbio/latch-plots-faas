@@ -1,11 +1,14 @@
+import asyncio
 import base64
 import io
+import os
 import sys
 from enum import Enum
 from pathlib import Path
 from typing import Any, Literal, NotRequired, TypedDict
 
 from aiohttp import ClientSession
+from aiohttp.client_exceptions import ServerDisconnectedError
 from latch.types.directory import LatchDir
 from latch.types.file import LatchFile
 from lplots.utils.nothing import _Nothing
@@ -17,10 +20,25 @@ from yarl import URL
 sys.path.append(str(Path(__file__).parent.parent.absolute()))
 from config import config
 
-latch_p = Path("/root/.latch")
-sdk_token = (latch_p / "token").read_text()
+latch_p = Path(os.environ.get("LATCH_SANDBOX_ROOT", "/root/.latch"))
+sdk_token_path = latch_p / "token"
+if sdk_token_path.exists():
+    sdk_token = sdk_token_path.read_text()
+else:
+    sdk_token = ""
 auth_token_sdk = f"Latch-SDK-Token {sdk_token}"
-nucleus_url = (latch_p / "nucleus-url").read_text()
+
+
+nucleus_url_path = latch_p / "nucleus-url"
+if nucleus_url_path.exists():
+    nucleus_url = nucleus_url_path.read_text()
+else:
+    nucleus_url = "https://nucleus.latch.bio"
+
+pod_id_path = latch_p / "id"
+pod_id: int | None = None
+if pod_id_path.exists():
+    pod_id = int(pod_id_path.read_text())
 
 sess: ClientSession | None = None
 
@@ -86,21 +104,32 @@ async def get_presigned_url(path: str) -> str:
 
 async def gql_query(query: str, variables: dict[str, Any], auth: str) -> Any:
     sess = get_global_http_sess()
-    async with sess.post(
-        URL(f"https://vacuole.{config.domain}") / "graphql",
-        headers={
-            "Content-Type": "application/json",
-            "User-Agent": "LatchPlotsFaas/0.2.0",
-            "Authorization": auth,
-        },
-        json={"query": query, "variables": variables},
-    ) as resp:
-        resp.raise_for_status()
+    delays = [0.5, 1.0, 2.0]
 
-        res = await resp.json()
-        if "errors" in res:
-            raise RuntimeError(f"graphql error: {res}")
-        return res
+    for attempt in range(len(delays) + 1):
+        try:
+            async with sess.post(
+                URL(f"https://vacuole.{config.domain}") / "graphql",
+                headers={
+                    "Content-Type": "application/json",
+                    "User-Agent": "LatchPlotsFaas/0.2.0",
+                    "Authorization": auth,
+                },
+                json={"query": query, "variables": variables},
+            ) as resp:
+                resp.raise_for_status()
+
+                res = await resp.json()
+                if "errors" in res:
+                    raise RuntimeError(f"graphql error: {res}")
+                return res
+        except ServerDisconnectedError:
+            if attempt < len(delays):
+                await asyncio.sleep(delays[attempt])
+            else:
+                raise
+
+    raise RuntimeError(f"Failed to execute graphql query after {len(delays)} attempts")
 
 
 def plot_to_webp_string(

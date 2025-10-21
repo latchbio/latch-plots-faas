@@ -1,0 +1,73 @@
+# Custom Plots from Any Library
+
+**Goal**: Programmatically render plots in a Plots notebook using **matplotlib/seaborn** (image) or **plotly** (interactive).
+**Discovery rule**: the variable holding your figure **must start with `fig`** (e.g., `fig_iris_scatter`). If a name already exists, append a suffix (`_1`, `_2`, …).
+
+---
+
+## 0) Install libs (when needed)
+
+```python
+import os
+os.system("/opt/mamba/envs/plots-faas/bin/pip install matplotlib plotly seaborn")
+```
+
+---
+
+## 1) Matplotlib / Seaborn (image output)
+
+**Pattern (always capture a Figure or Axes into a `fig*` variable):**
+
+```python
+import pandas as pd
+import matplotlib.pyplot as plt
+
+df = pd.read_csv("https://latch-public.s3.us-west-2.amazonaws.com/plots/test-data/iris.csv")
+
+fig_iris_scatter, ax = plt.subplots(figsize=(10, 6))
+ax.scatter(df["sepal.length"], df["sepal.width"], label="Sepal")
+ax.scatter(df["petal.length"], df["petal.width"], label="Petal")
+ax.legend()
+ax.set_title("Iris — Sepal vs Petal")
+ax.set_xlabel("Length"); ax.set_ylabel("Width")
+```
+
+> Tip: Seaborn returns an **Axes**; you can still expose a figure variable:
+
+```python
+import seaborn as sns, matplotlib.pyplot as plt
+fig_iris_pair, ax = plt.subplots()
+sns.scatterplot(data=df, x="sepal.length", y="sepal.width", ax=ax)
+```
+
+---
+
+## 2) Plotly (interactive)
+
+```python
+import plotly.express as px
+
+df = px.data.iris()
+fig_iris_scatter = px.scatter(
+    df,
+    x="sepal_length",
+    y="sepal_width",
+    template="simple_white",
+    title="Iris — Sepal Length vs Width"
+)
+```
+
+---
+
+## Naming rules (must-follow)
+
+* Use `fig_<what>` (e.g., `fig_iris_scatter`).
+* If that name already exists in `<current_layout>` or `<target_cell_contents>`, create a unique variant: `fig_iris_scatter_1`, `fig_iris_scatter_2`, …
+
+---
+
+## Gotchas & best practices
+
+* **Ensure the `fig*` variable references a Figure/Axes (matplotlib/seaborn) or a Plotly Figure**—not a return value like `PathCollection`.
+* Keep plotting code **at cell (global) scope** so the figure variable is visible to the renderer.
+* Prefer explicit `fig, ax = plt.subplots()` to guarantee you hold a real **Figure** object.

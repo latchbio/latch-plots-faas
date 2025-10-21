@@ -1,0 +1,125 @@
+# Latch Plots Reactivity
+
+**Core primitives**
+
+* **Signal**: reactive value holder.
+* **Computation node**: implicit wrapper around each cell; *subscribes* to any signals it reads.
+
+**How reactivity flows**
+
+1. Widgets/signals hold values.
+2. A cell runs → if it *reads* a signal, that cell subscribes.
+3. When a signal’s value changes, all current subscribers re-run.
+
+---
+
+## Signals: API & Patterns
+
+```python
+from lplots.reactive import Signal
+
+# Create
+value = Signal(10)
+
+# Read & subscribe
+x = value()            # subscribes this cell
+
+# Read without subscribing
+x_now = value.sample() # snapshot; no subscription
+
+# Update
+value(20)              # schedules re-runs of subscribers
+```
+
+Calling `.value` on a widget both retrieves the user input and subscribes the current cell to the cell where the widget is defined.
+
+```python
+## Cell 1 – Create widget
+text_input = w_text_input(label="Input")
+
+## Cell 2 – Access value (subscribes to Cell 1)
+text_input_value = text_input.value
+```
+
+**Immutability rule**
+Signals store a reference; internal mutation is invisible. Copy when “updating”:
+
+```python
+obj = Signal({})
+# ❌ obj()["k"]="v"   # no update propagates
+# ✅
+obj({**obj(), "k":"v"})
+```
+
+**Avoid infinite loops**
+
+```python
+x = value()        # this cell subscribes to `value`
+value(x + 10)      # ❌ unconditional self-update -> loop
+
+if x < 50:
+    value(x + 10)  # ✅ loop terminates
+```
+
+---
+
+## Transactions: update timing
+
+* **Delayed application**: All `Signal(...)` updates inside a running cell are queued and applied *after the cell finishes*.
+* Multiple cells re-running due to one change are grouped into **sequential transactions**—intermediate inconsistent states are not observable.
+
+Practical takeaways:
+
+* Use `sample()` inside the updating cell if you need the *previous* value during the same run.
+* Cross-signal invariants (e.g., `str(value) == value_str`) stay consistent across reactive re-runs.
+
+---
+
+## Subscriptions & Conditionals
+
+* A cell’s subscription set is **rebuilt on every run**—it only subscribes to signals it actually *read* last time.
+* Conditional access changes who you’re subscribed to:
+
+```python
+if value() > 30:        # subscribes to `value`
+    s = value_str()     # subscribes to `value_str` only when branch executes
+```
+
+**Force subscription** without using the value:
+
+```python
+value_str()  # unconditional subscribe
+```
+
+---
+
+## Redefining Signals (globals vs locals)
+
+* **Global variable rule**: Reassigning a global signal **updates its value** and **keeps subscribers** (equivalent to `value(new)`).
+* To drop subscribers and recreate:
+
+```python
+del value
+value = Signal(0)  # fresh signal, no subscribers
+```
+
+* **Locals** behave like normal Python—no special preservation. Guard creation if needed:
+
+```python
+if "value" not in locals():
+    value = Signal(10)
+```
+
+---
+
+## Quick Cheatsheet
+
+1. `s = Signal(init)` – create.
+2. `s()` – read **and subscribe**.
+3. `s.sample()` – read **without subscribing**.
+4. `s(new)` – update (applies after cell completes).
+5. Treat values as **immutable**; write copies, not in-place mutations.
+6. **No unconditional self-updates** in subscribed cells; gate updates.
+7. Subscriptions = signals **read on the last run**.
+8. Reactive **transactions** hide inconsistent intermediate states.
+9. Global reassignment **preserves subscribers**; `del` to reset.
