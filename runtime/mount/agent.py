@@ -950,8 +950,34 @@ class AgentHarness:
 
             self.conversation_task = asyncio.create_task(self.run_agent_loop())
 
+            most_recent_submit_response = None
+            for history_msg in reversed(messages):
+                if history_msg.get("role") == "assistant":
+                    content = history_msg.get("content")
+                    if isinstance(content, list):
+                        for block in content:
+                            if isinstance(block, dict) and block.get("type") == "tool_use" and block.get("name") == "submit_response":
+                                most_recent_submit_response = block.get("input", {})
+                                break
+                    if most_recent_submit_response is not None:
+                        break
+
+            if most_recent_submit_response is not None:
+                next_status = most_recent_submit_response.get("next_status")
+                waiting_states = {"awaiting_cell_execution", "awaiting_user_widget_input"}
+
+                if next_status in waiting_states:
+                    print(f"[agent] Reconnected while {next_status}, prompting LLM to check state and retry", flush=True)
+                    await self.pending_messages.put({
+                        "type": "user_query",
+                        "content": "The session was reconnected. You were waiting for an action to complete, but it may have finished or failed while offline. Please use get_notebook_context to check the current state, then retry any incomplete actions or continue with your plan.",
+                        "request_id": None,
+                    })
+                else:
+                    print(f"[agent] Reconnected with status '{next_status}', staying idle", flush=True)
+
             if len(messages) > 0 and messages[-1].get("role") == "user":
-                print("[agent] Last message is from user, auto-resuming conversation", flush=True)
+                print("[agent] Incomplete turn detected, auto-resuming", flush=True)
                 await self.pending_messages.put({"type": "resume"})
 
             def _task_done_callback(task: asyncio.Task) -> None:
