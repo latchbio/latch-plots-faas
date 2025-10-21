@@ -20,6 +20,8 @@ from lplots import _inject
 from socketio_thread import SocketIoThread
 from utils import auth_token_sdk, gql_query, nucleus_url, pod_id
 
+sys.stdout.reconfigure(line_buffering=True)
+
 sandbox_root = os.environ.get("LATCH_SANDBOX_ROOT")
 if sandbox_root:
     import pathlib
@@ -31,8 +33,6 @@ if sandbox_root:
         return original_path_new(cls, *args, **kwargs)
 
     pathlib.Path.__new__ = patched_path_new
-
-AGENT_DEBUG = os.environ.get("AGENT_DEBUG") == "1"
 
 
 class Mode(Enum):
@@ -71,7 +71,7 @@ class AgentHarness:
 
     async def send(self, msg: dict[str, object]) -> None:
         msg_type = msg.get("type", "unknown")
-        print(f"[agent] Sending message: {msg_type}", flush=True)
+        print(f"[agent] Sending message: {msg_type}")
         await self.conn.send(msg)
 
     async def _notify_history_updated(self, *, request_id: str | None = None) -> None:
@@ -109,8 +109,7 @@ class AgentHarness:
                 if role in {"user", "assistant"} and (isinstance(content, (str, list))):
                     anthropic_messages.append({"role": role, "content": content})
 
-        if AGENT_DEBUG:
-            print(f"[agent] Built {len(anthropic_messages)} messages from DB", flush=True)
+        print(f"[agent] Built {len(anthropic_messages)} messages from DB")
 
         return anthropic_messages
 
@@ -160,22 +159,22 @@ class AgentHarness:
             try:
                 task.result()
             except Exception as e:
-                print(f"[agent] conversation_task raised exception: {e}", flush=True)
+                print(f"[agent] conversation_task raised exception: {e}")
                 traceback.print_exc()
 
         self.conversation_task.add_done_callback(_task_done_callback)
 
     async def _clear_running_state(self) -> None:
         if len(self.pending_operations) > 0:
-            print(f"[agent] Cancelling {len(self.pending_operations)} pending operations", flush=True)
+            print(f"[agent] Cancelling {len(self.pending_operations)} pending operations")
             for tx_id, future in self.pending_operations.items():
                 if not future.done():
                     future.cancel()
-                    print(f"[agent]   Cancelled: {tx_id}", flush=True)
+                    print(f"[agent]   Cancelled: {tx_id}")
             self.pending_operations.clear()
 
         if self.conversation_task and not self.conversation_task.done():
-            print("[agent] Cancelling conversation task", flush=True)
+            print("[agent] Cancelling conversation task")
             self.conversation_running = False
             self.conversation_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
@@ -188,7 +187,7 @@ class AgentHarness:
             except asyncio.QueueEmpty:
                 break
 
-        print("[agent] Cleared running state", flush=True)
+        print("[agent] Cleared running state")
 
     async def atomic_operation(self, action: str, params: dict) -> dict:
         self.operation_counter += 1
@@ -202,8 +201,7 @@ class AgentHarness:
         self.pending_operations[tx_id] = response_future
 
         try:
-            if AGENT_DEBUG:
-                print(f"[agent] -> {action}")
+            print(f"[agent] -> {action}")
             await self.send({"type": "agent_action", "action": action, "params": params, "tx_id": tx_id})
         except Exception as e:
             self.pending_operations.pop(tx_id, None)
@@ -212,7 +210,7 @@ class AgentHarness:
         try:
             return await asyncio.wait_for(response_future, timeout=10.0)
         except asyncio.CancelledError:
-            print(f"[agent] Operation cancelled (session reinitialized): action={action}, tx_id={tx_id}", flush=True)
+            print(f"[agent] Operation cancelled (session reinitialized): action={action}, tx_id={tx_id}")
             return {"status": "error", "error": f"OPERATION FAILED: '{action}' was interrupted because the session was reinitialized. This operation did NOT complete. You must retry or inform the user."}
         except TimeoutError:
             return {"status": "error", "error": f"OPERATION FAILED: '{action}' timed out after 10 seconds. This operation did NOT complete.", "tx_id": tx_id}
@@ -236,12 +234,10 @@ class AgentHarness:
         msg = await self.pending_messages.get()
 
         msg_type = msg.get("type")
-        if AGENT_DEBUG:
-            print(f"[agent] _wait_for_message: got message type={msg_type}", flush=True)
+        print(f"[agent] _wait_for_message: got message type={msg_type}")
 
         if msg_type == "resume":
-            if AGENT_DEBUG:
-                print("[agent] Resuming turn after tool results", flush=True)
+            print("[agent] Resuming turn after tool results")
             return
 
         if msg_type == "user_query":
@@ -273,13 +269,11 @@ class AgentHarness:
 
             if success:
                 result_content = f"✓ Cell {cell_id} executed successfully"
-                if AGENT_DEBUG:
-                    print(f"[agent] Cell {cell_id} succeeded")
+                print(f"[agent] Cell {cell_id} succeeded")
             else:
                 exception = msg.get("exception", "Unknown error")
                 result_content = f"✗ Cell {cell_id} execution failed:\n```\n{exception}\n```"
-                if AGENT_DEBUG:
-                    print(f"[agent] Cell {cell_id} failed")
+                print(f"[agent] Cell {cell_id} failed")
 
             await self._insert_history(
                 event_type="anthropic_message",
@@ -303,8 +297,7 @@ class AgentHarness:
 
         elif msg_type == "stop":
             self.conversation_running = False
-            if AGENT_DEBUG:
-                print("[agent] Stop signal received")
+            print("[agent] Stop signal received")
 
     async def _complete_turn(self) -> None:
         if self.current_request_id is None:
@@ -320,8 +313,7 @@ class AgentHarness:
         await self._notify_history_updated(request_id=self.current_request_id)
 
         if should_continue:
-            if AGENT_DEBUG:
-                print("[agent] Auto-continuing as requested by model")
+            print("[agent] Auto-continuing as requested by model")
             await self.pending_messages.put({
                 "type": "user_query",
                 "content": "Continue with the next step.",
@@ -341,8 +333,7 @@ class AgentHarness:
             if position < 0:
                 return "Error: Position must be non-negative"
 
-            if AGENT_DEBUG:
-                print(f'[tool] create_cell pos={position} title="{title}"')
+            print(f'[tool] create_cell pos={position} title="{title}"')
 
             params = {
                 "position": position,
@@ -356,8 +347,7 @@ class AgentHarness:
             if result.get("status") == "success":
                 cell_id = result.get("cell_id", "unknown")
                 msg = f"Created cell at position {position} (ID: {cell_id}, Title: {title})"
-                if AGENT_DEBUG:
-                    print(f"[tool] create_cell -> {msg}")
+                print(f"[tool] create_cell -> {msg}")
                 return msg
             return f"Failed to create cell: {result.get('error', 'Unknown error')}"
 
@@ -368,9 +358,7 @@ class AgentHarness:
             if position < 0:
                 return "Error: Position must be non-negative"
 
-            if AGENT_DEBUG:
-                code_preview = code[:60] + "..." if len(code) > 60 else code
-                print(f"[tool] create_markdown_cell pos={position} code={code_preview!r}")
+            print(f"[tool] create_markdown_cell pos={position}")
 
             params = {
                 "position": position,
@@ -382,8 +370,7 @@ class AgentHarness:
             if result.get("status") == "success":
                 cell_id = result.get("cell_id", "unknown")
                 msg = f"Created markdown cell at position {position} (ID: {cell_id})"
-                if AGENT_DEBUG:
-                    print(f"[tool] create_markdown_cell -> {msg}")
+                print(f"[tool] create_markdown_cell -> {msg}")
                 return msg
             return f"Failed to create cell: {result.get('error', 'Unknown error')}"
 
@@ -391,8 +378,7 @@ class AgentHarness:
             cell_id = args["cell_id"]
             new_code = args["new_code"]
 
-            if AGENT_DEBUG:
-                print(f"[tool] edit_cell id={cell_id}")
+            print(f"[tool] edit_cell id={cell_id}")
 
             params = {
                 "cell_id": cell_id,
@@ -403,17 +389,14 @@ class AgentHarness:
             result = await self.atomic_operation("edit_cell", params)
             if result.get("status") == "success":
                 msg = f"Cell {cell_id} edited successfully"
-                if AGENT_DEBUG:
-                    print(f"[tool] edit_cell -> {msg}")
+                print(f"[tool] edit_cell -> {msg}")
                 return msg
             return f"Failed to edit cell: {result.get('error', 'Unknown error')}"
 
         async def delete_cell(args: dict) -> str:
             cell_id = args["cell_id"]
 
-            if AGENT_DEBUG:
-                print(f"[tool] delete_cell id={cell_id}")
-
+            print(f"[tool] delete_cell id={cell_id}")
             params = {"cell_id": cell_id}
 
             result = await self.atomic_operation("delete_cell", params)
@@ -428,8 +411,7 @@ class AgentHarness:
                     msg = f"Cell {cell_id} deleted. {cell_count} cells remain: [{cell_list}]"
                 else:
                     msg = f"Cell {cell_id} deleted. No cells remain in notebook."
-                if AGENT_DEBUG:
-                    print(f"[tool] delete_cell -> {msg}")
+                print(f"[tool] delete_cell -> {msg}")
                 return msg
             return f"Failed to delete cell: {result.get('error', 'Unknown error')}"
 
@@ -516,8 +498,7 @@ class AgentHarness:
             if value is None:
                 return "Widget value is required"
 
-            if AGENT_DEBUG:
-                print(f"[tool] set_widget key={key} value={value!r}")
+            print(f"[tool] set_widget key={key} value={value!r}")
 
             params = {"key": key, "value": json.dumps(value)}
 
@@ -540,8 +521,7 @@ class AgentHarness:
 
                 next_status = args.get("next_status")
                 if not isinstance(next_status, str) or next_status not in {"executing", "fixing", "thinking", "awaiting_user_response", "awaiting_cell_execution", "awaiting_user_widget_input", "done"}:
-                    if AGENT_DEBUG:
-                        print(f"[agent] Invalid next_status: {next_status}")
+                    print(f"[agent] Invalid next_status: {next_status}")
                     return "Please provide a valid next_status"
 
                 should_continue = args.get("continue", False)
@@ -738,8 +718,7 @@ class AgentHarness:
 
             model, thinking_budget = self.mode_config.get(self.mode, ("claude-sonnet-4-5-20250929", 1024))
 
-            if AGENT_DEBUG:
-                print(f"[agent] Turn {turn}, mode={self.mode}, thinking_budget={thinking_budget}", flush=True)
+            print(f"[agent] Turn {turn}, mode={self.mode}, thinking_budget={thinking_budget}")
 
             if thinking_budget is not None:
                 max_tokens = thinking_budget + 4096
@@ -760,8 +739,7 @@ class AgentHarness:
                         first_block_type = content[0].get("type") if isinstance(content[0], dict) else None
                         if first_block_type not in {"thinking", "redacted_thinking"}:
                             can_use_thinking = False
-                            if AGENT_DEBUG:
-                                print(f"[agent] Cannot use thinking API: last assistant message starts with {first_block_type}, not thinking", flush=True)
+                            print(f"[agent] Cannot use thinking API: last assistant message starts with {first_block_type}, not thinking")
 
             kwargs = {
                 "model": model,
@@ -790,21 +768,21 @@ class AgentHarness:
                 duration_seconds = time.time() - start_time
 
             except Exception as e:
-                print(f"[agent] API error: {e}", flush=True)
+                print(f"[agent] API error: {e}")
 
-                print(f"[agent] API call failed with {len(api_messages)} messages", flush=True)
+                print(f"[agent] API call failed with {len(api_messages)} messages")
                 for i, msg in enumerate(api_messages):
                     role = msg.get("role", "?")
                     content = msg.get("content", [])
                     if isinstance(content, str):
-                        print(f"  Message {i} ({role}): string content, length={len(content)}", flush=True)
+                        print(f"  Message {i} ({role}): string content, length={len(content)}")
                     elif isinstance(content, list):
-                        print(f"  Message {i} ({role}): {len(content)} blocks", flush=True)
+                        print(f"  Message {i} ({role}): {len(content)} blocks")
                         for j, block in enumerate(content):
                             block_type = block.get("type") if isinstance(block, dict) else getattr(block, "type", "?")
-                            print(f"    Block {j}: {block_type}", flush=True)
+                            print(f"    Block {j}: {block_type}")
                     else:
-                        print(f"  Message {i} ({role}): unknown content type={type(content)}", flush=True)
+                        print(f"  Message {i} ({role}): unknown content type={type(content)}")
 
                 await self.send({
                     "type": "agent_error",
@@ -825,12 +803,11 @@ class AgentHarness:
                         "duration": duration_seconds,
                     },
                 )
-            elif AGENT_DEBUG:
-                print(f"[agent] Skipping empty assistant message (stop_reason={response.stop_reason})", flush=True)
+            else:
+                print(f"[agent] Skipping empty assistant message (stop_reason={response.stop_reason})")
 
             if response.stop_reason == "end_turn":
-                if AGENT_DEBUG:
-                    print("[agent] Turn ended without submit_response; completing turn")
+                print("[agent] Turn ended without submit_response; completing turn")
                 await self._complete_turn()
             elif response.stop_reason == "tool_use":
                 tool_results = []
@@ -850,8 +827,7 @@ class AgentHarness:
                         if tool_name == "submit_response":
                             called_submit_response = True
 
-                        if AGENT_DEBUG:
-                            print(f"[agent] Executing tool: {tool_name} (id={tool_id})")
+                        print(f"[agent] Executing tool: {tool_name} (id={tool_id})")
 
                         handler = self.tool_map.get(tool_name)
                         if handler:
@@ -866,7 +842,7 @@ class AgentHarness:
                                     }),
                                 })
                             except Exception as e:
-                                print(f"[agent] Tool error: {tool_name}: {e}", flush=True)
+                                print(f"[agent] Tool error: {tool_name}: {e}")
                                 tool_results.append({
                                     "type": "tool_result",
                                     "tool_use_id": tool_id,
@@ -895,25 +871,23 @@ class AgentHarness:
                             "timestamp": int(time.time() * 1000),
                         },
                     )
-                elif AGENT_DEBUG:
+                else:
                     print("[agent] No tool results")
 
                 if called_submit_response:
-                    if AGENT_DEBUG:
-                        print("[agent] submit_response called, completing turn")
+                    print("[agent] submit_response called, completing turn")
                     await self._complete_turn()
                 else:
                     await self.pending_messages.put({"type": "resume"})
             elif response.stop_reason == "max_tokens":
-                print("[agent] Hit max tokens", flush=True)
+                print("[agent] Hit max tokens")
                 await self._complete_turn()
             else:
-                if AGENT_DEBUG:
-                    print(f"[agent] Unknown stop reason: {response.stop_reason}")
+                print(f"[agent] Unknown stop reason: {response.stop_reason}")
                 await self._complete_turn()
 
     async def handle_init(self, msg: dict[str, object]) -> None:
-        print("[agent] Initializing", flush=True)
+        print("[agent] Initializing")
 
         try:
             await self._clear_running_state()
@@ -943,7 +917,7 @@ class AgentHarness:
             tool_use_ids = set()
             tool_result_ids = set()
 
-            print(f"[agent] Checking for pending tools in {len(messages)} messages", flush=True)
+            print(f"[agent] Checking for pending tools in {len(messages)} messages")
 
             for history_msg in messages:
                 content = history_msg.get("content")
@@ -958,19 +932,19 @@ class AgentHarness:
                         tool_id = block.get("id")
                         if tool_id:
                             tool_use_ids.add(tool_id)
-                            print(f"[agent]   Found tool_use: id={tool_id}, name={block.get('name')}", flush=True)
+                            print(f"[agent]   Found tool_use: id={tool_id}, name={block.get('name')}")
                     elif block.get("type") == "tool_result":
                         tool_use_id = block.get("tool_use_id")
                         if tool_use_id:
                             tool_result_ids.add(tool_use_id)
-                            print(f"[agent]   Found tool_result: tool_use_id={tool_use_id}", flush=True)
+                            print(f"[agent]   Found tool_result: tool_use_id={tool_use_id}")
 
             pending_tool_ids = tool_use_ids - tool_result_ids
 
-            print(f"[agent] Tool use count: {len(tool_use_ids)}, Tool result count: {len(tool_result_ids)}, Pending: {len(pending_tool_ids)}", flush=True)
+            print(f"[agent] Tool use count: {len(tool_use_ids)}, Tool result count: {len(tool_result_ids)}, Pending: {len(pending_tool_ids)}")
 
             if pending_tool_ids:
-                print(f"[agent] Found {len(pending_tool_ids)} pending tool calls, closing them", flush=True)
+                print(f"[agent] Found {len(pending_tool_ids)} pending tool calls, closing them")
 
                 await self._insert_history(
                     event_type="anthropic_message",
@@ -998,7 +972,7 @@ class AgentHarness:
                 "type": "agent_status",
                 "status": "ready"
             })
-            print("[agent] Initialization complete", flush=True)
+            print("[agent] Initialization complete")
 
             self._start_conversation_loop()
 
@@ -1019,7 +993,7 @@ class AgentHarness:
                 waiting_states = {"awaiting_cell_execution", "awaiting_user_widget_input"}
 
                 if next_status in waiting_states:
-                    print(f"[agent] Reconnected while {next_status}, prompting LLM to check state and retry", flush=True)
+                    print(f"[agent] Reconnected while {next_status}, prompting LLM to check state and retry")
                     await self.pending_messages.put({
                         "type": "user_query",
                         "content": "The session was reconnected. You were waiting for an action to complete, but it may have finished or failed while offline. Please use get_notebook_context to check the current state, then retry any incomplete actions or continue with your plan.",
@@ -1027,10 +1001,10 @@ class AgentHarness:
                         "hidden": True,
                     })
                 else:
-                    print(f"[agent] Reconnected with status '{next_status}', staying idle", flush=True)
+                    print(f"[agent] Reconnected with status '{next_status}', staying idle")
 
             if len(messages) > 0 and messages[-1].get("role") == "user":
-                print("[agent] Incomplete turn detected, auto-resuming", flush=True)
+                print("[agent] Incomplete turn detected, auto-resuming")
                 await self.pending_messages.put({"type": "resume"})
         except Exception as e:
             await self.send({
@@ -1044,7 +1018,7 @@ class AgentHarness:
         request_id = msg.get("request_id")
         contextual_node_data = msg.get("contextual_node_data")
 
-        print(f"[agent] Processing query: {query}...", flush=True)
+        print(f"[agent] Processing query: {query}...")
 
         full_query = query
         if contextual_node_data:
@@ -1100,32 +1074,25 @@ class AgentHarness:
         msg = await self.conn.recv()
         msg_type = msg.get("type")
 
-        print(f"[agent] Received message: {msg_type}", flush=True)
+        print(f"[agent] Received message: {msg_type}")
 
         if msg_type == "init":
-            if AGENT_DEBUG:
-                print(f"[agent] Message: {msg_type}")
+            print(f"[agent] Message: {msg_type}")
             await self.handle_init(msg)
         elif msg_type == "agent_query":
-            if AGENT_DEBUG:
-                query = msg.get("query", "")
-                query_preview = query[:60] + "..." if len(query) > 60 else query
-                print(f"[agent] Query: {query_preview}")
+            query = msg.get("query", "")
+            query_preview = query[:60] + "..." if len(query) > 60 else query
+            print(f"[agent] Query: {query_preview}")
             await self.handle_query(msg)
         elif msg_type == "agent_cancel":
-            if AGENT_DEBUG:
-                request_id = msg.get("request_id", "unknown")
-                print(f"[agent] Cancel: {request_id}")
+            request_id = msg.get("request_id", "unknown")
+            print(f"[agent] Cancel: {request_id}")
             await self.handle_cancel(msg)
         elif msg_type == "agent_clear_history":
-            if AGENT_DEBUG:
-                print("[agent] Clear history request")
+            print("[agent] Clear history request")
             await self.handle_clear_history()
         elif msg_type == "agent_action_response":
-            if AGENT_DEBUG:
-                action = msg.get("action", "unknown")
-                status = msg.get("status", "unknown")
-                print(f"[agent] {action} -> {status}")
+            print(f"[agent] {msg.get('action', 'unknown')} -> {msg.get('status', 'unknown')}")
             await self.handle_action_response(msg)
         elif msg_type == "kernel_message":
             nested_msg = msg.get("message", {})
@@ -1157,7 +1124,7 @@ async def main() -> None:
     loop = asyncio.get_running_loop()
 
     from datetime import datetime
-    print(f"{datetime.now().isoformat()} [agent] Starting", flush=True)
+    print(f"{datetime.now().isoformat()} [agent] Starting")
 
     sock = socket.socket(family=socket.AF_UNIX, fileno=int(sys.argv[-1]))
     sock.setblocking(False)
