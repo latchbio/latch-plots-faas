@@ -950,6 +950,10 @@ class AgentHarness:
 
             self.conversation_task = asyncio.create_task(self.run_agent_loop())
 
+            if len(messages) > 0 and messages[-1].get("role") == "user":
+                print("[agent] Last message is from user, auto-resuming conversation", flush=True)
+                await self.pending_messages.put({"type": "resume"})
+
             def _task_done_callback(task: asyncio.Task) -> None:
                 try:
                     task.result()
