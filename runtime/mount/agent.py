@@ -152,6 +152,31 @@ class AgentHarness:
         )
         await self._notify_history_updated()
 
+    async def _clear_running_state(self) -> None:
+        if len(self.pending_operations) > 0:
+            print(f"[agent] Cancelling {len(self.pending_operations)} pending operations", flush=True)
+            for tx_id, future in self.pending_operations.items():
+                if not future.done():
+                    future.cancel()
+                    print(f"[agent]   Cancelled: {tx_id}", flush=True)
+            self.pending_operations.clear()
+
+        if self.conversation_task and not self.conversation_task.done():
+            print("[agent] Cancelling conversation task", flush=True)
+            self.conversation_running = False
+            self.conversation_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self.conversation_task
+            self.conversation_task = None
+
+        while not self.pending_messages.empty():
+            try:
+                self.pending_messages.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+
+        print("[agent] Cleared running state", flush=True)
+
     async def atomic_operation(self, action: str, params: dict) -> dict:
         self.operation_counter += 1
 
@@ -855,21 +880,7 @@ class AgentHarness:
         print("[agent] Initializing", flush=True)
 
         try:
-            if len(self.pending_operations) > 0:
-                print(f"[agent] Cancelling {len(self.pending_operations)} pending operations from previous session", flush=True)
-                for tx_id, future in self.pending_operations.items():
-                    if future.done():
-                        continue
-
-                    future.cancel()
-                    print(f"[agent]   Cancelled: {tx_id}", flush=True)
-
-            if self.conversation_task and not self.conversation_task.done():
-                print("[agent] Cancelling previous conversation task", flush=True)
-                self.conversation_running = False
-                self.conversation_task.cancel()
-                with contextlib.suppress(asyncio.CancelledError):
-                    await self.conversation_task
+            await self._clear_running_state()
 
             context = msg.get("context", "")
             self.instructions_context = context
@@ -1048,7 +1059,7 @@ class AgentHarness:
         return ", ".join(widget_summaries)
 
     async def handle_clear_history(self) -> None:
-        print("[agent] Clearing conversation history")
+        await self._clear_running_state()
         await self._mark_all_history_removed()
 
     async def accept(self) -> None:
