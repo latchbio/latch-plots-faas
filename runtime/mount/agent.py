@@ -779,6 +779,27 @@ class AgentHarness:
                 print(f"[tool] h5_extract_summary error: {error_msg}")
                 return error_msg
 
+        async def h5_modify_genes_of_interest(args: dict) -> str:
+            widget_key = args.get("widget_key")
+            gene = args.get("gene")
+            operation = args.get("operation")
+            
+            if AGENT_DEBUG:
+                print(f"[tool] h5_modify_genes_of_interest widget_key={widget_key} gene={gene} operation={operation}")
+            
+            params = {
+                "widget_key": widget_key,
+                "gene": gene,
+                "operation": operation
+            }
+            
+            result = await self.atomic_operation("h5_modify_genes_of_interest", params)
+            if result.get("status") == "success":
+                action = "Added" if operation == "add" else "Removed"
+                return f"{action} gene '{gene}' {'to' if operation == 'add' else 'from'} genes of interest"
+            
+            return f"Failed to {operation} gene from genes of interest: {result.get('error', 'Unknown error')}"
+
         self.tools.append({
             "name": "create_cell",
             "description": "Create a new code cell at specified position. The cell will automatically run after creation.",
@@ -1153,6 +1174,31 @@ class AgentHarness:
             }
         })
         self.tool_map["h5_extract_summary"] = h5_extract_summary
+
+        self.tools.append({
+            "name": "h5_modify_genes_of_interest",
+            "description": "Add or remove a gene/variable from the Genes of Interest list in an h5/AnnData widget",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "widget_key": {
+                        "type": "string",
+                        "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
+                    },
+                    "gene": {
+                        "type": "string",
+                        "description": "The gene name or variable index to add or remove"
+                    },
+                    "operation": {
+                        "type": "string",
+                        "enum": ["add", "remove"],
+                        "description": "Whether to add the gene to or remove it from the genes of interest list"
+                    },
+                },
+                "required": ["widget_key", "gene", "operation"],
+            },
+        })
+        self.tool_map["h5_modify_genes_of_interest"] = h5_modify_genes_of_interest
 
     async def run_agent_loop(self) -> None:
         assert self.client is not None, "Client not initialized"
