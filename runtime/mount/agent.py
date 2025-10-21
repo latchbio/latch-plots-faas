@@ -548,6 +548,29 @@ class AgentHarness:
             
             return f"Failed to filter h5 widget: {result.get('error', 'Unknown error')}"
 
+        async def h5_modify_obs_category_filter(args: dict) -> str:
+            widget_key = args.get("widget_key")
+            obs_key = args.get("obs_key")
+            category = args.get("category")
+            operation = args.get("operation")
+            
+            if AGENT_DEBUG:
+                print(f"[tool] h5_modify_obs_category_filter widget_key={widget_key} obs_key={obs_key} category={category} operation={operation}")
+            
+            params = {
+                "widget_key": widget_key,
+                "obs_key": obs_key,
+                "category": category,
+                "operation": operation
+            }
+            
+            result = await self.atomic_operation("h5_modify_obs_category_filter", params)
+            if result.get("status") == "success":
+                action = "hid" if operation == "add" else "showed"
+                return f"{action.capitalize()} category '{category}' in h5 widget obs key '{obs_key}'"
+            
+            return f"Failed to {operation} obs category filter: {result.get('error', 'Unknown error')}"
+
         async def h5_color_by_obs(args: dict) -> str:
             widget_key = args.get("widget_key")
             obs_key = args.get("obs_key")
@@ -963,6 +986,35 @@ class AgentHarness:
             },
         })
         self.tool_map["h5_show_only_obs_category"] = h5_show_only_obs_category
+
+        self.tools.append({
+            "name": "h5_modify_obs_category_filter",
+            "description": "Add or remove an observation category filter on an h5/AnnData widget. Use 'add' to hide a category, 'remove' to show it again.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "widget_key": {
+                        "type": "string",
+                        "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
+                    },
+                    "obs_key": {
+                        "type": "string",
+                        "description": "The observation key to filter on"
+                    },
+                    "category": {
+                        "type": "string",
+                        "description": "The category value to add/remove from filter"
+                    },
+                    "operation": {
+                        "type": "string",
+                        "enum": ["add", "remove"],
+                        "description": "Whether to add the filter or remove it"
+                    },
+                },
+                "required": ["widget_key", "obs_key", "category", "operation"],
+            },
+        })
+        self.tool_map["h5_modify_obs_category_filter"] = h5_modify_obs_category_filter
 
         self.tools.append({
             "name": "h5_color_by_obs",
