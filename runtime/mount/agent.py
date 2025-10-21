@@ -860,22 +860,29 @@ class AgentHarness:
                                 tool_results.append({
                                     "type": "tool_result",
                                     "tool_use_id": tool_id,
-                                    "content": result,
+                                    "content": json.dumps({
+                                        "summary": result,
+                                        "error": None,
+                                    }),
                                 })
                             except Exception as e:
                                 print(f"[agent] Tool error: {tool_name}: {e}", flush=True)
                                 tool_results.append({
                                     "type": "tool_result",
                                     "tool_use_id": tool_id,
-                                    "content": f"Error executing tool: {e!s}",
-                                    "is_error": True,
+                                    "content": json.dumps({
+                                        "summary": None,
+                                        "error": f"Error executing tool: {e!s}",
+                                    }),
                                 })
                         else:
                             tool_results.append({
                                 "type": "tool_result",
                                 "tool_use_id": tool_id,
-                                "content": f"Unknown tool: {tool_name}",
-                                "is_error": True,
+                                "content": json.dumps({
+                                    "summary": None,
+                                    "error": f"Unknown tool: {tool_name}",
+                                }),
                             })
 
                 if len(tool_results) > 0:
@@ -974,8 +981,10 @@ class AgentHarness:
                             {
                                 "type": "tool_result",
                                 "tool_use_id": tool_id,
-                                "content": "Tool call cancelled - session was ended before completion",
-                                "is_error": True,
+                                "content": json.dumps({
+                                    "summary": None,
+                                    "error": "Tool call cancelled - session was ended before completion",
+                                }),
                             }
                             for tool_id in pending_tool_ids
                         ],
