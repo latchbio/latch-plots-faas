@@ -175,9 +175,9 @@ class AgentHarness:
             return await asyncio.wait_for(response_future, timeout=10.0)
         except asyncio.CancelledError:
             print(f"[agent] Operation cancelled (session reinitialized): action={action}, tx_id={tx_id}", flush=True)
-            return {"status": "error", "error": "Operation cancelled - session reinitialized"}
+            return {"status": "error", "error": f"OPERATION FAILED: '{action}' was interrupted because the session was reinitialized. This operation did NOT complete. You must retry or inform the user."}
         except TimeoutError:
-            return {"status": "error", "error": "Operation timeout", "tx_id": tx_id}
+            return {"status": "error", "error": f"OPERATION FAILED: '{action}' timed out after 10 seconds. This operation did NOT complete.", "tx_id": tx_id}
         finally:
             self.pending_operations.pop(tx_id, None)
 
@@ -407,7 +407,8 @@ class AgentHarness:
         async def delete_all_cells(args: dict) -> str:
             context_result = await self.atomic_operation("get_context", {})
             if context_result.get("status") != "success":
-                return "Failed to get notebook context"
+                error_msg = context_result.get("error", "Unknown error")
+                return f"Failed to delete cells: {error_msg}"
 
             cells = context_result.get("context", {}).get("cells", [])
             deleted_count = 0
