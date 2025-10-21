@@ -153,6 +153,43 @@ class AgentHarness:
         )
         await self._notify_history_updated()
 
+    def _start_conversation_loop(self) -> None:
+        self.conversation_task = asyncio.create_task(self.run_agent_loop())
+
+        def _task_done_callback(task: asyncio.Task) -> None:
+            try:
+                task.result()
+            except Exception as e:
+                print(f"[agent] conversation_task raised exception: {e}", flush=True)
+                traceback.print_exc()
+
+        self.conversation_task.add_done_callback(_task_done_callback)
+
+    async def _clear_running_state(self) -> None:
+        if len(self.pending_operations) > 0:
+            print(f"[agent] Cancelling {len(self.pending_operations)} pending operations", flush=True)
+            for tx_id, future in self.pending_operations.items():
+                if not future.done():
+                    future.cancel()
+                    print(f"[agent]   Cancelled: {tx_id}", flush=True)
+            self.pending_operations.clear()
+
+        if self.conversation_task and not self.conversation_task.done():
+            print("[agent] Cancelling conversation task", flush=True)
+            self.conversation_running = False
+            self.conversation_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await self.conversation_task
+            self.conversation_task = None
+
+        while not self.pending_messages.empty():
+            try:
+                self.pending_messages.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+
+        print("[agent] Cleared running state", flush=True)
+
     async def atomic_operation(self, action: str, params: dict) -> dict:
         self.operation_counter += 1
 
@@ -176,9 +213,9 @@ class AgentHarness:
             return await asyncio.wait_for(response_future, timeout=10.0)
         except asyncio.CancelledError:
             print(f"[agent] Operation cancelled (session reinitialized): action={action}, tx_id={tx_id}", flush=True)
-            return {"status": "error", "error": "Operation cancelled - session reinitialized"}
+            return {"status": "error", "error": f"OPERATION FAILED: '{action}' was interrupted because the session was reinitialized. This operation did NOT complete. You must retry or inform the user."}
         except TimeoutError:
-            return {"status": "error", "error": "Operation timeout", "tx_id": tx_id}
+            return {"status": "error", "error": f"OPERATION FAILED: '{action}' timed out after 10 seconds. This operation did NOT complete.", "tx_id": tx_id}
         finally:
             self.pending_operations.pop(tx_id, None)
 
@@ -210,14 +247,23 @@ class AgentHarness:
         if msg_type == "user_query":
             self.current_request_id = msg.get("request_id")
 
+            payload = {
+                "type": "anthropic_message",
+                "role": "user",
+                "content": msg["content"],
+                "timestamp": int(time.time() * 1000),
+            }
+
+            if msg.get("display_query") is not None:
+                payload["display_query"] = msg["display_query"]
+            if msg.get("display_nodes") is not None:
+                payload["display_nodes"] = msg["display_nodes"]
+            if msg.get("hidden") is not None:
+                payload["hidden"] = msg["hidden"]
+
             await self._insert_history(
                 event_type="anthropic_message",
-                payload={
-                    "type": "anthropic_message",
-                    "role": "user",
-                    "content": msg["content"],
-                    "timestamp": int(time.time() * 1000),
-                },
+                payload=payload,
                 request_id=self.current_request_id,
             )
 
@@ -279,6 +325,7 @@ class AgentHarness:
                 "type": "user_query",
                 "content": "Continue with the next step.",
                 "request_id": self.current_request_id,
+                "hidden": True,
             })
 
     def init_tools(self) -> None:
@@ -411,7 +458,8 @@ class AgentHarness:
         async def delete_all_cells(args: dict) -> str:
             context_result = await self.atomic_operation("get_context", {})
             if context_result.get("status") != "success":
-                return "Failed to get notebook context"
+                error_msg = context_result.get("error", "Unknown error")
+                return f"Failed to delete cells: {error_msg}"
 
             cells = context_result.get("context", {}).get("cells", [])
             deleted_count = 0
@@ -631,7 +679,7 @@ class AgentHarness:
 
         self.tools.append({
             "name": "submit_response",
-            "description": "Submit the final response with plan, plan_diff, optional summary, next_status, and optional questions. Call this at the end of every turn.",
+            "description": "Submit the final response with plan, plan_diff, next_status, questions, and an optional summary. Call this at the end of every turn.",
             "input_schema": {
                 "type": "object",
                 "properties": {
@@ -860,24 +908,10 @@ class AgentHarness:
         print("[agent] Initializing", flush=True)
 
         try:
-            if len(self.pending_operations) > 0:
-                print(f"[agent] Cancelling {len(self.pending_operations)} pending operations from previous session", flush=True)
-                for tx_id, future in self.pending_operations.items():
-                    if future.done():
-                        continue
-
-                    future.cancel()
-                    print(f"[agent]   Cancelled: {tx_id}", flush=True)
+            await self._clear_running_state()
 
             self.should_auto_continue = False
             self.pending_auto_continue = False
-
-            if self.conversation_task and not self.conversation_task.done():
-                print("[agent] Cancelling previous conversation task", flush=True)
-                self.conversation_running = False
-                self.conversation_task.cancel()
-                with contextlib.suppress(asyncio.CancelledError):
-                    await self.conversation_task
 
             context = msg.get("context", "")
             self.instructions_context = context
@@ -949,95 +983,6 @@ class AgentHarness:
                 )
                 await self._notify_history_updated()
 
-            print(f"[agent] Checking resume conditions with {len(messages)} messages", flush=True)
-            has_asked_to_resume = False
-            if len(messages) > 0 and messages[-1].get("role") == "user":
-                last_content = messages[-1].get("content")
-                if isinstance(last_content, list):
-                    for block in last_content:
-                        if isinstance(block, dict) and block.get("type") == "tool_result":
-                            tool_use_id = block.get("tool_use_id")
-                            if isinstance(tool_use_id, str) and tool_use_id.startswith("resume_"):
-                                has_asked_to_resume = True
-                                print("[agent] Already asked to resume", flush=True)
-                                break
-
-            has_pending_work = False
-            for history_msg in reversed(messages):
-                if history_msg.get("role") != "assistant":
-                    continue
-
-                content = history_msg.get("content")
-                if not isinstance(content, list):
-                    print(f"[agent]   Content is not a list: {type(content)}", flush=True)
-                    continue
-
-                found_submit_response = False
-                for block in content:
-                    if not isinstance(block, dict):
-                        continue
-
-                    if block.get("type") == "tool_use" and block.get("name") == "submit_response":
-                        tool_id = block.get("id", "")
-                        if tool_id.startswith("resume_"):
-                            continue
-
-                        tool_input = block.get("input", {})
-                        next_status = tool_input.get("next_status")
-                        has_pending_work = next_status != "done"
-                        found_submit_response = True
-                        break
-
-                if found_submit_response:
-                    break
-
-            print(f"[agent] Resume decision: has_pending_work={has_pending_work}, has_asked_to_resume={has_asked_to_resume}", flush=True)
-
-            if has_pending_work and not has_asked_to_resume:
-                resume_tool_id = f"resume_{uuid.uuid4().hex[:12]}"
-
-                await self._insert_history(
-                    event_type="anthropic_message",
-                    payload={
-                        "type": "anthropic_message",
-                        "role": "assistant",
-                        "content": [
-                            {"type": "text", "text": "I see we were interrupted."},
-                            {
-                                "type": "tool_use",
-                                "id": resume_tool_id,
-                                "name": "submit_response",
-                                "input": {
-                                    "plan": [],
-                                    "plan_diff": [],
-                                    "questions": "Would you like me to continue?",
-                                    "next_status": "awaiting_user_response",
-                                }
-                            }
-                        ],
-                        "timestamp": int(time.time() * 1000),
-                    },
-                )
-
-                await self._insert_history(
-                    event_type="anthropic_message",
-                    payload={
-                        "type": "anthropic_message",
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "tool_result",
-                                "tool_use_id": resume_tool_id,
-                                "content": "Response submitted successfully"
-
-                            }
-
-                        ],
-                        "timestamp": int(time.time() * 1000),
-                    },
-                )
-                await self._notify_history_updated()
-
             self.initialized = True
             await self.send({
                 "type": "agent_status",
@@ -1045,16 +990,38 @@ class AgentHarness:
             })
             print("[agent] Initialization complete", flush=True)
 
-            self.conversation_task = asyncio.create_task(self.run_agent_loop())
+            self._start_conversation_loop()
 
-            def _task_done_callback(task: asyncio.Task) -> None:
-                try:
-                    task.result()
-                except Exception as e:
-                    print(f"[agent] conversation_task raised exception: {e}", flush=True)
-                    traceback.print_exc()
+            most_recent_submit_response = None
+            for history_msg in reversed(messages):
+                if history_msg.get("role") == "assistant":
+                    content = history_msg.get("content")
+                    if isinstance(content, list):
+                        for block in content:
+                            if isinstance(block, dict) and block.get("type") == "tool_use" and block.get("name") == "submit_response":
+                                most_recent_submit_response = block.get("input", {})
+                                break
+                    if most_recent_submit_response is not None:
+                        break
 
-            self.conversation_task.add_done_callback(_task_done_callback)
+            if most_recent_submit_response is not None:
+                next_status = most_recent_submit_response.get("next_status")
+                waiting_states = {"awaiting_cell_execution", "awaiting_user_widget_input"}
+
+                if next_status in waiting_states:
+                    print(f"[agent] Reconnected while {next_status}, prompting LLM to check state and retry", flush=True)
+                    await self.pending_messages.put({
+                        "type": "user_query",
+                        "content": "The session was reconnected. You were waiting for an action to complete, but it may have finished or failed while offline. Please use get_notebook_context to check the current state, then retry any incomplete actions or continue with your plan.",
+                        "request_id": None,
+                        "hidden": True,
+                    })
+                else:
+                    print(f"[agent] Reconnected with status '{next_status}', staying idle", flush=True)
+
+            if len(messages) > 0 and messages[-1].get("role") == "user":
+                print("[agent] Incomplete turn detected, auto-resuming", flush=True)
+                await self.pending_messages.put({"type": "resume"})
         except Exception as e:
             await self.send({
                 "type": "agent_error",
@@ -1065,13 +1032,20 @@ class AgentHarness:
     async def handle_query(self, msg: dict[str, object]) -> None:
         query = msg.get("query", "")
         request_id = msg.get("request_id")
+        contextual_node_data = msg.get("contextual_node_data")
 
         print(f"[agent] Processing query: {query}...", flush=True)
 
+        full_query = query
+        if contextual_node_data:
+            full_query = f"{query} \n\nHere is the context of the selected nodes the user would like to use: <ContextualNodeData>{json.dumps(contextual_node_data)}</ContextualNodeData>"
+
         await self.pending_messages.put({
             "type": "user_query",
-            "content": query,
+            "content": full_query,
             "request_id": request_id,
+            "display_query": query,
+            "display_nodes": contextual_node_data,
         })
 
     async def handle_cancel(self, msg: dict[str, object]) -> None:
@@ -1108,8 +1082,9 @@ class AgentHarness:
         return ", ".join(widget_summaries)
 
     async def handle_clear_history(self) -> None:
-        print("[agent] Clearing conversation history")
+        await self._clear_running_state()
         await self._mark_all_history_removed()
+        self._start_conversation_loop()
 
     async def accept(self) -> None:
         msg = await self.conn.recv()
