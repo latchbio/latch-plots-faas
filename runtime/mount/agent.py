@@ -245,6 +245,8 @@ class AgentHarness:
                 payload["display_query"] = msg["display_query"]
             if msg.get("display_nodes") is not None:
                 payload["display_nodes"] = msg["display_nodes"]
+            if msg.get("hidden") is not None:
+                payload["hidden"] = msg["hidden"]
 
             await self._insert_history(
                 event_type="anthropic_message",
@@ -300,6 +302,7 @@ class AgentHarness:
                 "type": "user_query",
                 "content": "Continue with the next step.",
                 "request_id": self.current_request_id,
+                "hidden": True,
             })
 
     def init_tools(self) -> None:
@@ -666,7 +669,7 @@ class AgentHarness:
                         "default": False
                     },
                 },
-                "required": ["plan", "plan_diff", "next_status", "questions"],
+                "required": ["plan", "plan_diff", "next_status"],
             },
         })
         self.tool_map["submit_response"] = submit_response
@@ -983,6 +986,7 @@ class AgentHarness:
                         "type": "user_query",
                         "content": "The session was reconnected. You were waiting for an action to complete, but it may have finished or failed while offline. Please use get_notebook_context to check the current state, then retry any incomplete actions or continue with your plan.",
                         "request_id": None,
+                        "hidden": True,
                     })
                 else:
                     print(f"[agent] Reconnected with status '{next_status}', staying idle", flush=True)
