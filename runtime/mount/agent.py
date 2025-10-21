@@ -825,6 +825,27 @@ class AgentHarness:
             
             return f"Failed to {operation} gene for coloring: {result.get('error', 'Unknown error')}"
 
+        async def h5_set_background_image_visibility(args: dict) -> str:
+            widget_key = args.get("widget_key")
+            background_image_id = args.get("background_image_id")
+            hidden = args.get("hidden")
+            
+            if AGENT_DEBUG:
+                print(f"[tool] h5_set_background_image_visibility widget_key={widget_key} background_image_id={background_image_id} hidden={hidden}")
+            
+            params = {
+                "widget_key": widget_key,
+                "background_image_id": background_image_id,
+                "hidden": hidden
+            }
+            
+            result = await self.atomic_operation("h5_set_background_image_visibility", params)
+            if result.get("status") == "success":
+                visibility_action = "hidden" if hidden else "shown"
+                return f"Background image {background_image_id} {visibility_action}"
+            
+            return f"Failed to set background image visibility: {result.get('error', 'Unknown error')}"
+
         self.tools.append({
             "name": "create_cell",
             "description": "Create a new code cell at specified position. The cell will automatically run after creation.",
@@ -1249,6 +1270,30 @@ class AgentHarness:
             },
         })
         self.tool_map["h5_color_by_genes_of_interest"] = h5_color_by_genes_of_interest
+
+        self.tools.append({
+            "name": "h5_set_background_image_visibility",
+            "description": "Show or hide a specific background image in an h5/AnnData widget.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "widget_key": {
+                        "type": "string",
+                        "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
+                    },
+                    "background_image_id": {
+                        "type": "string",
+                        "description": "The ID of the background image to show or hide"
+                    },
+                    "hidden": {
+                        "type": "boolean",
+                        "description": "Whether to hide (true) or show (false) the background image"
+                    },
+                },
+                "required": ["widget_key", "background_image_id", "hidden"],
+            },
+        })
+        self.tool_map["h5_set_background_image_visibility"] = h5_set_background_image_visibility
 
     async def run_agent_loop(self) -> None:
         assert self.client is not None, "Client not initialized"
