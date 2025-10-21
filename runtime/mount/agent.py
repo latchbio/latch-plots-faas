@@ -298,6 +298,7 @@ class AgentHarness:
                     "type": "user_query",
                     "content": "Continue with the next step.",
                     "request_id": self.current_request_id,
+                    "hidden": True,
                 })
 
         elif msg_type == "stop":
