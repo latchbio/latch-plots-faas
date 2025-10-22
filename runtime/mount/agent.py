@@ -459,57 +459,6 @@ class AgentHarness:
 
             return f"Deleted {deleted_count} cells from the notebook"
 
-        async def _get_notebook_context() -> str:
-            context_result, globals_result = await asyncio.gather(
-                self.atomic_operation("get_context"),
-                self.atomic_operation("request_globals_summary")
-            )
-
-            if context_result.get("status") != "success":
-                return f"Failed to get context: {context_result.get('error', 'Unknown error')}"
-
-            context = context_result.get("context", {})
-            cell_count = context.get("cell_count", 0)
-            cells = context.get("cells", [])
-
-            globals_data: dict[str, object] | None = None
-            if globals_result.get("status") == "success":
-                globals_data = globals_result.get("summary", {})
-
-            summary = f"Notebook has {cell_count} cell(s):\n"
-            for cell in cells:
-                index = cell.get("index", "?")
-                cell_id = cell.get("cell_id", "?")
-                cell_type = cell.get("cell_type", "unknown")
-                status = cell.get("status", "idle")
-                source = cell.get("source", "")
-                tf_id = cell.get("tf_id", "?")
-
-                source_preview = source[:500] + "..." if len(source) > 500 else source
-                source_preview = source_preview.replace("\n", " ")
-
-                summary += f"\n[{index}] ({cell_type}, {status}, cell_id: {cell_id}, tf_id: {tf_id})"
-                if source_preview:
-                    summary += f": {source_preview}"
-
-                widget_summary = self._format_widget_summaries(cell.get("widgets") or [])
-                if widget_summary:
-                    summary += f"\n  Widgets: {widget_summary}"
-
-            if globals_data is not None:
-                summary += f"\n\nGlobal variables ({len(globals_data)} total):\n"
-                for var_name, var_info in sorted(globals_data.items()):
-                    if isinstance(var_info, dict):
-                        var_type = var_info.get("type", "unknown")
-                        summary += f"  {var_name}: {var_type}\n"
-                        for key, value in var_info.items():
-                            if key != "type":
-                                summary += f"    {key}: {value}\n"
-                    else:
-                        summary += f"  {var_name}: {var_info}\n"
-
-            return summary
-
         async def set_widget(args: dict) -> str:
             key = args.get("key")
             if not key:
@@ -709,6 +658,57 @@ class AgentHarness:
                     },
                 })
         self.tool_map["set_widget"] = set_widget
+
+    async def _get_notebook_context(self) -> str:
+        context_result, globals_result = await asyncio.gather(
+            self.atomic_operation("get_context"),
+            self.atomic_operation("request_globals_summary")
+        )
+
+        if context_result.get("status") != "success":
+            return f"Failed to get context: {context_result.get('error', 'Unknown error')}"
+
+        context = context_result.get("context", {})
+        cell_count = context.get("cell_count", 0)
+        cells = context.get("cells", [])
+
+        globals_data: dict[str, object] | None = None
+        if globals_result.get("status") == "success":
+            globals_data = globals_result.get("summary", {})
+
+        summary = f"Notebook has {cell_count} cell(s):\n"
+        for cell in cells:
+            index = cell.get("index", "?")
+            cell_id = cell.get("cell_id", "?")
+            cell_type = cell.get("cell_type", "unknown")
+            status = cell.get("status", "idle")
+            source = cell.get("source", "")
+            tf_id = cell.get("tf_id", "?")
+
+            source_preview = source[:500] + "..." if len(source) > 500 else source
+            source_preview = source_preview.replace("\n", " ")
+
+            summary += f"\n[{index}] ({cell_type}, {status}, cell_id: {cell_id}, tf_id: {tf_id})"
+            if source_preview:
+                summary += f": {source_preview}"
+
+            widget_summary = self._format_widget_summaries(cell.get("widgets") or [])
+            if widget_summary:
+                summary += f"\n  Widgets: {widget_summary}"
+
+        if globals_data is not None:
+            summary += f"\n\nGlobal variables ({len(globals_data)} total):\n"
+            for var_name, var_info in sorted(globals_data.items()):
+                if isinstance(var_info, dict):
+                    var_type = var_info.get("type", "unknown")
+                    summary += f"  {var_name}: {var_type}\n"
+                    for key, value in var_info.items():
+                        if key != "type":
+                            summary += f"    {key}: {value}\n"
+                else:
+                    summary += f"  {var_name}: {var_info}\n"
+
+        return summary
 
     async def run_agent_loop(self) -> None:
         assert self.client is not None, "Client not initialized"
