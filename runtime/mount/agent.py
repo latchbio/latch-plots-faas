@@ -884,6 +884,33 @@ class AgentHarness:
             
             return f"Failed to set marker opacity: {result.get('error', 'Unknown error')}"
 
+        async def h5_manage_obs(args: dict) -> str:
+            widget_key = args.get("widget_key")
+            obs_key = args.get("obs_key")
+            operation = args.get("operation")
+            obs_type = args.get("obs_type", "category")
+            
+            if AGENT_DEBUG:
+                print(f"[tool] h5_manage_obs widget_key={widget_key} obs_key={obs_key} operation={operation} obs_type={obs_type}")
+            
+            params = {
+                "widget_key": widget_key,
+                "obs_key": obs_key,
+                "operation": operation
+            }
+            
+            if operation == "add":
+                params["obs_type"] = obs_type
+            
+            result = await self.atomic_operation("h5_manage_obs", params)
+            if result.get("status") == "success":
+                if operation == "add":
+                    return f"Created observation column '{obs_key}' with type '{obs_type}'"
+                else:
+                    return f"Deleted observation column '{obs_key}'"
+            
+            return f"Failed to {operation} observation column: {result.get('error', 'Unknown error')}"
+
         self.tools.append({
             "name": "create_cell",
             "description": "Create a new code cell at specified position. The cell will automatically run after creation.",
@@ -1376,6 +1403,36 @@ class AgentHarness:
             },
         })
         self.tool_map["h5_set_marker_opacity"] = h5_set_marker_opacity
+
+        self.tools.append({
+            "name": "h5_manage_obs",
+            "description": "Create or delete an observation column in an h5/AnnData widget.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "widget_key": {
+                        "type": "string",
+                        "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
+                    },
+                    "obs_key": {
+                        "type": "string",
+                        "description": "The observation column name to create or delete"
+                    },
+                    "operation": {
+                        "type": "string",
+                        "enum": ["add", "remove"],
+                        "description": "Whether to create a new observation column ('add') or delete an existing one ('remove')"
+                    },
+                    "obs_type": {
+                        "type": "string",
+                        "enum": ["category", "bool", "int64", "float64"],
+                        "description": "Type of observation. Only for 'add' operation. Defaults to 'category'."
+                    }
+                },
+                "required": ["widget_key", "obs_key", "operation"]
+            }
+        })
+        self.tool_map["h5_manage_obs"] = h5_manage_obs
 
     async def run_agent_loop(self) -> None:
         assert self.client is not None, "Client not initialized"
