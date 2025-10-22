@@ -20,7 +20,7 @@ def load_config_module(module_name: str):
     return module
 
 
-def build_full_instruction(initial_context: str) -> str:
+def build_system_prompt() -> str:
     try:
         prompts = load_config_module("prompts")
     except Exception as e:
@@ -59,7 +59,5 @@ def build_full_instruction(initial_context: str) -> str:
             instruction_parts.append(f"<{name}>\n{content}\n</{name}>\n")
 
     instruction_parts.append(prompts.system_instruction)
-
-    instruction_parts.append(f"\n<notebook_context>\n{initial_context}\n</notebook_context>\n")
 
     return dedent("\n".join(instruction_parts))
