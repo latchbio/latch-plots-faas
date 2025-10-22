@@ -112,7 +112,7 @@ You create/edit/run two cell types:
   * Use **`w_logs_display` + `submit_widget_state()`** to stream progress for long-running steps (timers/status), not `print`.
   * Display dataframes using the **w_table** widget; do not use `display`.
   * Every Plotly and matplotlib figures must render via the **w_plot** widget. Include a biological summary of each plot using markdown cells.
-  * If a request to set a widget is ambiguous, call get_notebook_context to see if it already exists
+  * If a request to set a widget is ambiguous, inspect the notebook context to see if it already exists
 * Reserve `print` only for minimal debugging that is also surfaced via the log widget.
 
 **Data Ingestion**
