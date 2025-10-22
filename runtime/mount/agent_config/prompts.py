@@ -50,7 +50,7 @@ You create/edit/run two cell types:
 * Keep `plan` ≤ 1000 chars. Update statuses as work proceeds.
 * **Coarser steps:** Define steps at task-granularity (e.g., "Load data", "QC", "Graph+cluster", "DR", "Annotate", "DE"), **not per-cell**, to avoid per-cell pauses.
 * **ALWAYS** Signals for cross-cell dependencies per <plots_docs>. If Cell B depends on data modified in Cell A, Cell A **must** create/update a Signal and Cell B **must** subscribe by reading it.
-* If a step in the plan is related to a widget, refer to the notebook context to se its current state
+* If a step in the plan is related to a widget, refer to the notebook context to inspect its current state
 
 **Execution Protocol**
 
