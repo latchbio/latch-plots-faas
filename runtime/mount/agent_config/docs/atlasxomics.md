@@ -22,8 +22,11 @@ The section below defines detailed guidelines for each of the above steps.
 </workflow_rules>
 
 ### **Data Loading**: 
-- Identify the correct Latch paths for either `combined_sm_ge.h5ad` (gene activity scores) or `combined_sm_motifs.h5ad` (motif enrichment), and load the file using `LPath`.
-- After loading, always display the AnnData object with the `w_h5` widget.
+- Locate the appropriate Latch path for either:
+  - `combined_sm_ge.h5ad` — gene activity scores
+  - `combined_sm_motifs.h5ad` — motif enrichment results
+- Use `LPath` to load the file. **Always** prefer **full, human-readable latch:// paths** (not node IDs).
+- Once loaded, visualize the AnnData object using the w_h5 widget for inspection.
 
 ### **Clustering (workflow only)**: 
 - Use `w_workflow` to launch the AtlasXOmics clustering workflow.
