@@ -11,6 +11,9 @@
 2. A cell runs → if it *reads* a signal, that cell subscribes.
 3. When a signal’s value changes, all current subscribers re-run.
 
+**Core Rules**
+1. **NEVER** update _and_ call a Signal within the same cell, as that will cause an infinite loop. 
+
 ---
 
 ## Signals: API & Patterns
@@ -123,3 +126,67 @@ if "value" not in locals():
 7. Subscriptions = signals **read on the last run**.
 8. Reactive **transactions** hide inconsistent intermediate states.
 9. Global reassignment **preserves subscribers**; `del` to reset.
+
+---
+
+## Advanced Patterns & Pitfalls
+
+### ✅ DO: 1. Separate signal roles
+Do not use the same signal for user input and computation output.
+
+**Good:**
+- `clusters_request` (button/UI)
+- `clusters_result` (computed output)
+- Viz reads only `clusters_result`
+
+### ❌ DON'T: 2. Infinite loop = read → write → rerun → repeat
+
+- **Never subscribe and update signals in the same cell. This will result in an infinite loop**
+- A loop can happen **in one cell OR across multiple cells**.
+
+**Single-cell example:**
+```python
+x = s()       # subscribes
+s(x + 1)      # write → rerun → loop
+```
+
+**Cross-cell example:**
+```python
+# Cell A
+a = A()       # subscribes
+B("trigger")
+
+# Cell B
+if B():       # subscribes
+    A(a + 1)  # write → Cell A runs → Cell B runs → loop
+```
+
+**Common pitfall with `adata` object**
+```python
+adata_signal()
+
+# ... Do scanpy operations ...
+
+adata_signal(adata) # ❌ this WILL cause an infinite loop and break the application
+```
+
+### ✅ DO: 3. Break the cycle using ANY of:
+
+- Add a condition/version check
+- Use `sample()` instead of `()` when reading before writing
+- Write to a different signal
+
+### ✅ DO: 4. Name signals by purpose
+- Good names prevent accidental reuse and loops.
+
+**Good**:
+- `qc_request`, `qc_result`
+- `clusters_request`, `clusters_result`
+- `adata_raw`, `adata_qc`, `adata_clustered`, `adata_annotated`
+
+**Bad**:
+- `tmp`, `data`, `state`
+
+✅ Prefer **creating a new signal for each stage of analysis**  
+(e.g. from `adata_qc` → `adata_clustered` → `adata_annotated`)  
+Instead of constantly overwriting the same signal.
