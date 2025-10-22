@@ -460,10 +460,8 @@ class AgentHarness:
             return f"Deleted {deleted_count} cells from the notebook"
 
         async def get_notebook_context(args: dict) -> str:
-            params = {}
-
             context_result, globals_result = await asyncio.gather(
-                self.atomic_operation("get_context", params),
+                self.atomic_operation("get_context"),
                 self.atomic_operation("request_globals_summary")
             )
 
