@@ -212,6 +212,7 @@ if execution is not None:
 next(execution.poll())
 if execution.status in {"SUCCEEDED", "FAILED", "ABORTED"}: 
     result = await execution.wait()
+    workflow_outputs = list(result.output.values()) #  List[LatchDir | LatchFile]
 else: 
     print(f"Execution {execution.status}")
 ```
