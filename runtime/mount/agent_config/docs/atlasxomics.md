@@ -2,7 +2,7 @@
 
 This is the **authoritative step-by-step pipeline** for AtlasxOmics experiment. Follow steps in order. 
 
-1. **Experiment Setup** - Ask users to confirm if they want to perform analysis on **gene activity score AnnData** (recommended) or **motif enrichment scores AnnData**. 
+1. **Experiment Setup** - If not clear from original request, ask users to confirm if they want to perform analysis on **gene activity score AnnData** (recommended) or **motif enrichment scores AnnData**. 
 2. **Data Loading** - load data using **Scanpy** and display it with `w_h5`.
 3. **Clustering (workflow only)** - Launch the AtlasXOmics clustering workflow using `w_workflow(wf_name="wf.__init__.opt_workflow", ...)`. Fallback to `scanpy` only if this fails.
 4. **Differential Gene Activity or Motif Enrichment Comparison** - Use `w_workflow(wf_name="wf.__init__.compare_workflow", ...)`
@@ -14,7 +14,7 @@ The section below defines detailed guidelines for each of the above steps.
 
 <workflow_rules>
 **HARD RULES — DO NOT VIOLATE:**
-1. **Forms only**. Collect every workflow input via lplots.widgets. Do not ask questions in prose.
+1. **Forms only**. Collect every workflow input via `lplots.widgets`. Do not ask questions in prose.
 2. **No hardcoded params**. Every workflow param must come from a widget value or a derived default shown in a widget.
 3. **Workflow input paths are remote**. Never pass local paths; upload then use `latch://` in `LatchFile`/`LatchDir`.
 4. **Exact workflow version**. Use the exact string provided in examples; do not change or omit it.
@@ -180,10 +180,6 @@ w = w_workflow(
 execution = w.value
 ```
 
-### **Lasso Selection Tasks or AnnData Subset Selection Tasks**
-- Use when users want to perform clustering on specific spatial regions they've selected
-- Reference Latch Plots documentation to retrieve lasso selected values and perform targeted clustering
-
 #### Example Implementation
 ```python
 viewer = w_h5(ann_data=adata)
@@ -295,7 +291,7 @@ groupings_file = LatchFile(remote_path)
   - `marker_genes`: **multiselect widget**, pre-populated with default marker genes for that cell type.
 - You **must auto-populate all fields with reasonable defaults using domain knowledge**. Users should only adjust values if needed, not enter them from scratch.
 - Add a **button** after the form to trigger gene set scoring. 
-- For **spatial ATAC-seq**, infer cell identity by computing **gene activity or gene set scores** (e.g., `scanpy.tl.score_genes`) and ranking cell types based on marker enrichment.
+- For **spatial ATAC-seq** only, infer cell identity by computing **gene activity or gene set scores** (e.g., `scanpy.tl.score_genes`) and ranking cell types based on marker enrichment.
 
 ## Data Assumptions
 
@@ -342,7 +338,8 @@ root/
 - `combined_sm_ge.h5ad`: Stores gene activity score for every spot
 - `combined_sm_motifs.h5ad`: Stores motif enrichment score for every spot
 - Both files follow the standard AnnData structure with `obs`, `uns`, `obsm`, and `obsp` components as detailed below. 
-- Folder ending with `_ArchRProject`: An `ArchR` project 
+- Folder ending with `_ArchRProject`: An `ArchR` project
+- Folder ending with `_coverages`: Contains `.bw` files which can be visualized in the IGV browser.
 
 **Standard Fields inside an AnnData Object**
 Example structure of `combined_sm_ge.h5ad`

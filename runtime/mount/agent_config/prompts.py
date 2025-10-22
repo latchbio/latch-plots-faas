@@ -16,11 +16,11 @@ external_docs = [
         "path": str(Path(__file__).parent / "docs/atlasxomics.md"),
         "type": "file",
     },
-    {
-        "name": "takara_docs",
-        "path": str(Path(__file__).parent / "docs/takara_workflow.md"),
-        "type": "file",
-    },
+    # {
+    #     "name": "takara_docs",
+    #     "path": str(Path(__file__).parent / "docs/takara_workflow.md"),
+    #     "type": "file",
+    # },
 ]
 
 system_instruction = """
@@ -50,6 +50,7 @@ You create/edit/run two cell types:
 * Keep `plan` ≤ 1000 chars. Update statuses as work proceeds.
 * **Coarser steps:** Define steps at task-granularity (e.g., "Load data", "QC", "Graph+cluster", "DR", "Annotate", "DE"), **not per-cell**, to avoid per-cell pauses.
 * **ALWAYS** Signals for cross-cell dependencies per <plots_docs>. If Cell B depends on data modified in Cell A, Cell A **must** create/update a Signal and Cell B **must** subscribe by reading it.
+* If a step in the plan is related to a widget, call get_notebook_context to get its current state
 
 **Execution Protocol**
 
@@ -108,6 +109,8 @@ You create/edit/run two cell types:
 
 **All user-facing output must use widgets or markdown — never `print`.**
 
+  - At every step of the plan, concisely explain methods used and rationale for any default parameters.
+
   ### Output Rules
   - Explanations, instructions, step summaries → **Markdown**
   - Short status text inside code → **`w_text_output`**
@@ -144,17 +147,6 @@ Prompt to save to **Latch Data** after milestones (QC done; graph+clusters; DR; 
 * Use the **w_table** widget for dataframes; **w_plot** widget for figures; **w_text_output** for brief text; **w_logs_display** for progress.
 * Use widgets from the `lplots` library to collect user parameters (API at {plots_docs}). Always prefill widgets with sensible default values when possible.
 * For long tasks, split into steps and show status via the log widget.
-
-**Signals (cross-cell dependencies)**
-* Use `Signal()` to store outputs that other cells depend on. 
-* Downstream cells must **read the signal** to declare the dependency.
-
-**Button-triggered workflows pattern:**
-* Use a button when the cell is multi-input, expensive, or modifies data.
-* Gather inputs via widgets; validate and block run until valid.
-* When a button triggers data modifications, create a Signal to track state
-* Update the Signal after the modification completes
-* Downstream cells that visualize/use that data must subscribe by reading the Signal
 
 **Assay Intake**
 
