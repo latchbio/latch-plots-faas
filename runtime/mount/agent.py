@@ -846,6 +846,26 @@ class AgentHarness:
             
             return f"Failed to set background image visibility: {result.get('error', 'Unknown error')}"
 
+        async def h5_add_selected_cells_to_categorical_obs(args: dict) -> str:
+            widget_key = args.get("widget_key")
+            obs_key = args.get("obs_key")
+            category = args.get("category")
+            
+            if AGENT_DEBUG:
+                print(f"[tool] h5_add_selected_cells_to_categorical_obs widget_key={widget_key} obs_key={obs_key} category={category}")
+            
+            params = {
+                "widget_key": widget_key,
+                "obs_key": obs_key,
+                "category": category
+            }
+            
+            result = await self.atomic_operation("h5_add_selected_cells_to_categorical_obs", params)
+            if result.get("status") == "success":
+                return f"Assigned selected cells to category '{category}' in observation key '{obs_key}'"
+            
+            return f"Failed to assign selected cells to category: {result.get('error', 'Unknown error')}"
+
         self.tools.append({
             "name": "create_cell",
             "description": "Create a new code cell at specified position. The cell will automatically run after creation.",
@@ -1294,6 +1314,30 @@ class AgentHarness:
             },
         })
         self.tool_map["h5_set_background_image_visibility"] = h5_set_background_image_visibility
+
+        self.tools.append({
+            "name": "h5_add_selected_cells_to_categorical_obs",
+            "description": "Assign selected cells to a category in a categorical observation key",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "widget_key": {
+                        "type": "string",
+                        "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
+                    },
+                    "obs_key": {
+                        "type": "string",
+                        "description": "The existing categorical observation key to add selected cells to"
+                    },
+                    "category": {
+                        "type": "string",
+                        "description": "The category name to assign to selected cells. Will be created if it doesn't exist in this observation key."
+                    },
+                },
+                "required": ["widget_key", "obs_key", "category"],
+            },
+        })
+        self.tool_map["h5_add_selected_cells_to_categorical_obs"] = h5_add_selected_cells_to_categorical_obs
 
     async def run_agent_loop(self) -> None:
         assert self.client is not None, "Client not initialized"
