@@ -22,7 +22,7 @@ The section below defines detailed guidelines for each of the above steps.
 </workflow_rules>
 
 ### **Data Loading**: 
-- Identify the correct node ID for either `combined_sm_ge.h5ad` (gene activity scores) or `combined_sm_motifs.h5ad` (motif enrichment), and load the file using `LPath("latch://<node_id>.node")`
+- Identify the correct Latch paths for either `combined_sm_ge.h5ad` (gene activity scores) or `combined_sm_motifs.h5ad` (motif enrichment), and load the file using `LPath`.
 - After loading, always display the AnnData object with the `w_h5` widget.
 
 ### **Clustering (workflow only)**: 
