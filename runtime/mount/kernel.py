@@ -1490,6 +1490,24 @@ class Kernel:
                     "dtype": str(value.dtype),
                     "shape": value.shape,
                 }
+            elif isinstance(value, ad.AnnData):
+                obs_dtypes_full = {str(k): str(v) for k, v in value.obs.dtypes.items()}
+                var_dtypes_full = (
+                    {str(k): str(v) for k, v in value.var.dtypes.items()}
+                    if hasattr(value.var, "dtypes")
+                    else {}
+                )
+
+                summary[key] = {
+                    "type": "AnnData",
+                    "n_obs": value.n_obs,
+                    "n_vars": value.n_vars,
+                    "obs_dtypes": dict(list(obs_dtypes_full.items())[:50]),
+                    "obs_dtypes_truncated": len(obs_dtypes_full) > 50,
+                    "var_dtypes": dict(list(var_dtypes_full.items())[:50]),
+                    "var_dtypes_truncated": len(var_dtypes_full) > 50,
+                    "obsm_keys": list(value.obsm.keys()) if hasattr(value, "obsm") else [],
+                }
             else:
                 summary[key] = {"type": type(value).__name__}
 
