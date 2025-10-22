@@ -83,15 +83,28 @@ def generate_filter_mask(
                 mask &= obs_values < value
 
         elif f["type"] == "var":
-            key = f["key"]
-            if key not in adata.var_names:
+            keys = f.get("keys", [])
+            if not keys:
+                # old key format
+                key = f.get("key")
+                if key:
+                    keys = [key]
+
+            valid_keys = [k for k in keys if k in adata.var_names]
+            if not valid_keys:
                 continue
 
             op = f["operation"]
             value = op["value"]
 
-            # todo(aidan): likely too slow?
-            var_values = np.asarray(adata[:, key].to_df().iloc[:, 0:].values.ravel())  # noqa: PD011
+            if len(valid_keys) == 1:
+                var_values = np.asarray(adata[:, valid_keys[0]].to_df().iloc[:, 0:].values.ravel())  # noqa: PD011
+            else:
+                gene_values = [
+                    np.asarray(adata[:, key].to_df().iloc[:, 0:].values.ravel())  # noqa: PD011
+                    for key in valid_keys
+                ]
+                var_values = np.mean(gene_values, axis=0)
 
             if op["type"] == "geq":
                 mask &= var_values >= value
