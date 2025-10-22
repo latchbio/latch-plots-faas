@@ -218,9 +218,6 @@ if value['lasso_points']:
 - `genome` *(Enum)*  
   Either `"hg38"` or `"mm10"`.
 
-**Input rules for `archrproject` and `groupings`**:
-- **Works**: `LatchDir("latch://<account_id>.account/ArchRProject")`
-- **Does not work** (No node IDs): `LatchDir("latch://12345.id")`
 
 #### Example Implementation
 

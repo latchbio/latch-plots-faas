@@ -207,6 +207,15 @@ if execution is not None:
     res = await execution.wait()
 ```
 
+```python
+# Retrieve workflow status and results 
+next(execution.poll())
+if execution.status in {"SUCCEEDED", "FAILED", "ABORTED"}: 
+    result = await execution.wait()
+else: 
+    print(f"Execution {execution.status}")
+```
+
 #### **Widget Parameters**
 
 - **label** (`str`, required): Button label.  
