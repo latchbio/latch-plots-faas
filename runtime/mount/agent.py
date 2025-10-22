@@ -510,6 +510,7 @@ class AgentHarness:
                     else:
                         summary += f"  {var_name}: {var_info}\n"
 
+            print(f"[tool] get_notebook_context -> {summary}")
             return summary
 
         async def set_widget(args: dict) -> str:
