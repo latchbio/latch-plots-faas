@@ -866,6 +866,24 @@ class AgentHarness:
             
             return f"Failed to assign selected cells to category: {result.get('error', 'Unknown error')}"
 
+        async def h5_set_marker_opacity(args: dict) -> str:
+            widget_key = args.get("widget_key")
+            opacity = args.get("opacity")
+            
+            if AGENT_DEBUG:
+                print(f"[tool] h5_set_marker_opacity widget_key={widget_key} opacity={opacity}")
+            
+            params = {
+                "widget_key": widget_key,
+                "opacity": opacity
+            }
+            
+            result = await self.atomic_operation("h5_set_marker_opacity", params)
+            if result.get("status") == "success":
+                return f"Set marker opacity to {opacity}"
+            
+            return f"Failed to set marker opacity: {result.get('error', 'Unknown error')}"
+
         self.tools.append({
             "name": "create_cell",
             "description": "Create a new code cell at specified position. The cell will automatically run after creation.",
@@ -1338,6 +1356,26 @@ class AgentHarness:
             },
         })
         self.tool_map["h5_add_selected_cells_to_categorical_obs"] = h5_add_selected_cells_to_categorical_obs
+
+        self.tools.append({
+            "name": "h5_set_marker_opacity",
+            "description": "Set the marker opacity for all cell markers in an h5/AnnData widget.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "widget_key": {
+                        "type": "string",
+                        "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
+                    },
+                    "opacity": {
+                        "type": "number",
+                        "description": "Opacity value for cell markers, between 0.1 (transparent) and 0.9 (opaque)"
+                    },
+                },
+                "required": ["widget_key", "opacity"],
+            },
+        })
+        self.tool_map["h5_set_marker_opacity"] = h5_set_marker_opacity
 
     async def run_agent_loop(self) -> None:
         assert self.client is not None, "Client not initialized"
