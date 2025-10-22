@@ -712,72 +712,6 @@ class AgentHarness:
             print(f"[tool] h5_zoom failed: {result.get('error', 'Unknown error')}")
             return f"Failed to zoom h5 widget: {result.get('error', 'Unknown error')}"
 
-        async def h5_extract_summary(args: dict) -> str:
-            asset_id = args.get("asset_id")
-            
-            print(f"[tool] h5_extract_summary asset_id={asset_id}")
-            
-            if not asset_id:
-                print(f"[tool] h5_extract_summary asset_id is required")
-                return "Error: asset_id is required"
-            
-            try:
-                # Download file from Latch Data using node_id
-                print(f"[tool] Creating LPath for node_id: {asset_id}")
-                lpath = LPath(f"latch://{asset_id}.node")
-                
-                # Get the filename for better caching
-                file_name = lpath.name()
-                print(f"[tool] File name: {file_name}")
-                
-                # Create a local cache path
-                local_path = Path(f"/tmp/{asset_id}.h5ad")
-                
-                print(f"[tool] Downloading file to: {local_path}")
-                lpath.download(local_path, cache=True)
-                
-                print(f"[tool] Reading h5ad file from: {local_path}")
-                adata = scanpy.read_h5ad(local_path)
-                
-                # Build summary
-                summary_parts = []
-                summary_parts.append(f"# AnnData Summary for {asset_id}\n")
-                
-                # Number of observations and features
-                summary_parts.append(f"**Observations (cells/spots):** {adata.n_obs}")
-                summary_parts.append(f"**Features (genes/variables):** {adata.n_vars}\n")
-                
-                # Observation columns
-                obs_cols = list(adata.obs.columns)
-                summary_parts.append(f"**Observation columns ({len(obs_cols)}):** {', '.join(obs_cols)}\n")
-                
-                # First 5 rows of obs
-                summary_parts.append("**First 5 rows of adata.obs:**")
-                obs_preview = adata.obs.head(5).to_string()
-                summary_parts.append(f"```\n{obs_preview}\n```\n")
-                
-                # Few rows of var
-                summary_parts.append("**First 5 rows of adata.var:**")
-                var_preview = adata.var.head(5).to_string()
-                summary_parts.append(f"```\n{var_preview}\n```\n")
-                
-                # obsm keys
-                obsm_keys = list(adata.obsm.keys())
-                summary_parts.append(f"**obsm keys:** {', '.join(obsm_keys) if obsm_keys else 'None'}")
-                
-                result = "\n".join(summary_parts)
-                print(f"[tool] h5_extract_summary result: {result}")
-                params = {
-                    "asset_id": asset_id,
-                }
-                await self.atomic_operation("h5_extract_summary", params)
-                # print(f"[tool] h5_extract_summary completed successfully")
-                return result
-                
-            except Exception as e:
-                error_msg = f"Error reading h5ad file: {str(e)}\n{traceback.format_exc()}"
-                print(f"[tool] h5_extract_summary error: {error_msg}")
-                return error_msg
 
         async def h5_modify_genes_of_interest(args: dict) -> str:
             widget_key = args.get("widget_key")
@@ -1270,21 +1204,6 @@ class AgentHarness:
         })
         self.tool_map["h5_zoom"] = h5_zoom
 
-        self.tools.append({
-            "name": "h5_extract_summary",
-            "description": "Inspect a .h5ad file from Latch Data and return AnnData summary details including observations, variables, and metadata.",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "asset_id": {
-                        "type": "string",
-                        "description": "The Latch Data node ID of the .h5ad file. This should come from files attached by the user in the chat."
-                    }
-                },
-                "required": ["asset_id"]
-            }
-        })
-        self.tool_map["h5_extract_summary"] = h5_extract_summary
 
         self.tools.append({
             "name": "h5_modify_genes_of_interest",
