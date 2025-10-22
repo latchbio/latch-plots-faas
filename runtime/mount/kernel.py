@@ -1468,7 +1468,7 @@ class Kernel:
             }
         )
 
-    async def send_globals_summary(self) -> None:
+    async def send_globals_summary(self, agent_tx_id: str | None = None) -> None:
         summary = {}
         for key, value in self.k_globals.items():
             if isinstance(value, Signal):
@@ -1493,7 +1493,11 @@ class Kernel:
             else:
                 summary[key] = {"type": type(value).__name__}
 
-        await self.send({"type": "globals_summary", "summary": summary})
+        msg = {"type": "globals_summary", "summary": summary}
+        if agent_tx_id is not None:
+            msg["agent_tx_id"] = agent_tx_id
+
+        await self.send(msg)
 
     async def upload_ldata(
         self,
@@ -1741,7 +1745,8 @@ class Kernel:
             return
 
         if msg["type"] == "globals_summary":
-            await self.send_globals_summary()
+            agent_tx_id = msg.get("agent_tx_id")
+            await self.send_globals_summary(agent_tx_id=agent_tx_id)
             return
 
         if msg["type"] == "upload_ldata":

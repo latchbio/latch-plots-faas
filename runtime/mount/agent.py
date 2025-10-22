@@ -189,7 +189,10 @@ class AgentHarness:
 
         print("[agent] Cleared running state")
 
-    async def atomic_operation(self, action: str, params: dict) -> dict:
+    async def atomic_operation(self, action: str, params: dict | None = None) -> dict:
+        if params is None:
+            params: dict = {}
+
         self.operation_counter += 1
 
         if self.mode == Mode.planning and action in {"create_cell", "edit_cell", "run_cell", "delete_cell"}:
@@ -439,7 +442,7 @@ class AgentHarness:
             return f"Failed to stop cell {cell_id}: {result.get('error', 'Unknown error')}"
 
         async def delete_all_cells(args: dict) -> str:
-            context_result = await self.atomic_operation("get_context", {})
+            context_result = await self.atomic_operation("get_context")
             if context_result.get("status") != "success":
                 error_msg = context_result.get("error", "Unknown error")
                 return f"Failed to delete cells: {error_msg}"
@@ -459,13 +462,21 @@ class AgentHarness:
         async def get_notebook_context(args: dict) -> str:
             params = {}
 
-            result = await self.atomic_operation("get_context", params)
-            if result.get("status") != "success":
-                return f"Failed to get context: {result.get('error', 'Unknown error')}"
+            context_result, globals_result = await asyncio.gather(
+                self.atomic_operation("get_context", params),
+                self.atomic_operation("request_globals_summary")
+            )
 
-            context = result.get("context", {})
+            if context_result.get("status") != "success":
+                return f"Failed to get context: {context_result.get('error', 'Unknown error')}"
+
+            context = context_result.get("context", {})
             cell_count = context.get("cell_count", 0)
             cells = context.get("cells", [])
+
+            globals_data: dict[str, object] | None = None
+            if globals_result.get("status") == "success":
+                globals_data = globals_result.get("summary", {})
 
             summary = f"Notebook has {cell_count} cell(s):\n"
             for cell in cells:
@@ -486,6 +497,18 @@ class AgentHarness:
                 widget_summary = self._format_widget_summaries(cell.get("widgets") or [])
                 if widget_summary:
                     summary += f"\n  Widgets: {widget_summary}"
+
+            if globals_data is not None:
+                summary += f"\n\nGlobal variables ({len(globals_data)} total):\n"
+                for var_name, var_info in sorted(globals_data.items()):
+                    if isinstance(var_info, dict):
+                        var_type = var_info.get("type", "unknown")
+                        summary += f"  {var_name}: {var_type}\n"
+                        for key, value in var_info.items():
+                            if key != "type":
+                                summary += f"    {key}: {value}\n"
+                    else:
+                        summary += f"  {var_name}: {var_info}\n"
 
             return summary
 
