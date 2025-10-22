@@ -10,12 +10,13 @@ import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
+from textwrap import dedent
 
 from agent_utils.auto_install import anthropic
 from anthropic.types import MessageParam, ToolParam
 from anthropic.types.beta.beta_message import BetaMessage
 from anthropic.types.message import Message
-from config_loader import build_full_instruction
+from config_loader import build_system_prompt
 from lplots import _inject
 from socketio_thread import SocketIoThread
 from utils import auth_token_sdk, gql_query, nucleus_url, pod_id
@@ -52,7 +53,6 @@ class AgentHarness:
     tools: list[ToolParam] = field(default_factory=list)
     tool_map: dict[str, Callable] = field(default_factory=dict)
     operation_counter: int = 0
-    instructions_context: str = ""
     current_request_id: str | None = None
     should_auto_continue: bool = False
     pending_auto_continue: bool = False
@@ -459,7 +459,7 @@ class AgentHarness:
 
             return f"Deleted {deleted_count} cells from the notebook"
 
-        async def get_notebook_context(args: dict) -> str:
+        async def _get_notebook_context() -> str:
             context_result, globals_result = await asyncio.gather(
                 self.atomic_operation("get_context"),
                 self.atomic_operation("request_globals_summary")
@@ -508,7 +508,6 @@ class AgentHarness:
                     else:
                         summary += f"  {var_name}: {var_info}\n"
 
-            print(f"[tool] get_notebook_context -> {summary}")
             return summary
 
         async def set_widget(args: dict) -> str:
@@ -671,16 +670,6 @@ class AgentHarness:
         self.tool_map["delete_all_cells"] = delete_all_cells
 
         self.tools.append({
-            "name": "get_notebook_context",
-            "description": "Get the current state of the notebook including all cells and their content.",
-            "input_schema": {
-                "type": "object",
-                "properties": {},
-            },
-        })
-        self.tool_map["get_notebook_context"] = get_notebook_context
-
-        self.tools.append({
             "name": "submit_response",
             "description": "Submit the final response with plan, plan_diff, next_status, questions, and an optional summary. Call this at the end of every turn.",
             "input_schema": {
@@ -742,6 +731,17 @@ class AgentHarness:
 
             print(f"[agent] Turn {turn}, mode={self.mode}, thinking_budget={thinking_budget}")
 
+            notebook_context = await self._get_notebook_context()
+
+            system_prompt_with_context = dedent(
+                f"""
+                {self.system_prompt}
+                <notebook_context>
+                {notebook_context}
+                </notebook_context>
+                """
+            )
+
             if thinking_budget is not None:
                 max_tokens = thinking_budget + 4096
             else:
@@ -766,7 +766,7 @@ class AgentHarness:
             kwargs = {
                 "model": model,
                 "max_tokens": max_tokens,
-                "system": self.system_prompt,
+                "system": system_prompt_with_context,
                 "messages": api_messages,
                 "tools": self.tools,
             }
@@ -917,8 +917,6 @@ class AgentHarness:
             self.should_auto_continue = False
             self.pending_auto_continue = False
 
-            context = msg.get("context", "")
-            self.instructions_context = context
             session_id = msg.get("session_id")
             if session_id is None:
                 raise RuntimeError(f"[handle init] Session ID is not set. Message: {msg}")
@@ -933,7 +931,7 @@ class AgentHarness:
                 default_headers={"Authorization": auth_token_sdk, "Pod-Id": str(pod_id)}
             )
 
-            self.system_prompt = build_full_instruction(self.instructions_context)
+            self.system_prompt = build_system_prompt()
 
             messages = await self._build_messages_from_db()
             tool_use_ids = set()
@@ -1018,7 +1016,7 @@ class AgentHarness:
                     print(f"[agent] Reconnected while {next_status}, prompting LLM to check state and retry")
                     await self.pending_messages.put({
                         "type": "user_query",
-                        "content": "The session was reconnected. You were waiting for an action to complete, but it may have finished or failed while offline. Please use get_notebook_context to check the current state, then retry any incomplete actions or continue with your plan.",
+                        "content": "The session was reconnected. You were waiting for an action to complete, but it may have finished or failed while offline. Please retry any incomplete actions or continue with your plan.",
                         "request_id": None,
                         "hidden": True,
                     })
