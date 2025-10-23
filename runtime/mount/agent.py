@@ -520,6 +520,7 @@ class AgentHarness:
                 "cell_id": cell_id,
                 "cell_name": title,
                 "message": action_summary,
+                "success": True,
             }
 
         async def stop_cell(args: dict) -> dict:
