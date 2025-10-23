@@ -1520,13 +1520,18 @@ class Kernel:
     def get_reactivity_summary(self) -> str:
         signal_id_to_name: dict[str, str] = {}
         global_signal_ids: set[str] = set()
+        widget_signal_ids: set[str] = set()
+
+        for widget_key, sig in self.widget_signals.items():
+            signal_id_to_name[sig.id] = widget_key
+            widget_signal_ids.add(sig.id)
 
         for var_name in self.k_globals:
             if var_name in {"__builtins__", "__warningregistry__"}:
                 continue
 
             sig = self.k_globals.get_signal(var_name)
-            if sig is not None:
+            if sig is not None and sig.id not in signal_id_to_name:
                 signal_id_to_name[sig.id] = var_name
                 global_signal_ids.add(sig.id)
 
@@ -1585,7 +1590,9 @@ class Kernel:
 
             summary_lines.append(f"{sig_name}:")
 
-            if sig_id and sig_id in global_signal_ids:
+            if sig_id and sig_id in widget_signal_ids:
+                summary_lines.append("  - Scope: widget signal")
+            elif sig_id and sig_id in global_signal_ids:
                 summary_lines.append("  - Scope: global variable")
             else:
                 summary_lines.append("  - Scope: local signal")
