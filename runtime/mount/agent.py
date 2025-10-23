@@ -106,7 +106,26 @@ class AgentHarness:
             if t == "anthropic_message":
                 role = item.get("role")
                 content = item.get("content")
-                if role in {"user", "assistant"} and (isinstance(content, (str, list))):
+                content_schema = item.get("content_schema")
+
+                if content_schema == "cell_result" and isinstance(content, dict):
+                    success = content.get("success", True)
+                    message = content.get("message", "")
+
+                    text_content = message
+                    if success:
+                        logs = content.get("logs", "")
+                        if logs:
+                            text_content += f"\n\nLogs:\n```\n{logs}\n```"
+                    else:
+                        exception = content.get("exception", "Unknown error")
+                        text_content += f"\n\nError:\n```\n{exception}\n```"
+                        logs = content.get("logs", "")
+                        if logs:
+                            text_content += f"\n\nLogs:\n```\n{logs}\n```"
+
+                    anthropic_messages.append({"role": role, "content": text_content})
+                elif role in {"user", "assistant"} and (isinstance(content, (str, list))):
                     anthropic_messages.append({"role": role, "content": content})
 
         print(f"[agent] Built {len(anthropic_messages)} messages from DB")
