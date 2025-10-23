@@ -121,6 +121,7 @@ class AgentHarness:
         try:
             # Find the last assistant message index that contains a submit_response tool_use
             last_submit_idx: int | None = None
+            kept_submit_tool_use_ids: set[str] = set()
             for i in range(len(messages) - 1, -1, -1):
                 msg = messages[i]
                 if msg.get("role") == "assistant":
@@ -129,6 +130,9 @@ class AgentHarness:
                         for block in content:
                             if isinstance(block, dict) and block.get("type") == "tool_use" and block.get("name") == "submit_response":
                                 last_submit_idx = i
+                                tool_id = block.get("id")
+                                if isinstance(tool_id, str):
+                                    kept_submit_tool_use_ids.add(tool_id)
                                 break
                     if last_submit_idx is not None:
                         break
@@ -159,7 +163,13 @@ class AgentHarness:
 
                             if block.get("type") == "tool_result":
                                 # Keep only errored tool results; content is JSON string with {summary, error}
+                                # Also keep tool_results that correspond to the kept final submit_response tool_use
                                 try:
+                                    tool_use_id = block.get("tool_use_id")
+                                    if isinstance(tool_use_id, str) and tool_use_id in kept_submit_tool_use_ids:
+                                        new_blocks.append(block)
+                                        continue
+
                                     payload_raw = block.get("content")
                                     payload = json.loads(payload_raw) if isinstance(payload_raw, str) else payload_raw
                                     if isinstance(payload, dict) and payload.get("error"):
