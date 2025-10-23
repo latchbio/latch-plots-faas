@@ -207,6 +207,8 @@ class AgentHarness:
                 # Other roles (if any): keep unchanged
                 compacted.append(msg)
 
+            print(f"[agent] Original messages: {messages}")
+            print(f"[agent] Compact messages: {compacted}")
             return compacted
         except Exception as e:
             print(f"[agent] _compact_messages error: {e}")
