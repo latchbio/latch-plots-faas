@@ -741,6 +741,8 @@ class AgentHarness:
 
             notebook_context = await self._get_notebook_context()
 
+            print(f"[agent] Notebook context:\n{notebook_context}")
+
             system_prompt_with_context = dedent(
                 f"""
                 {self.system_prompt}
