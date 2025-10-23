@@ -266,30 +266,45 @@ class AgentHarness:
         elif msg_type == "cell_result":
             cell_id = msg["cell_id"]
             success = msg.get("success", True)
+            cell_name = msg.get("cell_name", None)
 
             if success:
-                result_content = f"✓ Cell {cell_id} executed successfully"
+                result_content = {
+                    "type": "cell_result",
+                    "cell_id": cell_id,
+                    "cell_name": cell_name,
+                    "success": success,
+                    "logs": msg.get("logs", {}),
+                }
                 print(f"[agent] Cell {cell_id} succeeded")
             else:
-                exception = msg.get("exception", "Unknown error")
-                result_content = f"✗ Cell {cell_id} execution failed:\n```\n{exception}\n```"
+                result_content = {
+                    "type": "cell_result",
+                    "cell_id": cell_id,
+                    "cell_name": cell_name,
+                    "success": False,
+                    "exception": msg.get("exception", "Unknown error"),
+                    "logs": msg.get("logs", ""),
+                }
                 print(f"[agent] Cell {cell_id} failed")
 
-            await self._insert_history(
-                event_type="anthropic_message",
-                payload={
-                    "type": "anthropic_message",
-                    "role": "user",
-                    "content": result_content,
-                    "timestamp": int(time.time() * 1000),
-                },
-            )
+                await self._insert_history(
+                    event_type="anthropic_message",
+                    payload={
+                        "type": "anthropic_message",
+                        "role": "user",
+                        "content_schema": "cell_result",
+                        "content": result_content,
+                        "timestamp": int(time.time() * 1000),
+                    },
+                )
 
             if self.pending_auto_continue and not self.executing_cells:
                 print(f"[agent] All cells complete, resuming auto-continue (request_id={self.current_request_id})")
                 self.pending_auto_continue = False
                 await self.pending_messages.put({
                     "type": "user_query",
+                    "content_schema": "message",
                     "content": "Continue with the next step.",
                     "request_id": self.current_request_id,
                     "hidden": True,
