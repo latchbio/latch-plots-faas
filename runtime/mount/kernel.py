@@ -1539,6 +1539,9 @@ class Kernel:
 
         def collect_all_signals(n: Node) -> None:
             for sig_id, sig in n.signals.items():
+                if sig is None:
+                    continue
+
                 if sig_id not in all_signals:
                     all_signals[sig_id] = sig
                     if sig_id not in signal_id_to_name:
@@ -1552,14 +1555,14 @@ class Kernel:
 
         cell_dependencies: dict[str, set[str]] = {}
 
+        def traverse_node(n: Node, deps_set: set[str]) -> None:
+            deps_set.update(n.signals)
+
+            for child in n.children.values():
+                traverse_node(child, deps_set)
+
         for cell_id, node in self.cell_rnodes.items():
             deps: set[str] = set()
-
-            def traverse_node(n: Node, deps_set: set[str]) -> None:
-                deps_set.update(n.signals)
-
-                for child in n.children.values():
-                    traverse_node(child, deps_set)
 
             traverse_node(node, deps)
             cell_dependencies[cell_id] = deps
