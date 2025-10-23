@@ -1565,13 +1565,11 @@ class Kernel:
             cell_dependencies[cell_id] = deps
 
         summary_lines: list[str] = []
-        summary_lines.append("=== Reactive Notebook Structure ===\n")
+        summary_lines.append("## Reactive Dependencies")
 
         if len(self.cell_rnodes) == 0:
-            summary_lines.append("No cells with reactive dependencies.\n")
+            summary_lines.append("\nNo reactive dependencies in this notebook.")
             return "\n".join(summary_lines)
-
-        summary_lines.append("Signals:\n")
 
         signal_name_to_id: dict[str, str] = {}
         signal_usage: dict[str, list[str]] = {}
@@ -1584,35 +1582,33 @@ class Kernel:
                     signal_usage[sig_name] = []
                 signal_usage[sig_name].append(cell_id)
 
-        for sig_name in sorted(signal_usage.keys()):
-            cells = signal_usage[sig_name]
-            sig_id = signal_name_to_id.get(sig_name)
+        if len(signal_usage) > 0:
+            summary_lines.append("\n### Signals")
 
-            summary_lines.append(f"{sig_name}:")
+            for sig_name in sorted(signal_usage.keys()):
+                cells = signal_usage[sig_name]
+                sig_id = signal_name_to_id.get(sig_name)
 
-            if sig_id and sig_id in widget_signal_ids:
-                summary_lines.append("  - Scope: widget signal")
-            elif sig_id and sig_id in global_signal_ids:
-                summary_lines.append("  - Scope: global variable")
-            else:
-                summary_lines.append("  - Scope: local signal")
+                if sig_id is not None and sig_id in widget_signal_ids:
+                    scope = "widget"
+                elif sig_id is not None and sig_id in global_signal_ids:
+                    scope = "global variable"
+                else:
+                    scope = "local"
 
-            summary_lines.append(f"  - Used by cells: {', '.join(sorted(cells))}")
+                cell_list = ", ".join(sorted(cells))
+                summary_lines.append(f"- **{sig_name}** ({scope}) - used by cells: {cell_list}")
 
-        summary_lines.append("\nCell Dependencies:\n")
+        summary_lines.append("\n### Cell Dependencies")
 
         for cell_id in sorted(self.cell_rnodes.keys()):
             deps = cell_dependencies.get(cell_id, set())
 
-            summary_lines.append(f"Cell {cell_id}:")
-
             if deps:
                 dep_names = sorted(signal_id_to_name.get(sig_id, f"<unknown-{sig_id[:8]}>") for sig_id in deps)
-                summary_lines.append(f"  - Depends on signals: {', '.join(dep_names)}")
+                summary_lines.append(f"- **Cell {cell_id}** depends on: {', '.join(dep_names)}")
             else:
-                summary_lines.append("  - No signal dependencies")
-
-            summary_lines.append("")
+                summary_lines.append(f"- **Cell {cell_id}** has no signal dependencies")
 
         return "\n".join(summary_lines)
 
