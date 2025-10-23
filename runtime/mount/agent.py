@@ -1040,7 +1040,7 @@ class AgentHarness:
                             "type": "null"
                         }
                     ],
-                    "description": "Coloring configuration. Can be null to remove coloring, an obs object to color by observation, or a var object to color by variables (genes)"
+                    "description": "Coloring configuration. Can be null to remove coloring, an obs object to color by observation, or a var object to color by variables like genes"
                 }
             },
             "required": ["widget_key", "color_by"],
