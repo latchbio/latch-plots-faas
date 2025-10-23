@@ -1596,8 +1596,9 @@ class Kernel:
                 else:
                     scope = "local"
 
-                cell_list = ", ".join(sorted(cells))
-                summary_lines.append(f"- **{sig_name}** ({scope}) - used by cells: {cell_list}")
+                cell_labels = [f"TF ID {cell_id}" for cell_id in sorted(cells)]
+                cell_list = ", ".join(cell_labels)
+                summary_lines.append(f"- **{sig_name}** ({scope}) - used by: {cell_list}")
 
         summary_lines.append("\n### Cell Dependencies")
 
@@ -1606,9 +1607,9 @@ class Kernel:
 
             if deps:
                 dep_names = sorted(signal_id_to_name.get(sig_id, f"<unknown-{sig_id[:8]}>") for sig_id in deps)
-                summary_lines.append(f"- **Cell {cell_id}** depends on: {', '.join(dep_names)}")
+                summary_lines.append(f"- **Cell [TF ID: {cell_id}]** depends on: {', '.join(dep_names)}")
             else:
-                summary_lines.append(f"- **Cell {cell_id}** has no signal dependencies")
+                summary_lines.append(f"- **Cell [TF ID: {cell_id}]** has no signal dependencies")
 
         return "\n".join(summary_lines)
 
