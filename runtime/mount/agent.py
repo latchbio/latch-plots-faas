@@ -15,7 +15,7 @@ from agent_utils.auto_install import anthropic
 from anthropic.types import MessageParam, ToolParam
 from anthropic.types.beta.beta_message import BetaMessage
 from anthropic.types.message import Message
-from config_loader import build_full_instruction
+from config_loader import build_system_prompt
 from lplots import _inject
 from socketio_thread import SocketIoThread
 from utils import auth_token_sdk, gql_query, nucleus_url, pod_id
@@ -1071,7 +1071,7 @@ class AgentHarness:
                 default_headers={"Authorization": auth_token_sdk, "Pod-Id": str(pod_id)}
             )
 
-            self.system_prompt = build_full_instruction(self.instructions_context)
+            self.system_prompt = build_system_prompt()
 
             messages = await self._build_messages_from_db()
             tool_use_ids = set()
