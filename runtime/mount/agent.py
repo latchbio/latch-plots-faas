@@ -883,6 +883,20 @@ class AgentHarness:
                             can_use_thinking = False
                             print(f"[agent] Cannot use thinking API: last assistant message starts with {first_block_type}, not thinking")
 
+            # If thinking is disabled, strip thinking blocks from the last assistant message to satisfy API constraints
+            if not can_use_thinking:
+                for i in range(len(api_messages) - 1, -1, -1):
+                    if api_messages[i].get("role") == "assistant":
+                        content = api_messages[i].get("content")
+                        if isinstance(content, list):
+                            filtered = []
+                            for block in content:
+                                if isinstance(block, dict) and block.get("type") in {"thinking", "redacted_thinking"}:
+                                    continue
+                                filtered.append(block)
+                            api_messages[i]["content"] = filtered
+                        break
+
             kwargs = {
                 "model": model,
                 "max_tokens": max_tokens,
