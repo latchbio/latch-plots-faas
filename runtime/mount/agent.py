@@ -998,6 +998,7 @@ class AgentHarness:
                                 tool_results.append({
                                     "type": "tool_result",
                                     "tool_use_id": tool_id,
+                                    "tool_name": tool_name,
                                     "content": json.dumps(result),
                                 })
                             except Exception as e:
@@ -1005,6 +1006,7 @@ class AgentHarness:
                                 tool_results.append({
                                     "type": "tool_result",
                                     "tool_use_id": tool_id,
+                                    "tool_name": tool_name,
                                     "content": json.dumps({
                                         "summary": None,
                                         "error": f"Error executing tool: {e!s}",
