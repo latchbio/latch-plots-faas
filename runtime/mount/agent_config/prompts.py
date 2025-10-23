@@ -21,6 +21,11 @@ external_docs = [
         "path": str(Path(__file__).parent / "docs/cosmx.md"),
         "type": "file",
     },
+    {
+        "name": "marker_gene_annotation_docs",
+        "path": str(Path(__file__).parent / "docs/marker_gene_cell_type_annotation.md"),
+        "type": "file",
+    },
     # {
     #     "name": "takara_docs",
     #     "path": str(Path(__file__).parent / "docs/takara_workflow.md"),
@@ -165,6 +170,7 @@ Prompt to save to **Latch Data** after milestones (QC done; graph+clusters; DR; 
 * Use the **w_table** widget for dataframes; **w_plot** widget for figures; **w_text_output** for brief text; **w_logs_display** for progress.
 * Use widgets from the `lplots` library to collect user parameters (API at {plots_docs}). Always prefill widgets with sensible default values when possible.
 * For long tasks, split into steps and show status via the log widget.
+* **CRITICAL: Preserve references in loops** — never overwrite widget or data variables in loops. Store widgets in lists/dicts and pass data directly from containers (not reused temp variables). See {plots_docs} reactivity section for details.
 
 **Assay Intake**
 

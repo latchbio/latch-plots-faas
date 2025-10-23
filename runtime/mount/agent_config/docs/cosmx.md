@@ -6,7 +6,8 @@ This is the **authoritative step-by-step pipeline** for **CosMX** spatial transc
 2. **Preprocessing** — normalize and log-transform expression data.
 3. **Dimensionality Reduction & Clustering** — compute PCA, UMAP, and Leiden clusters using **Scanpy**.
 4. **Differential Gene Expression & GSEA** — identify marker genes per cluster and perform gene set enrichment analysis.
-5. **Cell Type Annotation** — assign biological meaning to clusters using marker genes.
+5. **Automated Cell Type Annotation** — automatically suggest cell types using the CellGuide marker database (see {marker_gene_annotation_docs}).
+6. **Manual Validation** (optional) — validate or refine automated annotations when needed.
 
 The sections below define detailed guidelines for each step.
 
@@ -208,7 +209,9 @@ Identify marker genes for each cluster and perform gene set enrichment analysis 
 
 2. **Visualize top markers** — display top marker genes using `w_table()` and generate dot plots.
 
-3. **Gene Set Enrichment Analysis (GSEA)** — run GSEA on ranked gene lists for each cluster.
+3. **Automated Cell Type Annotation** — **immediately after** computing marker genes, automatically run the marker gene-based annotation workflow to suggest cell types. See {marker_gene_annotation_docs} for complete details. This provides data-driven cell type suggestions before manual validation.
+
+4. **Gene Set Enrichment Analysis (GSEA)** — run GSEA on ranked gene lists for each cluster.
    - Use `gseapy.prerank()` for preranked GSEA.
    - Gene sets: use Enrichr libraries (e.g., `KEGG_2021_Human`, `Hallmark_2020`, `Reactome_2022`).
    - Ranking metric: use test statistic scores or log fold changes.
@@ -349,67 +352,130 @@ for cluster, (res_df, res_obj) in gsea_results.items():
 
 Assign biological cell type identities to clusters based on marker gene expression.
 
-#### Steps:
+**This step has two phases:**
 
-1. **Confirm organism and tissue type** — ask the user to specify the organism (human, mouse, etc.) and tissue type. **Do NOT proceed** until the user has answered.
+1. **Automated annotation using CellGuide database** (runs automatically after differential expression)
+2. **Manual validation and refinement** (optional, for verification or when automated results are uncertain)
 
-2. **Render form with sensible defaults** — create a form supporting multiple candidate cell types:
+---
 
-   - `cell_type`: text input, pre-filled with common cell types for the tissue.
-   - `marker_genes`: multiselect widget, pre-populated with default marker genes for each cell type.
+#### Phase 1: Automated Annotation (Primary Method)
 
-3. **Auto-populate fields** — use domain knowledge to provide reasonable defaults. Users should only adjust values if needed.
+**This phase runs automatically** after differential gene expression. See {marker_gene_annotation_docs} for the complete workflow.
 
-4. **Compute gene set scores** — use `sc.tl.score_genes()` to compute marker enrichment scores for each cell type.
+**Brief overview:**
 
-5. **Visualize scores** — display scores on UMAP and spatial embeddings using `w_h5` and Plotly.
+1. Load the CellGuide marker gene database from `latch:///cellguide_marker_gene_database.json`
+2. Confirm organism and tissue type with the user
+3. For each cluster, query the database with the top 10 marker genes
+4. Aggregate cell type suggestions across markers using consensus scoring
+5. Display suggested cell types with confidence scores and supporting evidence
+6. Add predictions to `adata.obs['predicted_cell_type']`
+7. Visualize on UMAP and spatial embeddings using `w_h5`
 
-#### Example Implementation
+The automated workflow provides **data-driven suggestions** that should be used as the primary annotation method.
+
+---
+
+#### Phase 2: Manual Validation (Optional)
+
+Use this phase to:
+
+- **Validate** automated suggestions when confidence is low
+- **Refine** annotations with additional known markers
+- **Discover** cell subtypes not well-represented in the database
+
+**Steps:**
+
+1. **Review automated results** — check the suggested cell types and confidence scores from Phase 1.
+
+2. **Identify clusters needing validation** — focus on:
+
+   - Low-confidence predictions
+   - "Unknown" annotations
+   - Unexpected cell types
+
+3. **Define validation markers** — for clusters requiring manual review, specify additional marker genes:
+
+   - Use domain knowledge for the specific tissue
+   - Include canonical markers from literature
+   - Consider both positive and negative markers
+
+4. **Compute gene set scores** — use `sc.tl.score_genes()` to compute marker enrichment scores.
+
+5. **Compare with automated suggestions** — visualize both automated predictions and validation scores using `w_h5` and Plotly.
+
+#### Example Implementation: Phase 2 (Manual Validation)
+
+**Note:** Phase 1 (automated annotation) runs automatically after differential expression. The code below is for **optional manual validation** only.
 
 ```python
 import scanpy as sc
 from lplots.widgets.text import w_text_input
-from lplots.widgets.select import w_multiselect
-from lplots.widgets.h5 import w_h5
-
-# Ask for organism and tissue type
 from lplots.widgets.select import w_select
+from lplots.widgets.h5 import w_h5
+from lplots.widgets.table import w_table
+import pandas as pd
 
-organism = w_select(
-    label="Organism",
-    options=["Human", "Mouse"],
-    default="Human"
-)
+# Review automated results (from Phase 1)
+# Check which clusters have low confidence or unexpected annotations
+low_confidence_clusters = adata.obs[
+    adata.obs['annotation_confidence'] < 10
+]['leiden'].unique()
 
-tissue = w_text_input(
-    label="Tissue type",
-    default="Brain"
-)
+if len(low_confidence_clusters) > 0:
+    # Manual validation for low-confidence clusters
 
-# Define cell type marker genes (example for brain)
-cell_type_markers = {
-    "Excitatory Neurons": ["SLC17A7", "NEUROD6", "SATB2"],
-    "Inhibitory Neurons": ["GAD1", "GAD2", "SLC32A1"],
-    "Astrocytes": ["GFAP", "AQP4", "SLC1A2"],
-    "Oligodendrocytes": ["MBP", "MOG", "PLP1"],
-    "Microglia": ["C1QA", "C1QB", "CSF1R"],
-    "Endothelial": ["PECAM1", "VWF", "CLDN5"]
-}
+    # Define validation marker genes (example for brain tissue)
+    validation_markers = {
+        "Excitatory Neurons": ["SLC17A7", "NEUROD6", "SATB2"],
+        "Inhibitory Neurons": ["GAD1", "GAD2", "SLC32A1"],
+        "Astrocytes": ["GFAP", "AQP4", "SLC1A2"],
+        "Oligodendrocytes": ["MBP", "MOG", "PLP1"],
+        "Microglia": ["C1QA", "C1QB", "CSF1R"],
+        "Endothelial": ["PECAM1", "VWF", "CLDN5"]
+    }
 
-# Compute gene set scores
-for cell_type, markers in cell_type_markers.items():
-    # Filter markers that exist in dataset
-    markers_present = [m for m in markers if m in adata.var_names]
-    if markers_present:
-        sc.tl.score_genes(adata, markers_present, score_name=f"{cell_type}_score")
+    # Compute validation scores
+    for cell_type, markers in validation_markers.items():
+        markers_present = [m for m in markers if m in adata.var_names]
+        if markers_present:
+            score_name = f"{cell_type}_validation_score"
+            sc.tl.score_genes(adata, markers_present, score_name=score_name)
 
-# Visualize scores
-viewer = w_h5(ann_data=adata)
+    # Compare automated vs validation results
+    comparison_data = []
+    for cluster in low_confidence_clusters:
+        cluster_mask = adata.obs['leiden'] == cluster
+        predicted = adata.obs.loc[cluster_mask, 'predicted_cell_type'].iloc[0]
+        auto_conf = adata.obs.loc[cluster_mask, 'annotation_confidence'].iloc[0]
 
-# Display score summary
-score_cols = [col for col in adata.obs.columns if col.endswith("_score")]
-score_summary = adata.obs[score_cols + ["leiden"]].groupby("leiden").mean()
-w_table(source=score_summary, label="Mean cell type scores per cluster")
+        # Get validation scores
+        validation_cols = [col for col in adata.obs.columns if col.endswith("_validation_score")]
+        if validation_cols:
+            mean_scores = adata.obs.loc[cluster_mask, validation_cols].mean()
+            top_validation = mean_scores.idxmax().replace("_validation_score", "")
+            top_val_score = mean_scores.max()
+        else:
+            top_validation = "N/A"
+            top_val_score = 0
+
+        comparison_data.append({
+            "Cluster": cluster,
+            "Automated Prediction": predicted,
+            "Auto Confidence": auto_conf,
+            "Manual Validation": top_validation,
+            "Validation Score": top_val_score
+        })
+
+    comparison_df = pd.DataFrame(comparison_data)
+    w_table(source=comparison_df, label="Automated vs Manual Validation Comparison")
+
+    # Visualize with w_h5 to inspect both predictions
+    viewer = w_h5(ann_data=adata)
+else:
+    # All clusters have high confidence
+    print("All clusters have high-confidence automated annotations. Manual validation not needed.")
 ```
 
 ---
