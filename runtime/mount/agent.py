@@ -374,6 +374,7 @@ class AgentHarness:
                 code_preview = code[:500] + "..." if len(code) > 500 else code
                 print(f"[tool] create_cell -> {msg}")
                 return {
+                    "tool_name": "create_cell",
                     "summary": msg,
                     "code": code_preview,
                     "cell_id": cell_id,
@@ -385,6 +386,7 @@ class AgentHarness:
             return {
                 "summary": f"Failed to create cell: {result.get('error', 'Unknown error')}",
                 "cell_name": title,
+                "tool_name": "create_cell",
                 "message": action_summary,
                 "success": False,
             }
@@ -417,6 +419,7 @@ class AgentHarness:
 
                 print(f"[tool] create_markdown_cell -> {msg}")
                 return {
+                    "tool_name": "create_markdown_cell",
                     "summary": msg,
                     "code": code_preview,
                     "cell_id": cell_id,
@@ -426,6 +429,7 @@ class AgentHarness:
                     "success": True,
                 }
             return {
+                "tool_name": "create_markdown_cell",
                 "message": f"Failed to create cell: {result.get('error', 'Unknown error')}",
                 "success": False,
             }
@@ -451,6 +455,7 @@ class AgentHarness:
                 code_preview = new_code[:500] + "..." if len(new_code) > 500 else new_code
 
                 return {
+                    "tool_name": "edit_cell",
                     "summary": msg,
                     "code": code_preview,
                     "cell_id": cell_id,
@@ -459,6 +464,7 @@ class AgentHarness:
                     "success": True,
                 }
             return {
+                "tool_name": "edit_cell",
                 "summary": f"Failed to edit cell: {result.get('error', 'Unknown error')}",
                 "cell_id": cell_id,
                 "cell_name": title,
@@ -488,6 +494,7 @@ class AgentHarness:
                     msg = f"Cell {cell_id} deleted. No cells remain in notebook."
                 print(f"[tool] delete_cell -> {msg}")
                 return {
+                    "tool_name": "delete_cell",
                     "summary": msg,
                     "cell_id": cell_id,
                     "cell_name": title,
@@ -495,6 +502,7 @@ class AgentHarness:
                     "success": True,
                 }
             return {
+                "tool_name": "delete_cell",
                 "summary": f"Failed to delete cell: {result.get('error', 'Unknown error')}",
                 "cell_id": cell_id,
                 "cell_name": title,
@@ -516,6 +524,7 @@ class AgentHarness:
             self.executing_cells.add(cell_id)
 
             return {
+                "tool_name": "run_cell",
                 "summary": f"Cell {cell_id} execution started",
                 "cell_id": cell_id,
                 "cell_name": title,
@@ -533,12 +542,14 @@ class AgentHarness:
             if result.get("status") == "success":
                 self.executing_cells.discard(cell_id)
                 return {
+                    "tool_name": "stop_cell",
                     "summary": f"Stopped cell {cell_id}",
                     "cell_id": cell_id,
                     "cell_name": title,
                     "message": action_summary,
                 }
             return {
+                "tool_name": "stop_cell",
                 "summary": f"Failed to stop cell {cell_id}: {result.get('error', 'Unknown error')}",
                 "cell_id": cell_id,
                 "cell_name": title,
@@ -551,6 +562,7 @@ class AgentHarness:
             if context_result.get("status") != "success":
                 error_msg = context_result.get("error", "Unknown error")
                 return {
+                    "tool_name": "delete_all_cells",
                     "message": f"Failed to delete cells: {error_msg}",
                     "success": False,
                 }
@@ -566,6 +578,7 @@ class AgentHarness:
                         deleted_count += 1
 
             return {
+                "tool_name": "delete_all_cells",
                 "success": True,
                 "summary": f"Deleted {deleted_count} cells from the notebook",
                 "deleted_count": deleted_count,
@@ -616,6 +629,7 @@ class AgentHarness:
             label = args.get("label")
             if not key:
                 return {
+                    "tool_name": "set_widget",
                     "summary": "Failed to set widget: Widget key is required",
                     "success": False,
                 }
@@ -623,6 +637,7 @@ class AgentHarness:
             value = args.get("value")
             if value is None:
                 return {
+                    "tool_name": "set_widget",
                     "summary": "Failed to set widget: Widget value is required",
                     "success": False,
                 }
@@ -635,12 +650,14 @@ class AgentHarness:
 
             if result.get("status") == "success":
                 return {
+                    "tool_name": "set_widget",
                     "summary": f"Updated widget value for: {key}",
                     "key": key,
                     "label": label,
                     "action_summary": action_summary,
                 }
             return {
+                "tool_name": "set_widget",
                 "summary": f"Failed to update widget value: {result.get('error', 'Unknown error')}",
                 "key": key,
                 "label": label,
@@ -692,6 +709,7 @@ class AgentHarness:
                     self.pending_auto_continue = False
 
                 return {
+                    "tool_name": "submit_response",
                     "summary": "Response submitted successfully",
                     "success": True,
                 }
@@ -700,6 +718,7 @@ class AgentHarness:
                 import traceback
                 traceback.print_exc()
                 return {
+                    "tool_name": "submit_response",
                     "summary": f"Error submitting response: {e!s}",
                     "success": False,
                 }
