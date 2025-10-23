@@ -606,6 +606,17 @@ class AgentHarness:
                     print(f"[agent] Invalid next_status: {next_status}")
                     return "Please provide a valid next_status"
 
+                # Guardrail: if awaiting_user_response, require either summary or questions to be non-empty
+                if next_status == "awaiting_user_response":
+                    has_summary = isinstance(summary, str) and summary.strip() != ""
+                    has_questions = isinstance(questions, str) and questions.strip() != ""
+                    if not (has_summary or has_questions):
+                        return (
+                            "Submit response rejected: when next_status is 'awaiting_user_response', "
+                            "you must provide a brief user-facing message via 'summary' or a concrete prompt via 'questions'. "
+                            "Please retry with one of these populated and include a short assistant text block."
+                        )
+
                 should_continue = args.get("continue", False)
 
                 plan_items = args.get("plan", [])
@@ -960,6 +971,26 @@ class AgentHarness:
 
                         if tool_name == "submit_response":
                             called_submit_response = True
+
+                            # Auto-populate summary from assistant text if missing
+                            summary = tool_input.get("summary") if isinstance(tool_input, dict) else None
+                            questions = tool_input.get("questions") if isinstance(tool_input, dict) else None
+
+                            # If summary and questions are both empty/missing, try to extract from assistant text
+                            if not (summary and isinstance(summary, str) and summary.strip()):
+                                if not (questions and isinstance(questions, str) and questions.strip()):
+                                    # Extract first text block from response
+                                    for content_block in response.content:
+                                        if isinstance(content_block, dict) and content_block.get("type") == "text":
+                                            text_content = content_block.get("text", "")
+                                            if isinstance(text_content, str) and text_content.strip():
+                                                # Use first sentence or up to 500 chars as fallback summary
+                                                extracted = text_content.strip()[:500]
+                                                if len(text_content.strip()) > 500:
+                                                    extracted += "..."
+                                                tool_input["summary"] = extracted
+                                                print(f"[agent] Auto-populated summary from assistant text block")
+                                                break
 
                         print(f"[agent] Executing tool: {tool_name} (id={tool_id})")
 
