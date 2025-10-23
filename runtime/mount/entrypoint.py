@@ -409,6 +409,22 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
             elif msg["type"] in {"load_kernel_snapshot", "save_kernel_snapshot"}:
                 kernel_snapshot_state.status = msg["status"]
 
+            elif msg["type"] == "globals_summary" and "agent_tx_id" in msg:
+                tx_id = msg.get("agent_tx_id")
+
+                if a_proc.conn_a is not None:
+                    print(f"[entrypoint] Routing globals response to agent (tx_id={tx_id})")
+                    await a_proc.conn_a.send({
+                        "type": "agent_action_response",
+                        "tx_id": tx_id,
+                        "status": "success",
+                        "summary": msg.get("summary", {})
+                    })
+                else:
+                    print("[entrypoint] Could not route globals response: agent not connected")
+
+                continue
+
             await plots_ctx_manager.broadcast_message(orjson.dumps(msg).decode())
 
         except Exception:
@@ -420,7 +436,27 @@ async def handle_agent_messages(conn_a: SocketIo) -> None:
     print("[entrypoint] Starting agent message listener")
     while True:
         msg = await conn_a.recv()
-        print(f"[entrypoint] Agent > {msg.get('type', 'unknown')}")
+        msg_type = msg.get("type", "unknown")
+        print(f"[entrypoint] Agent > {msg_type}")
+
+        if msg_type == "agent_action" and msg.get("action") == "request_globals_summary":
+            if k_proc.conn_k is not None:
+                tx_id = msg.get("tx_id")
+                print(f"[entrypoint] Routing globals request to kernel (tx_id={tx_id})")
+
+                await k_proc.conn_k.send({
+                    "type": "globals_summary",
+                    "agent_tx_id": tx_id
+                })
+            else:
+                print("[entrypoint] Kernel not connected, cannot route globals request")
+                await conn_a.send({
+                    "type": "agent_action_response",
+                    "tx_id": msg.get("tx_id"),
+                    "status": "error",
+                    "error": "Kernel not connected"
+                })
+            continue
 
         if current_agent_ctx is None:
             print("[entrypoint] No websocket client connected, skipping message")

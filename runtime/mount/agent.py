@@ -10,12 +10,13 @@ import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
+from textwrap import dedent
 
 from agent_utils.auto_install import anthropic
 from anthropic.types import MessageParam, ToolParam
 from anthropic.types.beta.beta_message import BetaMessage
 from anthropic.types.message import Message
-from config_loader import build_full_instruction
+from config_loader import build_system_prompt
 from lplots import _inject
 from socketio_thread import SocketIoThread
 from utils import auth_token_sdk, gql_query, nucleus_url, pod_id
@@ -52,7 +53,6 @@ class AgentHarness:
     tools: list[ToolParam] = field(default_factory=list)
     tool_map: dict[str, Callable] = field(default_factory=dict)
     operation_counter: int = 0
-    instructions_context: str = ""
     current_request_id: str | None = None
     should_auto_continue: bool = False
     pending_auto_continue: bool = False
@@ -189,7 +189,10 @@ class AgentHarness:
 
         print("[agent] Cleared running state")
 
-    async def atomic_operation(self, action: str, params: dict) -> dict:
+    async def atomic_operation(self, action: str, params: dict | None = None) -> dict:
+        if params is None:
+            params: dict = {}
+
         self.operation_counter += 1
 
         if self.mode == Mode.planning and action in {"create_cell", "edit_cell", "run_cell", "delete_cell"}:
@@ -546,7 +549,7 @@ class AgentHarness:
             }
 
         async def delete_all_cells(args: dict) -> dict:
-            context_result = await self.atomic_operation("get_context", {})
+            context_result = await self.atomic_operation("get_context")
             if context_result.get("status") != "success":
                 error_msg = context_result.get("error", "Unknown error")
                 return {
@@ -570,46 +573,7 @@ class AgentHarness:
                 "deleted_count": deleted_count,
             }
 
-        async def get_notebook_context(args: dict) -> dict:
-            params = {}
-
-            result = await self.atomic_operation("get_context", params)
-            if result.get("status") != "success":
-                return {
-                    "summary": f"Failed to get context: {result.get('error', 'Unknown error')}",
-                    "success": False,
-                }
-
-            context = result.get("context", {})
-            cell_count = context.get("cell_count", 0)
-            cells = context.get("cells", [])
-
-            summary = f"Notebook has {cell_count} cell(s):\n"
-            for cell in cells:
-                index = cell.get("index", "?")
-                cell_id = cell.get("cell_id", "?")
-                cell_type = cell.get("cell_type", "unknown")
-                status = cell.get("status", "idle")
-                source = cell.get("source", "")
-                tf_id = cell.get("tf_id", "?")
-
-                source_preview = source[:500] + "..." if len(source) > 500 else source
-                source_preview = source_preview.replace("\n", " ")
-
-                summary += f"\n[{index}] ({cell_type}, {status}, cell_id: {cell_id}, tf_id: {tf_id})"
-                if source_preview:
-                    summary += f": {source_preview}"
-
-                widget_summary = self._format_widget_summaries(cell.get("widgets") or [])
-                if widget_summary:
-                    summary += f"\n  Widgets: {widget_summary}"
-
-            return {
-                "summary": summary,
-                "success": True,
-            }
-
-        async def set_widget(args: dict) -> dict:
+        async def set_widget(args: dict) -> str:
             key = args.get("key")
             action_summary = args.get("action_summary")
             label = args.get("label")
@@ -809,16 +773,6 @@ class AgentHarness:
         self.tool_map["delete_all_cells"] = delete_all_cells
 
         self.tools.append({
-            "name": "get_notebook_context",
-            "description": "Get the current state of the notebook including all cells and their content.",
-            "input_schema": {
-                "type": "object",
-                "properties": {},
-            },
-        })
-        self.tool_map["get_notebook_context"] = get_notebook_context
-
-        self.tools.append({
             "name": "submit_response",
             "description": "Submit the final response with plan, plan_diff, next_status, questions, and an optional summary. Call this at the end of every turn.",
             "input_schema": {
@@ -861,6 +815,57 @@ class AgentHarness:
                 })
         self.tool_map["set_widget"] = set_widget
 
+    async def _get_notebook_context(self) -> str:
+        context_result, globals_result = await asyncio.gather(
+            self.atomic_operation("get_context"),
+            self.atomic_operation("request_globals_summary")
+        )
+
+        if context_result.get("status") != "success":
+            return f"Failed to get context: {context_result.get('error', 'Unknown error')}"
+
+        context = context_result.get("context", {})
+        cell_count = context.get("cell_count", 0)
+        cells = context.get("cells", [])
+
+        globals_data: dict[str, object] | None = None
+        if globals_result.get("status") == "success":
+            globals_data = globals_result.get("summary", {})
+
+        summary = f"Notebook has {cell_count} cell(s):\n"
+        for cell in cells:
+            index = cell.get("index", "?")
+            cell_id = cell.get("cell_id", "?")
+            cell_type = cell.get("cell_type", "unknown")
+            status = cell.get("status", "idle")
+            source = cell.get("source", "")
+            tf_id = cell.get("tf_id", "?")
+
+            source_preview = source[:500] + "..." if len(source) > 500 else source
+            source_preview = source_preview.replace("\n", " ")
+
+            summary += f"\n[{index}] ({cell_type}, {status}, cell_id: {cell_id}, tf_id: {tf_id})"
+            if source_preview:
+                summary += f": {source_preview}"
+
+            widget_summary = self._format_widget_summaries(cell.get("widgets") or [])
+            if widget_summary:
+                summary += f"\n  Widgets: {widget_summary}"
+
+        if globals_data is not None:
+            summary += f"\n\nGlobal variables ({len(globals_data)} total):\n"
+            for var_name, var_info in sorted(globals_data.items()):
+                if isinstance(var_info, dict):
+                    var_type = var_info.get("type", "unknown")
+                    summary += f"  {var_name}: {var_type}\n"
+                    for key, value in var_info.items():
+                        if key != "type":
+                            summary += f"    {key}: {value}\n"
+                else:
+                    summary += f"  {var_name}: {var_info}\n"
+
+        return summary
+
     async def run_agent_loop(self) -> None:
         assert self.client is not None, "Client not initialized"
 
@@ -881,6 +886,17 @@ class AgentHarness:
             model, thinking_budget = self.mode_config.get(self.mode, ("claude-sonnet-4-5-20250929", 1024))
 
             print(f"[agent] Turn {turn}, mode={self.mode}, thinking_budget={thinking_budget}")
+
+            notebook_context = await self._get_notebook_context()
+
+            system_prompt_with_context = dedent(
+                f"""
+                {self.system_prompt}
+                <notebook_context>
+                {notebook_context}
+                </notebook_context>
+                """
+            )
 
             if thinking_budget is not None:
                 max_tokens = thinking_budget + 4096
@@ -906,7 +922,7 @@ class AgentHarness:
             kwargs = {
                 "model": model,
                 "max_tokens": max_tokens,
-                "system": self.system_prompt,
+                "system": system_prompt_with_context,
                 "messages": api_messages,
                 "tools": self.tools,
             }
@@ -1055,8 +1071,6 @@ class AgentHarness:
             self.should_auto_continue = False
             self.pending_auto_continue = False
 
-            context = msg.get("context", "")
-            self.instructions_context = context
             session_id = msg.get("session_id")
             if session_id is None:
                 raise RuntimeError(f"[handle init] Session ID is not set. Message: {msg}")
@@ -1071,7 +1085,7 @@ class AgentHarness:
                 default_headers={"Authorization": auth_token_sdk, "Pod-Id": str(pod_id)}
             )
 
-            self.system_prompt = build_full_instruction(self.instructions_context)
+            self.system_prompt = build_system_prompt()
 
             messages = await self._build_messages_from_db()
             tool_use_ids = set()
@@ -1156,7 +1170,7 @@ class AgentHarness:
                     print(f"[agent] Reconnected while {next_status}, prompting LLM to check state and retry")
                     await self.pending_messages.put({
                         "type": "user_query",
-                        "content": "The session was reconnected. You were waiting for an action to complete, but it may have finished or failed while offline. Please use get_notebook_context to check the current state, then retry any incomplete actions or continue with your plan.",
+                        "content": "The session was reconnected. You were waiting for an action to complete, but it may have finished or failed while offline. Please retry any incomplete actions or continue with your plan.",
                         "request_id": None,
                         "hidden": True,
                     })

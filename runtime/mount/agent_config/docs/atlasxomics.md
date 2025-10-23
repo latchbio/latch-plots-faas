@@ -2,31 +2,39 @@
 
 This is the **authoritative step-by-step pipeline** for AtlasxOmics experiment. Follow steps in order. 
 
-1. **Data Loading** - load data using **Scanpy** and display it with `w_h5`.
-2. **Experiment Setup** - Ask users to confirm if they want to perform analysis on **gene activity score AnnData** (recommended) or **motif enrichment scores AnnData**. 
-3. **Clustering (workflow only)** - Confirm if clustering applies to all cells or a subset (subset = a single sample, condition, or lasso-selected region). Then launch the AtlasXOmics clustering workflow using `w_workflow(wf_name="wf.__init__.opt_workflow", ...)`. Fallback to `scanpy` only if this fails.
+1. **Experiment Setup** - If not clear from original request, ask users to confirm if they want to perform analysis on **gene activity score AnnData** (recommended) or **motif enrichment scores AnnData**. 
+2. **Data Loading** - load data using **Scanpy** and display it with `w_h5`.
+3. **Clustering (workflow only)** - Launch the AtlasXOmics clustering workflow using `w_workflow(wf_name="wf.__init__.opt_workflow", ...)`. Fallback to `scanpy` only if this fails.
 4. **Differential Gene Activity or Motif Enrichment Comparison** - Use `w_workflow(wf_name="wf.__init__.compare_workflow", ...)`
 5.  **Cell Type Annotation** - assign biological meaning to clusters using gene sets. 
 
 The section below defines detailed guidelines for each of the above steps.
 
 ### **Workflow Rules**
-When the step requires launching a workflow:
-- **Always render a form** with `lplots.widgets`  for all workflow inputs. **Do not** ask users questions in text. Pre-populate each widget with sensible `default` whenever possible.
-- **Do not** hardcode values the in the dictionary.
-- **Never** pass local paths to workflow params. Always upload to Latch Data and parse in the correct `latch://` paths.
-- **Always use the exact `version` provided in workflow code example.**  
-- **Always include `w.value` at the end**
+
+<workflow_rules>
+**HARD RULES — DO NOT VIOLATE:**
+1. **Forms only**. Collect every workflow input via `lplots.widgets`. Do not ask questions in prose.
+2. **No hardcoded params**. Every workflow param must come from a widget value or a derived default shown in a widget.
+3. **Workflow input paths are remote**. Never pass local paths; upload then use `latch://` in `LatchFile`/`LatchDir`.
+4. **Exact workflow version**. Use the exact string provided in examples; do not change or omit it.
+5. Must end with `execution = w.value` so a button is displayed to run the workflow.
+</workflow_rules>
 
 ### **Data Loading**: 
-- Identify the correct node ID for either `combined_sm_ge.h5ad` (gene activity scores) or `combined_sm_motifs.h5ad` (motif enrichment), and load the file using `LPath("latch://<node_id>.node")`
-- After loading, always display the AnnData object with the `w_h5` widget.
+- Locate the appropriate Latch path for either:
+  - `combined_sm_ge.h5ad` — gene activity scores
+  - `combined_sm_motifs.h5ad` — motif enrichment results
+- Use `LPath` to load the file. **Always** prefer **full, human-readable latch:// paths** (not node IDs).
+- Once loaded, visualize the AnnData object using the w_h5 widget for inspection.
 
 ### **Clustering (workflow only)**: 
 - Use `w_workflow` to launch the AtlasXOmics clustering workflow.
-- If the user want to cluster only a subset of the AnnData, include the optional parameter `adata_subset` (as a LatchFile) in params. Otherwise, omit it entirely.
+- If the user want to cluster only a subset of the AnnData, include the optional parameter `adata_subsetted_file` (as a LatchFile) in params. Otherwise, omit it entirely.
 
 ### Clustering Workflow Parameters
+
+- Strictly follow <workflow_rules>.
 
 #### **Required**
 - `project_name` *(str)*  
@@ -83,9 +91,10 @@ Instruct users to click this button to start the workflow.
 
 ```python
 from dataclasses import dataclass
-from enum import Enum
 from latch.types import LatchFile, LatchDir
-from lplots.widgets.workflow import w_workflow
+from latch.ldata.path import LPath
+from lplots.widgets.ldata import w_ldata_picker
+from lplots.widgets.text import w_text_output, w_text_input
 
 class Genome(Enum):
     mm10 = "mm10"
@@ -96,25 +105,65 @@ class Genome(Enum):
 class Run:
     run_id: str
     fragments_file: LatchFile
+    spatial_dir: LatchDir
     condition: str = "None"
-    spatial_dir: LatchDir = LatchDir(
-        "latch:///spatials/demo/spatial/"
+
+# 1) Expose widget for user to pick the top-level remote folder (returns LPath)
+raw_data_dir = w_ldata_picker(label="Raw Data Directory")
+if raw_data_dir.value is None:
+    w_text_output(
+        content="Select the top-level folder containing sample subfolders.",appearance={"message_box": "warning"}
+    )
+    exit(0)
+
+root: LPath = raw_data_dir.value  # already an LPath — use directly
+
+# 2) Samples + condition map
+samples = adata.obs["sample"].unique()
+cond_map = (adata.obs.groupby("sample")["condition"].first().to_dict()
+            if "condition" in adata.obs.columns
+            else {s: "None" for s in samples})
+
+# 3) Helper to join remote paths (LPath uses "/" join)
+def rpath(*parts: str) -> LPath:
+    p = root
+    for part in parts:
+        p = p / part
+    return p  # still LPath
+
+# 4) Build runs (convert to LatchFile/Dir via .path, not str())
+runs = []
+for s in samples:
+    print(s)
+    frag_lp: LPath = rpath(str(s), "chromap_output", "fragments.tsv.gz")
+    spat_lp: LPath = rpath(str(s), "spatial")
+
+    runs.append(
+        Run(
+            run_id=str(s),
+            fragments_file=LatchFile(frag_lp.path),  # latch://...
+            spatial_dir=LatchDir(spat_lp.path),      # latch://...
+            condition=cond_map[str(s)],
+        )
     )
 
-r = Run(
-  run_id = "D02297_NG07294", 
-  fragments_file = LatchFile("latch://38438.account/Kosta/Raw_Data/D02297_NG07294/chromap_output/fragments.tsv.gz"),
-  condition = "None",
-  spatial_dir = LatchDir("latch://38438.account/Kosta/Raw_Data/D02297_NG07294/spatial")
-)
+# 5) Construct params with minimal form for user to input project name, genome, resolution
+
+project_name = w_text_input(label="Project name", default="atlasx_clustering")
+genome = w_select(label="Genome", options=[g.value for g in Genome], default="hg38")
+resolution = w_text_input(label="Resolution(s)", default="0.5")
+
+def to_list_of_floats(text: str):
+    return [float(x.strip()) for x in text.split(",") if x.strip()]
+
 params = {
-     "runs": [r], # Infer the number of runs in list based on the number of samples in adata.obs["sample"]
-     "adata_subsetted_file": LatchFile("latch://38438.account/Kosta/cell_subset/adata_hsc_subset.h5ad"),
-     "genome": Genome.hg38,
-     "project_name": "test_w_workflow",
+     "runs": runs, 
+     "adata_subsetted_file": LatchFile("latch:///adata_subset.h5ad"),
+     "genome": genome.value,
+     "project_name": project_name.value,
      "tile_size": 5000,
      "n_features": [25000],
-     "resolution": [1.0],
+     "resolution": to_list_of_floats(resolution.value),
      "varfeat_iters": [1],
      "n_comps": [30],
      "min_cluster_size": 20,
@@ -133,10 +182,6 @@ w = w_workflow(
 
 execution = w.value
 ```
-
-### **Lasso Selection Tasks or AnnData Subset Selection Tasks**
-- Use when users want to perform clustering on specific spatial regions they've selected
-- Reference Latch Plots documentation to retrieve lasso selected values and perform targeted clustering
 
 #### Example Implementation
 ```python
@@ -157,6 +202,7 @@ if value['lasso_points']:
 - Use `w_workflow` to launch the AtlasXOmics comparison workflow.  
 - Automatically infer the correct grouping column from `adata.obs` (`condition`, `sample`, or `cluster`).  
 - Programmatically generate and upload a `compare_config.json` file as a `LatchFile` for workflow input.
+- Strictly follow <workflow_rules>.
 
 ### Comparison Workflow Parameters
 
@@ -174,6 +220,7 @@ if value['lasso_points']:
 
 - `genome` *(Enum)*  
   Either `"hg38"` or `"mm10"`.
+
 
 #### Example Implementation
 
@@ -243,11 +290,12 @@ groupings_file = LatchFile(remote_path)
 ### **Cell Type Annotation**
 
 - If the dataset context is unclear, first ask the user to confirm the **organism** and **tissue type**. **Do NOT proceed** until the user has answered the question. 
-- **Always render a form with sensible defaults** to avoid tedious manual input:
+- **Always render a form with sensible defaults** to avoid tedious manual input. The form should support **multiple candidate cell types**, e.g. one row per cell type:
   - `cell_type`: **text input**, pre-filled with a common or inferred cell type.
   - `marker_genes`: **multiselect widget**, pre-populated with default marker genes for that cell type.
 - You **must auto-populate all fields with reasonable defaults using domain knowledge**. Users should only adjust values if needed, not enter them from scratch.
-- For **spatial ATAC-seq**, infer cell identity by computing **gene activity or gene set scores** (e.g., `scanpy.tl.score_genes`) and ranking cell types based on marker enrichment.
+- Add a **button** after the form to trigger gene set scoring. 
+- For **spatial ATAC-seq** only, infer cell identity by computing **gene activity or gene set scores** (e.g., `scanpy.tl.score_genes`) and ranking cell types based on marker enrichment.
 
 ## Data Assumptions
 
@@ -294,7 +342,8 @@ root/
 - `combined_sm_ge.h5ad`: Stores gene activity score for every spot
 - `combined_sm_motifs.h5ad`: Stores motif enrichment score for every spot
 - Both files follow the standard AnnData structure with `obs`, `uns`, `obsm`, and `obsp` components as detailed below. 
-- Folder ending with `_ArchRProject`: An `ArchR` project 
+- Folder ending with `_ArchRProject`: An `ArchR` project
+- Folder ending with `_coverages`: Contains `.bw` files which can be visualized in the IGV browser.
 
 **Standard Fields inside an AnnData Object**
 Example structure of `combined_sm_ge.h5ad`
