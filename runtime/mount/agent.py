@@ -905,6 +905,18 @@ class AgentHarness:
                             }
                             print(f"[agent] Stripped thinking from last assistant message (index {last_assistant_idx})")
 
+            # Debug: log what we're sending to verify thinking is stripped
+            if not can_use_thinking:
+                print(f"[agent] Sending {len(api_messages)} messages to API with thinking DISABLED")
+                for i, msg in enumerate(api_messages):
+                    role = msg.get("role")
+                    content = msg.get("content")
+                    if isinstance(content, list):
+                        block_types = [b.get("type") if isinstance(b, dict) else "?" for b in content]
+                        print(f"[agent]   Message {i} ({role}): {block_types}")
+                    else:
+                        print(f"[agent]   Message {i} ({role}): string")
+
             kwargs = {
                 "model": model,
                 "max_tokens": max_tokens,
