@@ -111,116 +111,112 @@ class AgentHarness:
 
         print(f"[agent] Built {len(anthropic_messages)} messages from DB")
 
-        # [WIP]: Compact messages to reduce token usage while preserving intent and errors
-        # TODO: this is broken as it loses continuity and the agent gets stuck in a loop attempting to do the first task 
-        # repeatedly
-        return anthropic_messages
+        # Compact messages to reduce token usage while preserving intent and errors
+        return self._compact_messages(anthropic_messages)
 
     # TODO: Should we remove intermediate thinking traces?
     # Seems like we need to keep the last thinking message to enable thinking
     # on future turns
     def _compact_messages(self, messages: list[MessageParam]) -> list[MessageParam]:
         try:
-            # Find the last assistant message index that contains a submit_response tool_use
-            last_submit_idx: int | None = None
+            total = len(messages)
+            if total == 0:
+                return messages
+
+            # Identify indices of assistant messages
+            assistant_indices: list[int] = [i for i, m in enumerate(messages) if m.get("role") == "assistant"]
+            if len(assistant_indices) < 2:
+                # Not enough history to compact safely
+                return messages
+
+            # Keep the last two assistant turns unmodified (and everything after the second-to-last assistant)
+            keep_from_idx = assistant_indices[-2]
+
+            # Collect submit_response tool_use IDs from the older region we will compact
             kept_submit_tool_use_ids: set[str] = set()
-            for i in range(len(messages) - 1, -1, -1):
+            for i in range(0, keep_from_idx):
                 msg = messages[i]
                 if msg.get("role") == "assistant":
                     content = msg.get("content")
                     if isinstance(content, list):
                         for block in content:
-                            if isinstance(block, dict) and block.get("type") == "tool_use" and block.get("name") == "submit_response":
-                                last_submit_idx = i
+                            if isinstance(block, dict) \
+                               and block.get("type") == "tool_use" \
+                               and block.get("name") == "submit_response":
                                 tool_id = block.get("id")
                                 if isinstance(tool_id, str):
                                     kept_submit_tool_use_ids.add(tool_id)
-                                break
-                    if last_submit_idx is not None:
-                        break
 
             compacted: list[MessageParam] = []
 
             for idx, msg in enumerate(messages):
+                # Keep the tail region (last 2 full turns) unmodified
+                if idx >= keep_from_idx:
+                    compacted.append(msg)
+                    continue
+
                 role = msg.get("role")
                 content = msg.get("content")
 
-                # Handle user messages
-                if role == "user":
-                    if isinstance(content, str):
-                        text = content.strip()
-                        # Drop success cell-result lines, keep failures
-                        if text.startswith("\u2713 Cell"):
-                            continue
-                        # Keep all other user strings (queries, failure messages, etc.)
-                        compacted.append(msg)
-                        continue
-
-                    if isinstance(content, list):
-                        new_blocks = []
-                        for block in content:
-                            if not isinstance(block, dict):
-                                new_blocks.append(block)
-                                continue
-
-                            if block.get("type") == "tool_result":
-                                # Keep only errored tool results; content is JSON string with {summary, error}
-                                # Also keep tool_results that correspond to the kept final submit_response tool_use
-                                try:
-                                    tool_use_id = block.get("tool_use_id")
-                                    if isinstance(tool_use_id, str) and tool_use_id in kept_submit_tool_use_ids:
-                                        new_blocks.append(block)
-                                        continue
-
-                                    payload_raw = block.get("content")
-                                    payload = json.loads(payload_raw) if isinstance(payload_raw, str) else payload_raw
-                                    if isinstance(payload, dict) and payload.get("error"):
-                                        new_blocks.append(block)
-                                except Exception:
-                                    # If unparsable, be conservative and drop successful-looking results
-                                    pass
-                            else:
-                                # Non tool_result blocks: keep
-                                new_blocks.append(block)
-
-                        if len(new_blocks) > 0:
-                            compacted.append({"role": role, "content": new_blocks})
-                        # else drop empty message
-                        continue
-
-                # Handle assistant messages
                 if role == "assistant":
                     if isinstance(content, list):
                         new_blocks = []
                         for block in content:
                             if not isinstance(block, dict):
-                                new_blocks.append(block)
                                 continue
-
                             block_type = block.get("type")
-                            if block_type == "tool_use":
-                                name = block.get("name")
-                                # Keep only submit_response tool_use blocks from the last such assistant message
-                                if name == "submit_response" and (last_submit_idx is None or idx == last_submit_idx):
-                                    new_blocks.append(block)
-                                # else drop
-                            elif block_type in {"thinking", "redacted_thinking"}:
-                                # Keep thinking blocks for API compatibility (needed for subsequent thinking calls)
+                            if block_type == "tool_use" and block.get("name") == "submit_response":
                                 new_blocks.append(block)
-                            # else drop text blocks and other content (not shown to user, summary is the only display)
-
+                            elif block_type in {"thinking", "redacted_thinking"}:
+                                # Keep thinking traces for continuity/compatibility
+                                new_blocks.append(block)
+                            # Drop assistant text and other tool_use blocks in compacted region
                         if len(new_blocks) > 0:
                             compacted.append({"role": role, "content": new_blocks})
                         # else drop empty assistant message
                         continue
-
-                    # Assistant string content: drop (not shown to user)
+                    # Drop assistant string content in compacted region
                     continue
 
-                # Other roles (if any): keep unchanged
+                if role == "user":
+                    if isinstance(content, list):
+                        new_blocks = []
+                        for block in content:
+                            if not isinstance(block, dict):
+                                # Keep unknown non-dict blocks conservatively
+                                new_blocks.append(block)
+                                continue
+                            if block.get("type") == "tool_result":
+                                # Keep tool_results that correspond to kept submit_response tool_use IDs
+                                tool_use_id = block.get("tool_use_id")
+                                if isinstance(tool_use_id, str) and tool_use_id in kept_submit_tool_use_ids:
+                                    new_blocks.append(block)
+                                    continue
+                                # Keep errored tool results
+                                try:
+                                    payload_raw = block.get("content")
+                                    payload = json.loads(payload_raw) if isinstance(payload_raw, str) else payload_raw
+                                    if isinstance(payload, dict) and payload.get("error"):
+                                        new_blocks.append(block)
+                                except Exception:
+                                    # If unparsable, keep conservatively
+                                    new_blocks.append(block)
+                            else:
+                                # Keep any other user blocks as-is
+                                new_blocks.append(block)
+                        if len(new_blocks) > 0:
+                            compacted.append({"role": role, "content": new_blocks})
+                        # else drop
+                        continue
+
+                    # Keep user string messages (queries, cell text, etc.)
+                    compacted.append(msg)
+                    continue
+
+                # Other roles: keep unchanged
                 compacted.append(msg)
 
-            print(f"[agent] Original messages: {len(messages)}")
+            print(f"[agent] Original messages: {total}")
             print(f"[agent] Compact messages: {len(compacted)}")
             return compacted
         except Exception as e:
