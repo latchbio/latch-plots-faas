@@ -11,14 +11,12 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
 from textwrap import dedent
-import scanpy
 
 from agent_utils.auto_install import anthropic
 from anthropic.types import MessageParam, ToolParam
 from anthropic.types.beta.beta_message import BetaMessage
 from anthropic.types.message import Message
 from config_loader import build_system_prompt
-from latch.ldata.path import LPath
 from lplots import _inject
 from socketio_thread import SocketIoThread
 from utils import auth_token_sdk, gql_query, nucleus_url, pod_id
