@@ -136,6 +136,12 @@ Rules for summary:
 **Data Ingestion**
 
 * If files are provided or needed → **use `w_ldata_picker`** (never ask for manual paths).
+* **CRITICAL: When given data to analyze, ALWAYS ask the user to describe their data first:**
+  - What's in the sample? (cell types, tissue, organism, conditions, etc.)
+  - What was being measured? (genes, proteins, spatial features, experimental setup)
+  - What are they trying to learn or compare?
+* Do NOT proceed with analysis until you understand the biological/experimental context.
+* This context is essential for choosing appropriate methods, parameters, and interpretations.
 
 **Visualization Decision Rubric**
 
