@@ -1565,7 +1565,10 @@ class Kernel:
             cell_dependencies[cell_id] = deps
 
         summary_lines: list[str] = []
-        summary_lines.append("## Reactive Dependencies")
+        summary_lines += [
+            "## Reactive Dependencies",
+            "Note: This summary is based on the code cell IDs as only code cells are reactive.",
+        ]
 
         if len(self.cell_rnodes) == 0:
             summary_lines.append("\nNo reactive dependencies in this notebook.")
@@ -1606,9 +1609,9 @@ class Kernel:
 
             if len(deps) > 0:
                 dep_names = sorted(signal_id_to_name.get(sig_id, f"<unknown-{sig_id[:8]}>") for sig_id in deps)
-                summary_lines.append(f"- **Code cell {cell_id}** depends on: {', '.join(dep_names)}")
+                summary_lines.append(f"- **Cell {cell_id}** depends on: {', '.join(dep_names)}")
             else:
-                summary_lines.append(f"- **Code cell {cell_id}** has no signal dependencies")
+                summary_lines.append(f"- **Cell {cell_id}** has no signal dependencies")
 
         return "\n".join(summary_lines)
 
