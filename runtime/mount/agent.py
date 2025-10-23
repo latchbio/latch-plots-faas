@@ -111,8 +111,10 @@ class AgentHarness:
 
         print(f"[agent] Built {len(anthropic_messages)} messages from DB")
 
-        # Compact messages to reduce token usage while preserving intent and errors
-        return self._compact_messages(anthropic_messages)
+        # [WIP]: Compact messages to reduce token usage while preserving intent and errors
+        # TODO: this is broken as it loses continuity and the agent gets stuck in a loop attempting to do the first task 
+        # repeatedly
+        return anthropic_messages
 
     # TODO: Should we remove intermediate thinking traces?
     # Seems like we need to keep the last thinking message to enable thinking
@@ -218,8 +220,8 @@ class AgentHarness:
                 # Other roles (if any): keep unchanged
                 compacted.append(msg)
 
-            print(f"[agent] Original messages: {messages}")
-            print(f"[agent] Compact messages: {compacted}")
+            print(f"[agent] Original messages: {len(messages)}")
+            print(f"[agent] Compact messages: {len(compacted)}")
             return compacted
         except Exception as e:
             print(f"[agent] _compact_messages error: {e}")
