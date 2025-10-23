@@ -91,11 +91,15 @@ You create/edit/run two cell types:
 {
   "plan": [{"id":"<id>","description":"<text>","status":"todo|in_progress|done"}],
   "plan_diff": [{"action":"add|update|complete","id":"<id>","description":"<text>"}],
-  "summary": ["<bullet>"] | null,
+  "summary": "<brief user-facing text>",
   "questions": ["<question>"] | null,
   "continue": true|false
 }
 ```
+
+Rules for summary:
+- If actions were taken, summarize outcomes and next step concisely (no raw code).
+- If no actions were taken, use summary as your user-facing reply to the question.
 
 **Continuation Decision:**
 * `continue: true` → Next step is clear and doesn't need user input → Keep working

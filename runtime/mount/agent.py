@@ -604,17 +604,15 @@ class AgentHarness:
                 next_status = args.get("next_status")
                 if not isinstance(next_status, str) or next_status not in {"executing", "fixing", "thinking", "awaiting_user_response", "awaiting_cell_execution", "awaiting_user_widget_input", "done"}:
                     print(f"[agent] Invalid next_status: {next_status}")
-                    return "Please provide a valid next_status"
+                    raise ValueError("Please provide a valid next_status")
 
                 # Guardrail: if awaiting_user_response, require either summary or questions to be non-empty
                 if next_status == "awaiting_user_response":
                     has_summary = isinstance(summary, str) and summary.strip() != ""
                     has_questions = isinstance(questions, str) and questions.strip() != ""
                     if not (has_summary or has_questions):
-                        return (
-                            "Submit response rejected: when next_status is 'awaiting_user_response', "
-                            "you must provide a brief user-facing message via 'summary' or a concrete prompt via 'questions'. "
-                            "Please retry with one of these populated and include a short assistant text block."
+                        raise ValueError(
+                            "When next_status is 'awaiting_user_response', provide user-facing 'summary' or concrete 'questions'."
                         )
 
                 should_continue = args.get("continue", False)
@@ -647,7 +645,7 @@ class AgentHarness:
                 print(f"[tool] submit_response error: {e}")
                 import traceback
                 traceback.print_exc()
-                return f"Error submitting response: {e!s}"
+                raise
 
         self.tools.append({
             "name": "create_cell",
@@ -749,7 +747,7 @@ class AgentHarness:
                 "properties": {
                     "plan": {"type": "array", "description": "List of plan items"},
                     "plan_diff": {"type": "array", "description": "List of plan diff items"},
-                    "summary": {"type": "string", "description": "Optional summary text describing what was accomplished. Use markdown formatting with bullet points if needed. Omit if no summary needed."},
+                    "summary": {"type": "string", "description": "Brief user-facing text. If actions were taken, summarize outcomes; if no actions were taken, provide a concise reply to the user's query. Use markdown bullets when appropriate."},
                     "questions": {"type": "string", "description": "Optional question text for the user. Omit if no questions needed."},
                     "next_status": {"type": "string", "description": "What the agent will do next", "enum": ["executing", "fixing", "thinking", "awaiting_user_response", "awaiting_cell_execution", "awaiting_user_widget_input", "done"]},
                     "continue": {
@@ -957,6 +955,7 @@ class AgentHarness:
             elif response.stop_reason == "tool_use":
                 tool_results = []
                 called_submit_response = False
+                submit_response_failed = False
 
                 for block in response.content:
                     if isinstance(block, dict):
@@ -969,28 +968,6 @@ class AgentHarness:
                         tool_name = block.get("name") if isinstance(block, dict) else block.name
                         tool_input = block.get("input") if isinstance(block, dict) else block.input
                         print("[agent] TOOL INPUT:", tool_input)
-                        if tool_name == "submit_response":
-                            called_submit_response = True
-
-                            # Auto-populate summary from assistant text if missing
-                            summary = tool_input.get("summary") if isinstance(tool_input, dict) else None
-                            questions = tool_input.get("questions") if isinstance(tool_input, dict) else None
-
-                            # If summary and questions are both empty/missing, try to extract from assistant text
-                            if not (summary and isinstance(summary, str) and summary.strip()):
-                                if not (questions and isinstance(questions, str) and questions.strip()):
-                                    # Extract first text block from response
-                                    for content_block in response.content:
-                                        if isinstance(content_block, dict) and content_block.get("type") == "text":
-                                            text_content = content_block.get("text", "")
-                                            if isinstance(text_content, str) and text_content.strip():
-                                                # Use first sentence or up to 500 chars as fallback summary
-                                                extracted = text_content.strip()[:500]
-                                                if len(text_content.strip()) > 500:
-                                                    extracted += "..."
-                                                tool_input["summary"] = extracted
-                                                print(f"[agent] Auto-populated summary from assistant text block")
-                                                break
 
                         print(f"[agent] Executing tool: {tool_name} (id={tool_id})")
 
@@ -1007,6 +984,8 @@ class AgentHarness:
                                     }),
                                 })
                             except Exception as e:
+                                if tool_name == "submit_response":
+                                    submit_response_failed = True
                                 print(f"[agent] Tool error: {tool_name}: {e}")
                                 tool_results.append({
                                     "type": "tool_result",
@@ -1039,7 +1018,7 @@ class AgentHarness:
                 else:
                     print("[agent] No tool results")
 
-                if called_submit_response:
+                if called_submit_response and not submit_response_failed:
                     print("[agent] submit_response called, completing turn")
                     await self._complete_turn()
                 else:
