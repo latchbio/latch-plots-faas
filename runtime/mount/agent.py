@@ -694,8 +694,10 @@ class AgentHarness:
             cell_id = cell.get("cell_id", "?")
             cell_type = cell.get("cell_type", "unknown")
             source = cell.get("source", "")
+            status = cell.get("status", "idle")
+            tf_id = cell.get("tf_id", "?")
 
-            cell_section.extend((f"\n### Cell [{index}] (ID: {cell_id})", f"Type: {cell_type}"))
+            cell_section.extend((f"\n### Cell [{index}] (ID: {cell_id}, TF ID: {tf_id})", f"Type: {cell_type}", f"Status: {status}"))
 
             if source is not None:
                 source_display = source[:800] if len(source) > 800 else source
