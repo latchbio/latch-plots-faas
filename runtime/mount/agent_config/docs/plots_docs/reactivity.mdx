@@ -2,17 +2,18 @@
 
 **Core primitives**
 
-* **Signal**: reactive value holder.
-* **Computation node**: implicit wrapper around each cell; *subscribes* to any signals it reads.
+- **Signal**: reactive value holder.
+- **Computation node**: implicit wrapper around each cell; _subscribes_ to any signals it reads.
 
 **How reactivity flows**
 
 1. Widgets/signals hold values.
-2. A cell runs → if it *reads* a signal, that cell subscribes.
+2. A cell runs → if it _reads_ a signal, that cell subscribes.
 3. When a signal’s value changes, all current subscribers re-run.
 
 **Core Rules**
-1. **NEVER** update _and_ call a Signal within the same cell, as that will cause an infinite loop. 
+
+1. **NEVER** update _and_ call a Signal within the same cell, as that will cause an infinite loop.
 
 ---
 
@@ -68,20 +69,20 @@ if x < 50:
 
 ## Transactions: update timing
 
-* **Delayed application**: All `Signal(...)` updates inside a running cell are queued and applied *after the cell finishes*.
-* Multiple cells re-running due to one change are grouped into **sequential transactions**—intermediate inconsistent states are not observable.
+- **Delayed application**: All `Signal(...)` updates inside a running cell are queued and applied _after the cell finishes_.
+- Multiple cells re-running due to one change are grouped into **sequential transactions**—intermediate inconsistent states are not observable.
 
 Practical takeaways:
 
-* Use `sample()` inside the updating cell if you need the *previous* value during the same run.
-* Cross-signal invariants (e.g., `str(value) == value_str`) stay consistent across reactive re-runs.
+- Use `sample()` inside the updating cell if you need the _previous_ value during the same run.
+- Cross-signal invariants (e.g., `str(value) == value_str`) stay consistent across reactive re-runs.
 
 ---
 
 ## Subscriptions & Conditionals
 
-* A cell’s subscription set is **rebuilt on every run**—it only subscribes to signals it actually *read* last time.
-* Conditional access changes who you’re subscribed to:
+- A cell’s subscription set is **rebuilt on every run**—it only subscribes to signals it actually _read_ last time.
+- Conditional access changes who you’re subscribed to:
 
 ```python
 if value() > 30:        # subscribes to `value`
@@ -98,15 +99,15 @@ value_str()  # unconditional subscribe
 
 ## Redefining Signals (globals vs locals)
 
-* **Global variable rule**: Reassigning a global signal **updates its value** and **keeps subscribers** (equivalent to `value(new)`).
-* To drop subscribers and recreate:
+- **Global variable rule**: Reassigning a global signal **updates its value** and **keeps subscribers** (equivalent to `value(new)`).
+- To drop subscribers and recreate:
 
 ```python
 del value
 value = Signal(0)  # fresh signal, no subscribers
 ```
 
-* **Locals** behave like normal Python—no special preservation. Guard creation if needed:
+- **Locals** behave like normal Python—no special preservation. Guard creation if needed:
 
 ```python
 if "value" not in locals():
@@ -132,9 +133,11 @@ if "value" not in locals():
 ## Advanced Patterns & Pitfalls
 
 ### ✅ DO: 1. Separate signal roles
+
 Do not use the same signal for user input and computation output.
 
 **Good:**
+
 - `clusters_request` (button/UI)
 - `clusters_result` (computed output)
 - Viz reads only `clusters_result`
@@ -145,12 +148,14 @@ Do not use the same signal for user input and computation output.
 - A loop can happen **in one cell OR across multiple cells**.
 
 **Single-cell example:**
+
 ```python
 x = s()       # subscribes
 s(x + 1)      # write → rerun → loop
 ```
 
 **Cross-cell example:**
+
 ```python
 # Cell A
 a = A()       # subscribes
@@ -162,6 +167,7 @@ if B():       # subscribes
 ```
 
 **Common pitfall with `adata` object**
+
 ```python
 adata_signal()
 
@@ -177,16 +183,65 @@ adata_signal(adata) # ❌ this WILL cause an infinite loop and break the applica
 - Write to a different signal
 
 ### ✅ DO: 4. Name signals by purpose
+
 - Good names prevent accidental reuse and loops.
 
 **Good**:
+
 - `qc_request`, `qc_result`
 - `clusters_request`, `clusters_result`
 - `adata_raw`, `adata_qc`, `adata_clustered`, `adata_annotated`
 
 **Bad**:
+
 - `tmp`, `data`, `state`
 
 ✅ Prefer **creating a new signal for each stage of analysis**  
 (e.g. from `adata_qc` → `adata_clustered` → `adata_annotated`)  
 Instead of constantly overwriting the same signal.
+
+---
+
+## Widget References in Loops
+
+**Widgets and their data are reactive by reference** — reactivity depends on preserving unique references to both widget instances AND the variables passed into them. When creating multiple widgets in loops, you must store both widgets and their data in containers to maintain proper reactive connections.
+
+### ❌ DON'T: Overwrite widget or data variables in loops
+
+```python
+# ❌ BAD: Overwrites widget reference each iteration
+for i in range(5):
+    plot = w_plot(fig)  # only last widget accessible
+
+# ❌ BAD: Reuses variable name for data
+for cluster in clusters:
+    df = data[data['cluster'] == cluster]  # df gets overwritten
+    plots[cluster] = w_plot(df)  # all plots may share same df reference
+
+# ❌ BAD: Both widget and data references lost
+for key in keys:
+    subset = filter_data(key)
+    plot = w_plot(subset)  # overwrites both each iteration
+```
+
+### ✅ DO: Store widgets AND pass data directly from containers
+
+```python
+# ✅ GOOD: Store widgets in a list, pass data from indexable container
+plots = []
+for i, cluster in enumerate(clusters):
+    plots.append(w_plot(cluster_data[i]))  # each widget gets distinct data reference
+
+# ✅ GOOD: Store widgets in dict, access data directly
+plots = {}
+for key in ["scatter", "heatmap", "violin"]:
+    plots[key] = w_plot(data_dict[key])  # each widget references distinct data
+```
+
+**Why this matters:**
+
+- Each widget maintains reactive state and connections
+- Overwriting widget variables breaks references to widget instances
+- Reusing variable names for data can cause all widgets to share the same data reference
+- Using containers (lists/dicts) and accessing data directly preserves both widget and data references
+- Reactivity requires unique, stable references throughout the chain
