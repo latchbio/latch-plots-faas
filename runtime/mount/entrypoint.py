@@ -425,6 +425,22 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
 
                 continue
 
+            elif msg["type"] == "reactivity_summary" and "agent_tx_id" in msg:
+                tx_id = msg.get("agent_tx_id")
+
+                if a_proc.conn_a is not None:
+                    print(f"[entrypoint] Routing reactivity response to agent (tx_id={tx_id})")
+                    await a_proc.conn_a.send({
+                        "type": "agent_action_response",
+                        "tx_id": tx_id,
+                        "status": "success",
+                        "summary": msg.get("summary", "")
+                    })
+                else:
+                    print("[entrypoint] Could not route reactivity response: agent not connected")
+
+                continue
+
             await plots_ctx_manager.broadcast_message(orjson.dumps(msg).decode())
 
         except Exception:
@@ -450,6 +466,25 @@ async def handle_agent_messages(conn_a: SocketIo) -> None:
                 })
             else:
                 print("[entrypoint] Kernel not connected, cannot route globals request")
+                await conn_a.send({
+                    "type": "agent_action_response",
+                    "tx_id": msg.get("tx_id"),
+                    "status": "error",
+                    "error": "Kernel not connected"
+                })
+            continue
+
+        if msg_type == "agent_action" and msg.get("action") == "request_reactivity_summary":
+            if k_proc.conn_k is not None:
+                tx_id = msg.get("tx_id")
+                print(f"[entrypoint] Routing reactivity request to kernel (tx_id={tx_id})")
+
+                await k_proc.conn_k.send({
+                    "type": "reactivity_summary",
+                    "agent_tx_id": tx_id
+                })
+            else:
+                print("[entrypoint] Kernel not connected, cannot route reactivity request")
                 await conn_a.send({
                     "type": "agent_action_response",
                     "tx_id": msg.get("tx_id"),

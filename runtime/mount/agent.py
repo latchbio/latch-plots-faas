@@ -660,9 +660,10 @@ class AgentHarness:
         self.tool_map["set_widget"] = set_widget
 
     async def _get_notebook_context(self) -> str:
-        context_result, globals_result = await asyncio.gather(
+        context_result, globals_result, reactivity_result = await asyncio.gather(
             self.atomic_operation("get_context"),
-            self.atomic_operation("request_globals_summary")
+            self.atomic_operation("request_globals_summary"),
+            self.atomic_operation("request_reactivity_summary")
         )
 
         if context_result.get("status") != "success":
@@ -676,39 +677,69 @@ class AgentHarness:
         if globals_result.get("status") == "success":
             globals_data = globals_result.get("summary", {})
 
-        summary = f"Notebook has {cell_count} cell(s):\n"
+        reactivity_summary: str | None = None
+        if reactivity_result.get("status") == "success":
+            reactivity_summary = reactivity_result.get("summary")
+
+        sections = []
+
+        cell_section = ["## Notebook Cells", f"\nTotal: {cell_count} cells\n"]
+
         for cell in cells:
             index = cell.get("index", "?")
             cell_id = cell.get("cell_id", "?")
             cell_type = cell.get("cell_type", "unknown")
-            status = cell.get("status", "idle")
             source = cell.get("source", "")
-            tf_id = cell.get("tf_id", "?")
+            status = cell.get("status", "idle")
+            tf_id = cell.get("tf_id", None)
 
-            source_preview = source[:500] + "..." if len(source) > 500 else source
-            source_preview = source_preview.replace("\n", " ")
+            cell_section += [
+                f"\n### Cell [{index}] (ID: {cell_id})" + (f", (Code cell ID: {tf_id})" if tf_id is not None else ""),
+                f"Type: {cell_type}",
+                f"Status: {status}",
+            ]
 
-            summary += f"\n[{index}] ({cell_type}, {status}, cell_id: {cell_id}, tf_id: {tf_id})"
-            if source_preview:
-                summary += f": {source_preview}"
+            if source is not None:
+                source_display = source[:800] if len(source) > 800 else source
+                truncated = " [TRUNCATED]" if len(source) > 800 else ""
+                cell_section.append(f"```python\n{source_display}\n```{truncated}")
 
-            widget_summary = self._format_widget_summaries(cell.get("widgets") or [])
-            if widget_summary:
-                summary += f"\n  Widgets: {widget_summary}"
+            widgets = cell.get("widgets", None)
+            if widgets is not None:
+                widget_strs = []
+                for w in widgets:
+                    w_type = w.get("type", "unknown")
+                    w_key = w.get("key", "")
+                    w_label = w.get("label", "")
+                    if w_label:
+                        widget_strs.append(f"{w_type} ({w_label}) [{w_key}]")
+                    else:
+                        widget_strs.append(f"{w_type} [{w_key}]")
+                if widget_strs:
+                    cell_section.append(f"Widgets: {', '.join(widget_strs)}")
 
-        if globals_data is not None:
-            summary += f"\n\nGlobal variables ({len(globals_data)} total):\n"
-            for var_name, var_info in sorted(globals_data.items()):
+        sections.append("\n".join(cell_section))
+
+        if globals_data is not None and len(globals_data) > 0:
+            global_section = ["\n## Global Variables", f"\nTotal: {len(globals_data)} variables\n"]
+
+            for var_name in sorted(globals_data.keys()):
+                var_info = globals_data[var_name]
                 if isinstance(var_info, dict):
                     var_type = var_info.get("type", "unknown")
-                    summary += f"  {var_name}: {var_type}\n"
+                    global_section.append(f"\n**{var_name}** ({var_type})")
                     for key, value in var_info.items():
                         if key != "type":
-                            summary += f"    {key}: {value}\n"
+                            global_section.append(f"  - {key}: {value}")
                 else:
-                    summary += f"  {var_name}: {var_info}\n"
+                    global_section.append(f"\n**{var_name}**: {var_info}")
 
-        return summary
+            sections.append("\n".join(global_section))
+
+        if reactivity_summary is not None:
+            sections.append(reactivity_summary)
+
+        return "\n\n".join(sections)
 
     async def run_agent_loop(self) -> None:
         assert self.client is not None, "Client not initialized"
@@ -732,6 +763,8 @@ class AgentHarness:
             print(f"[agent] Turn {turn}, mode={self.mode}, thinking_budget={thinking_budget}")
 
             notebook_context = await self._get_notebook_context()
+
+            print(f"[agent] Notebook context:\n{notebook_context}")
 
             system_prompt_with_context = dedent(
                 f"""
