@@ -885,19 +885,25 @@ class AgentHarness:
                             can_use_thinking = False
                             print(f"[agent] Cannot use thinking API: last assistant message starts with {first_block_type}, not thinking")
 
-            # If thinking is disabled, strip thinking blocks from the last assistant message to satisfy API constraints
-            if not can_use_thinking:
+            # If thinking is disabled, strip thinking blocks from the final assistant message to satisfy API constraints
+            if not can_use_thinking and len(api_messages) > 0:
+                # Find the last assistant message index
+                last_assistant_idx = None
                 for i in range(len(api_messages) - 1, -1, -1):
                     if api_messages[i].get("role") == "assistant":
-                        content = api_messages[i].get("content")
-                        if isinstance(content, list):
-                            filtered = []
-                            for block in content:
-                                if isinstance(block, dict) and block.get("type") in {"thinking", "redacted_thinking"}:
-                                    continue
-                                filtered.append(block)
-                            api_messages[i]["content"] = filtered
+                        last_assistant_idx = i
                         break
+                
+                if last_assistant_idx is not None:
+                    content = api_messages[last_assistant_idx].get("content")
+                    if isinstance(content, list):
+                        filtered = [block for block in content if not (isinstance(block, dict) and block.get("type") in {"thinking", "redacted_thinking"})]
+                        if len(filtered) > 0:
+                            api_messages[last_assistant_idx] = {
+                                "role": "assistant",
+                                "content": filtered
+                            }
+                            print(f"[agent] Stripped thinking from last assistant message (index {last_assistant_idx})")
 
             kwargs = {
                 "model": model,
