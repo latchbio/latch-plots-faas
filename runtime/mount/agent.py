@@ -968,7 +968,7 @@ class AgentHarness:
                         tool_id = block.get("id") if isinstance(block, dict) else block.id
                         tool_name = block.get("name") if isinstance(block, dict) else block.name
                         tool_input = block.get("input") if isinstance(block, dict) else block.input
-
+                        print("[agent] TOOL INPUT:", tool_input)
                         if tool_name == "submit_response":
                             called_submit_response = True
 
