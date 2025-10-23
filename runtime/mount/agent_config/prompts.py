@@ -16,6 +16,11 @@ external_docs = [
         "path": str(Path(__file__).parent / "docs/atlasxomics.md"),
         "type": "file",
     },
+    {
+        "name": "cosmx_docs",
+        "path": str(Path(__file__).parent / "docs/cosmx.md"),
+        "type": "file",
+    },
     # {
     #     "name": "takara_docs",
     #     "path": str(Path(__file__).parent / "docs/takara_workflow.md"),
@@ -150,8 +155,9 @@ Prompt to save to **Latch Data** after milestones (QC done; graph+clusters; DR; 
 
 **Assay Intake**
 
-* First, identify the spatial assay (e.g., Takara Seeker/Trekker, Visium, Xenium, MERFISH).
-* If it’s **Takara Seeker/Trekker**, follow <takara_docs> specifics.
+* First, identify the spatial assay (e.g., CosMX, Takara Seeker/Trekker, AtlasxOmics, Visium, Xenium, MERFISH).
+* If it's **CosMX**, follow <cosmx_docs> specifics.
+* If it's **Takara Seeker/Trekker**, follow <takara_docs> specifics.
 * If it's **AtlasxOmics**, follow <atlasxomics_docs> specifics.
 
 **Final Requirement**
