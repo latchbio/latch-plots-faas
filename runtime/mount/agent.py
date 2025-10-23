@@ -528,66 +528,84 @@ class AgentHarness:
                 traceback.print_exc()
                 return f"Error submitting response: {e!s}"
 
-        async def h5_show_only_obs_category(args: dict) -> str:
+        async def h5_filter_by(args: dict) -> str:
             widget_key = args.get("widget_key")
-            obs_key = args.get("obs_key")
-            category = args.get("category")
+            changes = args.get("changes", [])
+            
+            if isinstance(changes, str):
+                try:
+                    changes = json.loads(changes)
+                except json.JSONDecodeError:
+                    return "Invalid changes JSON format"
             
             if AGENT_DEBUG:
-                print(f"[tool] h5_show_only_obs_category widget_key={widget_key} obs_key={obs_key} category={category}")
+                print(f"[tool] h5_filter_by widget_key={widget_key} changes={changes}")
             
             params = {
                 "widget_key": widget_key,
-                "obs_key": obs_key,
-                "category": category
+                "changes": changes
             }
             
-            result = await self.atomic_operation("h5_show_only_obs_category", params)
+            result = await self.atomic_operation("h5_filter_by", params)
             if result.get("status") == "success":
-                return f"Filtered h5 widget to show only {obs_key}={category}"
+                change_count = len(changes) if isinstance(changes, list) else 0
+                return f"Applied {change_count} filter change(s) to h5 widget"
             
-            return f"Failed to filter h5 widget: {result.get('error', 'Unknown error')}"
+            return f"Failed to apply filters to h5 widget: {result.get('error', 'Unknown error')}"
 
-        async def h5_modify_obs_category_filter(args: dict) -> str:
+        async def h5_color_by(args: dict) -> str:
             widget_key = args.get("widget_key")
-            obs_key = args.get("obs_key")
-            category = args.get("category")
-            operation = args.get("operation")
+            color_by = args.get("color_by")
+            
+            if isinstance(color_by, str):
+                try:
+                    color_by = json.loads(color_by)
+                except json.JSONDecodeError:
+                    return "Invalid color_by JSON format"
             
             if AGENT_DEBUG:
-                print(f"[tool] h5_modify_obs_category_filter widget_key={widget_key} obs_key={obs_key} category={category} operation={operation}")
+                print(f"[tool] h5_color_by widget_key={widget_key} color_by={color_by}")
             
-            params = {
-                "widget_key": widget_key,
-                "obs_key": obs_key,
-                "category": category,
-                "operation": operation
-            }
+            if color_by is None:
+                params = {
+                    "widget_key": widget_key,
+                    "color_by": None
+                }
+                result = await self.atomic_operation("h5_color_by", params)
+                if result.get("status") == "success":
+                    return f"Removed coloring from h5 widget"
+                return f"Failed to remove h5 widget coloring: {result.get('error', 'Unknown error')}"
             
-            result = await self.atomic_operation("h5_modify_obs_category_filter", params)
-            if result.get("status") == "success":
-                action = "hid" if operation == "add" else "showed"
-                return f"{action.capitalize()} category '{category}' in h5 widget obs key '{obs_key}'"
+            if color_by.get("type") == "obs":
+                obs_key = color_by.get("key")
+                params = {
+                    "widget_key": widget_key,
+                    "color_by": {
+                        "type": "obs",
+                        "key": obs_key
+                    }
+                }
+                result = await self.atomic_operation("h5_color_by", params)
+                if result.get("status") == "success":
+                    return f"Set h5 widget to color by observation '{obs_key}'"
+                return f"Failed to set h5 widget coloring: {result.get('error', 'Unknown error')}"
             
-            return f"Failed to {operation} obs category filter: {result.get('error', 'Unknown error')}"
-
-        async def h5_color_by_obs(args: dict) -> str:
-            widget_key = args.get("widget_key")
-            obs_key = args.get("obs_key")
+            if color_by.get("type") == "var":
+                var_keys = color_by.get("keys", [])
+                params = {
+                    "widget_key": widget_key,
+                    "color_by": {
+                        "type": "var",
+                        "keys": var_keys
+                    }
+                }
+                result = await self.atomic_operation("h5_color_by", params)
+                if result.get("status") == "success":
+                    gene_list = ", ".join(var_keys)
+                    return f"Set h5 widget to color by variable(s): {gene_list}"
+                return f"Failed to set h5 widget coloring: {result.get('error', 'Unknown error')}"
             
-            if AGENT_DEBUG:
-                print(f"[tool] h5_color_by_obs widget_key={widget_key} obs_key={obs_key}")
-            
-            params = {
-                "widget_key": widget_key,
-                "obs_key": obs_key
-            }
-            
-            result = await self.atomic_operation("h5_color_by_obs", params)
-            if result.get("status") == "success":
-                return f"Set h5 widget to color by {obs_key}"
-            
-            return f"Failed to set h5 widget coloring: {result.get('error', 'Unknown error')}"
+            return "Invalid color_by configuration"
 
         async def h5_set_selected_obsm_key(args: dict) -> str:
             widget_key = args.get("widget_key")
@@ -711,53 +729,6 @@ class AgentHarness:
                 return f"Applied {zoom_desc} to h5 widget {widget_key}"
             print(f"[tool] h5_zoom failed: {result.get('error', 'Unknown error')}")
             return f"Failed to zoom h5 widget: {result.get('error', 'Unknown error')}"
-
-
-        async def h5_modify_genes_of_interest(args: dict) -> str:
-            widget_key = args.get("widget_key")
-            gene = args.get("gene")
-            operation = args.get("operation")
-            
-            if AGENT_DEBUG:
-                print(f"[tool] h5_modify_genes_of_interest widget_key={widget_key} gene={gene} operation={operation}")
-            
-            params = {
-                "widget_key": widget_key,
-                "gene": gene,
-                "operation": operation
-            }
-            
-            result = await self.atomic_operation("h5_modify_genes_of_interest", params)
-            if result.get("status") == "success":
-                action = "Added" if operation == "add" else "Removed"
-                return f"{action} gene '{gene}' {'to' if operation == 'add' else 'from'} genes of interest"
-            
-            return f"Failed to {operation} gene from genes of interest: {result.get('error', 'Unknown error')}"
-
-        async def h5_color_by_genes_of_interest(args: dict) -> str:
-            widget_key = args.get("widget_key")
-            gene = args.get("gene")
-            operation = args.get("operation")
-            
-            if AGENT_DEBUG:
-                print(f"[tool] h5_color_by_genes_of_interest widget_key={widget_key} gene={gene} operation={operation}")
-            
-            params = {
-                "widget_key": widget_key,
-                "gene": gene,
-                "operation": operation
-            }
-            
-            result = await self.atomic_operation("h5_color_by_genes_of_interest", params)
-            if result.get("status") == "success":
-                if operation == "only":
-                    return f"Set h5 widget to color by only gene '{gene}'"
-                elif operation == "add":
-                    return f"Added gene '{gene}' to h5 widget coloring set"
-                else:
-                    return f"Removed gene '{gene}' from h5 widget coloring set"
-            
-            return f"Failed to {operation} gene for coloring: {result.get('error', 'Unknown error')}"
 
         async def h5_set_background_image_visibility(args: dict) -> str:
             widget_key = args.get("widget_key")
@@ -1030,8 +1001,8 @@ class AgentHarness:
         return summary
 
         self.tools.append({
-            "name": "h5_show_only_obs_category",
-            "description": "Filter an h5/AnnData widget to show only observations matching a specific category.",
+            "name": "h5_filter_by",
+            "description": "Apply filtering changes to an h5/AnnData widget. Can add, remove, or exclusively apply filters on observations or variables to subset cells displayed in the visualization.",
             "input_schema": {
                 "type": "object",
                 "properties": {
@@ -1039,23 +1010,116 @@ class AgentHarness:
                         "type": "string",
                         "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
                     },
-                    "obs_key": {
-                        "type": "string",
-                        "description": "The observation key to filter on"
-                    },
-                    "category": {
-                        "type": "string",
-                        "description": "The category value to show"
-                    },
+                    "changes": {
+                        "type": "array",
+                        "description": "Array of filter operations to apply",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "op": {
+                                    "type": "string",
+                                    "enum": ["add", "remove", "only"],
+                                    "description": "Operation type: 'add' to include additional filters, 'remove' to remove existing filters, 'only' to apply only this filter"
+                                },
+                                "filter": {
+                                    "oneOf": [
+                                        {
+                                            "type": "object",
+                                            "properties": {
+                                                "type": {
+                                                    "type": "string",
+                                                    "enum": ["obs"],
+                                                    "description": "Filter by observation metadata"
+                                                },
+                                                "key": {
+                                                    "type": "string",
+                                                    "description": "The observation key to filter on"
+                                                },
+                                                "operation": {
+                                                    "oneOf": [
+                                                        {
+                                                            "type": "object",
+                                                            "properties": {
+                                                                "type": {
+                                                                    "type": "string",
+                                                                    "enum": ["neq"],
+                                                                    "description": "Not equal operation"
+                                                                },
+                                                                "value": {
+                                                                    "type": ["string", "number", "null"],
+                                                                    "description": "Value to compare against"
+                                                                }
+                                                            },
+                                                            "required": ["type", "value"]
+                                                        },
+                                                        {
+                                                            "type": "object",
+                                                            "properties": {
+                                                                "type": {
+                                                                    "type": "string",
+                                                                    "enum": ["geq", "leq", "g", "l"],
+                                                                    "description": "Numeric comparison: geq (>=), leq (<=), g (>), l (<)"
+                                                                },
+                                                                "value": {
+                                                                    "type": "number",
+                                                                    "description": "Numeric value to compare against"
+                                                                }
+                                                            },
+                                                            "required": ["type", "value"]
+                                                        }
+                                                    ],
+                                                    "description": "Filter operation to apply"
+                                                }
+                                            },
+                                            "required": ["type", "key", "operation"]
+                                        },
+                                        {
+                                            "type": "object",
+                                            "properties": {
+                                                "type": {
+                                                    "type": "string",
+                                                    "enum": ["var"],
+                                                    "description": "Filter by variable(s) / gene(s)"
+                                                },
+                                                "keys": {
+                                                    "type": "array",
+                                                    "items": {"type": "string"},
+                                                    "description": "Array of variable/gene names to filter on"
+                                                },
+                                                "operation": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "type": {
+                                                            "type": "string",
+                                                            "enum": ["geq", "leq", "g", "l"],
+                                                            "description": "Numeric comparison: geq (>=), leq (<=), g (>), l (<)"
+                                                        },
+                                                        "value": {
+                                                            "type": "number",
+                                                            "description": "Numeric value to compare against"
+                                                        }
+                                                    },
+                                                    "required": ["type", "value"]
+                                                }
+                                            },
+                                            "required": ["type", "keys", "operation"]
+                                        }
+                                    ],
+                                    "description": "Filter specification for observations or variables"
+                                }
+                            },
+                            "required": ["op", "filter"]
+                        }
+                    }
                 },
-                "required": ["widget_key", "obs_key", "category"],
+                "required": ["widget_key", "changes"],
             },
         })
-        self.tool_map["h5_show_only_obs_category"] = h5_show_only_obs_category
+        self.tool_map["h5_filter_by"] = h5_filter_by
 
         self.tools.append({
-            "name": "h5_modify_obs_category_filter",
-            "description": "Add or remove an observation category filter on an h5/AnnData widget. Use 'add' to hide a category, 'remove' to show it again.",
+            "name": "h5_color_by",
+            "description": "Set an h5/AnnData widget to color by a specific observation or variable. Can color by a single observation key or by multiple variable keys (genes).",
             "input_schema": {
                 "type": "object",
                 "properties": {
@@ -1063,44 +1127,50 @@ class AgentHarness:
                         "type": "string",
                         "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
                     },
-                    "obs_key": {
-                        "type": "string",
-                        "description": "The observation key to filter on"
-                    },
-                    "category": {
-                        "type": "string",
-                        "description": "The category value to add/remove from filter"
-                    },
-                    "operation": {
-                        "type": "string",
-                        "enum": ["add", "remove"],
-                        "description": "Whether to add the filter or remove it"
-                    },
+                    "color_by": {
+                        "oneOf": [
+                            {
+                                "type": "object",
+                                "properties": {
+                                    "type": {
+                                        "type": "string",
+                                        "enum": ["obs"],
+                                        "description": "Color by observation metadata"
+                                    },
+                                    "key": {
+                                        "type": "string",
+                                        "description": "The observation key to color by"
+                                    }
+                                },
+                                "required": ["type", "key"]
+                            },
+                            {
+                                "type": "object",
+                                "properties": {
+                                    "type": {
+                                        "type": "string",
+                                        "enum": ["var"],
+                                        "description": "Color by variable(s) / gene(s)"
+                                    },
+                                    "keys": {
+                                        "type": "array",
+                                        "items": {"type": "string"},
+                                        "description": "Array of variable/gene names to color by"
+                                    }
+                                },
+                                "required": ["type", "keys"]
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "description": "Coloring configuration. Can be null to remove coloring, an obs object to color by observation, or a var object to color by variables (genes)"
+                    }
                 },
-                "required": ["widget_key", "obs_key", "category", "operation"],
+                "required": ["widget_key", "color_by"],
             },
         })
-        self.tool_map["h5_modify_obs_category_filter"] = h5_modify_obs_category_filter
-
-        self.tools.append({
-            "name": "h5_color_by_obs",
-            "description": "Set an h5/AnnData widget to color observations by a specific observation key.",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "widget_key": {
-                        "type": "string",
-                        "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
-                    },
-                    "obs_key": {
-                        "type": "string",
-                        "description": "The observation key to color by"
-                    },
-                },
-                "required": ["widget_key", "obs_key"],
-            },
-        })
-        self.tool_map["h5_color_by_obs"] = h5_color_by_obs
+        self.tool_map["h5_color_by"] = h5_color_by
 
         self.tools.append({
             "name": "h5_set_selected_obsm_key",
@@ -1203,57 +1273,6 @@ class AgentHarness:
             },
         })
         self.tool_map["h5_zoom"] = h5_zoom
-
-
-        self.tools.append({
-            "name": "h5_modify_genes_of_interest",
-            "description": "Add or remove a gene/variable from the Genes of Interest list in an h5/AnnData widget",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "widget_key": {
-                        "type": "string",
-                        "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
-                    },
-                    "gene": {
-                        "type": "string",
-                        "description": "The gene name or variable index to add or remove"
-                    },
-                    "operation": {
-                        "type": "string",
-                        "enum": ["add", "remove"],
-                        "description": "Whether to add the gene to or remove it from the genes of interest list"
-                    },
-                },
-                "required": ["widget_key", "gene", "operation"],
-            },
-        })
-        self.tool_map["h5_modify_genes_of_interest"] = h5_modify_genes_of_interest
-
-        self.tools.append({
-            "name": "h5_color_by_genes_of_interest",
-            "description": "Modify the gene coloring set in an h5/AnnData widget by adding genes, removing genes, or setting only a specific gene for coloring.",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "widget_key": {
-                        "type": "string",
-                        "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
-                    },
-                    "gene": {
-                        "type": "string",
-                        "description": "The gene name to add, remove, or set as the only gene for coloring"
-                    },
-                    "operation": {
-                        "type": "string",
-                        "enum": ["add", "remove", "only"],
-                        "description": "'add' adds the gene to the coloring set, 'remove' removes the gene, 'only' clears all other genes and colors by only this gene"
-                    },
-                },
-                "required": ["widget_key", "gene", "operation"],
-            },
-        })
-        self.tool_map["h5_color_by_genes_of_interest"] = h5_color_by_genes_of_interest
 
         self.tools.append({
             "name": "h5_set_background_image_visibility",
