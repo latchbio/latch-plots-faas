@@ -111,7 +111,107 @@ class AgentHarness:
 
         print(f"[agent] Built {len(anthropic_messages)} messages from DB")
 
-        return anthropic_messages
+        # Compact messages to reduce token usage while preserving intent and errors
+        return self._compact_messages(anthropic_messages)
+
+    # TODO: Should we remove intermediate thinking traces?
+    # Seems like we need to keep the last thinking message to enable thinking
+    # on future turns
+    def _compact_messages(self, messages: list[MessageParam]) -> list[MessageParam]:
+        try:
+            # Find the last assistant message index that contains a submit_response tool_use
+            last_submit_idx: int | None = None
+            for i in range(len(messages) - 1, -1, -1):
+                msg = messages[i]
+                if msg.get("role") == "assistant":
+                    content = msg.get("content")
+                    if isinstance(content, list):
+                        for block in content:
+                            if isinstance(block, dict) and block.get("type") == "tool_use" and block.get("name") == "submit_response":
+                                last_submit_idx = i
+                                break
+                    if last_submit_idx is not None:
+                        break
+
+            compacted: list[MessageParam] = []
+
+            for idx, msg in enumerate(messages):
+                role = msg.get("role")
+                content = msg.get("content")
+
+                # Handle user messages
+                if role == "user":
+                    if isinstance(content, str):
+                        text = content.strip()
+                        # Drop success cell-result lines, keep failures
+                        if text.startswith("\u2713 Cell"):
+                            continue
+                        # Keep all other user strings (queries, failure messages, etc.)
+                        compacted.append(msg)
+                        continue
+
+                    if isinstance(content, list):
+                        new_blocks = []
+                        for block in content:
+                            if not isinstance(block, dict):
+                                new_blocks.append(block)
+                                continue
+
+                            if block.get("type") == "tool_result":
+                                # Keep only errored tool results; content is JSON string with {summary, error}
+                                try:
+                                    payload_raw = block.get("content")
+                                    payload = json.loads(payload_raw) if isinstance(payload_raw, str) else payload_raw
+                                    if isinstance(payload, dict) and payload.get("error"):
+                                        new_blocks.append(block)
+                                except Exception:
+                                    # If unparsable, be conservative and drop successful-looking results
+                                    pass
+                            else:
+                                # Non tool_result blocks: keep
+                                new_blocks.append(block)
+
+                        if len(new_blocks) > 0:
+                            compacted.append({"role": role, "content": new_blocks})
+                        # else drop empty message
+                        continue
+
+                # Handle assistant messages
+                if role == "assistant":
+                    if isinstance(content, list):
+                        new_blocks = []
+                        for block in content:
+                            if not isinstance(block, dict):
+                                new_blocks.append(block)
+                                continue
+
+                            if block.get("type") == "tool_use":
+                                name = block.get("name")
+                                # Keep only submit_response tool_use blocks from the last such assistant message
+                                if name == "submit_response" and (last_submit_idx is None or idx == last_submit_idx):
+                                    new_blocks.append(block)
+                                # else drop
+                            else:
+                                # Keep non-tool_use blocks (e.g., text, thinking metadata if present)
+                                new_blocks.append(block)
+
+                        if len(new_blocks) > 0:
+                            compacted.append({"role": role, "content": new_blocks})
+                        # else drop empty assistant message
+                        continue
+
+                    # Assistant string content: keep as-is
+                    compacted.append(msg)
+                    continue
+
+                # Other roles (if any): keep unchanged
+                compacted.append(msg)
+
+            return compacted
+        except Exception as e:
+            print(f"[agent] _compact_messages error: {e}")
+            # On any failure, fall back to original messages
+            return messages
 
     async def _insert_history(self, *, event_type: str, payload: dict, request_id: str | None = None, tx_id: str | None = None) -> None:
         assert self.agent_session_id is not None
