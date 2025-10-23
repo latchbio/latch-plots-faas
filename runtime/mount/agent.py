@@ -681,7 +681,7 @@ class AgentHarness:
                 "properties": {
                     "plan": {"type": "array", "description": "List of plan items"},
                     "plan_diff": {"type": "array", "description": "List of plan diff items"},
-                    "summary": {"type": "string", "description": "Optional summary text describing what was accomplished or to display information to the user after a turn. Use markdown formatting with bullet points if needed. Omit if no summary needed."},
+                    "summary": {"type": "string", "description": "Summary text to help the user. This can be a message to the user or a description of what was accomplished. Use markdown formatting with bullet points if needed. Omit if no summary needed."},
                     "questions": {"type": "string", "description": "Optional question text for the user. Omit if no questions needed."},
                     "next_status": {"type": "string", "description": "What the agent will do next", "enum": ["executing", "fixing", "thinking", "awaiting_user_response", "awaiting_cell_execution", "awaiting_user_widget_input", "done"]},
                     "continue": {
