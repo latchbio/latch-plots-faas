@@ -994,257 +994,257 @@ class AgentHarness:
         self.tool_map["h5_filter_by"] = h5_filter_by
 
         self.tools.append({
-        "name": "h5_color_by",
-        "description": "Set an h5/AnnData widget to color by a specific observation or variable (can be multiple if for genes)",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "widget_key": {
-                    "type": "string",
-                    "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
+            "name": "h5_color_by",
+            "description": "Set an h5/AnnData widget to color by a specific observation or variable (can be multiple if for genes)",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "widget_key": {
+                        "type": "string",
+                        "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
+                    },
+                    "color_by": {
+                        "oneOf": [
+                            {
+                                "type": "object",
+                                "properties": {
+                                    "type": {
+                                        "type": "string",
+                                        "enum": ["obs"],
+                                        "description": "Color by observation metadata"
+                                    },
+                                    "key": {
+                                        "type": "string",
+                                        "description": "The observation key to color by"
+                                    }
+                                },
+                                "required": ["type", "key"]
+                            },
+                            {
+                                "type": "object",
+                                "properties": {
+                                    "type": {
+                                        "type": "string",
+                                        "enum": ["var"],
+                                        "description": "Color by variable(s) / gene(s)"
+                                    },
+                                    "keys": {
+                                        "type": "array",
+                                        "items": {"type": "string"},
+                                        "description": "Array of variable/gene names to color by"
+                                    }
+                                },
+                                "required": ["type", "keys"]
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "description": "Coloring configuration. Can be null to remove coloring, an obs object to color by observation, or a var object to color by variables like genes"
+                    }
                 },
-                "color_by": {
-                    "oneOf": [
-                        {
-                            "type": "object",
-                            "properties": {
-                                "type": {
-                                    "type": "string",
-                                    "enum": ["obs"],
-                                    "description": "Color by observation metadata"
-                                },
-                                "key": {
-                                    "type": "string",
-                                    "description": "The observation key to color by"
-                                }
-                            },
-                            "required": ["type", "key"]
-                        },
-                        {
-                            "type": "object",
-                            "properties": {
-                                "type": {
-                                    "type": "string",
-                                    "enum": ["var"],
-                                    "description": "Color by variable(s) / gene(s)"
-                                },
-                                "keys": {
-                                    "type": "array",
-                                    "items": {"type": "string"},
-                                    "description": "Array of variable/gene names to color by"
-                                }
-                            },
-                            "required": ["type", "keys"]
-                        },
-                        {
-                            "type": "null"
-                        }
-                    ],
-                    "description": "Coloring configuration. Can be null to remove coloring, an obs object to color by observation, or a var object to color by variables like genes"
-                }
+                "required": ["widget_key", "color_by"],
             },
-            "required": ["widget_key", "color_by"],
-        },
         })
         self.tool_map["h5_color_by"] = h5_color_by
 
         self.tools.append({
-        "name": "h5_set_selected_obsm_key",
-        "description": "Set the selected obsm key for an h5/AnnData widget to control which embedding is displayed.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "widget_key": {
-                    "type": "string",
-                    "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
+            "name": "h5_set_selected_obsm_key",
+            "description": "Set the selected obsm key for an h5/AnnData widget to control which embedding is displayed.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "widget_key": {
+                        "type": "string",
+                        "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
+                    },
+                    "obsm_key": {
+                        "type": "string",
+                        "description": "The obsm key to use for embedding (e.g spatial, X_umap)"
+                    },
                 },
-                "obsm_key": {
-                    "type": "string",
-                    "description": "The obsm key to use for embedding (e.g spatial, X_umap)"
-                },
+                "required": ["widget_key", "obsm_key"],
             },
-            "required": ["widget_key", "obsm_key"],
-        },
         })
         self.tool_map["h5_set_selected_obsm_key"] = h5_set_selected_obsm_key
 
         self.tools.append({
-        "name": "h5_set_background_image",
-        "description": "Set a background image for an h5/AnnData widget from a user-attached file. The file must be an image type (jpg, jpeg, png, tiff).",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "widget_key": {
-                    "type": "string",
-                    "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
+            "name": "h5_set_background_image",
+            "description": "Set a background image for an h5/AnnData widget from a user-attached file. The file must be an image type (jpg, jpeg, png, tiff).",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "widget_key": {
+                        "type": "string",
+                        "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
+                    },
+                    "node_id": {
+                        "type": "string",
+                        "description": "The LData node ID of the image file to use as background. This should come from files attached by the user in the chat."
+                    },
                 },
-                "node_id": {
-                    "type": "string",
-                    "description": "The LData node ID of the image file to use as background. This should come from files attached by the user in the chat."
-                },
+                "required": ["widget_key", "node_id"],
             },
-            "required": ["widget_key", "node_id"],
-        },
         })
         self.tool_map["h5_set_background_image"] = h5_set_background_image
 
         self.tools.append({
-        "name": "h5_open_image_aligner",
-        "description": "Open the image alignment modal for a background image in an h5/AnnData widget.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "widget_key": {
-                    "type": "string",
-                    "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
+            "name": "h5_open_image_aligner",
+            "description": "Open the image alignment modal for a background image in an h5/AnnData widget.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "widget_key": {
+                        "type": "string",
+                        "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
+                    },
+                    "background_image_id": {
+                        "type": "string",
+                        "description": "The ID of the background image to align (typically the node_id)"
+                    },
                 },
-                "background_image_id": {
-                    "type": "string",
-                    "description": "The ID of the background image to align (typically the node_id)"
-                },
+                "required": ["widget_key", "background_image_id"],
             },
-            "required": ["widget_key", "background_image_id"],
-        },
         })
         self.tool_map["h5_open_image_aligner"] = h5_open_image_aligner
 
         self.tools.append({
-        "name": "h5_autoscale",
-        "description": "Reset the plotted view in an h5/AnnData widget to Plotly's autoscaled data bounds.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "widget_key": {
-                    "type": "string",
-                    "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
+            "name": "h5_autoscale",
+            "description": "Reset the plotted view in an h5/AnnData widget to Plotly's autoscaled data bounds.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "widget_key": {
+                        "type": "string",
+                        "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
+                    },
                 },
+                "required": ["widget_key"],
             },
-            "required": ["widget_key"],
-        },
         })
         self.tool_map["h5_autoscale"] = h5_autoscale
 
         self.tools.append({
-        "name": "h5_zoom",
-        "description": "Zoom the Plotly view in an h5/AnnData widget in or out from the current camera center.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "widget_key": {
-                    "type": "string",
-                    "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
+            "name": "h5_zoom",
+            "description": "Zoom the Plotly view in an h5/AnnData widget in or out from the current camera center.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "widget_key": {
+                        "type": "string",
+                        "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
+                    },
+                    "direction": {
+                        "type": "string",
+                        "enum": ["in", "out"],
+                        "description": "Zoom direction; use \"in\" to zoom closer, \"out\" to zoom farther"
+                    },
+                    "percentage": {
+                        "type": "number",
+                        "minimum": 0,
+                        "description": "Optional percentage change (e.g. 25 for ±25%); omitting uses the default Plotly zoom factor"
+                    },
                 },
-                "direction": {
-                    "type": "string",
-                    "enum": ["in", "out"],
-                    "description": "Zoom direction; use \"in\" to zoom closer, \"out\" to zoom farther"
-                },
-                "percentage": {
-                    "type": "number",
-                    "minimum": 0,
-                    "description": "Optional percentage change (e.g. 25 for ±25%); omitting uses the default Plotly zoom factor"
-                },
+                "required": ["widget_key", "direction"],
             },
-            "required": ["widget_key", "direction"],
-        },
         })
         self.tool_map["h5_zoom"] = h5_zoom
 
         self.tools.append({
-        "name": "h5_set_background_image_visibility",
-        "description": "Show or hide a specific background image in an h5/AnnData widget.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "widget_key": {
-                    "type": "string",
-                    "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
+            "name": "h5_set_background_image_visibility",
+            "description": "Show or hide a specific background image in an h5/AnnData widget.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "widget_key": {
+                        "type": "string",
+                        "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
+                    },
+                    "background_image_id": {
+                        "type": "string",
+                        "description": "The ID of the background image to show or hide"
+                    },
+                    "hidden": {
+                        "type": "boolean",
+                        "description": "Whether to hide (true) or show (false) the background image"
+                    },
                 },
-                "background_image_id": {
-                    "type": "string",
-                    "description": "The ID of the background image to show or hide"
-                },
-                "hidden": {
-                    "type": "boolean",
-                    "description": "Whether to hide (true) or show (false) the background image"
-                },
+                "required": ["widget_key", "background_image_id", "hidden"],
             },
-            "required": ["widget_key", "background_image_id", "hidden"],
-        },
         })
         self.tool_map["h5_set_background_image_visibility"] = h5_set_background_image_visibility
 
         self.tools.append({
-        "name": "h5_add_selected_cells_to_categorical_obs",
-        "description": "Assign selected cells to a category in a categorical observation key",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "widget_key": {
-                    "type": "string",
-                    "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
+            "name": "h5_add_selected_cells_to_categorical_obs",
+            "description": "Assign selected cells to a category in a categorical observation key",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "widget_key": {
+                        "type": "string",
+                        "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
+                    },
+                    "obs_key": {
+                        "type": "string",
+                        "description": "The existing categorical observation key to add selected cells to"
+                    },
+                    "category": {
+                        "type": "string",
+                        "description": "The category name to assign to selected cells. Will be created if it doesn't exist in this observation key."
+                    },
                 },
-                "obs_key": {
-                    "type": "string",
-                    "description": "The existing categorical observation key to add selected cells to"
-                },
-                "category": {
-                    "type": "string",
-                    "description": "The category name to assign to selected cells. Will be created if it doesn't exist in this observation key."
-                },
+                "required": ["widget_key", "obs_key", "category"],
             },
-            "required": ["widget_key", "obs_key", "category"],
-        },
         })
         self.tool_map["h5_add_selected_cells_to_categorical_obs"] = h5_add_selected_cells_to_categorical_obs
 
         self.tools.append({
-        "name": "h5_set_marker_opacity",
-        "description": "Set the marker opacity for all cell markers in an h5/AnnData widget.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "widget_key": {
-                    "type": "string",
-                    "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
+            "name": "h5_set_marker_opacity",
+            "description": "Set the marker opacity for all cell markers in an h5/AnnData widget.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "widget_key": {
+                        "type": "string",
+                        "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
+                    },
+                    "opacity": {
+                        "type": "number",
+                        "description": "Opacity value for cell markers, between 0.1 (transparent) and 0.9 (opaque)"
+                    },
                 },
-                "opacity": {
-                    "type": "number",
-                    "description": "Opacity value for cell markers, between 0.1 (transparent) and 0.9 (opaque)"
-                },
+                "required": ["widget_key", "opacity"],
             },
-            "required": ["widget_key", "opacity"],
-        },
         })
         self.tool_map["h5_set_marker_opacity"] = h5_set_marker_opacity
 
         self.tools.append({
-        "name": "h5_manage_obs",
-        "description": "Create or delete an observation column in an h5/AnnData widget.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "widget_key": {
-                    "type": "string",
-                    "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
+            "name": "h5_manage_obs",
+            "description": "Create or delete an observation column in an h5/AnnData widget.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "widget_key": {
+                        "type": "string",
+                        "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
+                    },
+                    "obs_key": {
+                        "type": "string",
+                        "description": "The observation column name to create or delete"
+                    },
+                    "operation": {
+                        "type": "string",
+                        "enum": ["add", "remove"],
+                        "description": "Whether to create a new observation column ('add') or delete an existing one ('remove')"
+                    },
+                    "obs_type": {
+                        "type": "string",
+                        "enum": ["category", "bool", "int64", "float64"],
+                        "description": "Type of observation. Only for 'add' operation. Defaults to 'category'."
+                    }
                 },
-                "obs_key": {
-                    "type": "string",
-                    "description": "The observation column name to create or delete"
-                },
-                "operation": {
-                    "type": "string",
-                    "enum": ["add", "remove"],
-                    "description": "Whether to create a new observation column ('add') or delete an existing one ('remove')"
-                },
-                "obs_type": {
-                    "type": "string",
-                    "enum": ["category", "bool", "int64", "float64"],
-                    "description": "Type of observation. Only for 'add' operation. Defaults to 'category'."
-                }
-            },
-            "required": ["widget_key", "obs_key", "operation"]
-        }
+                "required": ["widget_key", "obs_key", "operation"]
+            }
         })
         self.tool_map["h5_manage_obs"] = h5_manage_obs
 
