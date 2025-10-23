@@ -288,16 +288,16 @@ class AgentHarness:
                 }
                 print(f"[agent] Cell {cell_id} failed")
 
-                await self._insert_history(
-                    event_type="anthropic_message",
-                    payload={
-                        "type": "anthropic_message",
-                        "role": "user",
-                        "content_schema": "cell_result",
-                        "content": json.dumps(result_content),
-                        "timestamp": int(time.time() * 1000),
-                    },
-                )
+            await self._insert_history(
+                event_type="anthropic_message",
+                payload={
+                    "type": "anthropic_message",
+                    "role": "user",
+                    "content_schema": "cell_result",
+                    "content": json.dumps(result_content),
+                    "timestamp": int(time.time() * 1000),
+                },
+            )
 
             if self.pending_auto_continue and not self.executing_cells:
                 print(f"[agent] All cells complete, resuming auto-continue (request_id={self.current_request_id})")
