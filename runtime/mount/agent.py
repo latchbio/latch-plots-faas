@@ -684,9 +684,6 @@ class AgentHarness:
 
         sections = []
 
-        if reactivity_summary is not None:
-            sections.append(reactivity_summary)
-
         cell_section = ["## Notebook Cells", f"\nTotal: {cell_count} cells\n"]
 
         for cell in cells:
@@ -735,6 +732,9 @@ class AgentHarness:
                     global_section.append(f"\n**{var_name}**: {var_info}")
 
             sections.append("\n".join(global_section))
+
+        if reactivity_summary is not None:
+            sections.append(reactivity_summary)
 
         return "\n\n".join(sections)
 
