@@ -714,7 +714,7 @@ class AgentHarness:
                     "title": {"type": "string", "description": "Name for the cell"},
                     "action_summary": {"type": "string", "description": "Summary of the purpose of the cell."},
                 },
-                "required": ["position", "code", "title"],
+                "required": ["position", "code", "title", "action_summary"],
             },
         })
         self.tool_map["create_cell"] = create_cell
@@ -730,7 +730,7 @@ class AgentHarness:
                     "title": {"type": "string", "description": "Title of first header in the markdown cell"},
                     "action_summary": {"type": "string", "description": "Summary of the purpose of the cell."},
                 },
-                "required": ["position", "code"],
+                "required": ["position", "code", "title", "action_summary"],
             },
         })
         self.tool_map["create_markdown_cell"] = create_markdown_cell
@@ -746,7 +746,7 @@ class AgentHarness:
                     "title": {"type": "string", "description": "Name of the cell to edit"},
                     "action_summary": {"type": "string", "description": "Summary of the purpose of the edit."},
                 },
-                "required": ["cell_id", "new_code"],
+                "required": ["cell_id", "new_code", "title"],
             },
         })
         self.tool_map["edit_cell"] = edit_cell
@@ -758,11 +758,10 @@ class AgentHarness:
                 "type": "object",
                 "properties": {
                     "cell_id": {"type": "string", "description": "ID of the cell to delete"},
-                    "cell_name": {"type": "string", "description": "Name of the cell to delete"},
                     "title": {"type": "string", "description": "Name of the cell to delete"},
                     "action_summary": {"type": "string", "description": "Summary of the purpose of the delete."},
                 },
-                "required": ["cell_id"],
+                "required": ["cell_id", "title", "action_summary"],
             },
         })
         self.tool_map["delete_cell"] = delete_cell
@@ -777,7 +776,7 @@ class AgentHarness:
                     "title": {"type": "string", "description": "Name of the cell to run"},
                     "action_summary": {"type": "string", "description": "Summary of the purpose of the run."},
                 },
-                "required": ["cell_id"],
+                "required": ["cell_id", "title", "action_summary"],
             },
         })
         self.tool_map["run_cell"] = run_cell
@@ -793,7 +792,7 @@ class AgentHarness:
                     "title": {"type": "string", "description": "Title of the cell to stop"},
                     "action_summary": {"type": "string", "description": "Summary of the purpose of the stop."},
                 },
-                "required": ["cell_id"],
+                "required": ["cell_id", "title", "action_summary"],
             },
         })
         self.tool_map["stop_cell"] = stop_cell
@@ -856,7 +855,7 @@ class AgentHarness:
                             "action_summary": {"type": "string", "description": "Summary of the purpose of the set_widget."},
                             "label": {"type": "string", "description": "Label of the widget to set"},
                         },
-                        "required": ["key", "value"],
+                        "required": ["key", "value", "action_summary", "label"],
                     },
                 })
         self.tool_map["set_widget"] = set_widget
