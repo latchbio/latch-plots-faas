@@ -345,13 +345,17 @@ class AgentHarness:
         self.tools = []
         self.tool_map = {}
 
-        async def create_cell(args: dict) -> str:
+        async def create_cell(args: dict) -> dict:
             position = args["position"]
             code = args["code"]
             title = args["title"]
+            action_summary = args["action_summary"]
 
             if position < 0:
-                return "Error: Position must be non-negative"
+                return {
+                    "message": "Error: Position must be non-negative",
+                    "success": False,
+                }
 
             print(f'[tool] create_cell pos={position} title="{title}"')
 
@@ -367,16 +371,35 @@ class AgentHarness:
             if result.get("status") == "success":
                 cell_id = result.get("cell_id", "unknown")
                 msg = f"Created cell at position {position} (ID: {cell_id}, Title: {title})"
+                code_preview = code[:500] + "..." if len(code) > 500 else code
                 print(f"[tool] create_cell -> {msg}")
-                return msg
-            return f"Failed to create cell: {result.get('error', 'Unknown error')}"
+                return {
+                    "summary": msg,
+                    "code": code_preview,
+                    "cell_id": cell_id,
+                    "cell_name": title,
+                    "position": position,
+                    "message": action_summary,
+                    "success": True,
+                }
+            return {
+                "summary": f"Failed to create cell: {result.get('error', 'Unknown error')}",
+                "cell_name": title,
+                "message": action_summary,
+                "success": False,
+            }
 
-        async def create_markdown_cell(args: dict) -> str:
+        async def create_markdown_cell(args: dict) -> dict:
             position = args["position"]
             code = args["code"]
+            title = args["title"]
+            action_summary = args["action_summary"]
 
             if position < 0:
-                return "Error: Position must be non-negative"
+                return {
+                    "message": "Error: Position must be non-negative",
+                    "success": False,
+                }
 
             print(f"[tool] create_markdown_cell pos={position}")
 
@@ -390,13 +413,28 @@ class AgentHarness:
             if result.get("status") == "success":
                 cell_id = result.get("cell_id", "unknown")
                 msg = f"Created markdown cell at position {position} (ID: {cell_id})"
-                print(f"[tool] create_markdown_cell -> {msg}")
-                return msg
-            return f"Failed to create cell: {result.get('error', 'Unknown error')}"
+                code_preview = code[:500] + "..." if len(code) > 500 else code
 
-        async def edit_cell(args: dict) -> str:
+                print(f"[tool] create_markdown_cell -> {msg}")
+                return {
+                    "summary": msg,
+                    "code": code_preview,
+                    "cell_id": cell_id,
+                    "cell_name": title,
+                    "position": position,
+                    "message": action_summary,
+                    "success": True,
+                }
+            return {
+                "message": f"Failed to create cell: {result.get('error', 'Unknown error')}",
+                "success": False,
+            }
+
+        async def edit_cell(args: dict) -> dict:
             cell_id = args["cell_id"]
             new_code = args["new_code"]
+            title = args["title"]
+            action_summary = args["action_summary"]
 
             print(f"[tool] edit_cell id={cell_id}")
 
@@ -410,11 +448,28 @@ class AgentHarness:
             if result.get("status") == "success":
                 msg = f"Cell {cell_id} edited successfully"
                 print(f"[tool] edit_cell -> {msg}")
-                return msg
-            return f"Failed to edit cell: {result.get('error', 'Unknown error')}"
+                code_preview = new_code[:500] + "..." if len(new_code) > 500 else new_code
 
-        async def delete_cell(args: dict) -> str:
+                return {
+                    "summary": msg,
+                    "code": code_preview,
+                    "cell_id": cell_id,
+                    "cell_name": title,
+                    "message": action_summary,
+                    "success": True,
+                }
+            return {
+                "summary": f"Failed to edit cell: {result.get('error', 'Unknown error')}",
+                "cell_id": cell_id,
+                "cell_name": title,
+                "message": action_summary,
+                "success": False,
+            }
+
+        async def delete_cell(args: dict) -> dict:
             cell_id = args["cell_id"]
+            title = args["title"]
+            action_summary = args["action_summary"]
 
             print(f"[tool] delete_cell id={cell_id}")
             params = {"cell_id": cell_id}
@@ -432,11 +487,25 @@ class AgentHarness:
                 else:
                     msg = f"Cell {cell_id} deleted. No cells remain in notebook."
                 print(f"[tool] delete_cell -> {msg}")
-                return msg
-            return f"Failed to delete cell: {result.get('error', 'Unknown error')}"
+                return {
+                    "summary": msg,
+                    "cell_id": cell_id,
+                    "cell_name": title,
+                    "message": action_summary,
+                    "success": True,
+                }
+            return {
+                "summary": f"Failed to delete cell: {result.get('error', 'Unknown error')}",
+                "cell_id": cell_id,
+                "cell_name": title,
+                "message": action_summary,
+                "success": False,
+            }
 
-        async def run_cell(args: dict) -> str:
+        async def run_cell(args: dict) -> dict:
             cell_id = args["cell_id"]
+            title = args["title"]
+            action_summary = args["action_summary"]
             params = {"cell_id": cell_id}
 
             await self.send({
@@ -446,23 +515,44 @@ class AgentHarness:
             })
             self.executing_cells.add(cell_id)
 
-            return f"Cell {cell_id} execution started"
+            return {
+                "summary": f"Cell {cell_id} execution started",
+                "cell_id": cell_id,
+                "cell_name": title,
+                "message": action_summary,
+            }
 
-        async def stop_cell(args: dict) -> str:
+        async def stop_cell(args: dict) -> dict:
             cell_id = args["cell_id"]
+            title = args["title"]
+            action_summary = args["action_summary"]
             params = {"cell_id": cell_id}
 
             result = await self.atomic_operation("stop_cell", params)
             if result.get("status") == "success":
                 self.executing_cells.discard(cell_id)
-                return f"Stopped cell {cell_id}"
-            return f"Failed to stop cell {cell_id}: {result.get('error', 'Unknown error')}"
+                return {
+                    "summary": f"Stopped cell {cell_id}",
+                    "cell_id": cell_id,
+                    "cell_name": title,
+                    "message": action_summary,
+                }
+            return {
+                "summary": f"Failed to stop cell {cell_id}: {result.get('error', 'Unknown error')}",
+                "cell_id": cell_id,
+                "cell_name": title,
+                "message": action_summary,
+                "success": False,
+            }
 
-        async def delete_all_cells(args: dict) -> str:
+        async def delete_all_cells(args: dict) -> dict:
             context_result = await self.atomic_operation("get_context", {})
             if context_result.get("status") != "success":
                 error_msg = context_result.get("error", "Unknown error")
-                return f"Failed to delete cells: {error_msg}"
+                return {
+                    "message": f"Failed to delete cells: {error_msg}",
+                    "success": False,
+                }
 
             cells = context_result.get("context", {}).get("cells", [])
             deleted_count = 0
@@ -474,14 +564,21 @@ class AgentHarness:
                     if result.get("status") == "success":
                         deleted_count += 1
 
-            return f"Deleted {deleted_count} cells from the notebook"
+            return {
+                "success": True,
+                "summary": f"Deleted {deleted_count} cells from the notebook",
+                "deleted_count": deleted_count,
+            }
 
-        async def get_notebook_context(args: dict) -> str:
+        async def get_notebook_context(args: dict) -> dict:
             params = {}
 
             result = await self.atomic_operation("get_context", params)
             if result.get("status") != "success":
-                return f"Failed to get context: {result.get('error', 'Unknown error')}"
+                return {
+                    "summary": f"Failed to get context: {result.get('error', 'Unknown error')}",
+                    "success": False,
+                }
 
             context = result.get("context", {})
             cell_count = context.get("cell_count", 0)
@@ -507,16 +604,27 @@ class AgentHarness:
                 if widget_summary:
                     summary += f"\n  Widgets: {widget_summary}"
 
-            return summary
+            return {
+                "summary": summary,
+                "success": True,
+            }
 
-        async def set_widget(args: dict) -> str:
+        async def set_widget(args: dict) -> dict:
             key = args.get("key")
+            action_summary = args.get("action_summary")
+            label = args.get("label")
             if not key:
-                return "Widget key is required"
+                return {
+                    "summary": "Failed to set widget: Widget key is required",
+                    "success": False,
+                }
 
             value = args.get("value")
             if value is None:
-                return "Widget value is required"
+                return {
+                    "summary": "Failed to set widget: Widget value is required",
+                    "success": False,
+                }
 
             print(f"[tool] set_widget key={key} value={value!r}")
 
@@ -525,11 +633,21 @@ class AgentHarness:
             result = await self.atomic_operation("set_widget", params)
 
             if result.get("status") == "success":
-                return f"Updated widget value for: {key}"
+                return {
+                    "summary": f"Updated widget value for: {key}",
+                    "key": key,
+                    "label": label,
+                    "action_summary": action_summary,
+                }
+            return {
+                "summary": f"Failed to update widget value: {result.get('error', 'Unknown error')}",
+                "key": key,
+                "label": label,
+                "action_summary": action_summary,
+                "success": False,
+            }
 
-            return f"Failed to update widget value: {result.get('error', 'Unknown error')}"
-
-        async def submit_response(args: dict) -> str:
+        async def submit_response(args: dict) -> dict:
             try:
                 summary = args.get("summary")
                 if summary is not None and not isinstance(summary, str):
@@ -542,7 +660,10 @@ class AgentHarness:
                 next_status = args.get("next_status")
                 if not isinstance(next_status, str) or next_status not in {"executing", "fixing", "thinking", "awaiting_user_response", "awaiting_cell_execution", "awaiting_user_widget_input", "done"}:
                     print(f"[agent] Invalid next_status: {next_status}")
-                    return "Please provide a valid next_status"
+                    return {
+                        "message": "Please provide a valid next_status",
+                        "success": False,
+                    }
 
                 should_continue = args.get("continue", False)
 
@@ -569,12 +690,18 @@ class AgentHarness:
                     self.should_auto_continue = should_continue
                     self.pending_auto_continue = False
 
-                return "Response submitted successfully"
+                return {
+                    "summary": "Response submitted successfully",
+                    "success": True,
+                }
             except Exception as e:
                 print(f"[tool] submit_response error: {e}")
                 import traceback
                 traceback.print_exc()
-                return f"Error submitting response: {e!s}"
+                return {
+                    "summary": f"Error submitting response: {e!s}",
+                    "success": False,
+                }
 
         self.tools.append({
             "name": "create_cell",
@@ -584,7 +711,8 @@ class AgentHarness:
                 "properties": {
                     "position": {"type": "integer", "description": "Position to insert the cell"},
                     "code": {"type": "string", "description": "Python code for the cell"},
-                    "title": {"type": "string", "description": "Title for the cell"},
+                    "title": {"type": "string", "description": "Name for the cell"},
+                    "action_summary": {"type": "string", "description": "Summary of the purpose of the cell."},
                 },
                 "required": ["position", "code", "title"],
             },
@@ -599,6 +727,8 @@ class AgentHarness:
                 "properties": {
                     "position": {"type": "integer", "description": "Position to insert the cell"},
                     "code": {"type": "string", "description": "Markdown content"},
+                    "title": {"type": "string", "description": "Title of first header in the markdown cell"},
+                    "action_summary": {"type": "string", "description": "Summary of the purpose of the cell."},
                 },
                 "required": ["position", "code"],
             },
@@ -613,6 +743,8 @@ class AgentHarness:
                 "properties": {
                     "cell_id": {"type": "string", "description": "ID of the cell to edit"},
                     "new_code": {"type": "string", "description": "New code/content for the cell"},
+                    "title": {"type": "string", "description": "Name of the cell to edit"},
+                    "action_summary": {"type": "string", "description": "Summary of the purpose of the edit."},
                 },
                 "required": ["cell_id", "new_code"],
             },
@@ -626,6 +758,9 @@ class AgentHarness:
                 "type": "object",
                 "properties": {
                     "cell_id": {"type": "string", "description": "ID of the cell to delete"},
+                    "cell_name": {"type": "string", "description": "Name of the cell to delete"},
+                    "title": {"type": "string", "description": "Name of the cell to delete"},
+                    "action_summary": {"type": "string", "description": "Summary of the purpose of the delete."},
                 },
                 "required": ["cell_id"],
             },
@@ -639,6 +774,8 @@ class AgentHarness:
                 "type": "object",
                 "properties": {
                     "cell_id": {"type": "string", "description": "ID of the cell to run"},
+                    "title": {"type": "string", "description": "Name of the cell to run"},
+                    "action_summary": {"type": "string", "description": "Summary of the purpose of the run."},
                 },
                 "required": ["cell_id"],
             },
@@ -652,6 +789,9 @@ class AgentHarness:
                 "type": "object",
                 "properties": {
                     "cell_id": {"type": "string", "description": "ID of the cell to stop"},
+                    "cell_name": {"type": "string", "description": "Name of the cell to stop"},
+                    "title": {"type": "string", "description": "Title of the cell to stop"},
+                    "action_summary": {"type": "string", "description": "Summary of the purpose of the stop."},
                 },
                 "required": ["cell_id"],
             },
@@ -713,6 +853,8 @@ class AgentHarness:
                             "value": {
                                 "description": "JSON-serializable value"
                             },
+                            "action_summary": {"type": "string", "description": "Summary of the purpose of the set_widget."},
+                            "label": {"type": "string", "description": "Label of the widget to set"},
                         },
                         "required": ["key", "value"],
                     },
@@ -856,10 +998,7 @@ class AgentHarness:
                                 tool_results.append({
                                     "type": "tool_result",
                                     "tool_use_id": tool_id,
-                                    "content": json.dumps({
-                                        "summary": result,
-                                        "error": None,
-                                    }),
+                                    "content": json.dumps(result),
                                 })
                             except Exception as e:
                                 print(f"[agent] Tool error: {tool_name}: {e}")
@@ -869,6 +1008,7 @@ class AgentHarness:
                                     "content": json.dumps({
                                         "summary": None,
                                         "error": f"Error executing tool: {e!s}",
+                                        "success": False,
                                     }),
                                 })
                         else:
