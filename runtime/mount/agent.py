@@ -269,8 +269,10 @@ class AgentHarness:
             cell_name = msg.get("display_name", None)
 
             if success:
+                result_message = f"✓ Cell {cell_name} ({cell_id}) executed successfully"
                 result_content = {
                     "type": "cell_result",
+                    "message": result_message,
                     "cell_id": cell_id,
                     "cell_name": cell_name,
                     "success": success,
@@ -278,12 +280,15 @@ class AgentHarness:
                 }
                 print(f"[agent] Cell {cell_id} succeeded")
             else:
+                exception = msg.get("exception", "Unknown error")
+                result_message = f"✗ Cell {cell_name} ({cell_id}) execution failed"
                 result_content = {
                     "type": "cell_result",
+                    "message": result_message,
                     "cell_id": cell_id,
                     "cell_name": cell_name,
                     "success": False,
-                    "exception": msg.get("exception", "Unknown error"),
+                    "exception": exception,
                     "logs": msg.get("logs", ""),
                 }
                 print(f"[agent] Cell {cell_id} failed")
