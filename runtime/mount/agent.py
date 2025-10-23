@@ -1110,6 +1110,8 @@ class AgentHarness:
             print(f"[agent] {msg.get('action', 'unknown')} -> {msg.get('status', 'unknown')}")
             await self.handle_action_response(msg)
         elif msg_type == "kernel_message":
+            print(f"[agent] Kernel message: {msg}")
+
             nested_msg = msg.get("message", {})
             nested_type = nested_msg.get("type")
             if nested_type == "cell_result":
