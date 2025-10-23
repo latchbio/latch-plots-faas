@@ -195,23 +195,24 @@ class AgentHarness:
                                 new_blocks.append(block)
                                 continue
 
-                            if block.get("type") == "tool_use":
+                            block_type = block.get("type")
+                            if block_type == "tool_use":
                                 name = block.get("name")
                                 # Keep only submit_response tool_use blocks from the last such assistant message
                                 if name == "submit_response" and (last_submit_idx is None or idx == last_submit_idx):
                                     new_blocks.append(block)
                                 # else drop
-                            else:
-                                # Keep non-tool_use blocks (e.g., text, thinking metadata if present)
+                            elif block_type in {"thinking", "redacted_thinking"}:
+                                # Keep thinking blocks for API compatibility (needed for subsequent thinking calls)
                                 new_blocks.append(block)
+                            # else drop text blocks and other content (not shown to user, summary is the only display)
 
                         if len(new_blocks) > 0:
                             compacted.append({"role": role, "content": new_blocks})
                         # else drop empty assistant message
                         continue
 
-                    # Assistant string content: keep as-is
-                    compacted.append(msg)
+                    # Assistant string content: drop (not shown to user)
                     continue
 
                 # Other roles (if any): keep unchanged
@@ -747,7 +748,7 @@ class AgentHarness:
                 "properties": {
                     "plan": {"type": "array", "description": "List of plan items"},
                     "plan_diff": {"type": "array", "description": "List of plan diff items"},
-                    "summary": {"type": "string", "description": "Brief user-facing text. If actions were taken, summarize outcomes; if no actions were taken, provide a concise reply to the user's query. Use markdown bullets when appropriate."},
+                    "summary": {"type": "string", "description": "Brief user-facing text. CRITICAL: This is the ONLY text shown to the user. If actions were taken, summarize outcomes; if no actions, copy your full text response here. Never use meta-descriptions like 'Provided overview to the user'. Use markdown bullets when appropriate."},
                     "questions": {"type": "string", "description": "Optional question text for the user. Omit if no questions needed."},
                     "next_status": {"type": "string", "description": "What the agent will do next", "enum": ["executing", "fixing", "thinking", "awaiting_user_response", "awaiting_cell_execution", "awaiting_user_widget_input", "done"]},
                     "continue": {

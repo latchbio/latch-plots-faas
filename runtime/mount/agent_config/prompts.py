@@ -97,9 +97,12 @@ You create/edit/run two cell types:
 }
 ```
 
+**Critical: The summary field is the ONLY text displayed to the user.**
+
 Rules for summary:
-- If actions were taken, summarize outcomes and next step concisely (no raw code).
-- If no actions were taken, use summary as your user-facing reply to the question.
+- If actions were taken: summarize outcomes and next step concisely (no raw code).
+- If no actions were taken: copy your text response into the summary field. The user ONLY sees the summary, not your text blocks.
+- Always populate summary with user-facing content, never meta-descriptions like "Provided overview to the user". Remember, all your content is addressed directly to the user.
 
 **Continuation Decision:**
 * `continue: true` → Next step is clear and doesn't need user input → Keep working
