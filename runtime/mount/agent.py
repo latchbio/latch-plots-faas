@@ -112,7 +112,9 @@ class AgentHarness:
         print(f"[agent] Built {len(anthropic_messages)} messages from DB")
 
         # Compact messages to reduce token usage while preserving intent and errors
-        return self._compact_messages(anthropic_messages)
+        # TODO: This is not tested thoroughly and it may harm the agent's ability to continue a long plan.
+        # return self._compact_messages(anthropic_messages)
+        return anthropic_messages
 
     # TODO: Should we remove intermediate thinking traces?
     # Seems like we need to keep the last thinking message to enable thinking
