@@ -530,7 +530,7 @@ class AgentHarness:
 
         async def h5_filter_by(args: dict) -> str:
             widget_key = args.get("widget_key")
-            changes = args.get("changes", [])
+            changes = args.get("changes")
             
             if isinstance(changes, str):
                 try:
@@ -548,8 +548,7 @@ class AgentHarness:
             
             result = await self.atomic_operation("h5_filter_by", params)
             if result.get("status") == "success":
-                change_count = len(changes) if isinstance(changes, list) else 0
-                return f"Applied {change_count} filter change(s) to h5 widget"
+                return f"Applied filters to h5 widget: {changes}"
             
             return f"Failed to apply filters to h5 widget: {result.get('error', 'Unknown error')}"
 
@@ -566,46 +565,16 @@ class AgentHarness:
             if AGENT_DEBUG:
                 print(f"[tool] h5_color_by widget_key={widget_key} color_by={color_by}")
             
-            if color_by is None:
-                params = {
-                    "widget_key": widget_key,
-                    "color_by": None
-                }
-                result = await self.atomic_operation("h5_color_by", params)
-                if result.get("status") == "success":
-                    return f"Removed coloring from h5 widget"
-                return f"Failed to remove h5 widget coloring: {result.get('error', 'Unknown error')}"
+            params = {
+                "widget_key": widget_key,
+                "color_by": color_by
+            }
             
-            if color_by.get("type") == "obs":
-                obs_key = color_by.get("key")
-                params = {
-                    "widget_key": widget_key,
-                    "color_by": {
-                        "type": "obs",
-                        "key": obs_key
-                    }
-                }
-                result = await self.atomic_operation("h5_color_by", params)
-                if result.get("status") == "success":
-                    return f"Set h5 widget to color by observation '{obs_key}'"
-                return f"Failed to set h5 widget coloring: {result.get('error', 'Unknown error')}"
+            result = await self.atomic_operation("h5_color_by", params)
+            if result.get("status") == "success":
+                return f"Set h5 widget coloring: {color_by}"
             
-            if color_by.get("type") == "var":
-                var_keys = color_by.get("keys", [])
-                params = {
-                    "widget_key": widget_key,
-                    "color_by": {
-                        "type": "var",
-                        "keys": var_keys
-                    }
-                }
-                result = await self.atomic_operation("h5_color_by", params)
-                if result.get("status") == "success":
-                    gene_list = ", ".join(var_keys)
-                    return f"Set h5 widget to color by variable(s): {gene_list}"
-                return f"Failed to set h5 widget coloring: {result.get('error', 'Unknown error')}"
-            
-            return "Invalid color_by configuration"
+            return f"Failed to set h5 widget coloring: {result.get('error', 'Unknown error')}"
 
         async def h5_set_selected_obsm_key(args: dict) -> str:
             widget_key = args.get("widget_key")
@@ -629,15 +598,8 @@ class AgentHarness:
             widget_key = args.get("widget_key")
             node_id = args.get("node_id")
             
-            print(f"[tool] h5_set_background_image widget_key={widget_key} node_id={node_id}")
-
-            if not widget_key:
-                print(f"[tool] h5_set_background_image widget_key is required")
-                return "Error: widget_key is required"
-            
-            if not node_id:
-                print(f"[tool] h5_set_background_image node_id is required")
-                return "Error: node_id is required"
+            if AGENT_DEBUG:
+                print(f"[tool] h5_set_background_image widget_key={widget_key} node_id={node_id}")
             
             params = {
                 "widget_key": widget_key,
@@ -647,23 +609,15 @@ class AgentHarness:
             result = await self.atomic_operation("h5_set_background_image", params)
             if result.get("status") == "success":
                 return f"Set background image for h5 widget using {node_id}"
-            print(f"[tool] h5_set_background_image failed: {result.get('error', 'Unknown error')}")
             return f"Failed to set background image: {result.get('error', 'Unknown error')}"
 
         async def h5_open_image_aligner(args: dict) -> str:
             widget_key = args.get("widget_key")
             background_image_id = args.get("background_image_id")
             
-            print(f"[tool] h5_open_image_aligner widget_key={widget_key} background_image_id={background_image_id}")
+            if AGENT_DEBUG:
+                print(f"[tool] h5_open_image_aligner widget_key={widget_key} background_image_id={background_image_id}")
 
-            if not widget_key:
-                print(f"[tool] h5_open_image_aligner widget_key is required")
-                return "Error: widget_key is required"
-            
-            if not background_image_id:
-                print(f"[tool] h5_open_image_aligner background_image_id is required")
-                return "Error: background_image_id is required"
-            
             params = {
                 "widget_key": widget_key,
                 "background_image_id": background_image_id,
@@ -672,17 +626,14 @@ class AgentHarness:
             result = await self.atomic_operation("h5_open_image_aligner", params)
             if result.get("status") == "success":
                 return f"Opened image aligner for background image {background_image_id}"
-            print(f"[tool] h5_open_image_aligner failed: {result.get('error', 'Unknown error')}")
+
             return f"Failed to open image aligner: {result.get('error', 'Unknown error')}"
 
         async def h5_autoscale(args: dict) -> str:
             widget_key = args.get("widget_key")
             
-            print(f"[tool] h5_autoscale widget_key={widget_key}")
-
-            if not widget_key:
-                print(f"[tool] h5_autoscale widget_key is required")
-                return "Error: widget_key is required"
+            if AGENT_DEBUG:
+                print(f"[tool] h5_autoscale widget_key={widget_key}")
             
             params = {
                 "widget_key": widget_key,
@@ -691,7 +642,7 @@ class AgentHarness:
             result = await self.atomic_operation("h5_autoscale", params)
             if result.get("status") == "success":
                 return f"Autoscaled h5 widget {widget_key} to data bounds"
-            print(f"[tool] h5_autoscale failed: {result.get('error', 'Unknown error')}")
+
             return f"Failed to autoscale h5 widget: {result.get('error', 'Unknown error')}"
 
         async def h5_zoom(args: dict) -> str:
@@ -699,20 +650,9 @@ class AgentHarness:
             direction = args.get("direction")
             percentage = args.get("percentage")
             
-            print(f"[tool] h5_zoom widget_key={widget_key} direction={direction} percentage={percentage}")
+            if AGENT_DEBUG:
+                print(f"[tool] h5_zoom widget_key={widget_key} direction={direction} percentage={percentage}")
 
-            if not widget_key:
-                print(f"[tool] h5_zoom widget_key is required")
-                return "Error: widget_key is required"
-            
-            if not direction:
-                print(f"[tool] h5_zoom direction is required")
-                return "Error: direction is required"
-            
-            if direction not in ["in", "out"]:
-                print(f"[tool] h5_zoom invalid direction: {direction}")
-                return f"Error: direction must be 'in' or 'out', got '{direction}'"
-            
             params = {
                 "widget_key": widget_key,
                 "direction": direction,
@@ -727,7 +667,7 @@ class AgentHarness:
                 if percentage is not None:
                     zoom_desc += f" by {percentage}%"
                 return f"Applied {zoom_desc} to h5 widget {widget_key}"
-            print(f"[tool] h5_zoom failed: {result.get('error', 'Unknown error')}")
+
             return f"Failed to zoom h5 widget: {result.get('error', 'Unknown error')}"
 
         async def h5_set_background_image_visibility(args: dict) -> str:
@@ -1002,7 +942,7 @@ class AgentHarness:
 
         self.tools.append({
             "name": "h5_filter_by",
-            "description": "Apply filtering changes to an h5/AnnData widget. Can add, remove, or exclusively apply filters on observations or variables to subset cells displayed in the visualization.",
+            "description": "Apply filtering changes to an h5/AnnData widget. Can add, remove, or exclusively apply them.",
             "input_schema": {
                 "type": "object",
                 "properties": {
@@ -1119,7 +1059,7 @@ class AgentHarness:
 
         self.tools.append({
             "name": "h5_color_by",
-            "description": "Set an h5/AnnData widget to color by a specific observation or variable. Can color by a single observation key or by multiple variable keys (genes).",
+            "description": "Set an h5/AnnData widget to color by a specific observation or variable (can be multiple if for genes)",
             "input_schema": {
                 "type": "object",
                 "properties": {
@@ -1174,7 +1114,7 @@ class AgentHarness:
 
         self.tools.append({
             "name": "h5_set_selected_obsm_key",
-            "description": "Set the selected obsm key for an h5/AnnData widget to control which spatial coordinates are displayed.",
+            "description": "Set the selected obsm key for an h5/AnnData widget to control which embedding is displayed.",
             "input_schema": {
                 "type": "object",
                 "properties": {
@@ -1194,7 +1134,7 @@ class AgentHarness:
 
         self.tools.append({
             "name": "h5_set_background_image",
-            "description": "Set a background image for an h5/AnnData widget from a user-attached file. The file must be an image type (jpg, jpeg, png, tiff). The image will be positioned and scaled automatically to match the spatial data coordinates.",
+            "description": "Set a background image for an h5/AnnData widget from a user-attached file. The file must be an image type (jpg, jpeg, png, tiff).",
             "input_schema": {
                 "type": "object",
                 "properties": {
