@@ -274,7 +274,7 @@ class AgentHarness:
                     "cell_id": cell_id,
                     "cell_name": cell_name,
                     "success": success,
-                    "logs": msg.get("logs", {}),
+                    "logs": msg.get("logs", ""),
                 }
                 print(f"[agent] Cell {cell_id} succeeded")
             else:
@@ -294,7 +294,7 @@ class AgentHarness:
                     "type": "anthropic_message",
                     "role": "user",
                     "content_schema": "cell_result",
-                    "content": json.dumps(result_content),
+                    "content": result_content,
                     "timestamp": int(time.time() * 1000),
                 },
             )
