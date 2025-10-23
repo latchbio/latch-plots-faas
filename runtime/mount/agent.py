@@ -294,7 +294,7 @@ class AgentHarness:
                         "type": "anthropic_message",
                         "role": "user",
                         "content_schema": "cell_result",
-                        "content": result_content,
+                        "content": json.dumps(result_content),
                         "timestamp": int(time.time() * 1000),
                     },
                 )
