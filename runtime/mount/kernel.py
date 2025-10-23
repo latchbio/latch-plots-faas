@@ -1471,10 +1471,8 @@ class Kernel:
     async def send_globals_summary(self, agent_tx_id: str | None = None) -> None:
         summary = {}
         for key, value in self.k_globals.items():
-            is_signal = False
             if isinstance(value, Signal):
                 value = value.sample()
-                is_signal = True
 
             if isinstance(value, pd.DataFrame):
                 summary[key] = {
@@ -1513,9 +1511,6 @@ class Kernel:
             else:
                 summary[key] = {"type": type(value).__name__}
 
-            if is_signal:
-                summary[key]["is_signal"] = True
-
         msg = {"type": "globals_summary", "summary": summary}
         if agent_tx_id is not None:
             msg["agent_tx_id"] = agent_tx_id
@@ -1524,6 +1519,8 @@ class Kernel:
 
     def get_reactivity_summary(self) -> str:
         signal_id_to_name: dict[str, str] = {}
+        global_signal_ids: set[str] = set()
+
         for var_name in self.k_globals:
             if var_name in {"__builtins__", "__warningregistry__"}:
                 continue
@@ -1531,6 +1528,7 @@ class Kernel:
             sig = self.k_globals.get_signal(var_name)
             if sig is not None:
                 signal_id_to_name[sig.id] = var_name
+                global_signal_ids.add(sig.id)
 
         all_signals: dict[str, Signal[object]] = {}
 
@@ -1570,27 +1568,24 @@ class Kernel:
 
         summary_lines.append("Signals:\n")
 
+        signal_name_to_id: dict[str, str] = {}
         signal_usage: dict[str, list[str]] = {}
+
         for cell_id, signal_ids in cell_dependencies.items():
             for sig_id in signal_ids:
                 sig_name = signal_id_to_name.get(sig_id, f"<unknown-{sig_id[:8]}>")
+                signal_name_to_id[sig_name] = sig_id
                 if sig_name not in signal_usage:
                     signal_usage[sig_name] = []
                 signal_usage[sig_name].append(cell_id)
 
-        global_signal_names = set()
-        for var_name in self.k_globals:
-            if var_name in {"__builtins__", "__warningregistry__"}:
-                continue
-            sig = self.k_globals.get_signal(var_name)
-            if sig is not None:
-                global_signal_names.add(var_name)
-
         for sig_name in sorted(signal_usage.keys()):
             cells = signal_usage[sig_name]
+            sig_id = signal_name_to_id.get(sig_name)
+
             summary_lines.append(f"{sig_name}:")
 
-            if sig_name in global_signal_names:
+            if sig_id and sig_id in global_signal_ids:
                 summary_lines.append("  - Scope: global variable")
             else:
                 summary_lines.append("  - Scope: local signal")
