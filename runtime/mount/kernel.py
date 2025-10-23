@@ -1471,8 +1471,10 @@ class Kernel:
     async def send_globals_summary(self, agent_tx_id: str | None = None) -> None:
         summary = {}
         for key, value in self.k_globals.items():
+            is_signal = False
             if isinstance(value, Signal):
                 value = value.sample()
+                is_signal = True
 
             if isinstance(value, pd.DataFrame):
                 summary[key] = {
@@ -1510,6 +1512,9 @@ class Kernel:
                 }
             else:
                 summary[key] = {"type": type(value).__name__}
+
+            if is_signal:
+                summary[key]["is_signal"] = True
 
         msg = {"type": "globals_summary", "summary": summary}
         if agent_tx_id is not None:
@@ -1556,28 +1561,6 @@ class Kernel:
             traverse_node(node, deps)
             cell_dependencies[cell_id] = deps
 
-        cell_triggers: dict[str, set[str]] = {cell_id: set() for cell_id in self.cell_rnodes}
-
-        for cell_id, signal_ids in cell_dependencies.items():
-            for sig_id in signal_ids:
-                sig = all_signals.get(sig_id)
-                if sig is None:
-                    continue
-
-                for listener_id in sig._listeners:  # noqa: SLF001
-                    for other_cell_id, other_node in self.cell_rnodes.items():
-                        if other_cell_id == cell_id:
-                            continue
-
-                        def is_descendant(n: Node, target_id: str) -> bool:
-                            if n.id == target_id:
-                                return True
-                            return any(is_descendant(child, target_id) for child in n.children.values())
-
-                        if is_descendant(other_node, listener_id):
-                            cell_triggers[cell_id].add(other_cell_id)
-                            break
-
         summary_lines: list[str] = []
         summary_lines.append("=== Reactive Notebook Structure ===\n")
 
@@ -1585,11 +1568,39 @@ class Kernel:
             summary_lines.append("No cells with reactive dependencies.\n")
             return "\n".join(summary_lines)
 
-        summary_lines.append("Cell Dependencies:\n")
+        summary_lines.append("Signals:\n")
+
+        signal_usage: dict[str, list[str]] = {}
+        for cell_id, signal_ids in cell_dependencies.items():
+            for sig_id in signal_ids:
+                sig_name = signal_id_to_name.get(sig_id, f"<unknown-{sig_id[:8]}>")
+                if sig_name not in signal_usage:
+                    signal_usage[sig_name] = []
+                signal_usage[sig_name].append(cell_id)
+
+        global_signal_names = set()
+        for var_name in self.k_globals:
+            if var_name in {"__builtins__", "__warningregistry__"}:
+                continue
+            sig = self.k_globals.get_signal(var_name)
+            if sig is not None:
+                global_signal_names.add(var_name)
+
+        for sig_name in sorted(signal_usage.keys()):
+            cells = signal_usage[sig_name]
+            summary_lines.append(f"{sig_name}:")
+
+            if sig_name in global_signal_names:
+                summary_lines.append("  - Scope: global variable")
+            else:
+                summary_lines.append("  - Scope: local signal")
+
+            summary_lines.append(f"  - Used by cells: {', '.join(sorted(cells))}")
+
+        summary_lines.append("\nCell Dependencies:\n")
 
         for cell_id in sorted(self.cell_rnodes.keys()):
             deps = cell_dependencies.get(cell_id, set())
-            triggers = cell_triggers.get(cell_id, set())
 
             summary_lines.append(f"Cell {cell_id}:")
 
@@ -1598,11 +1609,6 @@ class Kernel:
                 summary_lines.append(f"  - Depends on signals: {', '.join(dep_names)}")
             else:
                 summary_lines.append("  - No signal dependencies")
-
-            if triggers:
-                summary_lines.append(f"  - Triggers rerun of: {', '.join(sorted(triggers))}")
-            else:
-                summary_lines.append("  - Does not trigger other cells")
 
             summary_lines.append("")
 
