@@ -266,7 +266,7 @@ class AgentHarness:
         elif msg_type == "cell_result":
             cell_id = msg["cell_id"]
             success = msg.get("success", True)
-            cell_name = msg.get("cell_name", None)
+            cell_name = msg.get("display_name", None)
 
             if success:
                 result_content = {
