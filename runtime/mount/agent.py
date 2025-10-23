@@ -661,9 +661,10 @@ class AgentHarness:
         self.tool_map["set_widget"] = set_widget
 
     async def _get_notebook_context(self) -> str:
-        context_result, globals_result = await asyncio.gather(
+        context_result, globals_result, reactivity_result = await asyncio.gather(
             self.atomic_operation("get_context"),
-            self.atomic_operation("request_globals_summary")
+            self.atomic_operation("request_globals_summary"),
+            self.atomic_operation("request_reactivity_summary")
         )
 
         if context_result.get("status") != "success":
@@ -676,6 +677,10 @@ class AgentHarness:
         globals_data: dict[str, object] | None = None
         if globals_result.get("status") == "success":
             globals_data = globals_result.get("summary", {})
+
+        reactivity_summary: str | None = None
+        if reactivity_result.get("status") == "success":
+            reactivity_summary = reactivity_result.get("summary")
 
         summary = f"Notebook has {cell_count} cell(s):\n"
         for cell in cells:
@@ -708,6 +713,9 @@ class AgentHarness:
                             summary += f"    {key}: {value}\n"
                 else:
                     summary += f"  {var_name}: {var_info}\n"
+
+        if reactivity_summary is not None:
+            summary += f"\n\n{reactivity_summary}"
 
         return summary
 

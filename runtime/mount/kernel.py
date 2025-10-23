@@ -1517,6 +1517,106 @@ class Kernel:
 
         await self.send(msg)
 
+    def get_reactivity_summary(self) -> str:
+        signal_id_to_name: dict[str, str] = {}
+        for var_name in self.k_globals:
+            if var_name in {"__builtins__", "__warningregistry__"}:
+                continue
+
+            sig = self.k_globals.get_signal(var_name)
+            if sig is not None:
+                signal_id_to_name[sig.id] = var_name
+
+        all_signals: dict[str, Signal[object]] = {}
+
+        def collect_all_signals(n: Node) -> None:
+            for sig_id, sig in n.signals.items():
+                if sig_id not in all_signals:
+                    all_signals[sig_id] = sig
+                    if sig_id not in signal_id_to_name:
+                        signal_id_to_name[sig_id] = sig._name  # noqa: SLF001
+
+            for child in n.children.values():
+                collect_all_signals(child)
+
+        for node in self.cell_rnodes.values():
+            collect_all_signals(node)
+
+        cell_dependencies: dict[str, set[str]] = {}
+
+        for cell_id, node in self.cell_rnodes.items():
+            deps: set[str] = set()
+
+            def traverse_node(n: Node, deps_set: set[str]) -> None:
+                deps_set.update(n.signals)
+
+                for child in n.children.values():
+                    traverse_node(child, deps_set)
+
+            traverse_node(node, deps)
+            cell_dependencies[cell_id] = deps
+
+        cell_triggers: dict[str, set[str]] = {cell_id: set() for cell_id in self.cell_rnodes}
+
+        for cell_id, signal_ids in cell_dependencies.items():
+            for sig_id in signal_ids:
+                sig = all_signals.get(sig_id)
+                if sig is None:
+                    continue
+
+                for listener_id in sig._listeners:  # noqa: SLF001
+                    for other_cell_id, other_node in self.cell_rnodes.items():
+                        if other_cell_id == cell_id:
+                            continue
+
+                        def is_descendant(n: Node, target_id: str) -> bool:
+                            if n.id == target_id:
+                                return True
+                            return any(is_descendant(child, target_id) for child in n.children.values())
+
+                        if is_descendant(other_node, listener_id):
+                            cell_triggers[cell_id].add(other_cell_id)
+                            break
+
+        summary_lines: list[str] = []
+        summary_lines.append("=== Reactive Notebook Structure ===\n")
+
+        if len(self.cell_rnodes) == 0:
+            summary_lines.append("No cells with reactive dependencies.\n")
+            return "\n".join(summary_lines)
+
+        summary_lines.append("Cell Dependencies:\n")
+
+        for cell_id in sorted(self.cell_rnodes.keys()):
+            deps = cell_dependencies.get(cell_id, set())
+            triggers = cell_triggers.get(cell_id, set())
+
+            summary_lines.append(f"Cell {cell_id}:")
+
+            if deps:
+                dep_names = sorted(signal_id_to_name.get(sig_id, f"<unknown-{sig_id[:8]}>") for sig_id in deps)
+                summary_lines.append(f"  - Depends on signals: {', '.join(dep_names)}")
+            else:
+                summary_lines.append("  - No signal dependencies")
+
+            if triggers:
+                summary_lines.append(f"  - Triggers rerun of: {', '.join(sorted(triggers))}")
+            else:
+                summary_lines.append("  - Does not trigger other cells")
+
+            summary_lines.append("")
+
+        return "\n".join(summary_lines)
+
+    async def send_reactivity_summary(self, agent_tx_id: str | None = None) -> None:
+        summary_text = self.get_reactivity_summary()
+
+        msg = {"type": "reactivity_summary", "summary": summary_text}
+        if agent_tx_id is not None:
+            msg["agent_tx_id"] = agent_tx_id
+
+        await self.send(msg)
+
     async def upload_ldata(
         self,
         *,
@@ -1765,6 +1865,11 @@ class Kernel:
         if msg["type"] == "globals_summary":
             agent_tx_id = msg.get("agent_tx_id")
             await self.send_globals_summary(agent_tx_id=agent_tx_id)
+            return
+
+        if msg["type"] == "reactivity_summary":
+            agent_tx_id = msg.get("agent_tx_id")
+            await self.send_reactivity_summary(agent_tx_id=agent_tx_id)
             return
 
         if msg["type"] == "upload_ldata":
