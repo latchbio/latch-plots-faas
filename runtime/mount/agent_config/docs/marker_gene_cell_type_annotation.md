@@ -12,7 +12,11 @@ This workflow provides **automated cell type annotation** using the **CellGuide 
 
 ## Database Overview
 
-The CellGuide marker gene database is structured as:
+CellGuide provides **two complementary databases** that enable different types of queries:
+
+### 1. Per-Gene Database (`cellguide_marker_gene_database_per_gene.json`)
+
+**Structure:**
 
 ```python
 {
@@ -25,12 +29,65 @@ The CellGuide marker gene database is structured as:
 }
 ```
 
-**Key features:**
+**Use case:** "Which cell types is this gene a marker for?"
+
+- **Primary purpose**: Automated cell type annotation from marker genes
+- **Workflow**: Given a list of marker genes → find candidate cell types
+- **Ranking**: Cell types are ranked by marker strength (first = best)
+
+**Example query:**
+
+```python
+marker_db_per_gene["Gad1"]["Mus musculus"]["brain"]
+# Returns: ["inhibitory neuron", "GABAergic neuron", ...]
+```
+
+### 2. Per-CellType Database (`cellguide_marker_gene_database_per_celltype.json`)
+
+**Structure:**
+
+```python
+{
+    "organism_name": {
+        "tissue_name": {
+            "cell_type_name": ["gene_1", "gene_2", ...],
+            "All Tissues": {
+                "cell_type_name": ["gene_1", "gene_2", ...]
+            }
+        }
+    }
+}
+```
+
+**Use case:** "What are the marker genes for this cell type?"
+
+- **Primary purpose**: Validation, manual annotation, and marker lookup
+- **Workflow**: Given a cell type → find its canonical marker genes
+- **Ranking**: Genes are ranked by marker strength (first = best)
+
+**Example query:**
+
+```python
+marker_db_per_celltype["Mus musculus"]["Brain"]["inhibitory neuron"]
+# Returns: ["Gad1", "Gad2", "Slc32a1", ...]
+```
+
+### Key Features (Both Databases)
 
 - **Organism-specific**: e.g., "Mus musculus", "Homo sapiens"
 - **Tissue-specific**: e.g., "Brain", "Liver", "All Tissues"
-- **Ranked cell types**: order matters — earlier entries are stronger markers
+- **Ranked lists**: order matters — earlier entries are stronger markers
 - **Cell ontology terms**: includes varying granularity (e.g., "neuron" vs "excitatory neuron")
+
+### When to Use Each Database
+
+| Task                                   | Database to Use  |
+| -------------------------------------- | ---------------- |
+| Automated annotation from marker genes | **Per-gene**     |
+| Validation of predicted cell types     | **Per-celltype** |
+| Manual cell type lookup                | **Per-celltype** |
+| "What cell types express gene X?"      | **Per-gene**     |
+| "What genes mark cell type Y?"         | **Per-celltype** |
 
 ### Tissue Options Database
 
@@ -49,23 +106,71 @@ This file is used to **dynamically populate** the tissue dropdown based on the s
 
 ## Workflow
 
-### Step 1: Load the CellGuide Database and Tissue Options
+### Important: Automatic Execution Pattern
 
-Download and load both the marker gene database and tissue options from Latch Data:
+**All steps in this workflow should execute automatically** without requiring manual button clicks or other user-triggered actions.
+
+- ✅ **Use widgets for user INPUT**: `w_select`, `w_text_input`, etc. to collect parameters (organism, tissue)
+- ❌ **Do NOT use buttons to trigger execution**: avoid patterns like "Click to run annotation" buttons
+
+**Why this matters:**
+
+If essential operations (loading databases, running annotation) are placed behind manual triggers:
+
+1. Later cells will expect the results to exist
+2. If the user hasn't clicked the button, those cells will fail
+3. The agent may write duplicate auto-running code, leaving dead code in the notebook
+
+**Correct pattern:**
+
+```python
+# Collect user input with widgets
+organism = w_select(label="Organism", options=[...])
+tissue = w_select(label="Tissue", options=[...])
+
+# Then immediately run the annotation (no button needed)
+annotations = run_annotation(organism.value, tissue.value)
+```
+
+**Incorrect pattern:**
+
+```python
+# ❌ Don't do this
+organism = w_select(label="Organism", options=[...])
+run_button = w_button(label="Run Annotation")
+
+if run_button.clicked:  # This creates dependencies on manual interaction
+    annotations = run_annotation(...)
+```
+
+---
+
+### Step 1: Load the CellGuide Databases and Tissue Options
+
+Download and load **both CellGuide databases** plus tissue options from Latch Data:
 
 ```python
 import json
 from latch.ldata.path import LPath
 from pathlib import Path
 
-# Download marker gene database
-db_lpath = LPath("latch:///cellguide_marker_gene_database.json")
-local_db_path = Path(f"{db_lpath.node_id()}.json")
-db_lpath.download(local_db_path, cache=True)
+# Download per-gene database (for annotation)
+db_per_gene_lpath = LPath("latch:///cellguide_marker_gene_database_per_gene.json")
+local_db_per_gene_path = Path(f"{db_per_gene_lpath.node_id()}.json")
+db_per_gene_lpath.download(local_db_per_gene_path, cache=True)
 
-# Load marker database into memory
-with open(local_db_path, "r") as f:
-    marker_db = json.load(f)
+# Load per-gene database into memory
+with open(local_db_per_gene_path, "r") as f:
+    marker_db_per_gene = json.load(f)
+
+# Download per-celltype database (for validation/lookup)
+db_per_celltype_lpath = LPath("latch:///cellguide_marker_gene_database_per_celltype.json")
+local_db_per_celltype_path = Path(f"{db_per_celltype_lpath.node_id()}.json")
+db_per_celltype_lpath.download(local_db_per_celltype_path, cache=True)
+
+# Load per-celltype database into memory
+with open(local_db_per_celltype_path, "r") as f:
+    marker_db_per_celltype = json.load(f)
 
 # Download tissue options database
 tissues_lpath = LPath("latch:///tissues_per_organism.json")
@@ -104,13 +209,15 @@ tissue = w_select(
 )
 ```
 
-### Step 3: Query Database for Marker Genes
+### Step 3: Query Per-Gene Database for Cell Type Suggestions
 
-For each cluster, extract the **top 10 marker genes** from differential expression results and query the database.
+For each cluster, extract the **top 10 marker genes** from differential expression results and query the **per-gene database** to find candidate cell types.
+
+**Why use per-gene database here:** We have marker genes and want to find which cell types they represent → use `marker_db_per_gene`.
 
 **Tissue selection logic:**
 
-1. For each gene, check available tissues: `marker_db[gene][organism].keys()`
+1. For each gene, check available tissues: `marker_db_per_gene[gene][organism].keys()`
 2. If the user-specified tissue exists, use it
 3. Otherwise, fall back to `"All Tissues"` if available
 4. If neither exists, skip the gene
@@ -121,14 +228,21 @@ import pandas as pd
 from collections import Counter
 
 def query_marker_database(
-    marker_db: dict,
+    marker_db_per_gene: dict,
     gene_list: list,
     organism: str,
     tissue: str,
     top_n: int = 10
 ) -> dict:
     """
-    Query the CellGuide database for cell type suggestions.
+    Query the per-gene CellGuide database for cell type suggestions.
+
+    Args:
+        marker_db_per_gene: The per-gene database (gene -> organism -> tissue -> cell types)
+        gene_list: List of marker genes to query
+        organism: Organism name (e.g., "Mus musculus")
+        tissue: Tissue name (e.g., "Brain")
+        top_n: Number of top marker genes to use
 
     Returns:
         dict: {cell_type: {"score": int, "supporting_genes": [genes]}}
@@ -136,14 +250,14 @@ def query_marker_database(
     cell_type_votes = {}
 
     for gene in gene_list[:top_n]:
-        if gene not in marker_db:
+        if gene not in marker_db_per_gene:
             continue
 
-        if organism not in marker_db[gene]:
+        if organism not in marker_db_per_gene[gene]:
             continue
 
         # Select tissue
-        tissues_available = marker_db[gene][organism].keys()
+        tissues_available = marker_db_per_gene[gene][organism].keys()
         if tissue in tissues_available:
             selected_tissue = tissue
         elif "All Tissues" in tissues_available:
@@ -152,7 +266,7 @@ def query_marker_database(
             continue
 
         # Get ranked cell types for this gene
-        cell_types = marker_db[gene][organism][selected_tissue]
+        cell_types = marker_db_per_gene[gene][organism][selected_tissue]
 
         # Score by rank (higher score = better marker)
         # First position gets highest score, decreasing linearly
@@ -181,9 +295,9 @@ for cluster in adata.obs['leiden'].cat.categories:
     marker_df = sc.get.rank_genes_groups_df(adata, group=cluster)
     gene_list = marker_df['names'].tolist()
 
-    # Query database
+    # Query per-gene database for cell type suggestions
     suggestions = query_marker_database(
-        marker_db,
+        marker_db_per_gene,  # Use per-gene database
         gene_list,
         organism_val,
         tissue_val,
@@ -290,9 +404,15 @@ adata.obs['annotation_confidence'] = adata.obs['leiden'].map(
 viewer = w_h5(ann_data=adata)
 ```
 
-### Step 7: Validate with Marker Expression
+### Step 7: Validate with Per-CellType Database
 
-Optionally, validate the suggestions by computing gene set scores for the predicted cell types.
+Optionally, validate the suggestions by looking up **canonical marker genes** from the per-celltype database and computing expression scores.
+
+**Why use per-celltype database here:** We have predicted cell types and want to find their expected marker genes → use `marker_db_per_celltype`.
+
+**Two validation approaches:**
+
+#### Approach 1: Validate using genes from annotation (simpler)
 
 ```python
 import scanpy as sc
@@ -320,6 +440,60 @@ for cell_type in unique_cell_types:
         score_name = f"{cell_type}_validation_score"
         sc.tl.score_genes(adata, marker_genes, score_name=score_name)
 ```
+
+#### Approach 2: Validate using canonical markers from per-celltype database (recommended)
+
+This approach validates predictions against the **canonical marker gene set** from CellGuide.
+
+```python
+import scanpy as sc
+
+# For each unique predicted cell type, lookup canonical markers
+unique_cell_types = adata.obs['predicted_cell_type'].unique()
+
+for cell_type in unique_cell_types:
+    if cell_type == "Unknown":
+        continue
+
+    # Lookup canonical markers from per-celltype database
+    canonical_markers = None
+
+    # Try user-specified tissue first
+    if organism_val in marker_db_per_celltype:
+        if tissue_val in marker_db_per_celltype[organism_val]:
+            canonical_markers = marker_db_per_celltype[organism_val][tissue_val].get(cell_type)
+
+        # Fallback to "All Tissues" if not found
+        if canonical_markers is None and "All Tissues" in marker_db_per_celltype[organism_val]:
+            canonical_markers = marker_db_per_celltype[organism_val]["All Tissues"].get(cell_type)
+
+    if canonical_markers is None:
+        continue
+
+    # Filter to genes present in dataset (use top 10 canonical markers)
+    canonical_markers_present = [g for g in canonical_markers[:10] if g in adata.var_names]
+
+    if len(canonical_markers_present) > 0:
+        score_name = f"{cell_type}_canonical_score"
+        sc.tl.score_genes(adata, canonical_markers_present, score_name=score_name)
+```
+
+**Comparing validation scores:**
+
+```python
+# Compare canonical marker scores across clusters
+score_cols = [col for col in adata.obs.columns if col.endswith("_canonical_score")]
+
+if score_cols:
+    validation_summary = adata.obs[score_cols + ["leiden", "predicted_cell_type"]].groupby("leiden").mean()
+    w_table(source=validation_summary, label="Canonical Marker Expression Scores by Cluster")
+```
+
+**Interpretation:**
+
+- **High canonical scores** in predicted cluster → Strong validation
+- **Low canonical scores** → Prediction may be incorrect or cell type is ambiguous
+- **Mismatched scores** (high score in different cluster) → May indicate annotation error
 
 ---
 
@@ -368,6 +542,100 @@ If the top suggestion has a **low score** (e.g., < 10):
 
 ---
 
+## Database Usage Patterns
+
+Understanding **when to use each database** is critical for efficient and accurate annotation workflows.
+
+### When to Use Per-Gene Database
+
+**Use `marker_db_per_gene`** when you have genes and need to find cell types:
+
+| Scenario                    | Example                                                                                 |
+| --------------------------- | --------------------------------------------------------------------------------------- |
+| **Automated annotation**    | You have marker genes from differential expression → query to find cell type candidates |
+| **Gene-to-celltype lookup** | User asks: "What cell types express Gad1?"                                              |
+| **Cluster interpretation**  | Given top genes in a cluster → identify the cell type                                   |
+
+**Code pattern:**
+
+```python
+# Given: list of marker genes
+marker_genes = ["Gad1", "Gad2", "Slc32a1"]
+
+# Find: which cell types these genes mark
+for gene in marker_genes:
+    cell_types = marker_db_per_gene[gene][organism][tissue]
+    print(f"{gene} marks: {cell_types[:3]}")  # Top 3 cell types
+```
+
+### When to Use Per-CellType Database
+
+**Use `marker_db_per_celltype`** when you have cell types and need to find genes:
+
+| Scenario                    | Example                                                                           |
+| --------------------------- | --------------------------------------------------------------------------------- |
+| **Validation**              | You predicted "inhibitory neuron" → lookup canonical markers to verify expression |
+| **Manual annotation**       | User wants to manually check markers for a specific cell type                     |
+| **Celltype-to-gene lookup** | User asks: "What are the markers for astrocytes?"                                 |
+| **Reference gene sets**     | Building gene sets for scoring or visualization                                   |
+
+**Code pattern:**
+
+```python
+# Given: predicted cell type
+predicted_cell_type = "inhibitory neuron"
+
+# Find: canonical marker genes for this cell type
+marker_genes = marker_db_per_celltype[organism][tissue][predicted_cell_type]
+print(f"Top markers for {predicted_cell_type}: {marker_genes[:10]}")  # Top 10 markers
+```
+
+### Complete Workflow Example: Using Both Databases
+
+**Step 1:** Annotation (per-gene) → **Step 2:** Validation (per-celltype)
+
+```python
+# Step 1: Annotation using per-gene database
+# We have marker genes from differential expression
+top_cluster_markers = ["Gad1", "Gad2", "Slc32a1", "Pvalb"]
+
+# Query per-gene database to find cell types
+cell_type_suggestions = {}
+for gene in top_cluster_markers:
+    if gene in marker_db_per_gene and organism in marker_db_per_gene[gene]:
+        cell_types = marker_db_per_gene[gene][organism].get(tissue, [])
+        for ct in cell_types[:5]:  # Top 5 cell types per gene
+            cell_type_suggestions[ct] = cell_type_suggestions.get(ct, 0) + 1
+
+# Top suggestion by vote count
+predicted_cell_type = max(cell_type_suggestions, key=cell_type_suggestions.get)
+print(f"Predicted: {predicted_cell_type}")
+
+# Step 2: Validation using per-celltype database
+# Lookup canonical markers for the predicted cell type
+canonical_markers = marker_db_per_celltype[organism][tissue].get(predicted_cell_type, [])
+print(f"Expected markers: {canonical_markers[:10]}")
+
+# Compute expression score for validation
+canonical_markers_in_data = [g for g in canonical_markers[:10] if g in adata.var_names]
+sc.tl.score_genes(adata, canonical_markers_in_data, score_name=f"{predicted_cell_type}_validation")
+```
+
+### Decision Tree: Which Database?
+
+```
+Do you have...
+├─ Genes and need cell types? → Use per-gene database
+│   ├─ Marker genes from DE? → Automated annotation workflow
+│   └─ Single gene lookup? → Direct query: marker_db_per_gene[gene][org][tissue]
+│
+└─ Cell types and need genes? → Use per-celltype database
+    ├─ Predicted cell type to validate? → Canonical marker validation
+    └─ Manual cell type to explore? → Direct query: marker_db_per_celltype[org][tissue][cell_type]
+```
+
+---
+
 ## Integration with Workflows
 
 ### CosMX / Spatial Transcriptomics
@@ -401,22 +669,46 @@ sc.tl.rank_genes_groups(adata, groupby='leiden', method='wilcoxon')
 ## Best Practices
 
 1. **Always confirm organism and tissue** before querying
-2. **Use top 10 markers** per cluster for consensus (balance coverage and noise)
-3. **Display supporting evidence** so users can evaluate suggestions
-4. **Show multiple alternatives** to account for ontology granularity
-5. **Validate with expression** — compute marker scores to verify predictions
-6. **Flag low-confidence** annotations for manual review
-7. **Cache the database** — download once per session for efficiency
+2. **Load both databases** at the start — you'll need both for annotation and validation
+3. **Use per-gene for annotation** — when going from markers to cell types
+4. **Use per-celltype for validation** — when verifying predictions with canonical markers
+5. **Use top 10 markers** per cluster for consensus (balance coverage and noise)
+6. **Display supporting evidence** so users can evaluate suggestions
+7. **Show multiple alternatives** to account for ontology granularity
+8. **Validate with expression** — compute canonical marker scores to verify predictions
+9. **Flag low-confidence** annotations for manual review
+10. **Cache the databases** — download once per session for efficiency
 
 ---
 
 ## Summary
 
-This workflow provides **automated, data-driven cell type annotation** by:
+This workflow provides **automated, data-driven cell type annotation** using **two complementary databases**:
 
-- Querying a comprehensive marker gene database
-- Aggregating evidence across multiple markers
-- Ranking suggestions by consensus and marker strength
-- Providing transparent, interpretable results
+**Per-Gene Database (`marker_db_per_gene`):**
+
+- Maps genes → cell types
+- Used for automated annotation from marker genes
+- Primary workflow: differential expression → cell type suggestions
+
+**Per-CellType Database (`marker_db_per_celltype`):**
+
+- Maps cell types → genes
+- Used for validation and marker lookup
+- Primary workflow: predicted cell type → canonical marker validation
+
+**Complete annotation workflow:**
+
+1. Load both databases and tissue options
+2. Use **per-gene database** to annotate clusters from marker genes
+3. Use **per-celltype database** to validate predictions with canonical markers
+4. Visualize and interpret results
+
+The dual-database approach provides:
+
+- **Automated suggestions** from observed markers
+- **Validation** against canonical marker gene sets
+- **Transparent evidence** for all predictions
+- **Flexibility** for both automated and manual workflows
 
 Use this as a **first-pass annotation** to guide downstream analysis and manual refinement.
