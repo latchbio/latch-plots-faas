@@ -1684,6 +1684,7 @@ class AgentHarness:
             widget_value = widget.get("value") or ""
             widget_label = widget.get("label") or ""
             widget_filters = widget.get("filters") or []
+            print(f"[agent] widget_filters: {widget_filters}")
 
             widget_desc = f"key={widget_key}, type={widget_type}"
             if widget_value:
