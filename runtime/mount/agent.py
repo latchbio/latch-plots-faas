@@ -111,7 +111,120 @@ class AgentHarness:
 
         print(f"[agent] Built {len(anthropic_messages)} messages from DB")
 
+        # Compact messages to reduce token usage while preserving intent and errors
+        # TODO: This is not tested thoroughly and it may harm the agent's ability to continue a long plan.
+        # return self._compact_messages(anthropic_messages)
         return anthropic_messages
+
+    # TODO: Should we remove intermediate thinking traces?
+    # Seems like we need to keep the last thinking message to enable thinking
+    # on future turns
+    def _compact_messages(self, messages: list[MessageParam]) -> list[MessageParam]:
+        try:
+            total = len(messages)
+            if total == 0:
+                return messages
+
+            # Identify indices of assistant messages
+            assistant_indices: list[int] = [i for i, m in enumerate(messages) if m.get("role") == "assistant"]
+            if len(assistant_indices) < 2:
+                # Not enough history to compact safely
+                return messages
+
+            # Keep the last two assistant turns unmodified (and everything after the second-to-last assistant)
+            keep_from_idx = assistant_indices[-2]
+
+            # Collect submit_response tool_use IDs from the older region we will compact
+            kept_submit_tool_use_ids: set[str] = set()
+            for i in range(0, keep_from_idx):
+                msg = messages[i]
+                if msg.get("role") == "assistant":
+                    content = msg.get("content")
+                    if isinstance(content, list):
+                        for block in content:
+                            if isinstance(block, dict) \
+                               and block.get("type") == "tool_use" \
+                               and block.get("name") == "submit_response":
+                                tool_id = block.get("id")
+                                if isinstance(tool_id, str):
+                                    kept_submit_tool_use_ids.add(tool_id)
+
+            compacted: list[MessageParam] = []
+
+            for idx, msg in enumerate(messages):
+                # Keep the tail region (last 2 full turns) unmodified
+                if idx >= keep_from_idx:
+                    compacted.append(msg)
+                    continue
+
+                role = msg.get("role")
+                content = msg.get("content")
+
+                if role == "assistant":
+                    if isinstance(content, list):
+                        new_blocks = []
+                        for block in content:
+                            if not isinstance(block, dict):
+                                continue
+                            block_type = block.get("type")
+                            if block_type == "tool_use" and block.get("name") == "submit_response":
+                                new_blocks.append(block)
+                            elif block_type in {"thinking", "redacted_thinking"}:
+                                # Keep thinking traces for continuity/compatibility
+                                new_blocks.append(block)
+                            # Drop assistant text and other tool_use blocks in compacted region
+                        if len(new_blocks) > 0:
+                            compacted.append({"role": role, "content": new_blocks})
+                        # else drop empty assistant message
+                        continue
+                    # Drop assistant string content in compacted region
+                    continue
+
+                if role == "user":
+                    if isinstance(content, list):
+                        new_blocks = []
+                        for block in content:
+                            if not isinstance(block, dict):
+                                # Keep unknown non-dict blocks conservatively
+                                new_blocks.append(block)
+                                continue
+                            if block.get("type") == "tool_result":
+                                # Keep tool_results that correspond to kept submit_response tool_use IDs
+                                tool_use_id = block.get("tool_use_id")
+                                if isinstance(tool_use_id, str) and tool_use_id in kept_submit_tool_use_ids:
+                                    new_blocks.append(block)
+                                    continue
+                                # Keep errored tool results
+                                try:
+                                    payload_raw = block.get("content")
+                                    payload = json.loads(payload_raw) if isinstance(payload_raw, str) else payload_raw
+                                    if isinstance(payload, dict) and payload.get("error"):
+                                        new_blocks.append(block)
+                                except Exception:
+                                    # If unparsable, keep conservatively
+                                    new_blocks.append(block)
+                            else:
+                                # Keep any other user blocks as-is
+                                new_blocks.append(block)
+                        if len(new_blocks) > 0:
+                            compacted.append({"role": role, "content": new_blocks})
+                        # else drop
+                        continue
+
+                    # Keep user string messages (queries, cell text, etc.)
+                    compacted.append(msg)
+                    continue
+
+                # Other roles: keep unchanged
+                compacted.append(msg)
+
+            print(f"[agent] Original messages: {total}")
+            print(f"[agent] Compact messages: {len(compacted)}")
+            return compacted
+        except Exception as e:
+            print(f"[agent] _compact_messages error: {e}")
+            # On any failure, fall back to original messages
+            return messages
 
     async def _insert_history(self, *, event_type: str, payload: dict, request_id: str | None = None, tx_id: str | None = None) -> None:
         assert self.agent_session_id is not None
@@ -492,7 +605,16 @@ class AgentHarness:
                 next_status = args.get("next_status")
                 if not isinstance(next_status, str) or next_status not in {"executing", "fixing", "thinking", "awaiting_user_response", "awaiting_cell_execution", "awaiting_user_widget_input", "done"}:
                     print(f"[agent] Invalid next_status: {next_status}")
-                    return "Please provide a valid next_status"
+                    raise ValueError("Please provide a valid next_status")
+
+                # Guardrail: if awaiting_user_response, require either summary or questions to be non-empty
+                if next_status == "awaiting_user_response":
+                    has_summary = isinstance(summary, str) and summary.strip() != ""
+                    has_questions = isinstance(questions, str) and questions.strip() != ""
+                    if not (has_summary or has_questions):
+                        raise ValueError(
+                            "When next_status is 'awaiting_user_response', provide user-facing 'summary' or concrete 'questions'."
+                        )
 
                 should_continue = args.get("continue", False)
 
@@ -524,7 +646,7 @@ class AgentHarness:
                 print(f"[tool] submit_response error: {e}")
                 import traceback
                 traceback.print_exc()
-                return f"Error submitting response: {e!s}"
+                raise
 
         async def h5_filter_by(args: dict) -> str:
             widget_key = args.get("widget_key")
@@ -843,7 +965,7 @@ class AgentHarness:
                 "properties": {
                     "plan": {"type": "array", "description": "List of plan items"},
                     "plan_diff": {"type": "array", "description": "List of plan diff items"},
-                    "summary": {"type": "string", "description": "Optional summary text describing what was accomplished. Use markdown formatting with bullet points if needed. Omit if no summary needed."},
+                    "summary": {"type": "string", "description": "Brief user-facing text. CRITICAL: This is the ONLY text shown to the user. If actions were taken, summarize outcomes; if no actions, copy your full text response here. Never use meta-descriptions like 'Provided overview to the user'. Use markdown bullets when appropriate."},
                     "questions": {"type": "string", "description": "Optional question text for the user. Omit if no questions needed."},
                     "next_status": {"type": "string", "description": "What the agent will do next", "enum": ["executing", "fixing", "thinking", "awaiting_user_response", "awaiting_cell_execution", "awaiting_user_widget_input", "done"]},
                     "continue": {
@@ -1385,6 +1507,7 @@ class AgentHarness:
                                 can_use_thinking = False
                                 print(f"[agent] Cannot use thinking API: last assistant message starts with {first_block_type}, not thinking")
 
+
             kwargs = {
                 "model": model,
                 "max_tokens": max_tokens,
@@ -1456,6 +1579,7 @@ class AgentHarness:
             elif response.stop_reason == "tool_use":
                 tool_results = []
                 called_submit_response = False
+                submit_response_failed = False
 
                 for block in response.content:
                     if isinstance(block, dict):
@@ -1467,9 +1591,7 @@ class AgentHarness:
                         tool_id = block.get("id") if isinstance(block, dict) else block.id
                         tool_name = block.get("name") if isinstance(block, dict) else block.name
                         tool_input = block.get("input") if isinstance(block, dict) else block.input
-
-                        if tool_name == "submit_response":
-                            called_submit_response = True
+                        print("[agent] TOOL INPUT:", tool_input)
 
                         print(f"[agent] Executing tool: {tool_name} (id={tool_id})")
 
@@ -1486,6 +1608,8 @@ class AgentHarness:
                                     }),
                                 })
                             except Exception as e:
+                                if tool_name == "submit_response":
+                                    submit_response_failed = True
                                 print(f"[agent] Tool error: {tool_name}: {e}")
                                 tool_results.append({
                                     "type": "tool_result",
@@ -1518,7 +1642,7 @@ class AgentHarness:
                 else:
                     print("[agent] No tool results")
 
-                if called_submit_response:
+                if called_submit_response and not submit_response_failed:
                     print("[agent] submit_response called, completing turn")
                     await self._complete_turn()
                 else:
