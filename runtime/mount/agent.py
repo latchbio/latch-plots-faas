@@ -115,14 +115,24 @@ class AgentHarness:
 
                     content = message
                     if exception:
-                        content = f"{message}\n\n Exception: {exception}"
+                        content = f"{message}\n\nException: {exception}"
                     if logs:
-                        log_lines = logs.split('\n')
-                        if len(log_lines) > 32:
-                            truncated_logs = '\n'.join(log_lines[-32:])
-                            content = f"{content}\n\nLogs (last 32 lines):\n{truncated_logs}"
-                        else:
-                            content = f"{content}\n\nLogs: {logs}"
+                        content = f"{content}\n\nLogs:\n{logs}"
+
+                if isinstance(content, list):
+                    cleaned_content = []
+                    for block in content:
+                        if isinstance(block, dict) and block.get("type") == "tool_result":
+                            block = block.copy()
+                            try:
+                                result = json.loads(block.get("content", "{}"))
+                                if "original_code" in result:
+                                    result.pop("original_code")
+                                    block["content"] = json.dumps(result)
+                            except (json.JSONDecodeError, TypeError):
+                                pass
+                        cleaned_content.append(block)
+                    content = cleaned_content
 
                 if role in {"user", "assistant"} and (isinstance(content, (str, list))):
                     anthropic_messages.append({"role": role, "content": content})
@@ -464,7 +474,6 @@ class AgentHarness:
                 "auto_run": True
             }
 
-            # Find the original code from the stored context
             original_code = None
             cells = self.latest_notebook_context.get("cells", [])
             for cell in cells:
@@ -1357,6 +1366,10 @@ class AgentHarness:
                 exception = nested_msg.get("exception")
                 display_name = nested_msg.get("display_name")
 
+                logs = nested_msg.get("logs")
+                if logs and len(logs) > 4096:
+                    logs = logs[-4096:]
+
                 if cell_id is not None:
                     self.executing_cells.discard(str(cell_id))
 
@@ -1365,7 +1378,7 @@ class AgentHarness:
                     "cell_id": cell_id,
                     "success": not has_exception,
                     "exception": exception,
-                    "logs": nested_msg.get("logs"),
+                    "logs": logs,
                     "display_name": display_name,
                 })
             elif nested_type == "start_cell":
