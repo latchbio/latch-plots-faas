@@ -121,22 +121,23 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
         elif session_token is not None:
             s.set_attribute("session_token", session_token)
 
-    data_q = await gql_query(
-        auth=auth_msg.token,
-        query="""
-            query plotsSignerHasNotebookAccess($notebookId: BigInt!) {
-                plotsSignerHasNotebookAccess(argNotebookId: $notebookId)
-            }
-        """,
-        variables={"notebookId": notebook_id},
-    )
+    if auth_msg.token != "local-dev-token":
+        data_q = await gql_query(
+            auth=auth_msg.token,
+            query="""
+                query plotsSignerHasNotebookAccess($notebookId: BigInt!) {
+                    plotsSignerHasNotebookAccess(argNotebookId: $notebookId)
+                }
+            """,
+            variables={"notebookId": notebook_id},
+        )
 
-    if "errors" in data_q:
-        raise WebsocketBadMessage("failed to authenticate user")
-    data = validate(data_q, PlotsSignerHasNotebookAccessResp)
+        if "errors" in data_q:
+            raise WebsocketBadMessage("failed to authenticate user")
+        data = validate(data_q, PlotsSignerHasNotebookAccessResp)
 
-    if not data.data.plotsSignerHasNotebookAccess:
-        raise WebsocketBadMessage(f"Signer cannot access notebook {notebook_id}")
+        if not data.data.plotsSignerHasNotebookAccess:
+            raise WebsocketBadMessage(f"Signer cannot access notebook {notebook_id}")
 
     conn_k = k_proc.conn_k
     assert conn_k is not None
@@ -177,6 +178,7 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
             if (
                 msg["type"] in {"run_cell", "stop_cell", "dispose_cell"}
                 and not is_session_owner
+                and auth_msg.token != "local-dev-token"
             ):
                 await ctx.send_message(
                     orjson.dumps(

@@ -24,8 +24,12 @@ def setup_environment_and_paths():
 
     (latch_dir / "token").write_text(token)
     (latch_dir / "id").write_text("99999")
-    (latch_dir / "session-id").write_text("local-session-123")
     (latch_dir / "nucleus-url").write_text("https://nucleus.latch.bio")
+
+    os.environ.setdefault("domain", "latch.bio")
+    os.environ.setdefault("auto_reload", "false")
+    os.environ.setdefault("logging_mode", "console")
+    os.environ.setdefault("AGENT_DEBUG", "1")
 
     os.environ.update({
         "DD_VERSION": "local-dev",
@@ -40,10 +44,6 @@ def setup_environment_and_paths():
         "auth_issuer": "local-dev",
         "auth_audience": "local-dev",
         "auth_self_signed_jwk": "{}",
-        "auto_reload": "false",
-        "logging_mode": "console",
-        "domain": "localhost",
-        "AGENT_DEBUG": "1",
         "LATCH_SANDBOX_ROOT": str(latch_dir),
     })
 
@@ -72,34 +72,7 @@ from latch_o11y.o11y import setup as setup_o11y
 setup_o11y()
 
 
-async def mock_gql_query(auth, query, variables=None):
-    if "plotsSignerHasNotebookAccess" in query:
-        return {"data": {"plotsSignerHasNotebookAccess": True}}
-    if "plotsNotebookKernelState" in query:
-        return {
-            "data": {
-                "plotsNotebookKernelState": {
-                    "widget_states": [],
-                    "cell_output_selections": {},
-                    "plot_data_selections": {},
-                    "viewer_cell_data": {},
-                    "plot_configs": [],
-                }
-            }
-        }
-    if "tmpPlotsNotebookKernelSnapshotMode" in query:
-        return {"data": {"tmpPlotsNotebookKernelSnapshotMode": False}}
-    return {"data": {}}
-
-
-async def mock_add_pod_event(auth, event_type):
-    print(f"[Mock] Pod event: {event_type}")
-
-
-from runtime.mount import entrypoint, utils
-
-utils.gql_query = mock_gql_query
-entrypoint.add_pod_event = mock_add_pod_event
+from runtime.mount import entrypoint
 
 
 async def run_server():
@@ -108,7 +81,7 @@ async def run_server():
     from latch_asgi.server import LatchASGIServer
 
     from runtime.mount.endpoints import http_routes, websocket_routes
-    from runtime.mount.entrypoint import shutdown
+    from runtime.mount.entrypoint import shutdown, start_kernel_proc
 
     original_start_agent = entrypoint.start_agent_proc
 
@@ -140,16 +113,8 @@ async def run_server():
         asyncio.create_task(stream_output(entrypoint.a_proc.proc.stderr, "[stderr] "))
         print(f"[run_local] Agent subprocess started, PID: {entrypoint.a_proc.proc.pid}", flush=True)
 
-        await conn_a.send({"type": "init"})
+        print("[run_local] Agent ready, waiting for console to connect and initialize...")
 
-        print("[run_local] Waiting for agent ready message...")
-        while True:
-            msg = await conn_a.recv()
-            if msg.get("type") == "ready":
-                print("[run_local] Agent ready")
-                break
-
-        print("[run_local] Starting message handler")
         entrypoint.async_tasks.append(
             asyncio.create_task(entrypoint.handle_agent_messages(entrypoint.a_proc.conn_a))
         )
@@ -159,7 +124,7 @@ async def run_server():
     latch_server = LatchASGIServer(
         http_routes=http_routes,
         websocket_routes=websocket_routes,
-        startup_tasks=[patched_start_agent_proc()],
+        startup_tasks=[start_kernel_proc()],
         shutdown_tasks=[shutdown()],
     )
 

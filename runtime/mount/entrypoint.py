@@ -153,6 +153,10 @@ class TmpPlotsNotebookKernelSnapshotModeResp:
 
 
 async def add_pod_event(*, auth: str, event_type: str) -> None:
+    if "LATCH_SANDBOX_ROOT" in os.environ:
+        print(f"[local-dev] Skipping pod event: {event_type}")
+        return
+
     try:
         await gql_query(
             auth=auth,
@@ -486,26 +490,37 @@ async def start_kernel_proc() -> None:
     )
 
     k_state: KernelState | None = None
-    try:
-        resp = await gql_query(
-            auth=auth_token_sdk,
-            query="""
-                query plotsNotebookKernelState($pod_id: BigInt!) {
-                    plotsNotebookKernelState(argPodId: $pod_id)
-                }
-            """,
-            variables={"pod_id": pod_id},
+
+    if "LATCH_SANDBOX_ROOT" not in os.environ:
+        try:
+            resp = await gql_query(
+                auth=auth_token_sdk,
+                query="""
+                    query plotsNotebookKernelState($pod_id: BigInt!) {
+                        plotsNotebookKernelState(argPodId: $pod_id)
+                    }
+                """,
+                variables={"pod_id": pod_id},
+            )
+
+            data = validate(resp, PlotsNotebookKernelStateResp)
+            k_state = data.data.plotsNotebookKernelState
+        except Exception:
+            err_msg = {"type": "error", "data": traceback.format_exc()}
+            await plots_ctx_manager.broadcast_message(orjson.dumps(err_msg).decode())
+            traceback.print_exc()
+
+        if k_state is None:
+            return
+    else:
+        print("[local-dev] Skipping kernel state loading from database")
+        k_state = KernelState(
+            widget_states=[],
+            cell_output_selections={},
+            plot_data_selections={},
+            viewer_cell_data={},
+            plot_configs=[],
         )
-
-        data = validate(resp, PlotsNotebookKernelStateResp)
-        k_state = data.data.plotsNotebookKernelState
-    except Exception:
-        err_msg = {"type": "error", "data": traceback.format_exc()}
-        await plots_ctx_manager.broadcast_message(orjson.dumps(err_msg).decode())
-        traceback.print_exc()
-
-    if k_state is None:
-        return
 
     # todo(kenny): separate query for backwards compatability. Pull into main
     # fn when "snapshot mode" merged and works well
@@ -550,7 +565,11 @@ async def start_agent_proc() -> None:
         asyncio.create_task(handle_agent_messages(a_proc.conn_a))
     )
 
-    log_path = Path("/var/log/agent.log")
+    if "LATCH_SANDBOX_ROOT" in os.environ:
+        log_path = Path(os.environ["LATCH_SANDBOX_ROOT"]).parent / "agent.log"
+    else:
+        log_path = Path("/var/log/agent.log")
+
     log_path.parent.mkdir(parents=True, exist_ok=True)
     a_proc.log_file = open(log_path, "a")
 
@@ -568,20 +587,28 @@ async def start_agent_proc() -> None:
 
 
 async def stop_kernel_proc() -> None:
+    print("[shutdown] stop_kernel_proc: starting")
     ready_ev.clear()
 
     proc = k_proc.proc
     if proc is not None:
         try:
+            print(f"[shutdown] stop_kernel_proc: sending SIGTERM to pid {proc.pid}")
             proc.terminate()
+            print("[shutdown] stop_kernel_proc: waiting for process to exit (10s timeout)")
             await asyncio.wait_for(proc.wait(), timeout=10)
+            print("[shutdown] stop_kernel_proc: process exited cleanly")
         except TimeoutError:
-            print("Error terminating kernel process")
+            print("[shutdown] stop_kernel_proc: timeout, sending SIGKILL")
             proc.kill()
+            print("[shutdown] stop_kernel_proc: waiting for kill to complete")
             await proc.wait()
+            print("[shutdown] stop_kernel_proc: process killed")
 
+    print(f"[shutdown] stop_kernel_proc: cancelling {len(async_tasks)} tasks")
     for task in async_tasks:
         task.cancel()
+    print("[shutdown] stop_kernel_proc: complete")
 
 
 async def stop_agent_proc() -> None:
