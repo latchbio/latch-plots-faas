@@ -111,11 +111,14 @@ class AgentHarness:
                 if (role == "user" and isinstance(content, dict) and
                     content.get("type") == "cell_result"):
                     exception = content.get("exception")
+                    logs = content.get("logs")
                     message = content.get("message", "Cell execution completed")
+
+                    content = message
                     if exception:
-                        content = f"{message}, Exception: {exception}"
-                    else:
-                        content = message
+                        content = f"{message}\n\n Exception: {exception}"
+                    if logs:
+                        content = f"{content}\n\nLogs: {logs}"
 
                 if role in {"user", "assistant"} and (isinstance(content, (str, list))):
                     anthropic_messages.append({"role": role, "content": content})
@@ -290,7 +293,7 @@ class AgentHarness:
                     "cell_id": cell_id,
                     "cell_name": cell_name,
                     "success": success,
-                    "logs": msg.get("logs", ""),
+                    "logs": msg.get("logs"),
                 }
                 print(f"[agent] Cell {cell_id} succeeded")
             else:
@@ -303,7 +306,7 @@ class AgentHarness:
                     "cell_name": cell_name,
                     "success": False,
                     "exception": exception,
-                    "logs": msg.get("logs", ""),
+                    "logs": msg.get("logs"),
                 }
                 print(f"[agent] Cell {cell_id} failed")
 
