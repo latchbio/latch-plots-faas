@@ -64,6 +64,56 @@ Pre-aggregated reference dataset in **raw counts**:
 
 ## Workflow
 
+### CRITICAL: Widget Selection Pattern for Tangram
+
+**Tangram training is time-consuming (10-30 minutes).** Therefore:
+
+1. ✅ **Create widgets to collect parameters** (device, epochs, tissue selection)
+2. ✅ **WAIT for user to make selections** — do NOT proceed automatically
+3. ✅ **Split into separate cells**:
+   - **Cell A**: Create widgets and display them
+   - **Cell B**: Run Tangram training using selected values
+4. ❌ **Do NOT run Tangram immediately** after creating widgets in the same cell
+
+**Why this matters:**
+
+- Tangram takes 10-30 minutes to train
+- Users need to confirm parameters before committing to training
+- If parameters are wrong, users waste time re-running
+- This is different from marker gene annotation (which is fast and can run automatically)
+
+**Correct pattern:**
+
+```python
+# Cell 1: Create widgets and wait
+device = w_select(label="Device", options=["cpu", "cuda:0"])
+epochs = w_number_input(label="Epochs", default=500)
+print("Please select parameters above, then run the next cell.")
+```
+
+```python
+# Cell 2: Only run after user confirms (separate cell)
+ad_map = tg.map_cells_to_space(
+    adata_sc=ad_ref,
+    adata_sp=ad_sp,
+    device=device.value,
+    num_epochs=epochs.value
+)
+```
+
+**Incorrect pattern:**
+
+```python
+# ❌ Don't do this - runs immediately without user confirmation
+device = w_select(label="Device", options=["cpu", "cuda:0"])
+epochs = w_number_input(label="Epochs", default=500)
+
+# Tangram starts immediately - user has no chance to adjust!
+ad_map = tg.map_cells_to_space(...)  # Takes 30 minutes!
+```
+
+---
+
 ### Step 1: Load Tabula Sapiens Reference
 
 Download and convert the reference profiles to AnnData format for Tangram compatibility.
@@ -104,7 +154,11 @@ ad_ref.obs['cell_type'] = cell_types
 ad_ref.obs['tissue_cell_type'] = [f"{t}_{ct}" for t, ct in zip(tissues, cell_types)]
 
 print(f"Reference: {ad_ref.n_obs} cell types × {ad_ref.n_vars} genes")
-print(f"Tissues: {sorted(pd.unique(ad_ref.obs['tissue']))}")
+
+# CRITICAL: Introspect available tissues from the data
+available_tissues = sorted(pd.unique(ad_ref.obs['tissue']))
+print(f"Available tissues in reference: {available_tissues}")
+print(f"Number of tissues: {len(available_tissues)}")
 ```
 
 ### Step 2: Prepare Spatial Data
@@ -175,30 +229,72 @@ Run Tangram mapping using the pre-aggregated reference in cluster mode.
 
 **This is the key step**: Tangram learns to map reference cell types onto spatial coordinates.
 
+**CRITICAL:** This step should be split into TWO cells:
+
+1. **Cell 1**: Create widgets and let user make selections
+2. **Cell 2**: Run Tangram training with selected parameters
+
+#### Cell 1: Collect User Parameters (Create Widgets)
+
 ```python
 from lplots.widgets.select import w_select
 from lplots.widgets.number import w_number_input
 
 # Widget for choosing device
 device_select = w_select(
-    label="Device for training",
+    label="Device for training (CPU is slower but uses less memory)",
     options=["cpu", "cuda:0"],
     default="cpu"
 )
 
 # Widget for number of training epochs
 epochs_input = w_number_input(
-    label="Number of training epochs",
+    label="Number of training epochs (500-1000 recommended)",
     default=500,
     min_value=100,
     max_value=2000,
     step=100
 )
 
+# Optional: Widget for tissue filtering
+from lplots.widgets.select import w_select
+import pandas as pd
+
+available_tissues = sorted(pd.unique(ad_ref.obs['tissue']))
+tissue_filter = w_select(
+    label="Filter reference to specific tissue (optional)",
+    options=["Use all tissues"] + available_tissues,
+    default="Use all tissues"
+)
+
+print("Please select your parameters above, then proceed to the next cell to start training.")
+print(f"Note: Tangram training will take approximately 10-30 minutes on CPU.")
+```
+
+**STOP HERE** — Wait for user to make selections in the widgets above before proceeding.
+
+#### Cell 2: Run Tangram Training (After User Selections)
+
+**Only run this cell after the user has made their selections above.**
+
+```python
+import tangram as tg
+
+# Filter reference by tissue if specified
+if tissue_filter.value != "Use all tissues":
+    ad_ref_filtered = ad_ref[ad_ref.obs['tissue'] == tissue_filter.value].copy()
+    print(f"Using {ad_ref_filtered.n_obs} cell types from {tissue_filter.value}")
+else:
+    ad_ref_filtered = ad_ref
+    print(f"Using all {ad_ref_filtered.n_obs} cell types from all tissues")
+
 # Map cells to space using cluster mode
 # This uses the pre-aggregated cell type profiles
+print(f"Starting Tangram training with {epochs_input.value} epochs on {device_select.value}...")
+print("This will take 10-30 minutes. Please wait...")
+
 ad_map = tg.map_cells_to_space(
-    adata_sc=ad_ref,
+    adata_sc=ad_ref_filtered,
     adata_sp=ad_sp,
     mode='clusters',  # Use cluster mode for pre-aggregated data
     cluster_label='cell_type',  # Field in ad_ref.obs containing cell type labels
@@ -206,8 +302,8 @@ ad_map = tg.map_cells_to_space(
     num_epochs=epochs_input.value
 )
 
-print("Mapping complete!")
-print(f"Mapping score: {ad_map.uns.get('training_history', {}).get('train_score', 'N/A')}")
+print("✓ Mapping complete!")
+print(f"Final mapping score: {ad_map.uns.get('training_history', {}).get('train_score', 'N/A')}")
 ```
 
 **Training notes:**
@@ -409,49 +505,62 @@ if ad_sp.n_obs > 50000:
 
 ### Tissue Mismatch
 
-**Problem:** Reference tissue doesn't match spatial data tissue.
+**Problem:** Reference tissue doesn't match spatial data tissue, or you want to use only a specific tissue subset.
 
 **Solutions:**
 
+- **Always introspect available tissues first** — extract from data, don't hard-code tissue names
 - Filter reference to relevant tissue only
-- Use "All Tissues" if specific tissue not available
+- Let user select from available options using widget
 - Validate results carefully with marker genes
 
 ```python
-# Filter reference to specific tissue
+# CRITICAL: Always introspect available tissues from the data first
 from lplots.widgets.select import w_select
+import pandas as pd
 
-# Extract available tissues
+# Extract available tissues from the reference data
 available_tissues = sorted(pd.unique(ad_ref.obs['tissue']))
+print(f"Available tissues in reference: {available_tissues}")
 
+# Present tissue options to user for selection
 tissue_selector = w_select(
-    label="Select reference tissue",
+    label="Select reference tissue to use for mapping",
     options=available_tissues,
-    default=available_tissues[0]
+    default=available_tissues[0] if available_tissues else None
 )
 
-# Filter reference
-ad_ref_filtered = ad_ref[ad_ref.obs['tissue'] == tissue_selector.value].copy()
-print(f"Filtered reference: {ad_ref_filtered.n_obs} cell types from {tissue_selector.value}")
+# Filter reference to selected tissue
+if tissue_selector.value:
+    ad_ref_filtered = ad_ref[ad_ref.obs['tissue'] == tissue_selector.value].copy()
+    print(f"Filtered reference: {ad_ref_filtered.n_obs} cell types from {tissue_selector.value}")
 
-# Now use ad_ref_filtered for mapping
+    # Now use ad_ref_filtered for mapping
+else:
+    print("No tissue selected, using full reference")
+    ad_ref_filtered = ad_ref
 ```
+
+**Important:** Never hard-code tissue names like "Brain", "Liver", etc. Always extract from the data using `pd.unique(ad_ref.obs['tissue'])` to see what's actually available.
 
 ---
 
 ## Best Practices
 
-1. **Use raw counts for both reference and spatial data** — CRITICAL for Tangram alignment
-2. **Verify spatial data has raw counts and use them** — check before mapping
-3. **Check gene overlap first** — need at least 100-200 common genes
-4. **Match tissues** — filter reference to relevant tissue when possible
-5. **Monitor training** — check that score plateaus and doesn't keep decreasing
-6. **Validate results** — compare with marker gene annotations when available
-7. **Check confidence** — low confidence predictions may need manual review
-8. **Use cluster mode** — pre-aggregated reference is faster and uses less memory
-9. **Cache downloads** — download reference once per session for efficiency
-10. **Start with CPU** — use CPU first, switch to GPU only if needed
-11. **Visualize extensively** — use `w_h5` to inspect spatial patterns
+1. **CRITICAL: Split widget creation from Tangram training** — create widgets in one cell, run training in the next cell after user selections
+2. **Wait for user parameter selection** — Tangram takes 10-30 minutes, users must confirm parameters first
+3. **Use raw counts for both reference and spatial data** — CRITICAL for Tangram alignment
+4. **Verify spatial data has raw counts and use them** — check before mapping
+5. **Always introspect available tissues** — extract from data using `pd.unique(ad_ref.obs['tissue'])`, never hard-code tissue names
+6. **Check gene overlap first** — need at least 100-200 common genes
+7. **Match tissues** — filter reference to relevant tissue when possible using extracted tissue list
+8. **Monitor training** — check that score plateaus and doesn't keep decreasing
+9. **Validate results** — compare with marker gene annotations when available
+10. **Check confidence** — low confidence predictions may need manual review
+11. **Use cluster mode** — pre-aggregated reference is faster and uses less memory
+12. **Cache downloads** — download reference once per session for efficiency
+13. **Start with CPU** — use CPU first, switch to GPU only if needed
+14. **Visualize extensively** — use `w_h5` to inspect spatial patterns
 
 ---
 
