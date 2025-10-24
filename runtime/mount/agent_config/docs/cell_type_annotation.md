@@ -1,0 +1,465 @@
+# Tangram-Based Spatial Cell Type Annotation
+
+## Purpose
+
+This workflow provides **spatial cell type annotation** using **Tangram** with pre-aggregated **Tabula Sapiens** reference data. Tangram maps reference expression profiles onto spatial data to predict cell type identities and project gene expression patterns.
+
+## When to Use
+
+- **Human spatial data only** (CosMX, Visium, Slide-seq, Xenium, MERFISH, etc.)
+- When you need **continuous cell type probabilities** rather than discrete labels
+- When you want to **project full expression profiles** onto spatial coordinates
+- For **validation** of marker gene-based annotations
+
+## Advantages & Limitations
+
+**Advantages:**
+
+- Pre-aggregated clusters = **faster training**, less memory
+- Comprehensive human reference from Tabula Sapiens
+- Provides **cell type probabilities** for each spatial location
+- Can project **entire transcriptome** onto spatial data
+- Validated method published in [Nature Methods](https://www.nature.com/articles/s41592-021-01264-7)
+
+**Limitations:**
+
+- **Human data only** (Tabula Sapiens is human-specific)
+- Requires reasonable **gene overlap** between reference and spatial data
+- Training can take time (10-30 minutes depending on data size)
+- Works best when reference and spatial data are from similar tissues
+
+---
+
+## Data Overview
+
+### Tabula Sapiens Reference Profiles
+
+Two pre-aggregated reference datasets are available:
+
+1. **Normalized (recommended)**: `latch://39553.account/tabula_sapiens_avg_normalized.csv.gz`
+
+   - Log-normalized, library-size corrected expression
+   - Better for Tangram mapping
+   - Use this by default
+
+2. **Raw counts (alternative)**: `latch://39553.account/tabula_sapiens_avg_raw.csv.gz`
+   - Raw count data
+   - Use if spatial data is in raw counts
+
+**Structure:**
+
+- **Index**: Multi-index tuples of `(tissue, cell_type)`
+- **Columns**: Gene symbols (human)
+- **Values**: Average expression for that gene in that cell type/tissue combination
+
+**Example index:**
+
+```python
+('Blood', 'B cell')
+('Blood', 'T cell')
+('Brain', 'astrocyte')
+('Brain', 'excitatory neuron')
+('Liver', 'hepatocyte')
+...
+```
+
+---
+
+## Workflow
+
+### Step 1: Load Tabula Sapiens Reference
+
+Download and convert the reference profiles to AnnData format for Tangram compatibility.
+
+```python
+import pandas as pd
+import numpy as np
+import anndata as ad
+from latch.ldata.path import LPath
+from pathlib import Path
+
+# Download reference (use normalized by default)
+ref_lpath = LPath("latch://39553.account/tabula_sapiens_avg_normalized.csv.gz")
+local_ref_path = Path(f"{ref_lpath.node_id()}.csv.gz")
+ref_lpath.download(local_ref_path, cache=True)
+
+# Load reference DataFrame
+ref_df = pd.read_csv(local_ref_path, sep='\t', index_col=0)
+
+# Parse multi-index: index strings are "(tissue, cell_type)" tuples
+# Convert string representation to actual tuples
+import ast
+tissues = []
+cell_types = []
+
+for idx in ref_df.index:
+    tissue, cell_type = ast.literal_eval(idx)
+    tissues.append(tissue)
+    cell_types.append(cell_type)
+
+# Create AnnData from reference
+# Each "cell" is actually an aggregated cell type profile
+ad_ref = ad.AnnData(X=ref_df.values, var=pd.DataFrame(index=ref_df.columns))
+ad_ref.obs['tissue'] = tissues
+ad_ref.obs['cell_type'] = cell_types
+
+# Store combined annotation for Tangram cluster mode
+ad_ref.obs['tissue_cell_type'] = [f"{t}_{ct}" for t, ct in zip(tissues, cell_types)]
+
+print(f"Reference: {ad_ref.n_obs} cell types × {ad_ref.n_vars} genes")
+print(f"Tissues: {sorted(pd.unique(ad_ref.obs['tissue']))}")
+```
+
+### Step 2: Prepare Spatial Data
+
+Load spatial data and ensure it's compatible with the reference.
+
+```python
+import scanpy as sc
+
+# Load spatial AnnData (example: from h5ad file)
+ad_sp = sc.read_h5ad("spatial_data.h5ad")
+
+# Ensure spatial coordinates exist
+if 'spatial' not in ad_sp.obsm:
+    raise ValueError("Spatial data must have coordinates in adata.obsm['spatial']")
+
+# Check gene overlap
+common_genes = list(set(ad_ref.var_names) & set(ad_sp.var_names))
+print(f"Gene overlap: {len(common_genes)} / {ad_ref.n_vars} reference genes")
+
+if len(common_genes) < 100:
+    print(f"WARNING: Low gene overlap ({len(common_genes)} genes). Results may be unreliable.")
+    print("Consider using marker gene annotation instead.")
+```
+
+### Step 3: Filter to Common Genes and Prepare for Tangram
+
+Use Tangram's preprocessing function to align the datasets.
+
+```python
+import tangram as tg
+
+# Option 1: Use all common genes (recommended for pre-aggregated reference)
+tg.pp_adatas(ad_ref, ad_sp, genes=None)
+
+# Option 2: Use specific training genes (if you have marker genes)
+# training_genes = ['CD3D', 'CD8A', 'MS4A1', 'CD14', ...]  # Your marker genes
+# tg.pp_adatas(ad_ref, ad_sp, genes=training_genes)
+
+# Verify alignment
+assert ad_ref.uns['training_genes'] == ad_sp.uns['training_genes']
+print(f"Training genes: {len(ad_ref.uns['training_genes'])}")
+```
+
+### Step 4: Map Cell Types to Space (Cluster-Level Tangram)
+
+Run Tangram mapping using the pre-aggregated reference in cluster mode.
+
+**This is the key step**: Tangram learns to map reference cell types onto spatial coordinates.
+
+```python
+from lplots.widgets.select import w_select
+from lplots.widgets.number import w_number_input
+
+# Widget for choosing device
+device_select = w_select(
+    label="Device for training",
+    options=["cpu", "cuda:0"],
+    default="cpu"
+)
+
+# Widget for number of training epochs
+epochs_input = w_number_input(
+    label="Number of training epochs",
+    default=500,
+    min_value=100,
+    max_value=2000,
+    step=100
+)
+
+# Map cells to space using cluster mode
+# This uses the pre-aggregated cell type profiles
+ad_map = tg.map_cells_to_space(
+    adata_sc=ad_ref,
+    adata_sp=ad_sp,
+    mode='clusters',  # Use cluster mode for pre-aggregated data
+    cluster_label='cell_type',  # Field in ad_ref.obs containing cell type labels
+    device=device_select.value,
+    num_epochs=epochs_input.value
+)
+
+print("Mapping complete!")
+print(f"Mapping score: {ad_map.uns.get('training_history', {}).get('train_score', 'N/A')}")
+```
+
+**Training notes:**
+
+- Mapping typically takes 10-30 minutes on CPU
+- Use GPU (`cuda:0`) for faster training if available
+- Higher scores indicate better alignment
+- Score should plateau — if it's still increasing, consider more epochs
+
+### Step 5: Project Cell Annotations (KEY OUTPUT)
+
+**This is the PRIMARY output:** Transfer cell type labels from reference to spatial data.
+
+```python
+# Project cell type annotations onto spatial coordinates
+tg.project_cell_annotations(ad_map, ad_sp, annotation='cell_type')
+
+print("Cell type annotations projected to spatial data!")
+print(f"Annotations stored in: ad_sp.obsm['tangram_ct_pred']")
+
+# The result is a cells × cell_types probability matrix
+# Each row sums to 1 (probability distribution over cell types)
+cell_type_probs = ad_sp.obsm['tangram_ct_pred']
+print(f"Probability matrix shape: {cell_type_probs.shape}")
+
+# Get most likely cell type for each spatial location
+predicted_cell_types = cell_type_probs.columns[cell_type_probs.values.argmax(axis=1)]
+ad_sp.obs['tangram_cell_type'] = predicted_cell_types
+
+# Get prediction confidence (max probability)
+ad_sp.obs['tangram_confidence'] = cell_type_probs.values.max(axis=1)
+```
+
+### Step 6: Visualize Mapped Cell Types
+
+Display cell type predictions on spatial coordinates using `w_h5`.
+
+```python
+from lplots.widgets.h5 import w_h5
+from lplots.widgets.table import w_table
+import pandas as pd
+
+# Visualize with w_h5
+viewer = w_h5(ann_data=ad_sp)
+
+# Summary table: cell type distribution
+cell_type_counts = ad_sp.obs['tangram_cell_type'].value_counts().reset_index()
+cell_type_counts.columns = ['Cell Type', 'Count']
+cell_type_counts['Percentage'] = 100 * cell_type_counts['Count'] / cell_type_counts['Count'].sum()
+
+w_table(source=cell_type_counts, label="Tangram Cell Type Distribution")
+
+# Confidence summary
+confidence_stats = ad_sp.obs['tangram_confidence'].describe().to_frame('Confidence')
+w_table(source=confidence_stats, label="Prediction Confidence Statistics")
+```
+
+### Step 7: Project Gene Expression (Optional)
+
+Optionally, project the full reference transcriptome onto spatial coordinates.
+
+**Use case:** Visualize expected gene expression patterns based on predicted cell types.
+
+```python
+# Project genes from reference onto spatial data
+ad_ge = tg.project_genes(
+    adata_map=ad_map,
+    adata_sc=ad_ref,
+    cluster_label='cell_type'
+)
+
+# ad_ge is a new AnnData with:
+# - Same spatial coordinates as ad_sp
+# - Gene expression projected from reference
+
+# Example: visualize a projected gene
+gene_to_plot = 'CD3D'  # T cell marker
+if gene_to_plot in ad_ge.var_names:
+    ad_ge.obs[f'{gene_to_plot}_projected'] = ad_ge[:, gene_to_plot].X.toarray().flatten()
+    viewer_ge = w_h5(ann_data=ad_ge)
+```
+
+---
+
+## Integration with Existing Workflows
+
+### Relationship to Marker Gene Annotation
+
+Tangram and marker gene annotation are **complementary approaches**:
+
+| Feature             | Marker Gene Annotation        | Tangram Mapping                 |
+| ------------------- | ----------------------------- | ------------------------------- |
+| **Data**            | Any organism                  | Human only                      |
+| **Speed**           | Fast (< 1 min)                | Slower (10-30 min)              |
+| **Output**          | Discrete labels               | Continuous probabilities        |
+| **Gene projection** | No                            | Yes                             |
+| **Method**          | Database lookup               | ML alignment                    |
+| **Best for**        | Quick annotation, any species | Detailed human spatial analysis |
+
+### Combined Approach: Use Both for Validation
+
+**Recommended workflow for human data:**
+
+1. **Run marker gene annotation first** (fast, discrete labels)
+2. **Run Tangram mapping second** (detailed probabilities)
+3. **Compare results** to validate and refine annotations
+
+```python
+# Compare Tangram vs marker gene predictions
+if 'predicted_cell_type' in ad_sp.obs and 'tangram_cell_type' in ad_sp.obs:
+    comparison = pd.DataFrame({
+        'Marker Gene Prediction': ad_sp.obs['predicted_cell_type'],
+        'Tangram Prediction': ad_sp.obs['tangram_cell_type'],
+        'Tangram Confidence': ad_sp.obs['tangram_confidence']
+    })
+
+    # Find agreements
+    comparison['Agreement'] = (
+        comparison['Marker Gene Prediction'] == comparison['Tangram Prediction']
+    )
+
+    agreement_rate = 100 * comparison['Agreement'].mean()
+    print(f"Agreement rate: {agreement_rate:.1f}%")
+
+    # Display disagreements (interesting cases)
+    disagreements = comparison[~comparison['Agreement']]
+    if len(disagreements) > 0:
+        w_table(
+            source=disagreements.head(20),
+            label="Top 20 Prediction Disagreements (investigate these)"
+        )
+```
+
+---
+
+## Troubleshooting
+
+### Low Gene Overlap
+
+**Problem:** Fewer than 100-200 common genes between reference and spatial data.
+
+**Solutions:**
+
+- Check gene naming (uppercase vs lowercase)
+- Convert gene symbols to common format (e.g., all uppercase)
+- If overlap is < 100 genes, consider using marker gene annotation instead
+- For mouse data, use marker gene annotation (Tangram reference is human-only)
+
+```python
+# Check and fix gene naming
+ad_sp.var_names = ad_sp.var_names.str.upper()  # Convert to uppercase
+ad_ref.var_names = ad_ref.var_names.str.upper()
+
+# Re-check overlap
+common_genes = list(set(ad_ref.var_names) & set(ad_sp.var_names))
+print(f"Gene overlap after fixing: {len(common_genes)}")
+```
+
+### Low Mapping Score / Poor Convergence
+
+**Problem:** Training score plateaus at < 0.5 or keeps decreasing.
+
+**Solutions:**
+
+- Increase training epochs
+- Check that spatial data has reasonable gene expression (not all zeros)
+- Verify spatial and reference data are from compatible tissues
+- Try using marker genes instead of all genes for training
+
+```python
+# Check spatial data quality
+print(f"Non-zero genes per cell: {(ad_sp.X.toarray() > 0).sum(axis=1).mean():.1f}")
+print(f"Cells with < 50 genes: {((ad_sp.X.toarray() > 0).sum(axis=1) < 50).sum()}")
+
+# Try with marker genes only
+from lplots.widgets.select import w_multiselect
+
+# Let user select tissue-specific markers
+# ...then run tg.pp_adatas with those markers
+```
+
+### Memory Issues
+
+**Problem:** Out of memory during training.
+
+**Solutions:**
+
+- Use CPU instead of GPU (lower memory but slower)
+- Reduce number of spatial cells (subsample)
+- Use fewer training genes
+- Close other applications
+
+```python
+# Subsample spatial data if too large
+if ad_sp.n_obs > 50000:
+    print(f"Subsampling from {ad_sp.n_obs} to 50000 cells...")
+    sc.pp.subsample(ad_sp, n_obs=50000, random_state=42)
+```
+
+### Tissue Mismatch
+
+**Problem:** Reference tissue doesn't match spatial data tissue.
+
+**Solutions:**
+
+- Filter reference to relevant tissue only
+- Use "All Tissues" if specific tissue not available
+- Validate results carefully with marker genes
+
+```python
+# Filter reference to specific tissue
+from lplots.widgets.select import w_select
+
+# Extract available tissues
+available_tissues = sorted(pd.unique(ad_ref.obs['tissue']))
+
+tissue_selector = w_select(
+    label="Select reference tissue",
+    options=available_tissues,
+    default=available_tissues[0]
+)
+
+# Filter reference
+ad_ref_filtered = ad_ref[ad_ref.obs['tissue'] == tissue_selector.value].copy()
+print(f"Filtered reference: {ad_ref_filtered.n_obs} cell types from {tissue_selector.value}")
+
+# Now use ad_ref_filtered for mapping
+```
+
+---
+
+## Best Practices
+
+1. **Use normalized reference by default** — better for Tangram alignment
+2. **Check gene overlap first** — need at least 100-200 common genes
+3. **Match tissues** — filter reference to relevant tissue when possible
+4. **Monitor training** — check that score plateaus and doesn't keep decreasing
+5. **Validate results** — compare with marker gene annotations when available
+6. **Check confidence** — low confidence predictions may need manual review
+7. **Use cluster mode** — pre-aggregated reference is faster and uses less memory
+8. **Cache downloads** — download reference once per session for efficiency
+9. **Start with CPU** — use CPU first, switch to GPU only if needed
+10. **Visualize extensively** — use `w_h5` to inspect spatial patterns
+
+---
+
+## Summary
+
+Tangram-based spatial cell type annotation provides:
+
+- **Probabilistic cell type assignments** for human spatial data
+- **Gene expression projection** from comprehensive reference
+- **Validation** of marker gene-based predictions
+- **Granular cell type resolution** from Tabula Sapiens
+
+**Workflow summary:**
+
+1. Load Tabula Sapiens reference (normalized)
+2. Load and prepare spatial data
+3. Map reference cell types to space using cluster-level Tangram
+4. **Project cell annotations** (key output: cell type probabilities)
+5. Optionally project gene expression
+6. Visualize and validate results
+
+**When to use:**
+
+- Human spatial data with good gene coverage
+- Need for continuous cell type probabilities
+- Want to project reference expression patterns
+- Validation of discrete annotations
+
+**Complementary to marker gene annotation** — use both for comprehensive analysis!

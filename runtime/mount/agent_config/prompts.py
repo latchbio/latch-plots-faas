@@ -26,6 +26,11 @@ external_docs = [
         "path": str(Path(__file__).parent / "docs/marker_gene_cell_type_annotation.md"),
         "type": "file",
     },
+    {
+        "name": "tangram_cell_type_annotation_docs",
+        "path": str(Path(__file__).parent / "docs/cell_type_annotation.md"),
+        "type": "file",
+    },
     # {
     #     "name": "takara_docs",
     #     "path": str(Path(__file__).parent / "docs/takara_workflow.md"),

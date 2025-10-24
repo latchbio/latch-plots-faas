@@ -6,7 +6,10 @@ This is the **authoritative step-by-step pipeline** for **CosMX** spatial transc
 2. **Preprocessing** — normalize and log-transform expression data.
 3. **Dimensionality Reduction & Clustering** — compute PCA, UMAP, and Leiden clusters using **Scanpy**.
 4. **Differential Gene Expression & GSEA** — identify marker genes per cluster and perform gene set enrichment analysis.
-5. **Automated Cell Type Annotation** — automatically suggest cell types using the CellGuide marker database (see {marker_gene_annotation_docs}).
+5. **Cell Type Annotation** — choose annotation approach based on organism:
+   - **Human data**: Use Tangram mapping (see {tangram_cell_type_annotation_docs}) OR CellGuide marker database (see {marker_gene_annotation_docs})
+   - **Non-human data**: Use CellGuide marker database (see {marker_gene_annotation_docs})
+   - **Recommended for human**: Use both approaches and cross-validate
 6. **Manual Validation** (optional) — validate or refine automated annotations when needed.
 
 The sections below define detailed guidelines for each step.
@@ -350,34 +353,140 @@ for cluster, (res_df, res_obj) in gsea_results.items():
 
 ### **Cell Type Annotation**
 
-Assign biological cell type identities to clusters based on marker gene expression.
+Assign biological cell type identities to clusters based on spatial data. **Two complementary approaches** are available:
 
-**This step has two phases:**
-
-1. **Automated annotation using CellGuide database** (runs automatically after differential expression)
-2. **Manual validation and refinement** (optional, for verification or when automated results are uncertain)
+1. **Tangram Mapping** (for human data) — primary method using Tabula Sapiens reference
+2. **CellGuide Marker Gene Annotation** (for any organism) — database-driven annotation from marker genes
+3. **Cross-Validation** (recommended) — use both approaches to validate results
 
 ---
 
-#### Phase 1: Automated Annotation (Primary Method)
+#### Approach 1: Tangram Mapping (Human Data Only - Recommended for Human)
 
-**This phase runs automatically** after differential gene expression. See {marker_gene_annotation_docs} for the complete workflow.
+**For human spatial data**, use Tangram with Tabula Sapiens reference for comprehensive cell type mapping.
+
+See {tangram_cell_type_annotation_docs} for the complete workflow.
 
 **Brief overview:**
 
-1. Load the CellGuide marker gene database from `latch:///cellguide_marker_gene_database.json`
-2. Confirm organism and tissue type with the user
-3. For each cluster, query the database with the top 10 marker genes
-4. Aggregate cell type suggestions across markers using consensus scoring
-5. Display suggested cell types with confidence scores and supporting evidence
-6. Add predictions to `adata.obs['predicted_cell_type']`
-7. Visualize on UMAP and spatial embeddings using `w_h5`
+1. Load Tabula Sapiens reference profiles from Latch
+2. Prepare spatial data and check gene overlap
+3. Map reference cell types to spatial coordinates using cluster-level Tangram
+4. **Project cell annotations** (key output: cell type probabilities per spatial location)
+5. Visualize mapped cell types on spatial coordinates using `w_h5`
 
-The automated workflow provides **data-driven suggestions** that should be used as the primary annotation method.
+**Advantages:**
+
+- Probabilistic cell type assignments
+- Full transcriptome projection capability
+- Comprehensive human reference
+- Validated method
+
+**Limitations:**
+
+- Human data only
+- Requires reasonable gene overlap (100+ genes)
+- Takes 10-30 minutes for training
 
 ---
 
-#### Phase 2: Manual Validation (Optional)
+#### Approach 2: CellGuide Marker Gene Annotation (Any Organism)
+
+**For any organism** (including non-human), use CellGuide marker gene database annotation.
+
+See {marker_gene_annotation_docs} for the complete workflow.
+
+**Brief overview:**
+
+1. Load CellGuide marker gene databases (per-gene and per-celltype)
+2. Confirm organism and tissue type with the user
+3. For each cluster, query the per-gene database with top 10 marker genes
+4. Aggregate cell type suggestions across markers using consensus scoring
+5. Validate with per-celltype database (canonical markers)
+6. Display suggested cell types with confidence scores
+7. Visualize on UMAP and spatial embeddings using `w_h5`
+
+**Advantages:**
+
+- Works for any organism (mouse, human, etc.)
+- Fast (< 1 minute)
+- Discrete, interpretable labels
+- Transparent evidence trail
+
+**Limitations:**
+
+- Discrete labels only (no probabilities)
+- Limited to database coverage
+- May miss novel cell types
+
+---
+
+#### Approach 3: Cross-Validation (Recommended for Human Data)
+
+**For human data, use BOTH approaches** to validate and refine annotations.
+
+**Workflow:**
+
+1. **Run Tangram first** → get probabilistic cell type assignments
+2. **Extract marker genes** from Tangram predictions
+3. **Cross-reference with CellGuide** → validate using marker gene database
+4. **Compare results** → identify agreements and disagreements
+5. **Flag discrepancies** for manual review
+
+**Example cross-validation:**
+
+```python
+# Assuming both Tangram and CellGuide have been run
+
+# Compare predictions
+if 'tangram_cell_type' in adata.obs and 'predicted_cell_type' in adata.obs:
+    comparison = pd.DataFrame({
+        'Cluster': adata.obs['leiden'],
+        'Tangram Prediction': adata.obs['tangram_cell_type'],
+        'Tangram Confidence': adata.obs['tangram_confidence'],
+        'CellGuide Prediction': adata.obs['predicted_cell_type'],
+        'CellGuide Confidence': adata.obs['annotation_confidence']
+    })
+
+    # Agreement rate
+    comparison['Agreement'] = (
+        comparison['Tangram Prediction'] == comparison['CellGuide Prediction']
+    )
+    agreement_rate = 100 * comparison['Agreement'].mean()
+
+    # Summary by cluster
+    cluster_comparison = comparison.groupby('Cluster').agg({
+        'Agreement': 'mean',
+        'Tangram Confidence': 'mean',
+        'CellGuide Confidence': 'mean'
+    })
+
+    w_table(source=cluster_comparison, label="Cross-Validation: Tangram vs CellGuide")
+
+    # Flag discrepancies for review
+    discrepancies = comparison[~comparison['Agreement']].copy()
+    if len(discrepancies) > 0:
+        # For discrepancies, check marker gene overlap
+        # Use per-celltype database to get expected markers for both predictions
+        # Compare actual expression of those markers in the cluster
+
+        w_table(
+            source=discrepancies.head(20),
+            label="Top 20 Prediction Discrepancies (manual review needed)"
+        )
+```
+
+**When predictions disagree:**
+
+- Check marker gene expression for both predicted cell types
+- Look at Tangram confidence and CellGuide confidence scores
+- Visualize cells spatially to see if there are spatial patterns
+- Use per-celltype database to verify canonical markers
+- Low confidence in both → may be novel or mixed cell type
+
+---
+
+#### Manual Validation (Optional)
 
 Use this phase to:
 
