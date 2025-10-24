@@ -106,6 +106,11 @@ class AgentHarness:
             if t == "anthropic_message":
                 role = item.get("role")
                 content = item.get("content")
+
+                if (role == "user" and isinstance(content, dict) and
+                    content.get("type") == "cell_result"):
+                    content = content.get("message", "Cell execution completed")
+
                 if role in {"user", "assistant"} and (isinstance(content, (str, list))):
                     anthropic_messages.append({"role": role, "content": content})
 
@@ -298,7 +303,6 @@ class AgentHarness:
                 payload={
                     "type": "anthropic_message",
                     "role": "user",
-                    "content_schema": "cell_result",
                     "content": result_content,
                     "timestamp": int(time.time() * 1000),
                 },
@@ -309,7 +313,6 @@ class AgentHarness:
                 self.pending_auto_continue = False
                 await self.pending_messages.put({
                     "type": "user_query",
-                    "content_schema": "message",
                     "content": "Continue with the next step.",
                     "request_id": self.current_request_id,
                     "hidden": True,
