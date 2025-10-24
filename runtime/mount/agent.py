@@ -651,6 +651,7 @@ class AgentHarness:
             if result.get("status") == "success":
                 return {
                     "tool_name": "set_widget",
+                    "success": True,
                     "summary": f"Updated widget value for: {key}",
                     "key": key,
                     "label": label,
