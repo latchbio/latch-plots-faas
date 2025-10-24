@@ -52,6 +52,7 @@ class EvalServer:
         self.notebook_context = None
         self.cleanup_complete = False
         self.session_id = None
+        self.eval_complete = False
 
     async def start_kernel(self):
         print("[eval] Starting kernel subprocess")
@@ -343,6 +344,8 @@ class EvalServer:
 
                 initial_query = textwrap.dedent(f"""
                     First, delete all cells in the notebook to start fresh. Then: {self.test_case.task}
+
+                    IMPORTANT: When you have completed this task, include the text "[EVAL_COMPLETE]" at the end of your summary in submit_response.
                     {data_context}
                 """).strip()
 
@@ -440,6 +443,12 @@ class EvalServer:
         if msg_type == "agent_result":
             self.agent_sent_result = True
             structured = msg.get("structured_output", {})
+
+            summary = structured.get("summary", "")
+            if "[EVAL_COMPLETE]" in summary:
+                print("[eval] Detected [EVAL_COMPLETE] marker in agent summary")
+                self.eval_complete = True
+
             questions = structured.get("questions")
             self.has_questions = questions is not None and len(questions) > 0
 
@@ -468,7 +477,7 @@ class EvalServer:
                     self.cell_status[cell_id] = "error" if has_exception else "ran"
 
     def is_done(self) -> bool:
-        if not self.agent_sent_result:
+        if not self.eval_complete:
             return False
 
         if self.has_questions:
@@ -479,14 +488,7 @@ class EvalServer:
             print(f"[eval] Not done: {len(running_cells)} cells still running: {running_cells}")
             return False
 
-        if self.last_message_time is None:
-            return False
-
-        idle_time = time.time() - self.last_message_time
-        if idle_time < 20:
-            return False
-
-        print(f"[eval] Completion detected: result sent, no questions, no running cells, idle for {idle_time:.1f}s")
+        print(f"[eval] Completion detected: [EVAL_COMPLETE] marker found, no questions, no running cells")
         return True
 
 
