@@ -108,8 +108,7 @@ class AgentHarness:
                 role = item.get("role")
                 content = item.get("content")
 
-                if (role == "user" and isinstance(content, dict) and
-                    content.get("type") == "cell_result"):
+                if (role == "user" and isinstance(content, dict) and content.get("type") == "cell_result"):
                     exception = content.get("exception")
                     logs = content.get("logs")
                     message = content.get("message", "Cell execution completed")
