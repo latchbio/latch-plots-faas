@@ -1,0 +1,6 @@
+{
+  "id": "simple_markdown_001",
+  "task": "Create a single markdown cell with the text 'Hello from the agent'",
+  "data_node": null,
+  "judge_prompt": "Evaluate whether the agent correctly created a markdown cell. Check:\n\n1. Cell Creation: Did the agent create exactly one markdown cell?\n2. Content: Does the markdown cell contain the text 'Hello from the agent'?\n3. No Errors: Did the task complete without errors?\n\nProvide a structured evaluation with:\n- score: 1.0 if all criteria met, 0.5 if partial, 0.0 if failed\n- passed: true if score >= 0.8\n- successes: list what was done correctly\n- failures: list any issues or missing elements"
+}

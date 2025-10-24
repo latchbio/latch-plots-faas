@@ -592,18 +592,21 @@ async def stop_kernel_proc() -> None:
 
     proc = k_proc.proc
     if proc is not None:
-        try:
-            print(f"[shutdown] stop_kernel_proc: sending SIGTERM to pid {proc.pid}")
-            proc.terminate()
-            print("[shutdown] stop_kernel_proc: waiting for process to exit (10s timeout)")
-            await asyncio.wait_for(proc.wait(), timeout=10)
-            print("[shutdown] stop_kernel_proc: process exited cleanly")
-        except TimeoutError:
-            print("[shutdown] stop_kernel_proc: timeout, sending SIGKILL")
-            proc.kill()
-            print("[shutdown] stop_kernel_proc: waiting for kill to complete")
-            await proc.wait()
-            print("[shutdown] stop_kernel_proc: process killed")
+        if proc.returncode is not None:
+            print(f"[shutdown] stop_kernel_proc: process already exited with code {proc.returncode}")
+        else:
+            try:
+                print(f"[shutdown] stop_kernel_proc: sending SIGTERM to pid {proc.pid}")
+                proc.terminate()
+                print("[shutdown] stop_kernel_proc: waiting for process to exit (10s timeout)")
+                await asyncio.wait_for(proc.wait(), timeout=10)
+                print("[shutdown] stop_kernel_proc: process exited cleanly")
+            except TimeoutError:
+                print("[shutdown] stop_kernel_proc: timeout, sending SIGKILL")
+                proc.kill()
+                print("[shutdown] stop_kernel_proc: waiting for kill to complete")
+                await proc.wait()
+                print("[shutdown] stop_kernel_proc: process killed")
 
     print(f"[shutdown] stop_kernel_proc: cancelling {len(async_tasks)} tasks")
     for task in async_tasks:

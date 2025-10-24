@@ -162,10 +162,7 @@ async def run_server():
     signal.signal(signal.SIGINT, shutdown_signal)
     signal.signal(signal.SIGTERM, shutdown_signal)
 
-    try:
-        await serve(latch_server.raw_app, cfg, shutdown_trigger=await_shutdown)
-    finally:
-        await shutdown()
+    await serve(latch_server.raw_app, cfg, shutdown_trigger=await_shutdown)
 
 
 def main():

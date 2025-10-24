@@ -62,6 +62,7 @@ class AgentHarness:
     conversation_running: bool = False
     system_prompt: str = ""
     agent_session_id: int | None = None
+    local_dev_messages: list = field(default_factory=list)
 
     mode_config: dict[Mode, tuple[str, int | None]] = field(default_factory=lambda: {
         Mode.planning: ("claude-sonnet-4-5-20250929", 4096),
