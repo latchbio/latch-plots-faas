@@ -655,7 +655,7 @@ class AgentHarness:
                     "key": key,
                     "label": label,
                     "value": value,
-                    "action_summary": action_summary,
+                    "message": action_summary,
                 }
             return {
                 "tool_name": "set_widget",
