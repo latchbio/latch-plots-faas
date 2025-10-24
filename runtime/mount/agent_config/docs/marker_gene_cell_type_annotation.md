@@ -145,6 +145,81 @@ if run_button.clicked:  # This creates dependencies on manual interaction
 
 ---
 
+### Critical: Always Extract and Use Database Keys for Selection
+
+**When users request information about specific cell types, tissues, or organisms, ALWAYS extract available options from the database first and present them in reactive widgets. NEVER use fuzzy string matching or guess at names.**
+
+**Why this matters:**
+
+- Cell type names use specific ontology terms (e.g., "GABAergic interneuron" vs "inhibitory neuron")
+- Tissue names may vary in capitalization or terminology
+- Fuzzy string matching is brittle and error-prone
+- Users need to see what's actually available in the database
+- Exact key matching ensures reliable queries
+
+**Correct pattern for cell type lookup:**
+
+```python
+# User asks: "What are the markers for astrocytes in mouse brain?"
+
+# Step 1: Load databases (see Step 1 below)
+
+# Step 2: Extract available cell types from database
+organism = "Mus musculus"
+tissue = "Brain"
+
+# Get all available cell types for this organism/tissue
+available_cell_types = []
+if organism in marker_db_per_celltype:
+    if tissue in marker_db_per_celltype[organism]:
+        available_cell_types = list(marker_db_per_celltype[organism][tissue].keys())
+    elif "All Tissues" in marker_db_per_celltype[organism]:
+        available_cell_types = list(marker_db_per_celltype[organism]["All Tissues"].keys())
+
+# Step 3: Present options in widget (user selects exact match)
+from lplots.widgets.select import w_select
+
+cell_type_selector = w_select(
+    label=f"Select cell type in {organism} - {tissue}",
+    options=sorted(available_cell_types),  # Sort for easier browsing
+    default=available_cell_types[0] if available_cell_types else None
+)
+
+# Step 4: Query with exact key
+if cell_type_selector.value:
+    markers = marker_db_per_celltype[organism][tissue][cell_type_selector.value]
+    print(f"Top 10 markers for {cell_type_selector.value}: {markers[:10]}")
+```
+
+**Incorrect pattern:**
+
+```python
+# ❌ Don't do this - brittle fuzzy matching
+user_query = "astrocytes"  # User's informal term
+
+# Trying to guess/match cell type names
+for cell_type in marker_db_per_celltype[organism][tissue]:
+    if "astro" in cell_type.lower():  # Brittle! What if it's "Astroglia" or "Astrocyte-like"?
+        markers = marker_db_per_celltype[organism][tissue][cell_type]
+        break
+```
+
+**This pattern applies to ALL user queries involving database keys:**
+
+- **Cell types**: Extract from `marker_db_per_celltype[organism][tissue].keys()`
+- **Tissues**: Extract from `tissues_per_organism[organism]` or `marker_db_per_celltype[organism].keys()`
+- **Organisms**: Extract from `marker_db_per_celltype.keys()` or `tissues_per_organism.keys()`
+- **Genes**: Extract from `marker_db_per_gene.keys()` when needed
+
+**Benefits:**
+
+- User sees exactly what's available
+- No ambiguity or failed lookups
+- Reactive widgets update automatically
+- Clean, reliable code
+
+---
+
 ### Step 1: Load the CellGuide Databases and Tissue Options
 
 Download and load **both CellGuide databases** plus tissue options from Latch Data:
@@ -579,15 +654,44 @@ for gene in marker_genes:
 | **Celltype-to-gene lookup** | User asks: "What are the markers for astrocytes?"                                 |
 | **Reference gene sets**     | Building gene sets for scoring or visualization                                   |
 
-**Code pattern:**
+**Code pattern (when cell type is known):**
 
 ```python
-# Given: predicted cell type
+# Given: predicted cell type from annotation
 predicted_cell_type = "inhibitory neuron"
 
 # Find: canonical marker genes for this cell type
 marker_genes = marker_db_per_celltype[organism][tissue][predicted_cell_type]
 print(f"Top markers for {predicted_cell_type}: {marker_genes[:10]}")  # Top 10 markers
+```
+
+**Code pattern (when user asks about a cell type - use widget selection):**
+
+```python
+# User asks: "What are the markers for astrocytes?"
+# ALWAYS extract available cell types and let user select
+
+# Step 1: Get all available cell types
+available_cell_types = []
+if organism in marker_db_per_celltype:
+    if tissue in marker_db_per_celltype[organism]:
+        available_cell_types = list(marker_db_per_celltype[organism][tissue].keys())
+    elif "All Tissues" in marker_db_per_celltype[organism]:
+        available_cell_types = list(marker_db_per_celltype[organism]["All Tissues"].keys())
+
+# Step 2: Let user select from available options
+from lplots.widgets.select import w_select
+
+cell_type_selector = w_select(
+    label=f"Select cell type ({organism} - {tissue})",
+    options=sorted(available_cell_types),
+    default=available_cell_types[0] if available_cell_types else None
+)
+
+# Step 3: Query with selected cell type
+if cell_type_selector.value:
+    marker_genes = marker_db_per_celltype[organism][tissue][cell_type_selector.value]
+    print(f"Top 10 markers for {cell_type_selector.value}: {marker_genes[:10]}")
 ```
 
 ### Complete Workflow Example: Using Both Databases
@@ -668,16 +772,19 @@ sc.tl.rank_genes_groups(adata, groupby='leiden', method='wilcoxon')
 
 ## Best Practices
 
-1. **Always confirm organism and tissue** before querying
-2. **Load both databases** at the start — you'll need both for annotation and validation
-3. **Use per-gene for annotation** — when going from markers to cell types
-4. **Use per-celltype for validation** — when verifying predictions with canonical markers
-5. **Use top 10 markers** per cluster for consensus (balance coverage and noise)
-6. **Display supporting evidence** so users can evaluate suggestions
-7. **Show multiple alternatives** to account for ontology granularity
-8. **Validate with expression** — compute canonical marker scores to verify predictions
-9. **Flag low-confidence** annotations for manual review
-10. **Cache the databases** — download once per session for efficiency
+1. **Always extract database keys and use widgets** — never use fuzzy string matching for cell types, tissues, or organisms
+2. **Always confirm organism and tissue** before querying
+3. **Load both databases** at the start — you'll need both for annotation and validation
+4. **Use per-gene for annotation** — when going from markers to cell types
+5. **Use per-celltype for validation** — when verifying predictions with canonical markers
+6. **Extract available options first** — use `.keys()` to get valid choices, then present in `w_select`
+7. **Sort options for usability** — `sorted(available_options)` makes browsing easier
+8. **Use top 10 markers** per cluster for consensus (balance coverage and noise)
+9. **Display supporting evidence** so users can evaluate suggestions
+10. **Show multiple alternatives** to account for ontology granularity
+11. **Validate with expression** — compute canonical marker scores to verify predictions
+12. **Flag low-confidence** annotations for manual review
+13. **Cache the databases** — download once per session for efficiency
 
 ---
 
