@@ -648,6 +648,223 @@ class AgentHarness:
                 traceback.print_exc()
                 raise
 
+        async def h5_filter_by(args: dict) -> str:
+            widget_key = args.get("widget_key")
+            filters = args.get("filters")
+            
+            if isinstance(filters, str):
+                try:
+                    filters = json.loads(filters)
+                except json.JSONDecodeError:
+                    return f"filters is invalid JSON: {filters!r}"
+            
+            print(f"[tool] h5_filter_by widget_key={widget_key} filters={filters}")
+            
+            params = {
+                "widget_key": widget_key,
+                "filters": filters
+            }
+            
+            result = await self.atomic_operation("h5_filter_by", params)
+            if result.get("status") == "success":
+                return f"Applied filters to h5 widget: {filters}"
+            
+            return f"Failed to apply filters to h5 widget: {result.get('error', 'Unknown error')}"
+
+        async def h5_color_by(args: dict) -> str:
+            widget_key = args.get("widget_key")
+            color_by = args.get("color_by")
+            
+            if isinstance(color_by, str):
+                try:
+                    color_by = json.loads(color_by)
+                except json.JSONDecodeError:
+                    return f"color_by is invalid JSON: {color_by!r}"
+            
+            print(f"[tool] h5_color_by widget_key={widget_key} color_by={color_by}")
+            
+            params = {
+                "widget_key": widget_key,
+                "color_by": color_by
+            }
+            
+            result = await self.atomic_operation("h5_color_by", params)
+            if result.get("status") == "success":
+                return f"Set h5 widget coloring: {color_by}"
+            
+            return f"Failed to set h5 widget coloring: {result.get('error', 'Unknown error')}"
+
+        async def h5_set_selected_obsm_key(args: dict) -> str:
+            widget_key = args.get("widget_key")
+            obsm_key = args.get("obsm_key")
+            
+            print(f"[tool] h5_set_selected_obsm_key widget_key={widget_key} obsm_key={obsm_key}")
+            
+            params = {
+                "widget_key": widget_key,
+                "obsm_key": obsm_key
+            }
+            
+            result = await self.atomic_operation("h5_set_selected_obsm_key", params)
+            if result.get("status") == "success":
+                return f"Set h5 widget to use obsm key {obsm_key}"
+            
+            return f"Failed to set h5 widget obsm key: {result.get('error', 'Unknown error')}"
+
+        async def h5_set_background_image(args: dict) -> str:
+            widget_key = args.get("widget_key")
+            node_id = args.get("node_id")
+            
+            print(f"[tool] h5_set_background_image widget_key={widget_key} node_id={node_id}")
+            
+            params = {
+                "widget_key": widget_key,
+                "node_id": node_id,
+            }
+            
+            result = await self.atomic_operation("h5_set_background_image", params)
+            if result.get("status") == "success":
+                return f"Set background image for h5 widget using {node_id}"
+            return f"Failed to set background image: {result.get('error', 'Unknown error')}"
+
+        async def h5_open_image_aligner(args: dict) -> str:
+            widget_key = args.get("widget_key")
+            background_image_id = args.get("background_image_id")
+            
+            print(f"[tool] h5_open_image_aligner widget_key={widget_key} background_image_id={background_image_id}")
+
+            params = {
+                "widget_key": widget_key,
+                "background_image_id": background_image_id,
+            }
+            
+            result = await self.atomic_operation("h5_open_image_aligner", params)
+            if result.get("status") == "success":
+                return f"Opened image aligner for background image {background_image_id}"
+
+            return f"Failed to open image aligner: {result.get('error', 'Unknown error')}"
+
+        async def h5_autoscale(args: dict) -> str:
+            widget_key = args.get("widget_key")
+            
+            print(f"[tool] h5_autoscale widget_key={widget_key}")
+            
+            params = {
+                "widget_key": widget_key,
+            }
+            
+            result = await self.atomic_operation("h5_autoscale", params)
+            if result.get("status") == "success":
+                return f"Autoscaled h5 widget {widget_key} to data bounds"
+
+            return f"Failed to autoscale h5 widget: {result.get('error', 'Unknown error')}"
+
+        async def h5_zoom(args: dict) -> str:
+            widget_key = args.get("widget_key")
+            direction = args.get("direction")
+            percentage = args.get("percentage")
+            
+            print(f"[tool] h5_zoom widget_key={widget_key} direction={direction} percentage={percentage}")
+
+            params = {
+                "widget_key": widget_key,
+                "direction": direction,
+            }
+            
+            if percentage is not None:
+                params["percentage"] = percentage
+            
+            result = await self.atomic_operation("h5_zoom", params)
+            if result.get("status") == "success":
+                zoom_desc = f"zoom {direction}"
+                if percentage is not None:
+                    zoom_desc += f" by {percentage}%"
+                return f"Applied {zoom_desc} to h5 widget {widget_key}"
+
+            return f"Failed to zoom h5 widget: {result.get('error', 'Unknown error')}"
+
+        async def h5_set_background_image_visibility(args: dict) -> str:
+            widget_key = args.get("widget_key")
+            background_image_id = args.get("background_image_id")
+            hidden = args.get("hidden")
+            
+            print(f"[tool] h5_set_background_image_visibility widget_key={widget_key} background_image_id={background_image_id} hidden={hidden}")
+            
+            params = {
+                "widget_key": widget_key,
+                "background_image_id": background_image_id,
+                "hidden": hidden
+            }
+            
+            result = await self.atomic_operation("h5_set_background_image_visibility", params)
+            if result.get("status") == "success":
+                visibility_action = "hidden" if hidden else "shown"
+                return f"Background image {background_image_id} {visibility_action}"
+            
+            return f"Failed to set background image visibility: {result.get('error', 'Unknown error')}"
+
+        async def h5_add_selected_cells_to_categorical_obs(args: dict) -> str:
+            widget_key = args.get("widget_key")
+            obs_key = args.get("obs_key")
+            category = args.get("category")
+            
+            print(f"[tool] h5_add_selected_cells_to_categorical_obs widget_key={widget_key} obs_key={obs_key} category={category}")
+            
+            params = {
+                "widget_key": widget_key,
+                "obs_key": obs_key,
+                "category": category
+            }
+            
+            result = await self.atomic_operation("h5_add_selected_cells_to_categorical_obs", params)
+            if result.get("status") == "success":
+                return f"Assigned selected cells to category '{category}' in observation key '{obs_key}'"
+            
+            return f"Failed to assign selected cells to category: {result.get('error', 'Unknown error')}"
+
+        async def h5_set_marker_opacity(args: dict) -> str:
+            widget_key = args.get("widget_key")
+            opacity = args.get("opacity")
+            
+            print(f"[tool] h5_set_marker_opacity widget_key={widget_key} opacity={opacity}")
+            
+            params = {
+                "widget_key": widget_key,
+                "opacity": opacity
+            }
+            
+            result = await self.atomic_operation("h5_set_marker_opacity", params)
+            if result.get("status") == "success":
+                return f"Set marker opacity to {opacity}"
+            
+            return f"Failed to set marker opacity: {result.get('error', 'Unknown error')}"
+
+        async def h5_manage_obs(args: dict) -> str:
+            widget_key = args.get("widget_key")
+            obs_key = args.get("obs_key")
+            operation = args.get("operation")
+            obs_type = args.get("obs_type", "category")
+            
+            print(f"[tool] h5_manage_obs widget_key={widget_key} obs_key={obs_key} operation={operation} obs_type={obs_type}")
+            
+            params = {
+                "widget_key": widget_key,
+                "obs_key": obs_key,
+                "operation": operation
+            }
+            
+            if operation == "add":
+                params["obs_type"] = obs_type
+            
+            result = await self.atomic_operation("h5_manage_obs", params)
+            if result.get("status") == "success":
+                if operation == "add":
+                    return f"Created observation column '{obs_key}' with type '{obs_type}'"
+                else:
+                    return f"Deleted observation column '{obs_key}'"
+            
+            return f"Failed to {operation} observation column: {result.get('error', 'Unknown error')}"
+
         self.tools.append({
             "name": "create_cell",
             "description": "Create a new code cell at specified position. The cell will automatically run after creation.",
@@ -781,10 +998,371 @@ class AgentHarness:
                 })
         self.tool_map["set_widget"] = set_widget
 
+        self.tools.append({
+            "name": "h5_filter_by",
+            "description": "Set filters for an h5/AnnData widget. Pass the complete array of filters. Include existing filters from widget context to preserve them.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "widget_key": {
+                        "type": "string",
+                        "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
+                    },
+                    "filters": {
+                        "type": "array",
+                        "description": "Complete array of filters to apply",
+                        "items": {
+                            "oneOf": [
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "type": {
+                                            "type": "string",
+                                            "enum": ["obs"],
+                                            "description": "Filter by observation metadata"
+                                        },
+                                        "key": {
+                                            "type": "string",
+                                            "description": "The observation key to filter on"
+                                        },
+                                        "operation": {
+                                            "oneOf": [
+                                                {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "type": {
+                                                            "type": "string",
+                                                            "enum": ["neq"],
+                                                            "description": "Not equal operation"
+                                                        },
+                                                        "value": {
+                                                            "type": ["string", "number", "null"],
+                                                            "description": "Value to compare against"
+                                                        }
+                                                    },
+                                                    "required": ["type", "value"]
+                                                },
+                                                {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "type": {
+                                                            "type": "string",
+                                                            "enum": ["geq", "leq", "g", "l"],
+                                                            "description": "Numeric comparison: geq (>=), leq (<=), g (>), l (<)"
+                                                        },
+                                                        "value": {
+                                                            "type": "number",
+                                                            "description": "Numeric value to compare against"
+                                                        }
+                                                    },
+                                                    "required": ["type", "value"]
+                                                }
+                                            ],
+                                            "description": "Filter operation to apply"
+                                        }
+                                    },
+                                    "required": ["type", "key", "operation"]
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "type": {
+                                            "type": "string",
+                                            "enum": ["var"],
+                                            "description": "Filter by variable(s) / gene(s)"
+                                        },
+                                        "keys": {
+                                            "type": "array",
+                                            "items": {"type": "string"},
+                                            "description": "Array of variable/gene names to filter on"
+                                        },
+                                        "operation": {
+                                            "type": "object",
+                                            "properties": {
+                                                "type": {
+                                                    "type": "string",
+                                                    "enum": ["geq", "leq", "g", "l"],
+                                                    "description": "Numeric comparison: geq (>=), leq (<=), g (>), l (<)"
+                                                },
+                                                "value": {
+                                                    "type": "number",
+                                                    "description": "Numeric value to compare against"
+                                                }
+                                            },
+                                            "required": ["type", "value"]
+                                        }
+                                    },
+                                    "required": ["type", "keys", "operation"]
+                                }
+                            ]
+                        }
+                    }
+                },
+                "required": ["widget_key", "filters"],
+            },
+        })
+        self.tool_map["h5_filter_by"] = h5_filter_by
+
+        self.tools.append({
+            "name": "h5_color_by",
+            "description": "Set an h5/AnnData widget to color by a specific observation or variable (can be multiple if for genes)",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "widget_key": {
+                        "type": "string",
+                        "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
+                    },
+                    "color_by": {
+                        "oneOf": [
+                            {
+                                "type": "object",
+                                "properties": {
+                                    "type": {
+                                        "type": "string",
+                                        "enum": ["obs"],
+                                        "description": "Color by observation metadata"
+                                    },
+                                    "key": {
+                                        "type": "string",
+                                        "description": "The observation key to color by"
+                                    }
+                                },
+                                "required": ["type", "key"]
+                            },
+                            {
+                                "type": "object",
+                                "properties": {
+                                    "type": {
+                                        "type": "string",
+                                        "enum": ["var"],
+                                        "description": "Color by variable(s) / gene(s)"
+                                    },
+                                    "keys": {
+                                        "type": "array",
+                                        "items": {"type": "string"},
+                                        "description": "Array of variable/gene names to color by"
+                                    }
+                                },
+                                "required": ["type", "keys"]
+                            },
+                            {
+                                "type": "null"
+                            }
+                        ],
+                        "description": "Coloring configuration. Can be null to remove coloring, an obs object to color by observation, or a var object to color by variables like genes"
+                    }
+                },
+                "required": ["widget_key", "color_by"],
+            },
+        })
+        self.tool_map["h5_color_by"] = h5_color_by
+
+        self.tools.append({
+            "name": "h5_set_selected_obsm_key",
+            "description": "Set the selected obsm key for an h5/AnnData widget to control which embedding is displayed.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "widget_key": {
+                        "type": "string",
+                        "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
+                    },
+                    "obsm_key": {
+                        "type": "string",
+                        "description": "The obsm key to use for embedding (e.g spatial, X_umap)"
+                    },
+                },
+                "required": ["widget_key", "obsm_key"],
+            },
+        })
+        self.tool_map["h5_set_selected_obsm_key"] = h5_set_selected_obsm_key
+
+        self.tools.append({
+            "name": "h5_set_background_image",
+            "description": "Set a background image for an h5/AnnData widget from a user-attached file. The file must be an image type (jpg, jpeg, png, tiff).",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "widget_key": {
+                        "type": "string",
+                        "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
+                    },
+                    "node_id": {
+                        "type": "string",
+                        "description": "The LData node ID of the image file to use as background. This should come from files attached by the user in the chat."
+                    },
+                },
+                "required": ["widget_key", "node_id"],
+            },
+        })
+        self.tool_map["h5_set_background_image"] = h5_set_background_image
+
+        self.tools.append({
+            "name": "h5_open_image_aligner",
+            "description": "Open the image alignment modal for a background image in an h5/AnnData widget.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "widget_key": {
+                        "type": "string",
+                        "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
+                    },
+                    "background_image_id": {
+                        "type": "string",
+                        "description": "The ID of the background image to align (typically the node_id)"
+                    },
+                },
+                "required": ["widget_key", "background_image_id"],
+            },
+        })
+        self.tool_map["h5_open_image_aligner"] = h5_open_image_aligner
+
+        self.tools.append({
+            "name": "h5_autoscale",
+            "description": "Reset the plotted view in an h5/AnnData widget to Plotly's autoscaled data bounds.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "widget_key": {
+                        "type": "string",
+                        "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
+                    },
+                },
+                "required": ["widget_key"],
+            },
+        })
+        self.tool_map["h5_autoscale"] = h5_autoscale
+
+        self.tools.append({
+            "name": "h5_zoom",
+            "description": "Zoom the Plotly view in an h5/AnnData widget in or out from the current camera center.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "widget_key": {
+                        "type": "string",
+                        "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
+                    },
+                    "direction": {
+                        "type": "string",
+                        "enum": ["in", "out"],
+                        "description": "Zoom direction; use \"in\" to zoom closer, \"out\" to zoom farther"
+                    },
+                    "percentage": {
+                        "type": "number",
+                        "minimum": 0,
+                        "description": "Optional percentage change (e.g. 25 for ±25%); omitting uses the default Plotly zoom factor"
+                    },
+                },
+                "required": ["widget_key", "direction"],
+            },
+        })
+        self.tool_map["h5_zoom"] = h5_zoom
+
+        self.tools.append({
+            "name": "h5_set_background_image_visibility",
+            "description": "Show or hide a specific background image in an h5/AnnData widget.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "widget_key": {
+                        "type": "string",
+                        "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
+                    },
+                    "background_image_id": {
+                        "type": "string",
+                        "description": "The ID of the background image to show or hide"
+                    },
+                    "hidden": {
+                        "type": "boolean",
+                        "description": "Whether to hide (true) or show (false) the background image"
+                    },
+                },
+                "required": ["widget_key", "background_image_id", "hidden"],
+            },
+        })
+        self.tool_map["h5_set_background_image_visibility"] = h5_set_background_image_visibility
+
+        self.tools.append({
+            "name": "h5_add_selected_cells_to_categorical_obs",
+            "description": "Assign selected cells to a category in a categorical observation key",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "widget_key": {
+                        "type": "string",
+                        "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
+                    },
+                    "obs_key": {
+                        "type": "string",
+                        "description": "The existing categorical observation key to add selected cells to"
+                    },
+                    "category": {
+                        "type": "string",
+                        "description": "The category name to assign to selected cells. Will be created if it doesn't exist in this observation key."
+                    },
+                },
+                "required": ["widget_key", "obs_key", "category"],
+            },
+        })
+        self.tool_map["h5_add_selected_cells_to_categorical_obs"] = h5_add_selected_cells_to_categorical_obs
+
+        self.tools.append({
+            "name": "h5_set_marker_opacity",
+            "description": "Set the marker opacity for all cell markers in an h5/AnnData widget.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "widget_key": {
+                        "type": "string",
+                        "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
+                    },
+                    "opacity": {
+                        "type": "number",
+                        "description": "Opacity value for cell markers, between 0.1 (transparent) and 0.9 (opaque)"
+                    },
+                },
+                "required": ["widget_key", "opacity"],
+            },
+        })
+        self.tool_map["h5_set_marker_opacity"] = h5_set_marker_opacity
+
+        self.tools.append({
+            "name": "h5_manage_obs",
+            "description": "Create or delete an observation column in an h5/AnnData widget.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "widget_key": {
+                        "type": "string",
+                        "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
+                    },
+                    "obs_key": {
+                        "type": "string",
+                        "description": "The observation column name to create or delete"
+                    },
+                    "operation": {
+                        "type": "string",
+                        "enum": ["add", "remove"],
+                        "description": "Whether to create a new observation column ('add') or delete an existing one ('remove')"
+                    },
+                    "obs_type": {
+                        "type": "string",
+                        "enum": ["category", "bool", "int64", "float64"],
+                        "description": "Type of observation. Only for 'add' operation. Defaults to 'category'."
+                    }
+                },
+                "required": ["widget_key", "obs_key", "operation"]
+            }
+        })
+        self.tool_map["h5_manage_obs"] = h5_manage_obs
+
     async def _get_notebook_context(self) -> str:
-        context_result, globals_result = await asyncio.gather(
+        context_result, globals_result, reactivity_result = await asyncio.gather(
             self.atomic_operation("get_context"),
-            self.atomic_operation("request_globals_summary")
+            self.atomic_operation("request_globals_summary"),
+            self.atomic_operation("request_reactivity_summary")
         )
 
         if context_result.get("status") != "success":
@@ -798,39 +1376,69 @@ class AgentHarness:
         if globals_result.get("status") == "success":
             globals_data = globals_result.get("summary", {})
 
-        summary = f"Notebook has {cell_count} cell(s):\n"
+        reactivity_summary: str | None = None
+        if reactivity_result.get("status") == "success":
+            reactivity_summary = reactivity_result.get("summary")
+
+        sections = []
+
+        cell_section = ["## Notebook Cells", f"\nTotal: {cell_count} cells\n"]
+
         for cell in cells:
             index = cell.get("index", "?")
             cell_id = cell.get("cell_id", "?")
             cell_type = cell.get("cell_type", "unknown")
-            status = cell.get("status", "idle")
             source = cell.get("source", "")
-            tf_id = cell.get("tf_id", "?")
+            status = cell.get("status", "idle")
+            tf_id = cell.get("tf_id", None)
 
-            source_preview = source[:500] + "..." if len(source) > 500 else source
-            source_preview = source_preview.replace("\n", " ")
+            cell_section += [
+                f"\n### Cell [{index}] (ID: {cell_id})" + (f", (Code cell ID: {tf_id})" if tf_id is not None else ""),
+                f"Type: {cell_type}",
+                f"Status: {status}",
+            ]
 
-            summary += f"\n[{index}] ({cell_type}, {status}, cell_id: {cell_id}, tf_id: {tf_id})"
-            if source_preview:
-                summary += f": {source_preview}"
+            if source is not None:
+                source_display = source[:800] if len(source) > 800 else source
+                truncated = " [TRUNCATED]" if len(source) > 800 else ""
+                cell_section.append(f"```python\n{source_display}\n```{truncated}")
 
-            widget_summary = self._format_widget_summaries(cell.get("widgets") or [])
-            if widget_summary:
-                summary += f"\n  Widgets: {widget_summary}"
+            widgets = cell.get("widgets", None)
+            if widgets is not None:
+                widget_strs = []
+                for w in widgets:
+                    w_type = w.get("type", "unknown")
+                    w_key = w.get("key", "")
+                    w_label = w.get("label", "")
+                    if w_label:
+                        widget_strs.append(f"{w_type} ({w_label}) [{w_key}]")
+                    else:
+                        widget_strs.append(f"{w_type} [{w_key}]")
+                if widget_strs:
+                    cell_section.append(f"Widgets: {', '.join(widget_strs)}")
 
-        if globals_data is not None:
-            summary += f"\n\nGlobal variables ({len(globals_data)} total):\n"
-            for var_name, var_info in sorted(globals_data.items()):
+        sections.append("\n".join(cell_section))
+
+        if globals_data is not None and len(globals_data) > 0:
+            global_section = ["\n## Global Variables", f"\nTotal: {len(globals_data)} variables\n"]
+
+            for var_name in sorted(globals_data.keys()):
+                var_info = globals_data[var_name]
                 if isinstance(var_info, dict):
                     var_type = var_info.get("type", "unknown")
-                    summary += f"  {var_name}: {var_type}\n"
+                    global_section.append(f"\n**{var_name}** ({var_type})")
                     for key, value in var_info.items():
                         if key != "type":
-                            summary += f"    {key}: {value}\n"
+                            global_section.append(f"  - {key}: {value}")
                 else:
-                    summary += f"  {var_name}: {var_info}\n"
+                    global_section.append(f"\n**{var_name}**: {var_info}")
 
-        return summary
+            sections.append("\n".join(global_section))
+
+        if reactivity_summary is not None:
+            sections.append(reactivity_summary)
+
+        return "\n\n".join(sections)
 
     async def run_agent_loop(self) -> None:
         assert self.client is not None, "Client not initialized"
@@ -871,19 +1479,33 @@ class AgentHarness:
 
             can_use_thinking = True
             if thinking_budget is not None and len(api_messages) > 0:
-                last_assistant_msg = None
-                for msg in reversed(api_messages):
+                has_any_thinking = False
+                for msg in api_messages:
                     if msg.get("role") == "assistant":
-                        last_assistant_msg = msg
-                        break
+                        content = msg.get("content", [])
+                        if isinstance(content, list):
+                            for block in content:
+                                block_type = block.get("type") if isinstance(block, dict) else None
+                                if block_type in {"thinking", "redacted_thinking"}:
+                                    has_any_thinking = True
+                                    break
+                        if has_any_thinking:
+                            break
 
-                if last_assistant_msg:
-                    content = last_assistant_msg.get("content", [])
-                    if isinstance(content, list) and len(content) > 0:
-                        first_block_type = content[0].get("type") if isinstance(content[0], dict) else None
-                        if first_block_type not in {"thinking", "redacted_thinking"}:
-                            can_use_thinking = False
-                            print(f"[agent] Cannot use thinking API: last assistant message starts with {first_block_type}, not thinking")
+                if not has_any_thinking:
+                    last_assistant_msg = None
+                    for msg in reversed(api_messages):
+                        if msg.get("role") == "assistant":
+                            last_assistant_msg = msg
+                            break
+
+                    if last_assistant_msg:
+                        content = last_assistant_msg.get("content", [])
+                        if isinstance(content, list) and len(content) > 0:
+                            first_block_type = content[0].get("type") if isinstance(content[0], dict) else None
+                            if first_block_type not in {"thinking", "redacted_thinking"}:
+                                can_use_thinking = False
+                                print(f"[agent] Cannot use thinking API: last assistant message starts with {first_block_type}, not thinking")
 
 
             kwargs = {
@@ -1199,12 +1821,15 @@ class AgentHarness:
             widget_type = widget.get("type") or "unknown"
             widget_value = widget.get("value") or ""
             widget_label = widget.get("label") or ""
+            widget_filters = widget.get("filters") or []
 
             widget_desc = f"key={widget_key}, type={widget_type}"
             if widget_value:
                 widget_desc += f", value={widget_value}"
             if widget_label:
                 widget_desc += f", label={widget_label}"
+            if widget_filters:
+                widget_desc += f", filters={widget_filters}"
             widget_summaries.append(widget_desc)
 
         return ", ".join(widget_summaries)
