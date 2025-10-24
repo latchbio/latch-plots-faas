@@ -804,16 +804,6 @@ class AgentHarness:
         self.tool_map["delete_all_cells"] = delete_all_cells
 
         self.tools.append({
-            "name": "get_notebook_context",
-            "description": "Get the current state of the notebook including all cells and their content.",
-            "input_schema": {
-                "type": "object",
-                "properties": {},
-            },
-        })
-        self.tool_map["get_notebook_context"] = get_notebook_context
-
-        self.tools.append({
             "name": "submit_response",
             "description": "Submit the final response with plan, plan_diff, next_status, questions, and an optional summary. Call this at the end of every turn.",
             "input_schema": {
