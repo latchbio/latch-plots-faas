@@ -124,13 +124,10 @@ class AgentHarness:
                     for block in content:
                         if isinstance(block, dict) and block.get("type") == "tool_result":
                             block = block.copy()
-                            try:
-                                result = json.loads(block.get("content", "{}"))
-                                if "original_code" in result:
-                                    result.pop("original_code")
-                                    block["content"] = json.dumps(result)
-                            except (json.JSONDecodeError, TypeError):
-                                pass
+                            result = json.loads(block.get("content", "{}"))
+                            if "original_code" in result:
+                                result.pop("original_code")
+                                block["content"] = json.dumps(result)
                         cleaned_content.append(block)
                     content = cleaned_content
 
@@ -2133,8 +2130,8 @@ class AgentHarness:
                 exception = nested_msg.get("exception")
                 display_name = nested_msg.get("display_name")
 
-                logs = nested_msg.get("logs")
-                if logs and len(logs) > 4096:
+                logs = nested_msg.get("logs", None)
+                if logs is not None and len(logs) > 4096:
                     logs = logs[-4096:]
 
                 if cell_id is not None:
