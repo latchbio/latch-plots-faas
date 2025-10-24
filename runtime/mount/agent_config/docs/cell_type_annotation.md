@@ -24,6 +24,7 @@ This workflow provides **spatial cell type annotation** using **Tangram** with p
 **Limitations:**
 
 - **Human data only** (Tabula Sapiens is human-specific)
+- **Requires raw count data** — both reference and spatial must be in raw counts (not normalized)
 - Requires reasonable **gene overlap** between reference and spatial data
 - Training can take time (10-30 minutes depending on data size)
 - Works best when reference and spatial data are from similar tissues
@@ -34,17 +35,13 @@ This workflow provides **spatial cell type annotation** using **Tangram** with p
 
 ### Tabula Sapiens Reference Profiles
 
-Two pre-aggregated reference datasets are available:
+Pre-aggregated reference dataset in **raw counts**:
 
-1. **Normalized (recommended)**: `latch://39553.account/tabula_sapiens_avg_normalized.csv.gz`
+**`latch://{account_id}/tabula_sapiens_avg_raw.csv.gz`**
 
-   - Log-normalized, library-size corrected expression
-   - Better for Tangram mapping
-   - Use this by default
-
-2. **Raw counts (alternative)**: `latch://39553.account/tabula_sapiens_avg_raw.csv.gz`
-   - Raw count data
-   - Use if spatial data is in raw counts
+- Raw count data averaged across cell types
+- **Use raw counts for Tangram** — Tangram works best when reference and spatial data are in the same format
+- Spatial data should also be in raw counts (not normalized)
 
 **Structure:**
 
@@ -78,8 +75,8 @@ import anndata as ad
 from latch.ldata.path import LPath
 from pathlib import Path
 
-# Download reference (use normalized by default)
-ref_lpath = LPath("latch://39553.account/tabula_sapiens_avg_normalized.csv.gz")
+# Download reference (raw counts)
+ref_lpath = LPath("latch://{account_id}/tabula_sapiens_avg_raw.csv.gz")
 local_ref_path = Path(f"{ref_lpath.node_id()}.csv.gz")
 ref_lpath.download(local_ref_path, cache=True)
 
@@ -112,10 +109,13 @@ print(f"Tissues: {sorted(pd.unique(ad_ref.obs['tissue']))}")
 
 ### Step 2: Prepare Spatial Data
 
-Load spatial data and ensure it's compatible with the reference.
+Load spatial data and ensure it's in **raw counts** to match the reference.
+
+**CRITICAL:** Tangram requires that both reference and spatial data are in the same format. Since the reference is raw counts, spatial data must also be raw counts.
 
 ```python
 import scanpy as sc
+import numpy as np
 
 # Load spatial AnnData (example: from h5ad file)
 ad_sp = sc.read_h5ad("spatial_data.h5ad")
@@ -123,6 +123,23 @@ ad_sp = sc.read_h5ad("spatial_data.h5ad")
 # Ensure spatial coordinates exist
 if 'spatial' not in ad_sp.obsm:
     raise ValueError("Spatial data must have coordinates in adata.obsm['spatial']")
+
+# CRITICAL: Check if spatial data is in raw counts
+# Raw counts should be integers or close to integers
+is_raw_counts = np.all(ad_sp.X.data == ad_sp.X.data.astype(int))
+
+if not is_raw_counts:
+    print("WARNING: Spatial data does not appear to be raw counts!")
+    print("Tangram works best when both reference and spatial data are in raw counts.")
+    print("If you have raw counts available, use adata.raw or reload from raw data.")
+
+    # If raw counts are stored in adata.raw
+    if ad_sp.raw is not None:
+        print("Using raw counts from adata.raw...")
+        ad_sp = ad_sp.raw.to_adata()
+    else:
+        print("No raw counts found. Results may be suboptimal.")
+        print("Consider reloading data without normalization.")
 
 # Check gene overlap
 common_genes = list(set(ad_ref.var_names) & set(ad_sp.var_names))
@@ -424,16 +441,17 @@ print(f"Filtered reference: {ad_ref_filtered.n_obs} cell types from {tissue_sele
 
 ## Best Practices
 
-1. **Use normalized reference by default** — better for Tangram alignment
-2. **Check gene overlap first** — need at least 100-200 common genes
-3. **Match tissues** — filter reference to relevant tissue when possible
-4. **Monitor training** — check that score plateaus and doesn't keep decreasing
-5. **Validate results** — compare with marker gene annotations when available
-6. **Check confidence** — low confidence predictions may need manual review
-7. **Use cluster mode** — pre-aggregated reference is faster and uses less memory
-8. **Cache downloads** — download reference once per session for efficiency
-9. **Start with CPU** — use CPU first, switch to GPU only if needed
-10. **Visualize extensively** — use `w_h5` to inspect spatial patterns
+1. **Use raw counts for both reference and spatial data** — CRITICAL for Tangram alignment
+2. **Verify spatial data has raw counts and use them** — check before mapping
+3. **Check gene overlap first** — need at least 100-200 common genes
+4. **Match tissues** — filter reference to relevant tissue when possible
+5. **Monitor training** — check that score plateaus and doesn't keep decreasing
+6. **Validate results** — compare with marker gene annotations when available
+7. **Check confidence** — low confidence predictions may need manual review
+8. **Use cluster mode** — pre-aggregated reference is faster and uses less memory
+9. **Cache downloads** — download reference once per session for efficiency
+10. **Start with CPU** — use CPU first, switch to GPU only if needed
+11. **Visualize extensively** — use `w_h5` to inspect spatial patterns
 
 ---
 
@@ -448,8 +466,8 @@ Tangram-based spatial cell type annotation provides:
 
 **Workflow summary:**
 
-1. Load Tabula Sapiens reference (normalized)
-2. Load and prepare spatial data
+1. Load Tabula Sapiens reference (**raw counts**)
+2. Load and prepare spatial data (**ensure raw counts**)
 3. Map reference cell types to space using cluster-level Tangram
 4. **Project cell annotations** (key output: cell type probabilities)
 5. Optionally project gene expression
