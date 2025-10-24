@@ -966,7 +966,7 @@ class AgentHarness:
                 {notebook_context}
                 </notebook_context>
                 """
-             )
+            )
 
             if thinking_budget is not None:
                 max_tokens = thinking_budget + 4096
