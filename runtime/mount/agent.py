@@ -528,24 +528,24 @@ class AgentHarness:
 
         async def h5_filter_by(args: dict) -> str:
             widget_key = args.get("widget_key")
-            changes = args.get("changes")
+            filters = args.get("filters")
             
-            if isinstance(changes, str):
+            if isinstance(filters, str):
                 try:
-                    changes = json.loads(changes)
+                    filters = json.loads(filters)
                 except json.JSONDecodeError:
-                    return f"changes is invalid JSON: {changes!r}"
+                    return f"filters is invalid JSON: {filters!r}"
             
-            print(f"[tool] h5_filter_by widget_key={widget_key} changes={changes}")
+            print(f"[tool] h5_filter_by widget_key={widget_key} filters={filters}")
             
             params = {
                 "widget_key": widget_key,
-                "changes": changes
+                "filters": filters
             }
             
             result = await self.atomic_operation("h5_filter_by", params)
             if result.get("status") == "success":
-                return f"Applied filters to h5 widget: {changes}"
+                return f"Applied filters to h5 widget: {filters}"
             
             return f"Failed to apply filters to h5 widget: {result.get('error', 'Unknown error')}"
 
@@ -878,7 +878,7 @@ class AgentHarness:
 
         self.tools.append({
             "name": "h5_filter_by",
-            "description": "Apply filtering changes to an h5/AnnData widget. Can add or remove filters by ID.",
+            "description": "Set filters for an h5/AnnData widget. Pass the complete array of filters. Include existing filters from widget context to preserve them.",
             "input_schema": {
                 "type": "object",
                 "properties": {
@@ -886,128 +886,97 @@ class AgentHarness:
                         "type": "string",
                         "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
                     },
-                    "changes": {
+                    "filters": {
                         "type": "array",
-                        "description": "Array of filter operations to apply.",
+                        "description": "Complete array of filters to apply",
                         "items": {
                             "oneOf": [
                                 {
                                     "type": "object",
                                     "properties": {
-                                        "op": {
+                                        "type": {
                                             "type": "string",
-                                            "enum": ["add"],
-                                            "description": "Add a new filter"
+                                            "enum": ["obs"],
+                                            "description": "Filter by observation metadata"
                                         },
-                                        "filter": {
+                                        "key": {
+                                            "type": "string",
+                                            "description": "The observation key to filter on"
+                                        },
+                                        "operation": {
                                             "oneOf": [
                                                 {
                                                     "type": "object",
                                                     "properties": {
                                                         "type": {
                                                             "type": "string",
-                                                            "enum": ["obs"],
-                                                            "description": "Filter by observation metadata"
+                                                            "enum": ["neq"],
+                                                            "description": "Not equal operation"
                                                         },
-                                                        "key": {
-                                                            "type": "string",
-                                                            "description": "The observation key to filter on"
-                                                        },
-                                                        "operation": {
-                                                            "oneOf": [
-                                                                {
-                                                                    "type": "object",
-                                                                    "properties": {
-                                                                        "type": {
-                                                                            "type": "string",
-                                                                            "enum": ["neq"],
-                                                                            "description": "Not equal operation"
-                                                                        },
-                                                                        "value": {
-                                                                            "type": ["string", "number", "null"],
-                                                                            "description": "Value to compare against"
-                                                                        }
-                                                                    },
-                                                                    "required": ["type", "value"]
-                                                                },
-                                                                {
-                                                                    "type": "object",
-                                                                    "properties": {
-                                                                        "type": {
-                                                                            "type": "string",
-                                                                            "enum": ["geq", "leq", "g", "l"],
-                                                                            "description": "Numeric comparison: geq (>=), leq (<=), g (>), l (<)"
-                                                                        },
-                                                                        "value": {
-                                                                            "type": "number",
-                                                                            "description": "Numeric value to compare against"
-                                                                        }
-                                                                    },
-                                                                    "required": ["type", "value"]
-                                                                }
-                                                            ],
-                                                            "description": "Filter operation to apply"
+                                                        "value": {
+                                                            "type": ["string", "number", "null"],
+                                                            "description": "Value to compare against"
                                                         }
                                                     },
-                                                    "required": ["type", "key", "operation"]
+                                                    "required": ["type", "value"]
                                                 },
                                                 {
                                                     "type": "object",
                                                     "properties": {
                                                         "type": {
                                                             "type": "string",
-                                                            "enum": ["var"],
-                                                            "description": "Filter by variable(s) / gene(s)"
+                                                            "enum": ["geq", "leq", "g", "l"],
+                                                            "description": "Numeric comparison: geq (>=), leq (<=), g (>), l (<)"
                                                         },
-                                                        "keys": {
-                                                            "type": "array",
-                                                            "items": {"type": "string"},
-                                                            "description": "Array of variable/gene names to filter on"
-                                                        },
-                                                        "operation": {
-                                                            "type": "object",
-                                                            "properties": {
-                                                                "type": {
-                                                                    "type": "string",
-                                                                    "enum": ["geq", "leq", "g", "l"],
-                                                                    "description": "Numeric comparison: geq (>=), leq (<=), g (>), l (<)"
-                                                                },
-                                                                "value": {
-                                                                    "type": "number",
-                                                                    "description": "Numeric value to compare against"
-                                                                }
-                                                            },
-                                                            "required": ["type", "value"]
+                                                        "value": {
+                                                            "type": "number",
+                                                            "description": "Numeric value to compare against"
                                                         }
                                                     },
-                                                    "required": ["type", "keys", "operation"]
+                                                    "required": ["type", "value"]
                                                 }
                                             ],
-                                            "description": "Filter specification for observations or variables"
+                                            "description": "Filter operation to apply"
                                         }
                                     },
-                                    "required": ["op", "filter"]
+                                    "required": ["type", "key", "operation"]
                                 },
                                 {
                                     "type": "object",
                                     "properties": {
-                                        "op": {
+                                        "type": {
                                             "type": "string",
-                                            "enum": ["remove"],
-                                            "description": "Remove an existing filter by its ID"
+                                            "enum": ["var"],
+                                            "description": "Filter by variable(s) / gene(s)"
                                         },
-                                        "filter_id": {
-                                            "type": "string",
-                                            "description": "The ID of the filter to remove (visible in widget context)"
+                                        "keys": {
+                                            "type": "array",
+                                            "items": {"type": "string"},
+                                            "description": "Array of variable/gene names to filter on"
+                                        },
+                                        "operation": {
+                                            "type": "object",
+                                            "properties": {
+                                                "type": {
+                                                    "type": "string",
+                                                    "enum": ["geq", "leq", "g", "l"],
+                                                    "description": "Numeric comparison: geq (>=), leq (<=), g (>), l (<)"
+                                                },
+                                                "value": {
+                                                    "type": "number",
+                                                    "description": "Numeric value to compare against"
+                                                }
+                                            },
+                                            "required": ["type", "value"]
                                         }
                                     },
-                                    "required": ["op", "filter_id"]
+                                    "required": ["type", "keys", "operation"]
                                 }
                             ]
                         }
                     }
                 },
-                "required": ["widget_key", "changes"],
+                "required": ["widget_key", "filters"],
             },
         })
         self.tool_map["h5_filter_by"] = h5_filter_by
