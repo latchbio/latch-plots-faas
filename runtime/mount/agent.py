@@ -1354,7 +1354,7 @@ class AgentHarness:
             if nested_type == "cell_result":
                 cell_id = nested_msg.get("cell_id")
                 has_exception = nested_msg.get("has_exception", False)
-                exception = nested_msg.get("exception", "")
+                exception = nested_msg.get("exception")
                 display_name = nested_msg.get("display_name")
 
                 if cell_id is not None:
@@ -1365,6 +1365,7 @@ class AgentHarness:
                     "cell_id": cell_id,
                     "success": not has_exception,
                     "exception": exception,
+                    "logs": nested_msg.get("logs"),
                     "display_name": display_name,
                 })
             elif nested_type == "start_cell":
