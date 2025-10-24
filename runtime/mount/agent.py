@@ -353,6 +353,7 @@ class AgentHarness:
 
             if position < 0:
                 return {
+                    "tool_name": "create_cell",
                     "summary": "Error: Position must be non-negative",
                     "success": False,
                 }
@@ -384,10 +385,8 @@ class AgentHarness:
                     "success": True,
                 }
             return {
-                "summary": f"Failed to create cell: {result.get('error', 'Unknown error')}",
-                "cell_name": title,
                 "tool_name": "create_cell",
-                "message": action_summary,
+                "summary": f"Failed to create cell: {result.get('error', 'Unknown error')}",
                 "success": False,
             }
 
@@ -466,9 +465,6 @@ class AgentHarness:
             return {
                 "tool_name": "edit_cell",
                 "summary": f"Failed to edit cell: {result.get('error', 'Unknown error')}",
-                "cell_id": cell_id,
-                "cell_name": title,
-                "message": action_summary,
                 "success": False,
             }
 
@@ -504,9 +500,6 @@ class AgentHarness:
             return {
                 "tool_name": "delete_cell",
                 "summary": f"Failed to delete cell: {result.get('error', 'Unknown error')}",
-                "cell_id": cell_id,
-                "cell_name": title,
-                "message": action_summary,
                 "success": False,
             }
 
@@ -551,9 +544,6 @@ class AgentHarness:
             return {
                 "tool_name": "stop_cell",
                 "summary": f"Failed to stop cell {cell_id}: {result.get('error', 'Unknown error')}",
-                "cell_id": cell_id,
-                "cell_name": title,
-                "message": action_summary,
                 "success": False,
             }
 
@@ -563,7 +553,7 @@ class AgentHarness:
                 error_msg = context_result.get("error", "Unknown error")
                 return {
                     "tool_name": "delete_all_cells",
-                    "message": f"Failed to delete cells: {error_msg}",
+                    "summary": f"Failed to delete cells: {error_msg}",
                     "success": False,
                 }
 
@@ -654,14 +644,12 @@ class AgentHarness:
                     "summary": f"Updated widget value for: {key}",
                     "key": key,
                     "label": label,
+                    "value": value,
                     "action_summary": action_summary,
                 }
             return {
                 "tool_name": "set_widget",
                 "summary": f"Failed to update widget value: {result.get('error', 'Unknown error')}",
-                "key": key,
-                "label": label,
-                "action_summary": action_summary,
                 "success": False,
             }
 
@@ -679,6 +667,7 @@ class AgentHarness:
                 if not isinstance(next_status, str) or next_status not in {"executing", "fixing", "thinking", "awaiting_user_response", "awaiting_cell_execution", "awaiting_user_widget_input", "done"}:
                     print(f"[agent] Invalid next_status: {next_status}")
                     return {
+                        "tool_name": "submit_response",
                         "message": "Please provide a valid next_status",
                         "success": False,
                     }
