@@ -53,7 +53,6 @@ class AgentHarness:
     tools: list[ToolParam] = field(default_factory=list)
     tool_map: dict[str, Callable] = field(default_factory=dict)
     operation_counter: int = 0
-    instructions_context: str = ""
     current_request_id: str | None = None
     should_auto_continue: bool = False
     pending_auto_continue: bool = False
@@ -861,6 +860,8 @@ class AgentHarness:
             return f"Failed to get context: {context_result.get('error', 'Unknown error')}"
 
         context = context_result.get("context", {})
+        self.latest_notebook_context = context
+
         cell_count = context.get("cell_count", 0)
         cells = context.get("cells", [])
 
@@ -1151,8 +1152,6 @@ class AgentHarness:
             self.should_auto_continue = False
             self.pending_auto_continue = False
 
-            context = msg.get("context", "")
-            self.instructions_context = context
             session_id = msg.get("session_id")
             if session_id is None:
                 raise RuntimeError(f"[handle init] Session ID is not set. Message: {msg}")
