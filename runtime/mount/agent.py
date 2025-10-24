@@ -534,7 +534,7 @@ class AgentHarness:
                 try:
                     changes = json.loads(changes)
                 except json.JSONDecodeError:
-                    return "Invalid changes JSON format"
+                    return f"changes is invalid JSON: {changes!r}"
             
             print(f"[tool] h5_filter_by widget_key={widget_key} changes={changes}")
             
@@ -557,7 +557,7 @@ class AgentHarness:
                 try:
                     color_by = json.loads(color_by)
                 except json.JSONDecodeError:
-                    return "Invalid color_by JSON format"
+                    return f"color_by is invalid JSON: {color_by!r}"
             
             print(f"[tool] h5_color_by widget_key={widget_key} color_by={color_by}")
             
