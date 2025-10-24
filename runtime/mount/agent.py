@@ -1361,7 +1361,7 @@ class AgentHarness:
                 cell_id = nested_msg.get("cell_id")
                 has_exception = nested_msg.get("has_exception", False)
                 exception = nested_msg.get("exception", "")
-                display_name = nested_msg.get("display_name", None)
+                display_name = nested_msg.get("display_name")
 
                 if cell_id is not None:
                     self.executing_cells.discard(str(cell_id))
