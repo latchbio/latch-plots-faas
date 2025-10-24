@@ -117,7 +117,12 @@ class AgentHarness:
                     if exception:
                         content = f"{message}\n\n Exception: {exception}"
                     if logs:
-                        content = f"{content}\n\nLogs: {logs}"
+                        log_lines = logs.split('\n')
+                        if len(log_lines) > 32:
+                            truncated_logs = '\n'.join(log_lines[-32:])
+                            content = f"{content}\n\nLogs (last 32 lines):\n{truncated_logs}"
+                        else:
+                            content = f"{content}\n\nLogs: {logs}"
 
                 if role in {"user", "assistant"} and (isinstance(content, (str, list))):
                     anthropic_messages.append({"role": role, "content": content})
