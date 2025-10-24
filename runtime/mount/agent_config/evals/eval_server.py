@@ -10,7 +10,7 @@ from pathlib import Path
 
 os.environ.setdefault("auto_reload", "false")
 os.environ.setdefault("logging_mode", "console")
-os.environ.setdefault("domain", "localhost")
+os.environ.setdefault("domain", "latch.bio")
 os.environ.setdefault("DD_VERSION", "eval")
 os.environ.setdefault("DD_SERVICE", "latch-plots-eval")
 os.environ.setdefault("DD_ENV", "eval")
