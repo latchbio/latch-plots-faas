@@ -583,6 +583,7 @@ class AgentHarness:
             result = await self.atomic_operation("get_context", params)
             if result.get("status") != "success":
                 return {
+                    "tool_name": "get_notebook_context",
                     "summary": f"Failed to get context: {result.get('error', 'Unknown error')}",
                     "success": False,
                 }
@@ -612,6 +613,7 @@ class AgentHarness:
                     summary += f"\n  Widgets: {widget_summary}"
 
             return {
+                "tool_name": "get_notebook_context",
                 "summary": summary,
                 "success": True,
             }
