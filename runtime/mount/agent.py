@@ -676,6 +676,7 @@ class AgentHarness:
                 print("[tool] submit_response called with:")
                 print(f"  - next_status: {next_status}")
                 print(f"  - plan: {len(plan_items)} items")
+                print(f"  - plan_update_overview: {args.get('plan_update_overview')}")
                 for item in plan_items:
                     print(f"    - [{item.get('status')}] {item.get('id')}: {item.get('description')}")
                 print(f"  - plan_diff: {len(plan_diff_items)} items")
@@ -820,6 +821,7 @@ class AgentHarness:
                 "properties": {
                     "plan": {"type": "array", "description": "List of plan items"},
                     "plan_diff": {"type": "array", "description": "List of plan diff items"},
+                    "plan_update_overview": {"type": "string", "description": "Short title overview of what changed in the plan. Should follow the format like 'Added a new step.' or  `Completed step 2, step 3 now in progress.`"},
                     "summary": {"type": "string", "description": "Summary text to help the user. This can be a message to the user or a description of what was accomplished. Use markdown formatting with bullet points if needed. Omit if no summary needed."},
                     "questions": {"type": "string", "description": "Optional question text for the user. Omit if no questions needed."},
                     "next_status": {"type": "string", "description": "What the agent will do next", "enum": ["executing", "fixing", "thinking", "awaiting_user_response", "awaiting_cell_execution", "awaiting_user_widget_input", "done"]},
@@ -829,7 +831,7 @@ class AgentHarness:
                         "default": False
                     },
                 },
-                "required": ["plan", "plan_diff", "next_status"],
+                "required": ["plan", "plan_diff", "next_status", "plan_update_overview"],
             },
         })
         self.tool_map["submit_response"] = submit_response
