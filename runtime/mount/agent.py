@@ -454,7 +454,13 @@ class AgentHarness:
                 "auto_run": True
             }
 
-            original_code = self.latest_notebook_context.get("cells", []).get(cell_id, {}).get("source", None)
+            # Find the original code from the stored context
+            original_code = None
+            cells = self.latest_notebook_context.get("cells", [])
+            for cell in cells:
+                if cell.get("cell_id") == cell_id:
+                    original_code = cell.get("source", "")
+                    break
 
             result = await self.atomic_operation("edit_cell", params)
             if result.get("status") == "success":
