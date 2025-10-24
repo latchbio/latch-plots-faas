@@ -10,6 +10,7 @@ import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
+from textwrap import dedent
 
 from agent_utils.auto_install import anthropic
 from anthropic.types import MessageParam, ToolParam
@@ -200,7 +201,10 @@ class AgentHarness:
 
         print("[agent] Cleared running state")
 
-    async def atomic_operation(self, action: str, params: dict) -> dict:
+    async def atomic_operation(self, action: str, params: dict | None = None) -> dict:
+        if params is None:
+            params: dict = {}
+
         self.operation_counter += 1
 
         if self.mode == Mode.planning and action in {"create_cell", "edit_cell", "run_cell", "delete_cell"}:
@@ -589,49 +593,6 @@ class AgentHarness:
                 "deleted_count": deleted_count,
             }
 
-        async def get_notebook_context(args: dict) -> dict:
-            params = {}
-
-            result = await self.atomic_operation("get_context", params)
-            if result.get("status") != "success":
-                return {
-                    "tool_name": "get_notebook_context",
-                    "summary": f"Failed to get context: {result.get('error', 'Unknown error')}",
-                    "success": False,
-                }
-
-            context = result.get("context", {})
-            cell_count = context.get("cell_count", 0)
-            cells = context.get("cells", [])
-
-            self.latest_notebook_context = context
-
-            summary = f"Notebook has {cell_count} cell(s):\n"
-            for cell in cells:
-                index = cell.get("index", "?")
-                cell_id = cell.get("cell_id", "?")
-                cell_type = cell.get("cell_type", "unknown")
-                status = cell.get("status", "idle")
-                source = cell.get("source", "")
-                tf_id = cell.get("tf_id", "?")
-
-                source_preview = source[:500] + "..." if len(source) > 500 else source
-                source_preview = source_preview.replace("\n", " ")
-
-                summary += f"\n[{index}] ({cell_type}, {status}, cell_id: {cell_id}, tf_id: {tf_id})"
-                if source_preview:
-                    summary += f": {source_preview}"
-
-                widget_summary = self._format_widget_summaries(cell.get("widgets") or [])
-                if widget_summary:
-                    summary += f"\n  Widgets: {widget_summary}"
-
-            return {
-                "tool_name": "get_notebook_context",
-                "summary": summary,
-                "success": True,
-            }
-
         async def set_widget(args: dict) -> dict:
             key = args.get("key")
             action_summary = args.get("action_summary")
@@ -889,6 +850,88 @@ class AgentHarness:
                 })
         self.tool_map["set_widget"] = set_widget
 
+    async def _get_notebook_context(self) -> str:
+        context_result, globals_result, reactivity_result = await asyncio.gather(
+            self.atomic_operation("get_context"),
+            self.atomic_operation("request_globals_summary"),
+            self.atomic_operation("request_reactivity_summary")
+        )
+
+        if context_result.get("status") != "success":
+            return f"Failed to get context: {context_result.get('error', 'Unknown error')}"
+
+        context = context_result.get("context", {})
+        cell_count = context.get("cell_count", 0)
+        cells = context.get("cells", [])
+
+        globals_data: dict[str, object] | None = None
+        if globals_result.get("status") == "success":
+            globals_data = globals_result.get("summary", {})
+
+        reactivity_summary: str | None = None
+        if reactivity_result.get("status") == "success":
+            reactivity_summary = reactivity_result.get("summary")
+
+        sections = []
+
+        cell_section = ["## Notebook Cells", f"\nTotal: {cell_count} cells\n"]
+
+        for cell in cells:
+            index = cell.get("index", "?")
+            cell_id = cell.get("cell_id", "?")
+            cell_type = cell.get("cell_type", "unknown")
+            source = cell.get("source", "")
+            status = cell.get("status", "idle")
+            tf_id = cell.get("tf_id", None)
+
+            cell_section += [
+                f"\n### Cell [{index}] (ID: {cell_id})" + (f", (Code cell ID: {tf_id})" if tf_id is not None else ""),
+                f"Type: {cell_type}",
+                f"Status: {status}",
+            ]
+
+            if source is not None:
+                source_display = source[:800] if len(source) > 800 else source
+                truncated = " [TRUNCATED]" if len(source) > 800 else ""
+                cell_section.append(f"```python\n{source_display}\n```{truncated}")
+
+            widgets = cell.get("widgets", None)
+            if widgets is not None:
+                widget_strs = []
+                for w in widgets:
+                    w_type = w.get("type", "unknown")
+                    w_key = w.get("key", "")
+                    w_label = w.get("label", "")
+                    if w_label:
+                        widget_strs.append(f"{w_type} ({w_label}) [{w_key}]")
+                    else:
+                        widget_strs.append(f"{w_type} [{w_key}]")
+                if widget_strs:
+                    cell_section.append(f"Widgets: {', '.join(widget_strs)}")
+
+        sections.append("\n".join(cell_section))
+
+        if globals_data is not None and len(globals_data) > 0:
+            global_section = ["\n## Global Variables", f"\nTotal: {len(globals_data)} variables\n"]
+
+            for var_name in sorted(globals_data.keys()):
+                var_info = globals_data[var_name]
+                if isinstance(var_info, dict):
+                    var_type = var_info.get("type", "unknown")
+                    global_section.append(f"\n**{var_name}** ({var_type})")
+                    for key, value in var_info.items():
+                        if key != "type":
+                            global_section.append(f"  - {key}: {value}")
+                else:
+                    global_section.append(f"\n**{var_name}**: {var_info}")
+
+            sections.append("\n".join(global_section))
+
+        if reactivity_summary is not None:
+            sections.append(reactivity_summary)
+
+        return "\n\n".join(sections)
+
     async def run_agent_loop(self) -> None:
         assert self.client is not None, "Client not initialized"
 
@@ -910,6 +953,17 @@ class AgentHarness:
 
             print(f"[agent] Turn {turn}, mode={self.mode}, thinking_budget={thinking_budget}")
 
+            notebook_context = await self._get_notebook_context()
+
+            system_prompt_with_context = dedent(
+                f"""
+                {self.system_prompt}
+                <notebook_context>
+                {notebook_context}
+                </notebook_context>
+                """
+             )
+
             if thinking_budget is not None:
                 max_tokens = thinking_budget + 4096
             else:
@@ -917,24 +971,38 @@ class AgentHarness:
 
             can_use_thinking = True
             if thinking_budget is not None and len(api_messages) > 0:
-                last_assistant_msg = None
-                for msg in reversed(api_messages):
+                has_any_thinking = False
+                for msg in api_messages:
                     if msg.get("role") == "assistant":
-                        last_assistant_msg = msg
-                        break
+                        content = msg.get("content", [])
+                        if isinstance(content, list):
+                            for block in content:
+                                block_type = block.get("type") if isinstance(block, dict) else None
+                                if block_type in {"thinking", "redacted_thinking"}:
+                                    has_any_thinking = True
+                                    break
+                        if has_any_thinking:
+                            break
 
-                if last_assistant_msg:
-                    content = last_assistant_msg.get("content", [])
-                    if isinstance(content, list) and len(content) > 0:
-                        first_block_type = content[0].get("type") if isinstance(content[0], dict) else None
-                        if first_block_type not in {"thinking", "redacted_thinking"}:
-                            can_use_thinking = False
-                            print(f"[agent] Cannot use thinking API: last assistant message starts with {first_block_type}, not thinking")
+                if not has_any_thinking:
+                    last_assistant_msg = None
+                    for msg in reversed(api_messages):
+                        if msg.get("role") == "assistant":
+                            last_assistant_msg = msg
+                            break
+
+                    if last_assistant_msg:
+                        content = last_assistant_msg.get("content", [])
+                        if isinstance(content, list) and len(content) > 0:
+                            first_block_type = content[0].get("type") if isinstance(content[0], dict) else None
+                            if first_block_type not in {"thinking", "redacted_thinking"}:
+                                can_use_thinking = False
+                                print(f"[agent] Cannot use thinking API: last assistant message starts with {first_block_type}, not thinking")
 
             kwargs = {
                 "model": model,
                 "max_tokens": max_tokens,
-                "system": self.system_prompt,
+                "system": system_prompt_with_context,
                 "messages": api_messages,
                 "tools": self.tools,
             }
@@ -1184,7 +1252,7 @@ class AgentHarness:
                     print(f"[agent] Reconnected while {next_status}, prompting LLM to check state and retry")
                     await self.pending_messages.put({
                         "type": "user_query",
-                        "content": "The session was reconnected. You were waiting for an action to complete, but it may have finished or failed while offline. Please use get_notebook_context to check the current state, then retry any incomplete actions or continue with your plan.",
+                        "content": "The session was reconnected. You were waiting for an action to complete, but it may have finished or failed while offline. Please retry any incomplete actions or continue with your plan.",
                         "request_id": None,
                         "hidden": True,
                     })
