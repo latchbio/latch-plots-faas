@@ -781,19 +781,33 @@ class AgentHarness:
 
             can_use_thinking = True
             if thinking_budget is not None and len(api_messages) > 0:
-                last_assistant_msg = None
-                for msg in reversed(api_messages):
+                has_any_thinking = False
+                for msg in api_messages:
                     if msg.get("role") == "assistant":
-                        last_assistant_msg = msg
-                        break
+                        content = msg.get("content", [])
+                        if isinstance(content, list):
+                            for block in content:
+                                block_type = block.get("type") if isinstance(block, dict) else None
+                                if block_type in {"thinking", "redacted_thinking"}:
+                                    has_any_thinking = True
+                                    break
+                        if has_any_thinking:
+                            break
 
-                if last_assistant_msg:
-                    content = last_assistant_msg.get("content", [])
-                    if isinstance(content, list) and len(content) > 0:
-                        first_block_type = content[0].get("type") if isinstance(content[0], dict) else None
-                        if first_block_type not in {"thinking", "redacted_thinking"}:
-                            can_use_thinking = False
-                            print(f"[agent] Cannot use thinking API: last assistant message starts with {first_block_type}, not thinking")
+                if not has_any_thinking:
+                    last_assistant_msg = None
+                    for msg in reversed(api_messages):
+                        if msg.get("role") == "assistant":
+                            last_assistant_msg = msg
+                            break
+
+                    if last_assistant_msg:
+                        content = last_assistant_msg.get("content", [])
+                        if isinstance(content, list) and len(content) > 0:
+                            first_block_type = content[0].get("type") if isinstance(content[0], dict) else None
+                            if first_block_type not in {"thinking", "redacted_thinking"}:
+                                can_use_thinking = False
+                                print(f"[agent] Cannot use thinking API: last assistant message starts with {first_block_type}, not thinking")
 
             kwargs = {
                 "model": model,
