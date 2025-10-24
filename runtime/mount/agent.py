@@ -62,6 +62,7 @@ class AgentHarness:
     conversation_running: bool = False
     system_prompt: str = ""
     agent_session_id: int | None = None
+    latest_notebook_context: dict = field(default_factory=dict)
 
     mode_config: dict[Mode, tuple[str, int | None]] = field(default_factory=lambda: {
         Mode.planning: ("claude-sonnet-4-5-20250929", 4096),
@@ -380,12 +381,11 @@ class AgentHarness:
             if result.get("status") == "success":
                 cell_id = result.get("cell_id", "unknown")
                 msg = f"Created cell at position {position} (ID: {cell_id}, Title: {title})"
-                code_preview = code[:500] + "..." if len(code) > 500 else code
                 print(f"[tool] create_cell -> {msg}")
                 return {
                     "tool_name": "create_cell",
                     "summary": msg,
-                    "code": code_preview,
+                    "code": code,
                     "cell_id": cell_id,
                     "cell_name": title,
                     "position": position,
@@ -422,13 +422,12 @@ class AgentHarness:
             if result.get("status") == "success":
                 cell_id = result.get("cell_id", "unknown")
                 msg = f"Created markdown cell at position {position} (ID: {cell_id})"
-                code_preview = code[:500] + "..." if len(code) > 500 else code
 
                 print(f"[tool] create_markdown_cell -> {msg}")
                 return {
                     "tool_name": "create_markdown_cell",
                     "summary": msg,
-                    "code": code_preview,
+                    "code": code,
                     "cell_id": cell_id,
                     "cell_name": title,
                     "position": position,
@@ -455,16 +454,18 @@ class AgentHarness:
                 "auto_run": True
             }
 
+            original_code = self.latest_notebook_context.get("cells", []).get(cell_id, {}).get("source", None)
+
             result = await self.atomic_operation("edit_cell", params)
             if result.get("status") == "success":
                 msg = f"Cell {cell_id} edited successfully"
                 print(f"[tool] edit_cell -> {msg}")
-                code_preview = new_code[:500] + "..." if len(new_code) > 500 else new_code
 
                 return {
                     "tool_name": "edit_cell",
                     "summary": msg,
-                    "code": code_preview,
+                    "code": new_code,
+                    "original_code": original_code,
                     "cell_id": cell_id,
                     "cell_name": title,
                     "message": action_summary,
@@ -596,6 +597,8 @@ class AgentHarness:
             context = result.get("context", {})
             cell_count = context.get("cell_count", 0)
             cells = context.get("cells", [])
+
+            self.latest_notebook_context = context
 
             summary = f"Notebook has {cell_count} cell(s):\n"
             for cell in cells:
