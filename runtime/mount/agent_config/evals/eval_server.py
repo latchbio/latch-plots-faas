@@ -49,6 +49,7 @@ class EvalServer:
         self.kernel_sock = None
         self.kernel_conn = None
         self.websocket = None
+        self.kernel_websocket = None
         self.notebook_context = None
         self.cleanup_complete = False
         self.session_id = None
@@ -178,12 +179,9 @@ class EvalServer:
             response_msg = await asyncio.wait_for(self.websocket.recv(), timeout=5.0)
             response = json.loads(response_msg)
 
-            print(f"[eval] Received response: type={response.get('type')}, tx_id={response.get('tx_id')}")
-
             if response.get("tx_id") == tx_id and response.get("type") == "agent_action_response":
                 if response.get("status") == "success":
                     context = response.get("context", {})
-                    print(f"[eval] Got notebook context: {len(context.get('cells', []))} cells")
                     return context
                 else:
                     print(f"[eval] Failed to get context: status={response.get('status')}, error={response.get('error')}")
@@ -242,6 +240,7 @@ class EvalServer:
 
     async def handle_kernel_connection(self, websocket):
         print("[eval] Kernel websocket connected")
+        self.kernel_websocket = websocket
 
         try:
             auth_msg = await websocket.recv()
@@ -259,33 +258,45 @@ class EvalServer:
 
             async def forward_kernel_to_console():
                 try:
-                    while True:
+                    while not self.cleanup_complete:
                         msg = await self.kernel_conn.recv()
-                        msg_type = msg.get("type", "unknown")
-                        if msg_type not in ("kernel_stdio", "h5"):
-                            print(f"[eval] kernel→console: {msg_type}")
                         await websocket.send(json.dumps(msg))
                 except Exception as e:
-                    print(f"[eval] Error forwarding kernel→console: {e}")
-                    import traceback
-                    traceback.print_exc()
+                    if not self.cleanup_complete:
+                        print(f"[eval] Error forwarding kernel→console: {e}")
+                        import traceback
+                        traceback.print_exc()
 
             async def forward_console_to_kernel():
                 try:
                     async for message in websocket:
+                        if self.cleanup_complete:
+                            break
                         msg = json.loads(message)
-                        msg_type = msg.get("type", "unknown")
-                        print(f"[eval] console→kernel: {msg_type}")
                         await self.kernel_conn.send(msg)
                 except Exception as e:
-                    print(f"[eval] Error forwarding console→kernel: {e}")
-                    import traceback
-                    traceback.print_exc()
+                    if not self.cleanup_complete:
+                        print(f"[eval] Error forwarding console→kernel: {e}")
+                        import traceback
+                        traceback.print_exc()
 
             forward_task = asyncio.create_task(forward_kernel_to_console())
             receive_task = asyncio.create_task(forward_console_to_kernel())
 
-            await asyncio.gather(forward_task, receive_task, return_exceptions=True)
+            while not self.cleanup_complete:
+                await asyncio.sleep(0.1)
+
+            forward_task.cancel()
+            receive_task.cancel()
+            try:
+                await asyncio.gather(forward_task, receive_task, return_exceptions=True)
+            except:
+                pass
+
+            try:
+                await websocket.close()
+            except:
+                pass
         except Exception as e:
             print(f"[eval] Error in handle_kernel_connection: {e}")
             import traceback
@@ -302,8 +313,7 @@ class EvalServer:
             console_init = json.loads(init_msg)
             if console_init.get("type") == "init":
                 self.session_id = int(console_init.get("session_id"))
-                print(f"[eval] Got session_id from console: {self.session_id}")
-
+    
                 # Clear history for this session
                 from run_local_eval import get_eval_config
                 from mount.utils import gql_query
@@ -321,18 +331,12 @@ class EvalServer:
                         """,
                         variables={"sessionId": str(self.session_id)},
                     )
-                    print("[eval] Cleared agent history")
                 except Exception as e:
                     print(f"[eval] Warning: Failed to clear agent history: {e}")
-
-            print(f"[eval] Sending init to agent with session_id={self.session_id}")
             await self.agent_conn.send({"type": "init", "session_id": self.session_id})
 
             msg = await self.agent_conn.recv()
             if msg.get("type") == "agent_status" and msg.get("status") == "ready":
-                print("[eval] Agent initialized")
-
-                print("[eval] Sending initial query...")
                 data_context = ""
                 if self.test_case.data_node:
                     contextual_data = [{
@@ -354,7 +358,6 @@ class EvalServer:
                     "query": initial_query,
                     "request_id": f"eval-init-{self.session_id}"
                 })
-                print("[eval] Initial query sent")
 
             async def forward_agent_to_console():
                 try:
@@ -440,32 +443,8 @@ class EvalServer:
 
         msg_type = msg.get("type")
 
-        if msg_type == "agent_result":
-            self.agent_sent_result = True
-            structured = msg.get("structured_output", {})
-
-            summary = structured.get("summary", "")
-            if "[EVAL_COMPLETE]" in summary:
-                print("[eval] Detected [EVAL_COMPLETE] marker in agent summary")
-                self.eval_complete = True
-
-            questions = structured.get("questions")
-            self.has_questions = questions is not None and len(questions) > 0
-
-            if self.has_questions:
-                print(f"[eval] Agent asked {len(questions)} question(s), auto-responding...")
-                await asyncio.sleep(1)
-                auto_response = {
-                    "type": "agent_query",
-                    "query": "Please continue and make your best judgment.",
-                    "request_id": f"auto-response-{time.time()}"
-                }
-                await self.agent_conn.send(auto_response)
-                self.has_questions = False
-                self.agent_sent_result = False
-                print("[eval] Waiting for agent to respond to auto-answer...")
-            else:
-                print("[eval] Agent sent result (no questions)")
+        if msg_type == "agent_history_updated":
+            await self.check_for_completion()
 
         elif msg_type in ("start_cell", "cell_result"):
             cell_id = msg.get("cell_id")
@@ -475,6 +454,39 @@ class EvalServer:
                 elif msg_type == "cell_result":
                     has_exception = msg.get("has_exception", False)
                     self.cell_status[cell_id] = "error" if has_exception else "ran"
+
+    async def check_for_completion(self):
+        from run_local_eval import get_eval_config
+        from mount.utils import gql_query
+        auth_token_sdk, _, _ = get_eval_config()
+
+        try:
+            resp = await gql_query(
+                auth=auth_token_sdk,
+                query="""
+                    query AgentHistory($sessionId: BigInt!) {
+                        agentHistories(condition: {sessionId: $sessionId, removed: false}, orderBy: ID_DESC, first: 20) {
+                            nodes { id payload }
+                        }
+                    }
+                """,
+                variables={"sessionId": str(self.session_id)},
+            )
+            nodes = resp.get("data", {}).get("agentHistories", {}).get("nodes", [])
+
+            for node in nodes:
+                payload = node.get("payload", {})
+                if payload.get("type") == "anthropic_message" and payload.get("role") == "assistant":
+                    content = payload.get("content", [])
+                    for block in content:
+                        if isinstance(block, dict) and block.get("type") == "tool_use" and block.get("name") == "submit_response":
+                            tool_input = block.get("input", {})
+                            summary = tool_input.get("summary", "")
+                            if "[EVAL_COMPLETE]" in summary:
+                                self.eval_complete = True
+                                return
+        except Exception as e:
+            print(f"[eval] Error checking for completion: {e}")
 
     def is_done(self) -> bool:
         if not self.eval_complete:
