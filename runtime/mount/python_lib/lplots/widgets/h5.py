@@ -2,7 +2,6 @@ from dataclasses import dataclass
 from typing import Literal, TypedDict
 
 from latch.ldata.path import LPath
-
 from lplots.h5.utils import auto_install
 from lplots.h5.utils.persistence import use_anndata_key
 
@@ -42,6 +41,7 @@ class ViewerPreset(TypedDict, total=False):
 
 class H5State(_emit.WidgetState[h5_widget_type, str | ad.AnnData | None]):
     obj_id: str | None
+    label: str | None
     spatial_dir: LPath | None
     readonly: bool
     ann_tiles: LPath | None
@@ -99,6 +99,7 @@ class H5(widget.BaseWidget):
 def w_h5(
     *,
     key: str | None = None,
+    label: str | None = None,
     ann_data: ad.AnnData | None = None,
     spatial_dir: LPath | None = None,
     ann_tiles: LPath | None = None,
@@ -120,6 +121,7 @@ def w_h5(
         _state={
             "type": h5_widget_type,
             "obj_id": obj_id,
+            "label": label,
             "spatial_dir": spatial_dir,
             "ann_tiles": ann_tiles,
             "readonly": readonly,

@@ -709,222 +709,363 @@ class AgentHarness:
                     "success": False,
                 }
 
-        async def h5_filter_by(args: dict) -> str:
+        async def h5_filter_by(args: dict) -> dict:
             widget_key = args.get("widget_key")
             filters = args.get("filters")
-            
+
             if isinstance(filters, str):
                 try:
                     filters = json.loads(filters)
                 except json.JSONDecodeError:
-                    return f"filters is invalid JSON: {filters!r}"
-            
+                    return {
+                        "tool_name": "h5_filter_by",
+                        "success": False,
+                        "summary": f"filters is invalid JSON: {filters!r}",
+                    }
+
             print(f"[tool] h5_filter_by widget_key={widget_key} filters={filters}")
-            
+
             params = {
                 "widget_key": widget_key,
                 "filters": filters
             }
-            
+
             result = await self.atomic_operation("h5_filter_by", params)
             if result.get("status") == "success":
-                return f"Applied filters to h5 widget: {filters}"
-            
-            return f"Failed to apply filters to h5 widget: {result.get('error', 'Unknown error')}"
+                return {
+                    "tool_name": "h5_filter_by",
+                    "success": True,
+                    "label": args.get("label"),
+                    "summary": f"Applied filters to h5 widget: {filters}",
+                    "widget_key": widget_key,
+                    "filters": filters,
+                }
 
-        async def h5_color_by(args: dict) -> str:
+            return {
+                "tool_name": "h5_filter_by",
+                "success": False,
+                "summary": f"Failed to apply filters to h5 widget: {result.get('error', 'Unknown error')}",
+            }
+
+        async def h5_color_by(args: dict) -> dict:
             widget_key = args.get("widget_key")
             color_by = args.get("color_by")
-            
+
             if isinstance(color_by, str):
                 try:
                     color_by = json.loads(color_by)
                 except json.JSONDecodeError:
-                    return f"color_by is invalid JSON: {color_by!r}"
-            
+                    return {
+                        "tool_name": "h5_color_by",
+                        "success": False,
+                        "summary": f"color_by is invalid JSON: {color_by!r}",
+                    }
+
             print(f"[tool] h5_color_by widget_key={widget_key} color_by={color_by}")
-            
+
             params = {
                 "widget_key": widget_key,
                 "color_by": color_by
             }
-            
+
             result = await self.atomic_operation("h5_color_by", params)
             if result.get("status") == "success":
-                return f"Set h5 widget coloring: {color_by}"
-            
-            return f"Failed to set h5 widget coloring: {result.get('error', 'Unknown error')}"
+                return {
+                    "tool_name": "h5_color_by",
+                    "success": True,
+                    "label": args.get("label"),
+                    "summary": f"Set h5 widget coloring: {color_by}",
+                    "widget_key": widget_key,
+                    "color_by": color_by,
+                }
 
-        async def h5_set_selected_obsm_key(args: dict) -> str:
+            return {
+                "tool_name": "h5_color_by",
+                "success": False,
+                "summary": f"Failed to set h5 widget coloring: {result.get('error', 'Unknown error')}",
+            }
+
+        async def h5_set_selected_obsm_key(args: dict) -> dict:
             widget_key = args.get("widget_key")
             obsm_key = args.get("obsm_key")
-            
+
             print(f"[tool] h5_set_selected_obsm_key widget_key={widget_key} obsm_key={obsm_key}")
-            
+
             params = {
                 "widget_key": widget_key,
                 "obsm_key": obsm_key
             }
-            
+
             result = await self.atomic_operation("h5_set_selected_obsm_key", params)
             if result.get("status") == "success":
-                return f"Set h5 widget to use obsm key {obsm_key}"
-            
-            return f"Failed to set h5 widget obsm key: {result.get('error', 'Unknown error')}"
+                return {
+                    "tool_name": "h5_set_selected_obsm_key",
+                    "success": True,
+                    "label": args.get("label"),
+                    "summary": f"Set h5 widget to use obsm key {obsm_key}",
+                    "widget_key": widget_key,
+                    "obsm_key": obsm_key,
+                }
 
-        async def h5_set_background_image(args: dict) -> str:
+            return {
+                "tool_name": "h5_set_selected_obsm_key",
+                "success": False,
+                "summary": f"Failed to set h5 widget obsm key: {result.get('error', 'Unknown error')}",
+            }
+
+        async def h5_set_background_image(args: dict) -> dict:
             widget_key = args.get("widget_key")
             node_id = args.get("node_id")
-            
+
             print(f"[tool] h5_set_background_image widget_key={widget_key} node_id={node_id}")
-            
+
             params = {
                 "widget_key": widget_key,
                 "node_id": node_id,
             }
-            
+
             result = await self.atomic_operation("h5_set_background_image", params)
             if result.get("status") == "success":
-                return f"Set background image for h5 widget using {node_id}"
-            return f"Failed to set background image: {result.get('error', 'Unknown error')}"
+                return {
+                    "tool_name": "h5_set_background_image",
+                    "success": True,
+                    "label": args.get("label"),
+                    "summary": f"Set background image for h5 widget using {node_id}",
+                    "widget_key": widget_key,
+                    "node_id": node_id,
+                }
+            return {
+                "tool_name": "h5_set_background_image",
+                "success": False,
+                "summary": f"Failed to set background image: {result.get('error', 'Unknown error')}",
+            }
 
-        async def h5_open_image_aligner(args: dict) -> str:
+        async def h5_open_image_aligner(args: dict) -> dict:
             widget_key = args.get("widget_key")
             background_image_id = args.get("background_image_id")
-            
+
             print(f"[tool] h5_open_image_aligner widget_key={widget_key} background_image_id={background_image_id}")
 
             params = {
                 "widget_key": widget_key,
                 "background_image_id": background_image_id,
             }
-            
+
             result = await self.atomic_operation("h5_open_image_aligner", params)
             if result.get("status") == "success":
-                return f"Opened image aligner for background image {background_image_id}"
+                return {
+                    "tool_name": "h5_open_image_aligner",
+                    "success": True,
+                    "label": args.get("label"),
+                    "summary": f"Opened image aligner for background image {background_image_id}",
+                    "widget_key": widget_key,
+                    "background_image_id": background_image_id,
+                }
 
-            return f"Failed to open image aligner: {result.get('error', 'Unknown error')}"
+            return {
+                "tool_name": "h5_open_image_aligner",
+                "success": False,
+                "summary": f"Failed to open image aligner: {result.get('error', 'Unknown error')}",
+            }
 
-        async def h5_autoscale(args: dict) -> str:
+        async def h5_autoscale(args: dict) -> dict:
             widget_key = args.get("widget_key")
-            
+
             print(f"[tool] h5_autoscale widget_key={widget_key}")
-            
+
             params = {
                 "widget_key": widget_key,
             }
-            
+
             result = await self.atomic_operation("h5_autoscale", params)
             if result.get("status") == "success":
-                return f"Autoscaled h5 widget {widget_key} to data bounds"
+                return {
+                    "tool_name": "h5_autoscale",
+                    "success": True,
+                    "label": args.get("label"),
+                    "summary": f"Autoscaled h5 widget {widget_key} to data bounds",
+                    "widget_key": widget_key,
+                }
 
-            return f"Failed to autoscale h5 widget: {result.get('error', 'Unknown error')}"
+            return {
+                "tool_name": "h5_autoscale",
+                "success": False,
+                "summary": f"Failed to autoscale h5 widget: {result.get('error', 'Unknown error')}",
+            }
 
-        async def h5_zoom(args: dict) -> str:
+        async def h5_zoom(args: dict) -> dict:
             widget_key = args.get("widget_key")
             direction = args.get("direction")
             percentage = args.get("percentage")
-            
+
             print(f"[tool] h5_zoom widget_key={widget_key} direction={direction} percentage={percentage}")
 
             params = {
                 "widget_key": widget_key,
                 "direction": direction,
             }
-            
+
             if percentage is not None:
                 params["percentage"] = percentage
-            
+
             result = await self.atomic_operation("h5_zoom", params)
             if result.get("status") == "success":
                 zoom_desc = f"zoom {direction}"
                 if percentage is not None:
                     zoom_desc += f" by {percentage}%"
-                return f"Applied {zoom_desc} to h5 widget {widget_key}"
+                return {
+                    "tool_name": "h5_zoom",
+                    "success": True,
+                    "label": args.get("label"),
+                    "summary": f"Applied {zoom_desc} to h5 widget {widget_key}",
+                    "widget_key": widget_key,
+                    "direction": direction,
+                    "percentage": percentage,
+                }
 
-            return f"Failed to zoom h5 widget: {result.get('error', 'Unknown error')}"
+            return {
+                "tool_name": "h5_zoom",
+                "success": False,
+                "summary": f"Failed to zoom h5 widget: {result.get('error', 'Unknown error')}",
+            }
 
-        async def h5_set_background_image_visibility(args: dict) -> str:
+        async def h5_set_background_image_visibility(args: dict) -> dict:
             widget_key = args.get("widget_key")
             background_image_id = args.get("background_image_id")
             hidden = args.get("hidden")
-            
+
             print(f"[tool] h5_set_background_image_visibility widget_key={widget_key} background_image_id={background_image_id} hidden={hidden}")
-            
+
             params = {
                 "widget_key": widget_key,
                 "background_image_id": background_image_id,
                 "hidden": hidden
             }
-            
+
             result = await self.atomic_operation("h5_set_background_image_visibility", params)
             if result.get("status") == "success":
                 visibility_action = "hidden" if hidden else "shown"
-                return f"Background image {background_image_id} {visibility_action}"
-            
-            return f"Failed to set background image visibility: {result.get('error', 'Unknown error')}"
+                return {
+                    "tool_name": "h5_set_background_image_visibility",
+                    "success": True,
+                    "label": args.get("label"),
+                    "summary": f"Background image {background_image_id} {visibility_action}",
+                    "widget_key": widget_key,
+                    "background_image_id": background_image_id,
+                    "hidden": hidden,
+                }
 
-        async def h5_add_selected_cells_to_categorical_obs(args: dict) -> str:
+            return {
+                "tool_name": "h5_set_background_image_visibility",
+                "success": False,
+                "summary": f"Failed to set background image visibility: {result.get('error', 'Unknown error')}",
+            }
+
+        async def h5_add_selected_cells_to_categorical_obs(args: dict) -> dict:
             widget_key = args.get("widget_key")
             obs_key = args.get("obs_key")
             category = args.get("category")
-            
+
             print(f"[tool] h5_add_selected_cells_to_categorical_obs widget_key={widget_key} obs_key={obs_key} category={category}")
-            
+
             params = {
                 "widget_key": widget_key,
                 "obs_key": obs_key,
                 "category": category
             }
-            
+
             result = await self.atomic_operation("h5_add_selected_cells_to_categorical_obs", params)
             if result.get("status") == "success":
-                return f"Assigned selected cells to category '{category}' in observation key '{obs_key}'"
-            
-            return f"Failed to assign selected cells to category: {result.get('error', 'Unknown error')}"
+                return {
+                    "tool_name": "h5_add_selected_cells_to_categorical_obs",
+                    "success": True,
+                    "label": args.get("label"),
+                    "summary": f"Assigned selected cells to category '{category}' in observation key '{obs_key}'",
+                    "widget_key": widget_key,
+                    "obs_key": obs_key,
+                    "category": category,
+                }
 
-        async def h5_set_marker_opacity(args: dict) -> str:
+            return {
+                "tool_name": "h5_add_selected_cells_to_categorical_obs",
+                "success": False,
+                "summary": f"Failed to assign selected cells to category: {result.get('error', 'Unknown error')}",
+            }
+
+        async def h5_set_marker_opacity(args: dict) -> dict:
             widget_key = args.get("widget_key")
             opacity = args.get("opacity")
-            
+
             print(f"[tool] h5_set_marker_opacity widget_key={widget_key} opacity={opacity}")
-            
+
             params = {
                 "widget_key": widget_key,
                 "opacity": opacity
             }
-            
+
             result = await self.atomic_operation("h5_set_marker_opacity", params)
             if result.get("status") == "success":
-                return f"Set marker opacity to {opacity}"
-            
-            return f"Failed to set marker opacity: {result.get('error', 'Unknown error')}"
+                return {
+                    "tool_name": "h5_set_marker_opacity",
+                    "success": True,
+                    "label": args.get("label"),
+                    "summary": f"Set marker opacity to {opacity}",
+                    "widget_key": widget_key,
+                    "opacity": opacity,
+                }
 
-        async def h5_manage_obs(args: dict) -> str:
+            return {
+                "tool_name": "h5_set_marker_opacity",
+                "success": False,
+                "summary": f"Failed to set marker opacity: {result.get('error', 'Unknown error')}",
+            }
+
+        async def h5_manage_obs(args: dict) -> dict:
             widget_key = args.get("widget_key")
             obs_key = args.get("obs_key")
             operation = args.get("operation")
             obs_type = args.get("obs_type", "category")
-            
+
             print(f"[tool] h5_manage_obs widget_key={widget_key} obs_key={obs_key} operation={operation} obs_type={obs_type}")
-            
+
             params = {
                 "widget_key": widget_key,
                 "obs_key": obs_key,
                 "operation": operation
             }
-            
+
             if operation == "add":
                 params["obs_type"] = obs_type
-            
+
             result = await self.atomic_operation("h5_manage_obs", params)
             if result.get("status") == "success":
                 if operation == "add":
-                    return f"Created observation column '{obs_key}' with type '{obs_type}'"
+                    return {
+                        "tool_name": "h5_manage_obs",
+                        "success": True,
+                        "label": args.get("label"),
+                        "summary": f"Created observation column '{obs_key}' with type '{obs_type}'",
+                        "widget_key": widget_key,
+                        "obs_key": obs_key,
+                        "operation": operation,
+                        "obs_type": obs_type,
+                    }
                 else:
-                    return f"Deleted observation column '{obs_key}'"
-            
-            return f"Failed to {operation} observation column: {result.get('error', 'Unknown error')}"
+                    return {
+                        "tool_name": "h5_manage_obs",
+                        "success": True,
+                        "label": args.get("label"),
+                        "summary": f"Deleted observation column '{obs_key}'",
+                        "widget_key": widget_key,
+                        "obs_key": obs_key,
+                        "operation": operation,
+                    }
+
+            return {
+                "tool_name": "h5_manage_obs",
+                "success": False,
+                "summary": f"Failed to {operation} observation column: {result.get('error', 'Unknown error')}",
+            }
 
         self.tools.append({
             "name": "create_cell",
@@ -1084,6 +1225,10 @@ class AgentHarness:
                         "type": "string",
                         "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
                     },
+                    "label": {
+                        "type": "string",
+                        "description": "Label of the widget"
+                    },
                     "filters": {
                         "type": "array",
                         "description": "Complete array of filters to apply",
@@ -1189,6 +1334,10 @@ class AgentHarness:
                         "type": "string",
                         "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
                     },
+                    "label": {
+                        "type": "string",
+                        "description": "Label of the widget"
+                    },
                     "color_by": {
                         "oneOf": [
                             {
@@ -1244,6 +1393,10 @@ class AgentHarness:
                         "type": "string",
                         "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
                     },
+                    "label": {
+                        "type": "string",
+                        "description": "Label of the widget"
+                    },
                     "obsm_key": {
                         "type": "string",
                         "description": "The obsm key to use for embedding (e.g spatial, X_umap)"
@@ -1260,6 +1413,10 @@ class AgentHarness:
             "input_schema": {
                 "type": "object",
                 "properties": {
+                    "label": {
+                        "type": "string",
+                        "description": "Label of the widget"
+                    },
                     "widget_key": {
                         "type": "string",
                         "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
@@ -1280,6 +1437,10 @@ class AgentHarness:
             "input_schema": {
                 "type": "object",
                 "properties": {
+                    "label": {
+                        "type": "string",
+                        "description": "Label of the widget"
+                    },
                     "widget_key": {
                         "type": "string",
                         "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
@@ -1300,6 +1461,10 @@ class AgentHarness:
             "input_schema": {
                 "type": "object",
                 "properties": {
+                    "label": {
+                        "type": "string",
+                        "description": "Label of the widget"
+                    },
                     "widget_key": {
                         "type": "string",
                         "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
@@ -1319,6 +1484,10 @@ class AgentHarness:
                     "widget_key": {
                         "type": "string",
                         "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
+                    },
+                    "label": {
+                        "type": "string",
+                        "description": "Label of the widget"
                     },
                     "direction": {
                         "type": "string",
@@ -1342,6 +1511,10 @@ class AgentHarness:
             "input_schema": {
                 "type": "object",
                 "properties": {
+                    "label": {
+                        "type": "string",
+                        "description": "Label of the widget"
+                    },
                     "widget_key": {
                         "type": "string",
                         "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
@@ -1366,6 +1539,10 @@ class AgentHarness:
             "input_schema": {
                 "type": "object",
                 "properties": {
+                    "label": {
+                        "type": "string",
+                        "description": "Label of the widget"
+                    },
                     "widget_key": {
                         "type": "string",
                         "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
@@ -1390,6 +1567,10 @@ class AgentHarness:
             "input_schema": {
                 "type": "object",
                 "properties": {
+                    "label": {
+                        "type": "string",
+                        "description": "Label of the widget"
+                    },
                     "widget_key": {
                         "type": "string",
                         "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
@@ -1413,6 +1594,10 @@ class AgentHarness:
                     "widget_key": {
                         "type": "string",
                         "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
+                    },
+                    "label": {
+                        "type": "string",
+                        "description": "Label of the widget"
                     },
                     "obs_key": {
                         "type": "string",
