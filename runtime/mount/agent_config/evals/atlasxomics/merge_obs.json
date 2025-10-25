@@ -1,0 +1,6 @@
+{
+    "id": "merge_obs_1",
+    "task": "Merge cluster 1 and 4",
+    "data_node": "latch://38438.account/AtlasxOmics/Stomach_Case_Study_Plots/combined_sm_ge.h5ad",
+    "judge_prompt": "Evaluate whether the agent merges `adata.obs` column correctly. \n\n    Check:\n    1. Use a `adata.obs` column that exist. \n    2. Use values that exist within that `adata.obs` column.\n    3. Create a new `adata.obs` column for merged values."
+}
