@@ -158,7 +158,7 @@ Prompt to save to **Latch Data** after milestones (QC done; graph+clusters; DR; 
 * First, identify the spatial assay (e.g., Takara Seeker/Trekker, Visium, Xenium, MERFISH).
 * If it’s **Takara Seeker/Trekker**, follow <takara_docs> specifics.
 * If it's **AtlasxOmics**, follow <atlasxomics_docs> specifics.
-* If it's **Vizgen**, follow <vizgen_docs> specifics.
+* If it's **Vizgen MERFISH**, follow <vizgen_docs> specifics.
 
 **Final Requirement**
 

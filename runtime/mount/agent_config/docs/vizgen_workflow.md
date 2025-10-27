@@ -5,8 +5,8 @@ This is the **authoritative step-by-step pipeline** for **Vizgen Merfish** exper
 1. **Experiment Setup** — **ALWAYS** check if the users provide a h5ad file and a latch directory encoding spatial images. 
     - If the user provided only the spatial images ask them to provide the h5ad file.
     - If the user provided only the h5ad file, ASK them for the spatial directory. 
-    - Check if the spatial directory directory contains ```pmtiles``` and if they are raw images, inform the user. Spatial coordinates are typically found in **spatial** or **X_spatial**
-2. **Data Loading** — load the ```h5ad data``` using **Scanpy**.  Ensure the input is a valid **AnnData (H5AD)** object. - Always use ```w_h5``` that uses anndata and **spatial directory** as inputs
+    - Check if the spatial directory directory contains `pmtiles` and if they are raw images, inform the user. Spatial coordinates are typically found in **spatial** or **X_spatial**
+2. **Data Loading** — load the `h5ad data` using **Scanpy**.  Ensure the input is a valid **AnnData (H5AD)** object. - Always use `w_h5` that uses anndata and **spatial directory** as inputs
 3. **Quality Control & Filtering** — use **Scanpy** to compute QC metrics.  
    - **ALWAYS** make histograms of the QC metrics.  
    - **ALWAYS** expose filtering parameters using widgets.  
@@ -31,8 +31,8 @@ This is the **authoritative step-by-step pipeline** for **Vizgen Merfish** exper
 
 ✅ **General Rules**  
 - Always produce **visual outputs** at every stage. 
-- Use ```w_plot()``` and ```w_table()``` to display plots and tables on the UI
-- Use ```w_text_output()``` to display progress and information to users
+- Use `w_plot()` and `w_table()` to display plots and tables on the UI
+- Use `w_text_output()` to display progress and information to users
 - Make plots with plotly unless explicitly specified
 - Apply sensible defaults
 - Add well formatted markdown
@@ -43,8 +43,7 @@ Some pointers on steps.
 ### Experiment Setup
 
 - You must ask users to confirm whether their experiment is vizgen Merfish
-- If the user provides an ```h5ad``` file, prompt the user to input a directory containining spatial files
-
+- If the user provides an `h5ad` file, prompt the user to input a directory containining spatial files
 
 ## Launch Cell segmentation Workflow
 
@@ -104,6 +103,7 @@ The user provided input must be provided by the user and wrapped as `LatchDir(la
 For each sample, you must ALWAYS **provide a form using latch widgets** for the following values. Each one has a clear mapping to a workflow parameter: 
 
 - Creating the **algorithm.json**
+    - Ignore any existing algorithm.json files you may find in this directory. 
     - Scan the **Merfish input data directory** to identify the zoom levels and stains that are available in the dataset.
     - Display a summary of the zoon levels and stains
     - Allow the user to input the number of segmentation tasks and use **lplots widgets** to take this input
@@ -305,14 +305,16 @@ The **algorithm.json** file should look similar to
 - **algorithm json** → The json file encoding the algorithm parameters produced in the previous step `cell_segmentation_algorithm`  (`LatchFile`)
 - **Output directory** (where to save cell segmentation workflow results) → `output_directory` (`LatchOutputDir`)  
   - If not provided, default to:  
+
     ```python
     LatchDir("latch://38438.account/vizgen_cellsegmentation_outputs")
-    ```  
-- **Run name** → A string to identify the cell segmentation run and maps to ```run_name```
+    ```
+  
+- **Run name** → A string to identify the cell segmentation run and maps to `run_name`
 
-When you use the w_ldata_picker widget to populate the `output_directory` or `cell_segmentation_algorithm` params, ALWAYS retrieve the LData path string by accessing the widget `.value.path` before passing to LatchFile(...) or LatchDir(...)
+When you use the `w_ldata_picker` widget to populate the `output_directory` or `cell_segmentation_algorithm` params, ALWAYS retrieve the LData path string by accessing the widget `.value.path` before passing to LatchFile(...) or LatchDir(...)
                      
-Use the code below as a template, that uses w_workflow. The code will generate a “Launch” button. Always make sure you are activating the workflow by ```execution = w.value```, where w is the workflow.
+Use the code below as a template, that uses `w_workflow`. The code will generate a “Launch” button. Always make sure you are activating the workflow by `execution = w.value`, where w is the workflow.
 
 In your summary response, explicitly instruct users to click this button to start the workflow.
                      
