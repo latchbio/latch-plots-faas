@@ -2,7 +2,6 @@ import asyncio
 import contextlib
 import json
 import os
-import pathlib
 import socket
 import sys
 import time
@@ -11,7 +10,6 @@ import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
-from textwrap import dedent
 
 from agent_utils.auto_install import anthropic
 from anthropic.types import MessageParam, ToolParam
@@ -70,7 +68,6 @@ class AgentHarness:
         Mode.executing: ("claude-sonnet-4-5-20250929", 1024),
         Mode.debugging: ("claude-sonnet-4-5-20250929", 2048),
     })
-    llm_call_counter: int = 0
 
     async def send(self, msg: dict[str, object]) -> None:
         msg_type = msg.get("type", "unknown")
@@ -1726,17 +1723,6 @@ class AgentHarness:
 
             print(f"[agent] Turn {turn}, mode={self.mode}, thinking_budget={thinking_budget}")
 
-            notebook_context = await self._get_notebook_context()
-
-            system_prompt_with_context = dedent(
-                f"""
-                {self.system_prompt}
-                <notebook_context>
-                {notebook_context}
-                </notebook_context>
-                """
-            )
-
             if thinking_budget is not None:
                 max_tokens = thinking_budget + 4096
             else:
@@ -1780,8 +1766,7 @@ class AgentHarness:
                 },
                 {
                     "type": "text",
-                    "text": f"<notebook_context>\n{notebook_context}\n</notebook_context>",
-                    "cache_control": {"type": "ephemeral"}
+                    "text": f"<notebook_context>\n{await self._get_notebook_context()}\n</notebook_context>",
                 }
             ]
 
@@ -1810,33 +1795,6 @@ class AgentHarness:
                 use_beta_api = True
 
             try:
-                # Log prompt and messages before API call
-                call_dir = pathlib.Path(f"/root/prompts/{self.llm_call_counter}")
-                call_dir.mkdir(parents=True, exist_ok=True)
-
-                # Write system prompt
-                (call_dir / "system_prompt.txt").write_text(system_prompt_with_context, encoding="utf-8")
-
-                # Write messages
-                (call_dir / "messages.txt").write_text(json.dumps(api_messages, indent=2), encoding="utf-8")
-
-                # Write pre-call info
-                call_info = (
-                    f"Call #{self.llm_call_counter}\n"
-                    f"Turn: {turn}\n"
-                    f"Mode: {self.mode}\n"
-                    f"Model: {model}\n"
-                    f"Max tokens: {max_tokens}\n"
-                    f"Thinking budget: {thinking_budget}\n"
-                    f"Use beta API: {use_beta_api}\n"
-                    f"Number of messages: {len(api_messages)}\n"
-                    f"Number of tools: {len(self.tools)}\n"
-                    f"System prompt length: {len(system_prompt_with_context)} chars\n"
-                )
-                (call_dir / "call_info.txt").write_text(call_info, encoding="utf-8")
-
-                print(f"[agent] Logged prompt to {call_dir}")
-
                 start_time = time.time()
 
                 if use_beta_api:
@@ -1845,48 +1803,6 @@ class AgentHarness:
                     response: Message = await self.client.messages.create(**kwargs)
 
                 duration_seconds = time.time() - start_time
-
-                # Write stats after API call
-                usage = response.usage
-                total_input = (
-                    getattr(usage, "input_tokens", 0) +
-                    getattr(usage, "cache_creation_input_tokens", 0) +
-                    getattr(usage, "cache_read_input_tokens", 0)
-                )
-                cache_creation = getattr(usage, "cache_creation_input_tokens", 0)
-                cache_read = getattr(usage, "cache_read_input_tokens", 0)
-                new_input = getattr(usage, "input_tokens", 0)
-                output_tokens = getattr(usage, "output_tokens", 0)
-
-                cache_efficiency = f"{(cache_read / total_input * 100):.1f}" if total_input > 0 else "0.0"
-
-                stats_content = (
-                    "=== Token Usage Statistics ===\n"
-                    f"Input tokens (new): {new_input}\n"
-                    f"Cache creation tokens: {cache_creation} (cost: 1.25x base)\n"
-                    f"Cache read tokens: {cache_read} (cost: 0.1x base)\n"
-                    f"Output tokens: {output_tokens}\n"
-                    f"TOTAL input tokens: {total_input}\n"
-                    f"\n=== Cache Efficiency ===\n"
-                    f"Cache hit rate: {cache_efficiency}% of input from cache\n"
-                    f"Tokens saved from reprocessing: {cache_read}\n"
-                    f"\n=== Timing ===\n"
-                    f"Duration: {duration_seconds:.2f}s\n"
-                    f"Stop reason: {response.stop_reason}\n"
-                    f"\n=== Response Info ===\n"
-                    f"Response ID: {response.id}\n"
-                    f"Model: {response.model}\n"
-                )
-                (call_dir / "stats.txt").write_text(stats_content, encoding="utf-8")
-
-                # Enhanced console logging
-                if cache_read > 0:
-                    print(f"[agent] Token usage - Input: {total_input} (new: {new_input}, cache_write: {cache_creation}, cache_HIT: {cache_read}), Output: {output_tokens}")
-                    print(f"[agent] Cache efficiency: {cache_efficiency}% from cache (saved {cache_read} tokens from reprocessing)")
-                else:
-                    print(f"[agent] Token usage - Input: {total_input} (new: {new_input}, cache_write: {cache_creation}, no cache hits yet), Output: {output_tokens}")
-
-                self.llm_call_counter += 1
 
             except Exception as e:
                 print(f"[agent] API error: {e}")
