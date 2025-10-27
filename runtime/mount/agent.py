@@ -1770,14 +1770,6 @@ class AgentHarness:
                 }
             ]
 
-            if len(api_messages) > 0:
-                msg = api_messages[-1]
-                content = msg.get("content")
-                if isinstance(content, str):
-                    api_messages[-1]["content"] = [{"type": "text", "text": content, "cache_control": {"type": "ephemeral"}}]
-                elif isinstance(content, list) and content:
-                    api_messages[-1]["content"][-1]["cache_control"] = {"type": "ephemeral"}
-
             kwargs = {
                 "model": model,
                 "max_tokens": max_tokens,
