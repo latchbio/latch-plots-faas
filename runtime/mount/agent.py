@@ -342,6 +342,8 @@ class AgentHarness:
 
         elif msg_type == "stop":
             self.conversation_running = False
+            await self._clear_running_state()
+            await self._start_conversation_loop()
             print("[agent] Stop signal received")
 
     async def _complete_turn(self) -> None:
