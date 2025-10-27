@@ -10,7 +10,6 @@ import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
-from textwrap import dedent
 
 from agent_utils.auto_install import anthropic
 from anthropic.types import MessageParam, ToolParam
@@ -1616,6 +1615,9 @@ class AgentHarness:
         })
         self.tool_map["h5_manage_obs"] = h5_manage_obs
 
+        if len(self.tools) > 0:
+            self.tools[-1]["cache_control"] = {"type": "ephemeral"}
+
     async def _get_notebook_context(self) -> str:
         context_result, globals_result, reactivity_result = await asyncio.gather(
             self.atomic_operation("get_context"),
@@ -1721,17 +1723,6 @@ class AgentHarness:
 
             print(f"[agent] Turn {turn}, mode={self.mode}, thinking_budget={thinking_budget}")
 
-            notebook_context = await self._get_notebook_context()
-
-            system_prompt_with_context = dedent(
-                f"""
-                {self.system_prompt}
-                <notebook_context>
-                {notebook_context}
-                </notebook_context>
-                """
-            )
-
             if thinking_budget is not None:
                 max_tokens = thinking_budget + 4096
             else:
@@ -1767,10 +1758,22 @@ class AgentHarness:
                                 can_use_thinking = False
                                 print(f"[agent] Cannot use thinking API: last assistant message starts with {first_block_type}, not thinking")
 
+            system_blocks = [
+                {
+                    "type": "text",
+                    "text": self.system_prompt,
+                    "cache_control": {"type": "ephemeral"}
+                },
+                {
+                    "type": "text",
+                    "text": f"<notebook_context>\n{await self._get_notebook_context()}\n</notebook_context>",
+                }
+            ]
+
             kwargs = {
                 "model": model,
                 "max_tokens": max_tokens,
-                "system": system_prompt_with_context,
+                "system": system_blocks,
                 "messages": api_messages,
                 "tools": self.tools,
             }
