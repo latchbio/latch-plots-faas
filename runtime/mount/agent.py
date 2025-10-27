@@ -69,6 +69,7 @@ class AgentHarness:
         Mode.executing: ("claude-sonnet-4-5-20250929", 1024),
         Mode.debugging: ("claude-sonnet-4-5-20250929", 2048),
     })
+    llm_call_counter: int = 0
 
     async def send(self, msg: dict[str, object]) -> None:
         msg_type = msg.get("type", "unknown")
@@ -1784,6 +1785,34 @@ class AgentHarness:
                 use_beta_api = True
 
             try:
+                # Log prompt and messages before API call
+                import pathlib
+                call_dir = pathlib.Path(f"/root/prompts/{self.llm_call_counter}")
+                call_dir.mkdir(parents=True, exist_ok=True)
+
+                # Write system prompt
+                (call_dir / "system_prompt.txt").write_text(system_prompt_with_context, encoding="utf-8")
+
+                # Write messages
+                (call_dir / "messages.txt").write_text(json.dumps(api_messages, indent=2), encoding="utf-8")
+
+                # Write pre-call info
+                call_info = (
+                    f"Call #{self.llm_call_counter}\n"
+                    f"Turn: {turn}\n"
+                    f"Mode: {self.mode}\n"
+                    f"Model: {model}\n"
+                    f"Max tokens: {max_tokens}\n"
+                    f"Thinking budget: {thinking_budget}\n"
+                    f"Use beta API: {use_beta_api}\n"
+                    f"Number of messages: {len(api_messages)}\n"
+                    f"Number of tools: {len(self.tools)}\n"
+                    f"System prompt length: {len(system_prompt_with_context)} chars\n"
+                )
+                (call_dir / "call_info.txt").write_text(call_info, encoding="utf-8")
+
+                print(f"[agent] Logged prompt to {call_dir}")
+
                 start_time = time.time()
 
                 if use_beta_api:
@@ -1792,6 +1821,33 @@ class AgentHarness:
                     response: Message = await self.client.messages.create(**kwargs)
 
                 duration_seconds = time.time() - start_time
+
+                # Write stats after API call
+                usage = response.usage
+                total_input = (
+                    getattr(usage, "input_tokens", 0) +
+                    getattr(usage, "cache_creation_input_tokens", 0) +
+                    getattr(usage, "cache_read_input_tokens", 0)
+                )
+                stats_content = (
+                    "=== Token Usage Statistics ===\n"
+                    f"Input tokens (new): {getattr(usage, 'input_tokens', 0)}\n"
+                    f"Cache creation tokens: {getattr(usage, 'cache_creation_input_tokens', 0)}\n"
+                    f"Cache read tokens: {getattr(usage, 'cache_read_input_tokens', 0)}\n"
+                    f"Output tokens: {getattr(usage, 'output_tokens', 0)}\n"
+                    f"TOTAL input tokens: {total_input}\n"
+                    "\n=== Timing ===\n"
+                    f"Duration: {duration_seconds:.2f}s\n"
+                    f"Stop reason: {response.stop_reason}\n"
+                    "\n=== Response Info ===\n"
+                    f"Response ID: {response.id}\n"
+                    f"Model: {response.model}\n"
+                )
+                (call_dir / "stats.txt").write_text(stats_content, encoding="utf-8")
+
+                print(f"[agent] Token usage - Input: {total_input} (new: {getattr(usage, 'input_tokens', 0)}, cached: {getattr(usage, 'cache_read_input_tokens', 0)}), Output: {getattr(usage, 'output_tokens', 0)}")
+
+                self.llm_call_counter += 1
 
             except Exception as e:
                 print(f"[agent] API error: {e}")
