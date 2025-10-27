@@ -118,7 +118,9 @@ For each sample, you must ALWAYS **provide a form using latch widgets** for the 
        - **ALWAYS** set **nuclear_channel** and **entity_fill_channel** to **all** in segmentation_parameters
     - Based on the inputs specified by the user create an algorithm.json file and use the ldata picker to save the file to ldata. 
     - Regardless of the avaibility of existing **algorithm.json** files, you should always create a **NEW** algorithm.json similar to what I have below based on user choices. 
-    - Use the **ldatapicker** widget to allow the user to save the algorithm.json to ldata. You should allow the user to specify the directory and the file name. 
+    - Use **lplots widgets** to allow the user to specify the name of the file to save the json document we created.
+    - Use the **ldatapicker** widget to allow the user to pick the directory to save the algorithm.json to ldata. 
+    - You should allow the user to specify the directory and the file name. 
 
 The **algorithm.json** file should look similar to 
     ```
