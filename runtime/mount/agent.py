@@ -2,6 +2,7 @@ import asyncio
 import contextlib
 import json
 import os
+import pathlib
 import socket
 import sys
 import time
@@ -1617,6 +1618,9 @@ class AgentHarness:
         })
         self.tool_map["h5_manage_obs"] = h5_manage_obs
 
+        if len(self.tools) > 0:
+            self.tools[-1]["cache_control"] = {"type": "ephemeral"}
+
     async def _get_notebook_context(self) -> str:
         context_result, globals_result, reactivity_result = await asyncio.gather(
             self.atomic_operation("get_context"),
@@ -1768,10 +1772,31 @@ class AgentHarness:
                                 can_use_thinking = False
                                 print(f"[agent] Cannot use thinking API: last assistant message starts with {first_block_type}, not thinking")
 
+            system_blocks = [
+                {
+                    "type": "text",
+                    "text": self.system_prompt,
+                    "cache_control": {"type": "ephemeral"}
+                },
+                {
+                    "type": "text",
+                    "text": f"<notebook_context>\n{notebook_context}\n</notebook_context>",
+                    "cache_control": {"type": "ephemeral"}
+                }
+            ]
+
+            if len(api_messages) > 0:
+                msg = api_messages[-1]
+                content = msg.get("content")
+                if isinstance(content, str):
+                    api_messages[-1]["content"] = [{"type": "text", "text": content, "cache_control": {"type": "ephemeral"}}]
+                elif isinstance(content, list) and content:
+                    api_messages[-1]["content"][-1]["cache_control"] = {"type": "ephemeral"}
+
             kwargs = {
                 "model": model,
                 "max_tokens": max_tokens,
-                "system": system_prompt_with_context,
+                "system": system_blocks,
                 "messages": api_messages,
                 "tools": self.tools,
             }
@@ -1786,7 +1811,6 @@ class AgentHarness:
 
             try:
                 # Log prompt and messages before API call
-                import pathlib
                 call_dir = pathlib.Path(f"/root/prompts/{self.llm_call_counter}")
                 call_dir.mkdir(parents=True, exist_ok=True)
 
@@ -1829,23 +1853,38 @@ class AgentHarness:
                     getattr(usage, "cache_creation_input_tokens", 0) +
                     getattr(usage, "cache_read_input_tokens", 0)
                 )
+                cache_creation = getattr(usage, "cache_creation_input_tokens", 0)
+                cache_read = getattr(usage, "cache_read_input_tokens", 0)
+                new_input = getattr(usage, "input_tokens", 0)
+                output_tokens = getattr(usage, "output_tokens", 0)
+
+                cache_efficiency = f"{(cache_read / total_input * 100):.1f}" if total_input > 0 else "0.0"
+
                 stats_content = (
                     "=== Token Usage Statistics ===\n"
-                    f"Input tokens (new): {getattr(usage, 'input_tokens', 0)}\n"
-                    f"Cache creation tokens: {getattr(usage, 'cache_creation_input_tokens', 0)}\n"
-                    f"Cache read tokens: {getattr(usage, 'cache_read_input_tokens', 0)}\n"
-                    f"Output tokens: {getattr(usage, 'output_tokens', 0)}\n"
+                    f"Input tokens (new): {new_input}\n"
+                    f"Cache creation tokens: {cache_creation} (cost: 1.25x base)\n"
+                    f"Cache read tokens: {cache_read} (cost: 0.1x base)\n"
+                    f"Output tokens: {output_tokens}\n"
                     f"TOTAL input tokens: {total_input}\n"
-                    "\n=== Timing ===\n"
+                    f"\n=== Cache Efficiency ===\n"
+                    f"Cache hit rate: {cache_efficiency}% of input from cache\n"
+                    f"Tokens saved from reprocessing: {cache_read}\n"
+                    f"\n=== Timing ===\n"
                     f"Duration: {duration_seconds:.2f}s\n"
                     f"Stop reason: {response.stop_reason}\n"
-                    "\n=== Response Info ===\n"
+                    f"\n=== Response Info ===\n"
                     f"Response ID: {response.id}\n"
                     f"Model: {response.model}\n"
                 )
                 (call_dir / "stats.txt").write_text(stats_content, encoding="utf-8")
 
-                print(f"[agent] Token usage - Input: {total_input} (new: {getattr(usage, 'input_tokens', 0)}, cached: {getattr(usage, 'cache_read_input_tokens', 0)}), Output: {getattr(usage, 'output_tokens', 0)}")
+                # Enhanced console logging
+                if cache_read > 0:
+                    print(f"[agent] Token usage - Input: {total_input} (new: {new_input}, cache_write: {cache_creation}, cache_HIT: {cache_read}), Output: {output_tokens}")
+                    print(f"[agent] Cache efficiency: {cache_efficiency}% from cache (saved {cache_read} tokens from reprocessing)")
+                else:
+                    print(f"[agent] Token usage - Input: {total_input} (new: {new_input}, cache_write: {cache_creation}, no cache hits yet), Output: {output_tokens}")
 
                 self.llm_call_counter += 1
 
