@@ -106,8 +106,8 @@ if __name__ == "__main__":
     create_json(
         base_dir + "de.json",
         workflow_id="de_1",
-        task="Perform differential gene activity comparison between two conditions for cluster 5.",
-        data_node="latch://38438.account/AtlasxOmics/Kosta/Kostallari_SOW313_ATAC",
+        task="Perform differential gene activity comparison between cluster 1 and 2.",
+        data_node="latch://38438.account/AtlasxOmics/atlasx_demo_002205",
         judge_prompt=judge_text_3
     )
 
