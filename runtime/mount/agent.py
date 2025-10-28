@@ -1792,6 +1792,30 @@ class AgentHarness:
 
                 duration_seconds = time.time() - start_time
 
+                if response.usage is not None:
+                    usage = response.usage
+
+                    # todo(aidan): store this info in db per model config
+                    context_limit = 200_000
+
+                    cache_read_input_tokens = usage.cache_read_input_tokens
+                    if cache_read_input_tokens is None:
+                        cache_read_input_tokens = 0
+
+                    cache_creation_input_tokens = usage.cache_creation_input_tokens
+                    if cache_creation_input_tokens is None:
+                        cache_creation_input_tokens = 0
+
+                    usage_data = {
+                        "type": "agent_usage_update",
+                        "input_tokens": usage.input_tokens,
+                        "cache_read_input_tokens": cache_read_input_tokens,
+                        "cache_creation_input_tokens": cache_creation_input_tokens,
+                        "context_limit": context_limit,
+                    }
+
+                    await self.send(usage_data)
+
             except Exception as e:
                 print(f"[agent] API error: {e}")
 
