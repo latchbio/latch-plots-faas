@@ -85,10 +85,22 @@ class EvalServer:
 
         async def stream_output(stream, prefix=""):
             while True:
-                line = await stream.readline()
-                if not line:
-                    break
-                print(f"[agent] {prefix}{line.decode().rstrip()}", flush=True)
+                try:
+                    line = await stream.readline()
+                    if not line:
+                        break
+                    decoded = line.decode().rstrip()
+                    if len(decoded) > 1000:
+                        decoded = decoded[:1000] + "... [TRUNCATED]"
+                    print(f"[agent] {prefix}{decoded}", flush=True)
+                except ValueError as e:
+                    if "exceed the limit" in str(e):
+                        chunk = await stream.read(8192)
+                        if not chunk:
+                            break
+                        print(f"[agent] {prefix}[Large output truncated: {len(chunk)} bytes]", flush=True)
+                    else:
+                        raise
 
         asyncio.create_task(stream_output(self.agent_proc.stdout, ""))
         asyncio.create_task(stream_output(self.agent_proc.stderr, "[stderr] "))
@@ -97,26 +109,23 @@ class EvalServer:
         if msg.get("type") == "ready":
             print("[eval] Agent subprocess started and ready")
 
-    async def get_notebook_context_from_console(self):
-        print("[eval] Requesting notebook context from console...")
-
+    async def _send_action_request(self, action: str, params: dict = {}) -> dict | None:
         if not self.websocket:
-            print("[eval] Error: websocket is None")
+            print(f"[eval] Error: websocket is None for action {action}")
             return None
 
-        tx_id = "eval_get_context"
-        context_request = {
+        tx_id = f"eval_{action}_{time.time()}"
+        request = {
             "type": "agent_action",
-            "action": "get_context",
-            "params": {},
+            "action": action,
+            "params": params,
             "tx_id": tx_id
         }
 
         try:
-            await self.websocket.send(json.dumps(context_request))
-            print("[eval] Sent context request, waiting for response...")
+            await self.websocket.send(json.dumps(request))
         except Exception as e:
-            print(f"[eval] Error sending context request: {e}")
+            print(f"[eval] Error sending {action} request: {e}")
             return None
 
         try:
@@ -125,22 +134,55 @@ class EvalServer:
 
             if response.get("tx_id") == tx_id and response.get("type") == "agent_action_response":
                 if response.get("status") == "success":
-                    context = response.get("context", {})
-                    return context
+                    return response
                 else:
-                    print(f"[eval] Failed to get context: status={response.get('status')}, error={response.get('error')}")
+                    print(f"[eval] Failed {action}: status={response.get('status')}, error={response.get('error')}")
                     return None
             else:
-                print(f"[eval] Unexpected response type: {response.get('type')}, expected 'agent_action_response'")
+                print(f"[eval] Unexpected response type: {response.get('type')}")
                 return None
         except asyncio.TimeoutError:
-            print("[eval] Timeout waiting for notebook context")
+            print(f"[eval] Timeout waiting for {action}")
             return None
         except Exception as e:
-            print(f"[eval] Error getting notebook context: {e}")
-            import traceback
-            traceback.print_exc()
+            print(f"[eval] Error getting {action}: {e}")
             return None
+
+    async def get_notebook_context_from_console(self):
+        print("[eval] Requesting notebook context, globals, and reactivity from console...")
+
+        context_result, globals_result, reactivity_result = await asyncio.gather(
+            self._send_action_request("get_context"),
+            self._send_action_request("request_globals_summary"),
+            self._send_action_request("request_reactivity_summary"),
+            return_exceptions=True
+        )
+
+        result = {}
+
+        if isinstance(context_result, dict) and context_result is not None:
+            result["context"] = context_result.get("context", {})
+        else:
+            print(f"[eval] Failed to get notebook context: {context_result}")
+            result["context"] = {}
+
+        if isinstance(globals_result, dict) and globals_result is not None:
+            result["globals"] = globals_result.get("summary", {})
+        else:
+            print(f"[eval] Failed to get globals: {globals_result}")
+            result["globals"] = {}
+
+        if isinstance(reactivity_result, dict) and reactivity_result is not None:
+            result["reactivity"] = reactivity_result.get("summary", "")
+        else:
+            print(f"[eval] Failed to get reactivity: {reactivity_result}")
+            result["reactivity"] = ""
+
+        print(f"[eval] Got notebook context: {len(result.get('context', {}).get('cells', []))} cells, "
+              f"{len(result.get('globals', {}))} globals, "
+              f"reactivity: {len(result.get('reactivity', ''))} chars")
+
+        return result
 
     async def stop_agent(self):
         if self.agent_proc:
@@ -414,8 +456,10 @@ async def run_eval(test_case: TestCase, port: int, latch_dir: Path) -> TestResul
 
     print(f"\n[eval] Eval completed in {duration_ms / 1000:.2f}s")
     print(f"[eval] Total conversation turns: {len(server.conversation_history)}")
-    cells = notebook_state.get("cells", [])
-    print(f"[eval] Final notebook state: {len(cells)} cells")
+    cells = notebook_state.get("context", {}).get("cells", [])
+    globals_count = len(notebook_state.get("globals", {}))
+    reactivity_len = len(notebook_state.get("reactivity", ""))
+    print(f"[eval] Final notebook state: {len(cells)} cells, {globals_count} globals, {reactivity_len} chars reactivity")
 
     return test_result
 

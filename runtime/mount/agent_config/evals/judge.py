@@ -17,6 +17,8 @@ class LLMJudge:
     async def evaluate(self, test_case: TestCase, test_result: TestResult) -> EvalResult:
         conversation_summary = self._format_conversation(test_result.conversation_history)
         notebook_summary = self._format_notebook(test_result.notebook_state)
+        globals_summary = self._format_globals(test_result.notebook_state.get("globals", {}))
+        reactivity_summary = test_result.notebook_state.get("reactivity", "")
 
         prompt = textwrap.dedent(f"""
             You are evaluating an AI agent's performance on a task.
@@ -36,7 +38,14 @@ class LLMJudge:
             FINAL NOTEBOOK STATE:
             {notebook_summary}
 
+            GLOBAL VARIABLES IN KERNEL:
+            {globals_summary}
+
+            REACTIVITY/SIGNAL GRAPH:
+            {reactivity_summary}
+
             Evaluate the agent's performance according to the criteria. Be thorough and fair.
+            Consider all aspects: the notebook cells, the global variables created, and the reactivity graph.
 
             Respond ONLY with valid JSON in this exact format (no markdown, no additional text):
             {{
@@ -91,7 +100,8 @@ class LLMJudge:
         return "\n".join(lines)
 
     def _format_notebook(self, notebook_state: dict) -> str:
-        cells = notebook_state.get("cells", [])
+        context = notebook_state.get("context", {})
+        cells = context.get("cells", [])
         lines = [f"Total cells: {len(cells)}\n"]
 
         for i, cell in enumerate(cells):
@@ -105,5 +115,26 @@ class LLMJudge:
 
             if cell.get("outputs"):
                 lines.append(f"  Outputs: {len(cell['outputs'])} items")
+
+        return "\n".join(lines)
+
+    def _format_globals(self, globals_data: dict) -> str:
+        if not globals_data:
+            return "No global variables"
+
+        lines = [f"Total global variables: {len(globals_data)}\n"]
+
+        for var_name in sorted(globals_data.keys()):
+            var_info = globals_data[var_name]
+            if isinstance(var_info, dict):
+                var_type = var_info.get("type", "unknown")
+                lines.append(f"\n{var_name} ({var_type}):")
+                for key, value in var_info.items():
+                    if key != "type":
+                        value_str = str(value)[:200]
+                        lines.append(f"  {key}: {value_str}")
+            else:
+                var_str = str(var_info)[:200]
+                lines.append(f"\n{var_name}: {var_str}")
 
         return "\n".join(lines)
