@@ -340,10 +340,6 @@ class AgentHarness:
                     "hidden": True,
                 })
 
-        elif msg_type == "stop":
-            self.conversation_running = False
-            print("[agent] Stop signal received")
-
     async def _complete_turn(self) -> None:
         if self.current_request_id is None:
             return
@@ -1913,6 +1909,53 @@ class AgentHarness:
                 print(f"[agent] Unknown stop reason: {response.stop_reason}")
                 await self._complete_turn()
 
+    async def _close_pending_tool_calls(self, *, error_message: str, messages: list[MessageParam]) -> None:
+        tool_use_ids = set()
+        tool_result_ids = set()
+
+        for history_msg in messages:
+            content = history_msg.get("content")
+            if not isinstance(content, list):
+                continue
+
+            for block in content:
+                if not isinstance(block, dict):
+                    continue
+
+                if block.get("type") == "tool_use":
+                    tool_id = block.get("id")
+                    if tool_id:
+                        tool_use_ids.add(tool_id)
+                elif block.get("type") == "tool_result":
+                    tool_use_id = block.get("tool_use_id")
+                    if tool_use_id:
+                        tool_result_ids.add(tool_use_id)
+
+        pending_tool_ids = tool_use_ids - tool_result_ids
+
+        if pending_tool_ids:
+            print(f"[agent] Closing {len(pending_tool_ids)} pending tool calls")
+            await self._insert_history(
+                event_type="anthropic_message",
+                payload={
+                    "type": "anthropic_message",
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": tool_id,
+                            "content": json.dumps({
+                                "summary": None,
+                                "error": error_message,
+                            }),
+                        }
+                        for tool_id in pending_tool_ids
+                    ],
+                    "timestamp": int(time.time() * 1000),
+                },
+            )
+            await self._notify_history_updated()
+
     async def handle_init(self, msg: dict[str, object]) -> None:
         print("[agent] Initializing")
 
@@ -1939,58 +1982,10 @@ class AgentHarness:
             self.system_prompt = build_system_prompt()
 
             messages = await self._build_messages_from_db()
-            tool_use_ids = set()
-            tool_result_ids = set()
-
-            print(f"[agent] Checking for pending tools in {len(messages)} messages")
-
-            for history_msg in messages:
-                content = history_msg.get("content")
-                if not isinstance(content, list):
-                    continue
-
-                for block in content:
-                    if not isinstance(block, dict):
-                        continue
-
-                    if block.get("type") == "tool_use":
-                        tool_id = block.get("id")
-                        if tool_id:
-                            tool_use_ids.add(tool_id)
-                            print(f"[agent]   Found tool_use: id={tool_id}, name={block.get('name')}")
-                    elif block.get("type") == "tool_result":
-                        tool_use_id = block.get("tool_use_id")
-                        if tool_use_id:
-                            tool_result_ids.add(tool_use_id)
-                            print(f"[agent]   Found tool_result: tool_use_id={tool_use_id}")
-
-            pending_tool_ids = tool_use_ids - tool_result_ids
-
-            print(f"[agent] Tool use count: {len(tool_use_ids)}, Tool result count: {len(tool_result_ids)}, Pending: {len(pending_tool_ids)}")
-
-            if pending_tool_ids:
-                print(f"[agent] Found {len(pending_tool_ids)} pending tool calls, closing them")
-
-                await self._insert_history(
-                    event_type="anthropic_message",
-                    payload={
-                        "type": "anthropic_message",
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "tool_result",
-                                "tool_use_id": tool_id,
-                                "content": json.dumps({
-                                    "summary": None,
-                                    "error": "Tool call cancelled - session was ended before completion",
-                                }),
-                            }
-                            for tool_id in pending_tool_ids
-                        ],
-                        "timestamp": int(time.time() * 1000),
-                    },
-                )
-                await self._notify_history_updated()
+            await self._close_pending_tool_calls(
+                error_message="Tool call cancelled - session was ended before completion",
+                messages=await self._build_messages_from_db(),
+            )
 
             self.initialized = True
             await self.send({
@@ -2061,37 +2056,17 @@ class AgentHarness:
         request_id = msg.get("request_id", "unknown")
         print(f"[agent] Cancelling request {request_id}")
 
-        self.conversation_running = False
+        await self._clear_running_state()
 
-        if self.conversation_task and not self.conversation_task.done():
-            self.conversation_task.cancel()
-            try:
-                await self.conversation_task
-            except asyncio.CancelledError:
-                pass
+        self.current_request_id = None
+        self.should_auto_continue = False
+        self.pending_auto_continue = False
 
-    def _format_widget_summaries(self, widgets: list[dict]) -> str:
-        if not widgets:
-            return ""
-
-        widget_summaries = []
-        for widget in widgets:
-            widget_key = widget.get("key") or "?"
-            widget_type = widget.get("type") or "unknown"
-            widget_value = widget.get("value") or ""
-            widget_label = widget.get("label") or ""
-            widget_filters = widget.get("filters") or []
-
-            widget_desc = f"key={widget_key}, type={widget_type}"
-            if widget_value:
-                widget_desc += f", value={widget_value}"
-            if widget_label:
-                widget_desc += f", label={widget_label}"
-            if widget_filters:
-                widget_desc += f", filters={widget_filters}"
-            widget_summaries.append(widget_desc)
-
-        return ", ".join(widget_summaries)
+        await self._close_pending_tool_calls(
+            error_message="Request cancelled by user",
+            messages=await self._build_messages_from_db(),
+        )
+        self._start_conversation_loop()
 
     async def handle_clear_history(self) -> None:
         await self._clear_running_state()
