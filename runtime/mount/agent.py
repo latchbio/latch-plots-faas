@@ -1933,7 +1933,7 @@ class AgentHarness:
 
         pending_tool_ids = tool_use_ids - tool_result_ids
 
-        if pending_tool_ids:
+        if len(pending_tool_ids) > 0:
             print(f"[agent] Closing {len(pending_tool_ids)} pending tool calls")
             await self._insert_history(
                 event_type="anthropic_message",
