@@ -10,7 +10,6 @@ import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
-from textwrap import dedent
 
 from agent_utils.auto_install import anthropic
 from anthropic.types import MessageParam, ToolParam
@@ -62,6 +61,7 @@ class AgentHarness:
     conversation_running: bool = False
     system_prompt: str = ""
     agent_session_id: int | None = None
+    latest_notebook_context: dict = field(default_factory=dict)
 
     mode_config: dict[Mode, tuple[str, int | None]] = field(default_factory=lambda: {
         Mode.planning: ("claude-sonnet-4-5-20250929", 4096),
@@ -106,6 +106,30 @@ class AgentHarness:
             if t == "anthropic_message":
                 role = item.get("role")
                 content = item.get("content")
+
+                if (role == "user" and isinstance(content, dict) and content.get("type") == "cell_result"):
+                    exception = content.get("exception")
+                    logs = content.get("logs")
+                    message = content.get("message", "Cell execution completed")
+
+                    content = message
+                    if exception:
+                        content = f"{message}\n\nException: {exception}"
+                    if logs:
+                        content = f"{content}\n\nLogs:\n{logs}"
+
+                if isinstance(content, list):
+                    cleaned_content = []
+                    for block in content:
+                        if isinstance(block, dict) and block.get("type") == "tool_result":
+                            block = block.copy()
+                            result = json.loads(block.get("content", "{}"))
+                            if "original_code" in result:
+                                result.pop("original_code")
+                                block["content"] = json.dumps(result)
+                        cleaned_content.append(block)
+                    content = cleaned_content
+
                 if role in {"user", "assistant"} and (isinstance(content, (str, list))):
                     anthropic_messages.append({"role": role, "content": content})
 
@@ -269,13 +293,31 @@ class AgentHarness:
         elif msg_type == "cell_result":
             cell_id = msg["cell_id"]
             success = msg.get("success", True)
+            cell_name = msg.get("display_name", None)
 
             if success:
-                result_content = f"✓ Cell {cell_id} executed successfully"
+                result_message = f"✓ Cell {cell_name} ({cell_id}) executed successfully"
+                result_content = {
+                    "type": "cell_result",
+                    "message": result_message,
+                    "cell_id": cell_id,
+                    "cell_name": cell_name,
+                    "success": success,
+                    "logs": msg.get("logs"),
+                }
                 print(f"[agent] Cell {cell_id} succeeded")
             else:
                 exception = msg.get("exception", "Unknown error")
-                result_content = f"✗ Cell {cell_id} execution failed:\n```\n{exception}\n```"
+                result_message = f"✗ Cell {cell_name} ({cell_id}) execution failed"
+                result_content = {
+                    "type": "cell_result",
+                    "message": result_message,
+                    "cell_id": cell_id,
+                    "cell_name": cell_name,
+                    "success": False,
+                    "exception": exception,
+                    "logs": msg.get("logs"),
+                }
                 print(f"[agent] Cell {cell_id} failed")
 
             await self._insert_history(
@@ -297,10 +339,6 @@ class AgentHarness:
                     "request_id": self.current_request_id,
                     "hidden": True,
                 })
-
-        elif msg_type == "stop":
-            self.conversation_running = False
-            print("[agent] Stop signal received")
 
     async def _complete_turn(self) -> None:
         if self.current_request_id is None:
@@ -328,13 +366,18 @@ class AgentHarness:
         self.tools = []
         self.tool_map = {}
 
-        async def create_cell(args: dict) -> str:
+        async def create_cell(args: dict) -> dict:
             position = args["position"]
             code = args["code"]
             title = args["title"]
+            action_summary = args["action_summary"]
 
             if position < 0:
-                return "Error: Position must be non-negative"
+                return {
+                    "tool_name": "create_cell",
+                    "summary": "Error: Position must be non-negative",
+                    "success": False,
+                }
 
             print(f'[tool] create_cell pos={position} title="{title}"')
 
@@ -351,15 +394,33 @@ class AgentHarness:
                 cell_id = result.get("cell_id", "unknown")
                 msg = f"Created cell at position {position} (ID: {cell_id}, Title: {title})"
                 print(f"[tool] create_cell -> {msg}")
-                return msg
-            return f"Failed to create cell: {result.get('error', 'Unknown error')}"
+                return {
+                    "tool_name": "create_cell",
+                    "summary": msg,
+                    "code": code,
+                    "cell_id": cell_id,
+                    "cell_name": title,
+                    "position": position,
+                    "message": action_summary,
+                    "success": True,
+                }
+            return {
+                "tool_name": "create_cell",
+                "summary": f"Failed to create cell: {result.get('error', 'Unknown error')}",
+                "success": False,
+            }
 
-        async def create_markdown_cell(args: dict) -> str:
+        async def create_markdown_cell(args: dict) -> dict:
             position = args["position"]
             code = args["code"]
+            title = args["title"]
+            action_summary = args["action_summary"]
 
             if position < 0:
-                return "Error: Position must be non-negative"
+                return {
+                    "summary": "Error: Position must be non-negative",
+                    "success": False,
+                }
 
             print(f"[tool] create_markdown_cell pos={position}")
 
@@ -373,13 +434,29 @@ class AgentHarness:
             if result.get("status") == "success":
                 cell_id = result.get("cell_id", "unknown")
                 msg = f"Created markdown cell at position {position} (ID: {cell_id})"
-                print(f"[tool] create_markdown_cell -> {msg}")
-                return msg
-            return f"Failed to create cell: {result.get('error', 'Unknown error')}"
 
-        async def edit_cell(args: dict) -> str:
+                print(f"[tool] create_markdown_cell -> {msg}")
+                return {
+                    "tool_name": "create_markdown_cell",
+                    "summary": msg,
+                    "code": code,
+                    "cell_id": cell_id,
+                    "cell_name": title,
+                    "position": position,
+                    "message": action_summary,
+                    "success": True,
+                }
+            return {
+                "tool_name": "create_markdown_cell",
+                "message": f"Failed to create cell: {result.get('error', 'Unknown error')}",
+                "success": False,
+            }
+
+        async def edit_cell(args: dict) -> dict:
             cell_id = args["cell_id"]
             new_code = args["new_code"]
+            title = args["title"]
+            action_summary = args["action_summary"]
 
             print(f"[tool] edit_cell id={cell_id}")
 
@@ -389,15 +466,38 @@ class AgentHarness:
                 "auto_run": True
             }
 
+            original_code = None
+            cells = self.latest_notebook_context.get("cells", [])
+            for cell in cells:
+                if cell.get("cell_id") == cell_id:
+                    original_code = cell.get("source", "")
+                    break
+
             result = await self.atomic_operation("edit_cell", params)
             if result.get("status") == "success":
                 msg = f"Cell {cell_id} edited successfully"
                 print(f"[tool] edit_cell -> {msg}")
-                return msg
-            return f"Failed to edit cell: {result.get('error', 'Unknown error')}"
 
-        async def delete_cell(args: dict) -> str:
+                return {
+                    "tool_name": "edit_cell",
+                    "summary": msg,
+                    "code": new_code,
+                    "original_code": original_code,
+                    "cell_id": cell_id,
+                    "cell_name": title,
+                    "message": action_summary,
+                    "success": True,
+                }
+            return {
+                "tool_name": "edit_cell",
+                "summary": f"Failed to edit cell: {result.get('error', 'Unknown error')}",
+                "success": False,
+            }
+
+        async def delete_cell(args: dict) -> dict:
             cell_id = args["cell_id"]
+            title = args["title"]
+            action_summary = args["action_summary"]
 
             print(f"[tool] delete_cell id={cell_id}")
             params = {"cell_id": cell_id}
@@ -415,11 +515,24 @@ class AgentHarness:
                 else:
                     msg = f"Cell {cell_id} deleted. No cells remain in notebook."
                 print(f"[tool] delete_cell -> {msg}")
-                return msg
-            return f"Failed to delete cell: {result.get('error', 'Unknown error')}"
+                return {
+                    "tool_name": "delete_cell",
+                    "summary": msg,
+                    "cell_id": cell_id,
+                    "cell_name": title,
+                    "message": action_summary,
+                    "success": True,
+                }
+            return {
+                "tool_name": "delete_cell",
+                "summary": f"Failed to delete cell: {result.get('error', 'Unknown error')}",
+                "success": False,
+            }
 
-        async def run_cell(args: dict) -> str:
+        async def run_cell(args: dict) -> dict:
             cell_id = args["cell_id"]
+            title = args["title"]
+            action_summary = args["action_summary"]
             params = {"cell_id": cell_id}
 
             await self.send({
@@ -429,23 +542,46 @@ class AgentHarness:
             })
             self.executing_cells.add(cell_id)
 
-            return f"Cell {cell_id} execution started"
+            return {
+                "tool_name": "run_cell",
+                "summary": f"Cell {cell_id} execution started",
+                "cell_id": cell_id,
+                "cell_name": title,
+                "message": action_summary,
+                "success": True,
+            }
 
-        async def stop_cell(args: dict) -> str:
+        async def stop_cell(args: dict) -> dict:
             cell_id = args["cell_id"]
+            title = args["title"]
+            action_summary = args["action_summary"]
             params = {"cell_id": cell_id}
 
             result = await self.atomic_operation("stop_cell", params)
             if result.get("status") == "success":
                 self.executing_cells.discard(cell_id)
-                return f"Stopped cell {cell_id}"
-            return f"Failed to stop cell {cell_id}: {result.get('error', 'Unknown error')}"
+                return {
+                    "tool_name": "stop_cell",
+                    "summary": f"Stopped cell {cell_id}",
+                    "cell_id": cell_id,
+                    "cell_name": title,
+                    "message": action_summary,
+                }
+            return {
+                "tool_name": "stop_cell",
+                "summary": f"Failed to stop cell {cell_id}: {result.get('error', 'Unknown error')}",
+                "success": False,
+            }
 
-        async def delete_all_cells(args: dict) -> str:
-            context_result = await self.atomic_operation("get_context")
+        async def delete_all_cells(args: dict) -> dict:
+            context_result = await self.atomic_operation("get_context", {})
             if context_result.get("status") != "success":
                 error_msg = context_result.get("error", "Unknown error")
-                return f"Failed to delete cells: {error_msg}"
+                return {
+                    "tool_name": "delete_all_cells",
+                    "summary": f"Failed to delete cells: {error_msg}",
+                    "success": False,
+                }
 
             cells = context_result.get("context", {}).get("cells", [])
             deleted_count = 0
@@ -457,16 +593,31 @@ class AgentHarness:
                     if result.get("status") == "success":
                         deleted_count += 1
 
-            return f"Deleted {deleted_count} cells from the notebook"
+            return {
+                "tool_name": "delete_all_cells",
+                "success": True,
+                "summary": f"Deleted {deleted_count} cells from the notebook",
+                "deleted_count": deleted_count,
+            }
 
-        async def set_widget(args: dict) -> str:
+        async def set_widget(args: dict) -> dict:
             key = args.get("key")
+            action_summary = args.get("action_summary")
+            label = args.get("label")
             if not key:
-                return "Widget key is required"
+                return {
+                    "tool_name": "set_widget",
+                    "summary": "Failed to set widget: Widget key is required",
+                    "success": False,
+                }
 
             value = args.get("value")
             if value is None:
-                return "Widget value is required"
+                return {
+                    "tool_name": "set_widget",
+                    "summary": "Failed to set widget: Widget value is required",
+                    "success": False,
+                }
 
             print(f"[tool] set_widget key={key} value={value!r}")
 
@@ -475,11 +626,22 @@ class AgentHarness:
             result = await self.atomic_operation("set_widget", params)
 
             if result.get("status") == "success":
-                return f"Updated widget value for: {key}"
+                return {
+                    "tool_name": "set_widget",
+                    "success": True,
+                    "summary": f"Updated widget value for: {key}",
+                    "key": key,
+                    "label": label,
+                    "value": value,
+                    "message": action_summary,
+                }
+            return {
+                "tool_name": "set_widget",
+                "summary": f"Failed to update widget value: {result.get('error', 'Unknown error')}",
+                "success": False,
+            }
 
-            return f"Failed to update widget value: {result.get('error', 'Unknown error')}"
-
-        async def submit_response(args: dict) -> str:
+        async def submit_response(args: dict) -> dict:
             try:
                 summary = args.get("summary")
                 if summary is not None and not isinstance(summary, str):
@@ -492,7 +654,11 @@ class AgentHarness:
                 next_status = args.get("next_status")
                 if not isinstance(next_status, str) or next_status not in {"executing", "fixing", "thinking", "awaiting_user_response", "awaiting_cell_execution", "awaiting_user_widget_input", "done"}:
                     print(f"[agent] Invalid next_status: {next_status}")
-                    return "Please provide a valid next_status"
+                    return {
+                        "tool_name": "submit_response",
+                        "message": "Please provide a valid next_status",
+                        "success": False,
+                    }
 
                 should_continue = args.get("continue", False)
 
@@ -502,6 +668,7 @@ class AgentHarness:
                 print("[tool] submit_response called with:")
                 print(f"  - next_status: {next_status}")
                 print(f"  - plan: {len(plan_items)} items")
+                print(f"  - plan_update_overview: {args.get('plan_update_overview')}")
                 for item in plan_items:
                     print(f"    - [{item.get('status')}] {item.get('id')}: {item.get('description')}")
                 print(f"  - plan_diff: {len(plan_diff_items)} items")
@@ -519,229 +686,378 @@ class AgentHarness:
                     self.should_auto_continue = should_continue
                     self.pending_auto_continue = False
 
-                return "Response submitted successfully"
+                return {
+                    "tool_name": "submit_response",
+                    "summary": "Response submitted successfully",
+                    "success": True,
+                }
             except Exception as e:
                 print(f"[tool] submit_response error: {e}")
                 import traceback
                 traceback.print_exc()
-                return f"Error submitting response: {e!s}"
+                return {
+                    "tool_name": "submit_response",
+                    "summary": f"Error submitting response: {e!s}",
+                    "success": False,
+                }
 
-        async def h5_filter_by(args: dict) -> str:
+        async def h5_filter_by(args: dict) -> dict:
             widget_key = args.get("widget_key")
             filters = args.get("filters")
-            
+
             if isinstance(filters, str):
                 try:
                     filters = json.loads(filters)
                 except json.JSONDecodeError:
-                    return f"filters is invalid JSON: {filters!r}"
-            
+                    return {
+                        "tool_name": "h5_filter_by",
+                        "success": False,
+                        "summary": f"filters is invalid JSON: {filters!r}",
+                    }
+
             print(f"[tool] h5_filter_by widget_key={widget_key} filters={filters}")
-            
+
             params = {
                 "widget_key": widget_key,
                 "filters": filters
             }
-            
+
             result = await self.atomic_operation("h5_filter_by", params)
             if result.get("status") == "success":
-                return f"Applied filters to h5 widget: {filters}"
-            
-            return f"Failed to apply filters to h5 widget: {result.get('error', 'Unknown error')}"
+                return {
+                    "tool_name": "h5_filter_by",
+                    "success": True,
+                    "label": args.get("label"),
+                    "summary": f"Applied filters to h5 widget: {filters}",
+                    "widget_key": widget_key,
+                    "filters": filters,
+                }
 
-        async def h5_color_by(args: dict) -> str:
+            return {
+                "tool_name": "h5_filter_by",
+                "success": False,
+                "summary": f"Failed to apply filters to h5 widget: {result.get('error', 'Unknown error')}",
+            }
+
+        async def h5_color_by(args: dict) -> dict:
             widget_key = args.get("widget_key")
             color_by = args.get("color_by")
-            
+
             if isinstance(color_by, str):
                 try:
                     color_by = json.loads(color_by)
                 except json.JSONDecodeError:
-                    return f"color_by is invalid JSON: {color_by!r}"
-            
+                    return {
+                        "tool_name": "h5_color_by",
+                        "success": False,
+                        "summary": f"color_by is invalid JSON: {color_by!r}",
+                    }
+
             print(f"[tool] h5_color_by widget_key={widget_key} color_by={color_by}")
-            
+
             params = {
                 "widget_key": widget_key,
                 "color_by": color_by
             }
-            
+
             result = await self.atomic_operation("h5_color_by", params)
             if result.get("status") == "success":
-                return f"Set h5 widget coloring: {color_by}"
-            
-            return f"Failed to set h5 widget coloring: {result.get('error', 'Unknown error')}"
+                return {
+                    "tool_name": "h5_color_by",
+                    "success": True,
+                    "label": args.get("label"),
+                    "summary": f"Set h5 widget coloring: {color_by}",
+                    "widget_key": widget_key,
+                    "color_by": color_by,
+                }
 
-        async def h5_set_selected_obsm_key(args: dict) -> str:
+            return {
+                "tool_name": "h5_color_by",
+                "success": False,
+                "summary": f"Failed to set h5 widget coloring: {result.get('error', 'Unknown error')}",
+            }
+
+        async def h5_set_selected_obsm_key(args: dict) -> dict:
             widget_key = args.get("widget_key")
             obsm_key = args.get("obsm_key")
-            
+
             print(f"[tool] h5_set_selected_obsm_key widget_key={widget_key} obsm_key={obsm_key}")
-            
+
             params = {
                 "widget_key": widget_key,
                 "obsm_key": obsm_key
             }
-            
+
             result = await self.atomic_operation("h5_set_selected_obsm_key", params)
             if result.get("status") == "success":
-                return f"Set h5 widget to use obsm key {obsm_key}"
-            
-            return f"Failed to set h5 widget obsm key: {result.get('error', 'Unknown error')}"
+                return {
+                    "tool_name": "h5_set_selected_obsm_key",
+                    "success": True,
+                    "label": args.get("label"),
+                    "summary": f"Set h5 widget to use obsm key {obsm_key}",
+                    "widget_key": widget_key,
+                    "obsm_key": obsm_key,
+                }
 
-        async def h5_set_background_image(args: dict) -> str:
+            return {
+                "tool_name": "h5_set_selected_obsm_key",
+                "success": False,
+                "summary": f"Failed to set h5 widget obsm key: {result.get('error', 'Unknown error')}",
+            }
+
+        async def h5_set_background_image(args: dict) -> dict:
             widget_key = args.get("widget_key")
             node_id = args.get("node_id")
-            
+
             print(f"[tool] h5_set_background_image widget_key={widget_key} node_id={node_id}")
-            
+
             params = {
                 "widget_key": widget_key,
                 "node_id": node_id,
             }
-            
+
             result = await self.atomic_operation("h5_set_background_image", params)
             if result.get("status") == "success":
-                return f"Set background image for h5 widget using {node_id}"
-            return f"Failed to set background image: {result.get('error', 'Unknown error')}"
+                return {
+                    "tool_name": "h5_set_background_image",
+                    "success": True,
+                    "label": args.get("label"),
+                    "summary": f"Set background image for h5 widget using {node_id}",
+                    "widget_key": widget_key,
+                    "node_id": node_id,
+                }
+            return {
+                "tool_name": "h5_set_background_image",
+                "success": False,
+                "summary": f"Failed to set background image: {result.get('error', 'Unknown error')}",
+            }
 
-        async def h5_open_image_aligner(args: dict) -> str:
+        async def h5_open_image_aligner(args: dict) -> dict:
             widget_key = args.get("widget_key")
             background_image_id = args.get("background_image_id")
-            
+
             print(f"[tool] h5_open_image_aligner widget_key={widget_key} background_image_id={background_image_id}")
 
             params = {
                 "widget_key": widget_key,
                 "background_image_id": background_image_id,
             }
-            
+
             result = await self.atomic_operation("h5_open_image_aligner", params)
             if result.get("status") == "success":
-                return f"Opened image aligner for background image {background_image_id}"
+                return {
+                    "tool_name": "h5_open_image_aligner",
+                    "success": True,
+                    "label": args.get("label"),
+                    "summary": f"Opened image aligner for background image {background_image_id}",
+                    "widget_key": widget_key,
+                    "background_image_id": background_image_id,
+                }
 
-            return f"Failed to open image aligner: {result.get('error', 'Unknown error')}"
+            return {
+                "tool_name": "h5_open_image_aligner",
+                "success": False,
+                "summary": f"Failed to open image aligner: {result.get('error', 'Unknown error')}",
+            }
 
-        async def h5_autoscale(args: dict) -> str:
+        async def h5_autoscale(args: dict) -> dict:
             widget_key = args.get("widget_key")
-            
+
             print(f"[tool] h5_autoscale widget_key={widget_key}")
-            
+
             params = {
                 "widget_key": widget_key,
             }
-            
+
             result = await self.atomic_operation("h5_autoscale", params)
             if result.get("status") == "success":
-                return f"Autoscaled h5 widget {widget_key} to data bounds"
+                return {
+                    "tool_name": "h5_autoscale",
+                    "success": True,
+                    "label": args.get("label"),
+                    "summary": f"Autoscaled h5 widget {widget_key} to data bounds",
+                    "widget_key": widget_key,
+                }
 
-            return f"Failed to autoscale h5 widget: {result.get('error', 'Unknown error')}"
+            return {
+                "tool_name": "h5_autoscale",
+                "success": False,
+                "summary": f"Failed to autoscale h5 widget: {result.get('error', 'Unknown error')}",
+            }
 
-        async def h5_zoom(args: dict) -> str:
+        async def h5_zoom(args: dict) -> dict:
             widget_key = args.get("widget_key")
             direction = args.get("direction")
             percentage = args.get("percentage")
-            
+
             print(f"[tool] h5_zoom widget_key={widget_key} direction={direction} percentage={percentage}")
 
             params = {
                 "widget_key": widget_key,
                 "direction": direction,
             }
-            
+
             if percentage is not None:
                 params["percentage"] = percentage
-            
+
             result = await self.atomic_operation("h5_zoom", params)
             if result.get("status") == "success":
                 zoom_desc = f"zoom {direction}"
                 if percentage is not None:
                     zoom_desc += f" by {percentage}%"
-                return f"Applied {zoom_desc} to h5 widget {widget_key}"
+                return {
+                    "tool_name": "h5_zoom",
+                    "success": True,
+                    "label": args.get("label"),
+                    "summary": f"Applied {zoom_desc} to h5 widget {widget_key}",
+                    "widget_key": widget_key,
+                    "direction": direction,
+                    "percentage": percentage,
+                }
 
-            return f"Failed to zoom h5 widget: {result.get('error', 'Unknown error')}"
+            return {
+                "tool_name": "h5_zoom",
+                "success": False,
+                "summary": f"Failed to zoom h5 widget: {result.get('error', 'Unknown error')}",
+            }
 
-        async def h5_set_background_image_visibility(args: dict) -> str:
+        async def h5_set_background_image_visibility(args: dict) -> dict:
             widget_key = args.get("widget_key")
             background_image_id = args.get("background_image_id")
             hidden = args.get("hidden")
-            
+
             print(f"[tool] h5_set_background_image_visibility widget_key={widget_key} background_image_id={background_image_id} hidden={hidden}")
-            
+
             params = {
                 "widget_key": widget_key,
                 "background_image_id": background_image_id,
                 "hidden": hidden
             }
-            
+
             result = await self.atomic_operation("h5_set_background_image_visibility", params)
             if result.get("status") == "success":
                 visibility_action = "hidden" if hidden else "shown"
-                return f"Background image {background_image_id} {visibility_action}"
-            
-            return f"Failed to set background image visibility: {result.get('error', 'Unknown error')}"
+                return {
+                    "tool_name": "h5_set_background_image_visibility",
+                    "success": True,
+                    "label": args.get("label"),
+                    "summary": f"Background image {background_image_id} {visibility_action}",
+                    "widget_key": widget_key,
+                    "background_image_id": background_image_id,
+                    "hidden": hidden,
+                }
 
-        async def h5_add_selected_cells_to_categorical_obs(args: dict) -> str:
+            return {
+                "tool_name": "h5_set_background_image_visibility",
+                "success": False,
+                "summary": f"Failed to set background image visibility: {result.get('error', 'Unknown error')}",
+            }
+
+        async def h5_add_selected_cells_to_categorical_obs(args: dict) -> dict:
             widget_key = args.get("widget_key")
             obs_key = args.get("obs_key")
             category = args.get("category")
-            
+
             print(f"[tool] h5_add_selected_cells_to_categorical_obs widget_key={widget_key} obs_key={obs_key} category={category}")
-            
+
             params = {
                 "widget_key": widget_key,
                 "obs_key": obs_key,
                 "category": category
             }
-            
+
             result = await self.atomic_operation("h5_add_selected_cells_to_categorical_obs", params)
             if result.get("status") == "success":
-                return f"Assigned selected cells to category '{category}' in observation key '{obs_key}'"
-            
-            return f"Failed to assign selected cells to category: {result.get('error', 'Unknown error')}"
+                return {
+                    "tool_name": "h5_add_selected_cells_to_categorical_obs",
+                    "success": True,
+                    "label": args.get("label"),
+                    "summary": f"Assigned selected cells to category '{category}' in observation key '{obs_key}'",
+                    "widget_key": widget_key,
+                    "obs_key": obs_key,
+                    "category": category,
+                }
 
-        async def h5_set_marker_opacity(args: dict) -> str:
+            return {
+                "tool_name": "h5_add_selected_cells_to_categorical_obs",
+                "success": False,
+                "summary": f"Failed to assign selected cells to category: {result.get('error', 'Unknown error')}",
+            }
+
+        async def h5_set_marker_opacity(args: dict) -> dict:
             widget_key = args.get("widget_key")
             opacity = args.get("opacity")
-            
+
             print(f"[tool] h5_set_marker_opacity widget_key={widget_key} opacity={opacity}")
-            
+
             params = {
                 "widget_key": widget_key,
                 "opacity": opacity
             }
-            
+
             result = await self.atomic_operation("h5_set_marker_opacity", params)
             if result.get("status") == "success":
-                return f"Set marker opacity to {opacity}"
-            
-            return f"Failed to set marker opacity: {result.get('error', 'Unknown error')}"
+                return {
+                    "tool_name": "h5_set_marker_opacity",
+                    "success": True,
+                    "label": args.get("label"),
+                    "summary": f"Set marker opacity to {opacity}",
+                    "widget_key": widget_key,
+                    "opacity": opacity,
+                }
 
-        async def h5_manage_obs(args: dict) -> str:
+            return {
+                "tool_name": "h5_set_marker_opacity",
+                "success": False,
+                "summary": f"Failed to set marker opacity: {result.get('error', 'Unknown error')}",
+            }
+
+        async def h5_manage_obs(args: dict) -> dict:
             widget_key = args.get("widget_key")
             obs_key = args.get("obs_key")
             operation = args.get("operation")
             obs_type = args.get("obs_type", "category")
-            
+
             print(f"[tool] h5_manage_obs widget_key={widget_key} obs_key={obs_key} operation={operation} obs_type={obs_type}")
-            
+
             params = {
                 "widget_key": widget_key,
                 "obs_key": obs_key,
                 "operation": operation
             }
-            
+
             if operation == "add":
                 params["obs_type"] = obs_type
-            
+
             result = await self.atomic_operation("h5_manage_obs", params)
             if result.get("status") == "success":
                 if operation == "add":
-                    return f"Created observation column '{obs_key}' with type '{obs_type}'"
+                    return {
+                        "tool_name": "h5_manage_obs",
+                        "success": True,
+                        "label": args.get("label"),
+                        "summary": f"Created observation column '{obs_key}' with type '{obs_type}'",
+                        "widget_key": widget_key,
+                        "obs_key": obs_key,
+                        "operation": operation,
+                        "obs_type": obs_type,
+                    }
                 else:
-                    return f"Deleted observation column '{obs_key}'"
-            
-            return f"Failed to {operation} observation column: {result.get('error', 'Unknown error')}"
+                    return {
+                        "tool_name": "h5_manage_obs",
+                        "success": True,
+                        "label": args.get("label"),
+                        "summary": f"Deleted observation column '{obs_key}'",
+                        "widget_key": widget_key,
+                        "obs_key": obs_key,
+                        "operation": operation,
+                    }
+
+            return {
+                "tool_name": "h5_manage_obs",
+                "success": False,
+                "summary": f"Failed to {operation} observation column: {result.get('error', 'Unknown error')}",
+            }
 
         self.tools.append({
             "name": "create_cell",
@@ -751,9 +1067,10 @@ class AgentHarness:
                 "properties": {
                     "position": {"type": "integer", "description": "Position to insert the cell"},
                     "code": {"type": "string", "description": "Python code for the cell"},
-                    "title": {"type": "string", "description": "Title for the cell"},
+                    "title": {"type": "string", "description": "Name for the cell"},
+                    "action_summary": {"type": "string", "description": "Summary of the purpose of the cell."},
                 },
-                "required": ["position", "code", "title"],
+                "required": ["position", "code", "title", "action_summary"],
             },
         })
         self.tool_map["create_cell"] = create_cell
@@ -766,8 +1083,10 @@ class AgentHarness:
                 "properties": {
                     "position": {"type": "integer", "description": "Position to insert the cell"},
                     "code": {"type": "string", "description": "Markdown content"},
+                    "title": {"type": "string", "description": "Title of first header in the markdown cell"},
+                    "action_summary": {"type": "string", "description": "Summary of the purpose of the cell."},
                 },
-                "required": ["position", "code"],
+                "required": ["position", "code", "title", "action_summary"],
             },
         })
         self.tool_map["create_markdown_cell"] = create_markdown_cell
@@ -780,8 +1099,10 @@ class AgentHarness:
                 "properties": {
                     "cell_id": {"type": "string", "description": "ID of the cell to edit"},
                     "new_code": {"type": "string", "description": "New code/content for the cell"},
+                    "title": {"type": "string", "description": "Name of the cell to edit"},
+                    "action_summary": {"type": "string", "description": "Summary of the purpose of the edit."},
                 },
-                "required": ["cell_id", "new_code"],
+                "required": ["cell_id", "new_code", "title"],
             },
         })
         self.tool_map["edit_cell"] = edit_cell
@@ -793,8 +1114,10 @@ class AgentHarness:
                 "type": "object",
                 "properties": {
                     "cell_id": {"type": "string", "description": "ID of the cell to delete"},
+                    "title": {"type": "string", "description": "Name of the cell to delete"},
+                    "action_summary": {"type": "string", "description": "Summary of the purpose of the delete."},
                 },
-                "required": ["cell_id"],
+                "required": ["cell_id", "title", "action_summary"],
             },
         })
         self.tool_map["delete_cell"] = delete_cell
@@ -806,8 +1129,10 @@ class AgentHarness:
                 "type": "object",
                 "properties": {
                     "cell_id": {"type": "string", "description": "ID of the cell to run"},
+                    "title": {"type": "string", "description": "Name of the cell to run"},
+                    "action_summary": {"type": "string", "description": "Summary of the purpose of the run."},
                 },
-                "required": ["cell_id"],
+                "required": ["cell_id", "title", "action_summary"],
             },
         })
         self.tool_map["run_cell"] = run_cell
@@ -819,8 +1144,11 @@ class AgentHarness:
                 "type": "object",
                 "properties": {
                     "cell_id": {"type": "string", "description": "ID of the cell to stop"},
+                    "cell_name": {"type": "string", "description": "Name of the cell to stop"},
+                    "title": {"type": "string", "description": "Title of the cell to stop"},
+                    "action_summary": {"type": "string", "description": "Summary of the purpose of the stop."},
                 },
-                "required": ["cell_id"],
+                "required": ["cell_id", "title", "action_summary"],
             },
         })
         self.tool_map["stop_cell"] = stop_cell
@@ -843,7 +1171,8 @@ class AgentHarness:
                 "properties": {
                     "plan": {"type": "array", "description": "List of plan items"},
                     "plan_diff": {"type": "array", "description": "List of plan diff items"},
-                    "summary": {"type": "string", "description": "Optional summary text describing what was accomplished. Use markdown formatting with bullet points if needed. Omit if no summary needed."},
+                    "plan_update_overview": {"type": "string", "description": "Short title overview of what changed in the plan. Should follow the format like 'Added a new step.' or  `Completed step 2, step 3 now in progress.`"},
+                    "summary": {"type": "string", "description": "Summary text to help the user. This can be a message to the user or a description of what was accomplished. Use markdown formatting with bullet points if needed. Omit if no summary needed."},
                     "questions": {"type": "string", "description": "Optional question text for the user. Omit if no questions needed."},
                     "next_status": {"type": "string", "description": "What the agent will do next", "enum": ["executing", "fixing", "thinking", "awaiting_user_response", "awaiting_cell_execution", "awaiting_user_widget_input", "done"]},
                     "continue": {
@@ -852,7 +1181,7 @@ class AgentHarness:
                         "default": False
                     },
                 },
-                "required": ["plan", "plan_diff", "next_status"],
+                "required": ["plan", "plan_diff", "next_status", "plan_update_overview"],
             },
         })
         self.tool_map["submit_response"] = submit_response
@@ -870,8 +1199,10 @@ class AgentHarness:
                             "value": {
                                 "description": "JSON-serializable value"
                             },
+                            "action_summary": {"type": "string", "description": "Summary of the purpose of the set_widget."},
+                            "label": {"type": "string", "description": "Label of the widget to set"},
                         },
-                        "required": ["key", "value"],
+                        "required": ["key", "value", "action_summary", "label"],
                     },
                 })
         self.tool_map["set_widget"] = set_widget
@@ -885,6 +1216,10 @@ class AgentHarness:
                     "widget_key": {
                         "type": "string",
                         "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
+                    },
+                    "label": {
+                        "type": "string",
+                        "description": "Label of the widget"
                     },
                     "filters": {
                         "type": "array",
@@ -991,6 +1326,10 @@ class AgentHarness:
                         "type": "string",
                         "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
                     },
+                    "label": {
+                        "type": "string",
+                        "description": "Label of the widget"
+                    },
                     "color_by": {
                         "oneOf": [
                             {
@@ -1046,6 +1385,10 @@ class AgentHarness:
                         "type": "string",
                         "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
                     },
+                    "label": {
+                        "type": "string",
+                        "description": "Label of the widget"
+                    },
                     "obsm_key": {
                         "type": "string",
                         "description": "The obsm key to use for embedding (e.g spatial, X_umap)"
@@ -1062,6 +1405,10 @@ class AgentHarness:
             "input_schema": {
                 "type": "object",
                 "properties": {
+                    "label": {
+                        "type": "string",
+                        "description": "Label of the widget"
+                    },
                     "widget_key": {
                         "type": "string",
                         "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
@@ -1082,6 +1429,10 @@ class AgentHarness:
             "input_schema": {
                 "type": "object",
                 "properties": {
+                    "label": {
+                        "type": "string",
+                        "description": "Label of the widget"
+                    },
                     "widget_key": {
                         "type": "string",
                         "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
@@ -1102,6 +1453,10 @@ class AgentHarness:
             "input_schema": {
                 "type": "object",
                 "properties": {
+                    "label": {
+                        "type": "string",
+                        "description": "Label of the widget"
+                    },
                     "widget_key": {
                         "type": "string",
                         "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
@@ -1121,6 +1476,10 @@ class AgentHarness:
                     "widget_key": {
                         "type": "string",
                         "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
+                    },
+                    "label": {
+                        "type": "string",
+                        "description": "Label of the widget"
                     },
                     "direction": {
                         "type": "string",
@@ -1144,6 +1503,10 @@ class AgentHarness:
             "input_schema": {
                 "type": "object",
                 "properties": {
+                    "label": {
+                        "type": "string",
+                        "description": "Label of the widget"
+                    },
                     "widget_key": {
                         "type": "string",
                         "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
@@ -1168,6 +1531,10 @@ class AgentHarness:
             "input_schema": {
                 "type": "object",
                 "properties": {
+                    "label": {
+                        "type": "string",
+                        "description": "Label of the widget"
+                    },
                     "widget_key": {
                         "type": "string",
                         "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
@@ -1192,6 +1559,10 @@ class AgentHarness:
             "input_schema": {
                 "type": "object",
                 "properties": {
+                    "label": {
+                        "type": "string",
+                        "description": "Label of the widget"
+                    },
                     "widget_key": {
                         "type": "string",
                         "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
@@ -1216,6 +1587,10 @@ class AgentHarness:
                         "type": "string",
                         "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
                     },
+                    "label": {
+                        "type": "string",
+                        "description": "Label of the widget"
+                    },
                     "obs_key": {
                         "type": "string",
                         "description": "The observation column name to create or delete"
@@ -1236,6 +1611,9 @@ class AgentHarness:
         })
         self.tool_map["h5_manage_obs"] = h5_manage_obs
 
+        if len(self.tools) > 0:
+            self.tools[-1]["cache_control"] = {"type": "ephemeral"}
+
     async def _get_notebook_context(self) -> str:
         context_result, globals_result, reactivity_result = await asyncio.gather(
             self.atomic_operation("get_context"),
@@ -1247,6 +1625,8 @@ class AgentHarness:
             return f"Failed to get context: {context_result.get('error', 'Unknown error')}"
 
         context = context_result.get("context", {})
+        self.latest_notebook_context = context
+
         cell_count = context.get("cell_count", 0)
         cells = context.get("cells", [])
 
@@ -1339,17 +1719,6 @@ class AgentHarness:
 
             print(f"[agent] Turn {turn}, mode={self.mode}, thinking_budget={thinking_budget}")
 
-            notebook_context = await self._get_notebook_context()
-
-            system_prompt_with_context = dedent(
-                f"""
-                {self.system_prompt}
-                <notebook_context>
-                {notebook_context}
-                </notebook_context>
-                """
-            )
-
             if thinking_budget is not None:
                 max_tokens = thinking_budget + 4096
             else:
@@ -1385,10 +1754,22 @@ class AgentHarness:
                                 can_use_thinking = False
                                 print(f"[agent] Cannot use thinking API: last assistant message starts with {first_block_type}, not thinking")
 
+            system_blocks = [
+                {
+                    "type": "text",
+                    "text": self.system_prompt,
+                    "cache_control": {"type": "ephemeral"}
+                },
+                {
+                    "type": "text",
+                    "text": f"<notebook_context>\n{await self._get_notebook_context()}\n</notebook_context>",
+                }
+            ]
+
             kwargs = {
                 "model": model,
                 "max_tokens": max_tokens,
-                "system": system_prompt_with_context,
+                "system": system_blocks,
                 "messages": api_messages,
                 "tools": self.tools,
             }
@@ -1410,6 +1791,30 @@ class AgentHarness:
                     response: Message = await self.client.messages.create(**kwargs)
 
                 duration_seconds = time.time() - start_time
+
+                if response.usage is not None:
+                    usage = response.usage
+
+                    # todo(aidan): store this info in db per model config
+                    context_limit = 200_000
+
+                    cache_read_input_tokens = usage.cache_read_input_tokens
+                    if cache_read_input_tokens is None:
+                        cache_read_input_tokens = 0
+
+                    cache_creation_input_tokens = usage.cache_creation_input_tokens
+                    if cache_creation_input_tokens is None:
+                        cache_creation_input_tokens = 0
+
+                    usage_data = {
+                        "type": "agent_usage_update",
+                        "input_tokens": usage.input_tokens,
+                        "cache_read_input_tokens": cache_read_input_tokens,
+                        "cache_creation_input_tokens": cache_creation_input_tokens,
+                        "context_limit": context_limit,
+                    }
+
+                    await self.send(usage_data)
 
             except Exception as e:
                 print(f"[agent] API error: {e}")
@@ -1480,10 +1885,7 @@ class AgentHarness:
                                 tool_results.append({
                                     "type": "tool_result",
                                     "tool_use_id": tool_id,
-                                    "content": json.dumps({
-                                        "summary": result,
-                                        "error": None,
-                                    }),
+                                    "content": json.dumps(result),
                                 })
                             except Exception as e:
                                 print(f"[agent] Tool error: {tool_name}: {e}")
@@ -1493,6 +1895,7 @@ class AgentHarness:
                                     "content": json.dumps({
                                         "summary": None,
                                         "error": f"Error executing tool: {e!s}",
+                                        "success": False,
                                     }),
                                 })
                         else:
@@ -1530,6 +1933,53 @@ class AgentHarness:
                 print(f"[agent] Unknown stop reason: {response.stop_reason}")
                 await self._complete_turn()
 
+    async def _close_pending_tool_calls(self, *, error_message: str, messages: list[MessageParam]) -> None:
+        tool_use_ids = set()
+        tool_result_ids = set()
+
+        for history_msg in messages:
+            content = history_msg.get("content")
+            if not isinstance(content, list):
+                continue
+
+            for block in content:
+                if not isinstance(block, dict):
+                    continue
+
+                if block.get("type") == "tool_use":
+                    tool_id = block.get("id")
+                    if tool_id:
+                        tool_use_ids.add(tool_id)
+                elif block.get("type") == "tool_result":
+                    tool_use_id = block.get("tool_use_id")
+                    if tool_use_id:
+                        tool_result_ids.add(tool_use_id)
+
+        pending_tool_ids = tool_use_ids - tool_result_ids
+
+        if len(pending_tool_ids) > 0:
+            print(f"[agent] Closing {len(pending_tool_ids)} pending tool calls")
+            await self._insert_history(
+                event_type="anthropic_message",
+                payload={
+                    "type": "anthropic_message",
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": tool_id,
+                            "content": json.dumps({
+                                "summary": None,
+                                "error": error_message,
+                            }),
+                        }
+                        for tool_id in pending_tool_ids
+                    ],
+                    "timestamp": int(time.time() * 1000),
+                },
+            )
+            await self._notify_history_updated()
+
     async def handle_init(self, msg: dict[str, object]) -> None:
         print("[agent] Initializing")
 
@@ -1556,58 +2006,10 @@ class AgentHarness:
             self.system_prompt = build_system_prompt()
 
             messages = await self._build_messages_from_db()
-            tool_use_ids = set()
-            tool_result_ids = set()
-
-            print(f"[agent] Checking for pending tools in {len(messages)} messages")
-
-            for history_msg in messages:
-                content = history_msg.get("content")
-                if not isinstance(content, list):
-                    continue
-
-                for block in content:
-                    if not isinstance(block, dict):
-                        continue
-
-                    if block.get("type") == "tool_use":
-                        tool_id = block.get("id")
-                        if tool_id:
-                            tool_use_ids.add(tool_id)
-                            print(f"[agent]   Found tool_use: id={tool_id}, name={block.get('name')}")
-                    elif block.get("type") == "tool_result":
-                        tool_use_id = block.get("tool_use_id")
-                        if tool_use_id:
-                            tool_result_ids.add(tool_use_id)
-                            print(f"[agent]   Found tool_result: tool_use_id={tool_use_id}")
-
-            pending_tool_ids = tool_use_ids - tool_result_ids
-
-            print(f"[agent] Tool use count: {len(tool_use_ids)}, Tool result count: {len(tool_result_ids)}, Pending: {len(pending_tool_ids)}")
-
-            if pending_tool_ids:
-                print(f"[agent] Found {len(pending_tool_ids)} pending tool calls, closing them")
-
-                await self._insert_history(
-                    event_type="anthropic_message",
-                    payload={
-                        "type": "anthropic_message",
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "tool_result",
-                                "tool_use_id": tool_id,
-                                "content": json.dumps({
-                                    "summary": None,
-                                    "error": "Tool call cancelled - session was ended before completion",
-                                }),
-                            }
-                            for tool_id in pending_tool_ids
-                        ],
-                        "timestamp": int(time.time() * 1000),
-                    },
-                )
-                await self._notify_history_updated()
+            await self._close_pending_tool_calls(
+                error_message="Tool call cancelled - session was ended before completion",
+                messages=await self._build_messages_from_db(),
+            )
 
             self.initialized = True
             await self.send({
@@ -1678,37 +2080,17 @@ class AgentHarness:
         request_id = msg.get("request_id", "unknown")
         print(f"[agent] Cancelling request {request_id}")
 
-        self.conversation_running = False
+        await self._clear_running_state()
 
-        if self.conversation_task and not self.conversation_task.done():
-            self.conversation_task.cancel()
-            try:
-                await self.conversation_task
-            except asyncio.CancelledError:
-                pass
+        self.current_request_id = None
+        self.should_auto_continue = False
+        self.pending_auto_continue = False
 
-    def _format_widget_summaries(self, widgets: list[dict]) -> str:
-        if not widgets:
-            return ""
-
-        widget_summaries = []
-        for widget in widgets:
-            widget_key = widget.get("key") or "?"
-            widget_type = widget.get("type") or "unknown"
-            widget_value = widget.get("value") or ""
-            widget_label = widget.get("label") or ""
-            widget_filters = widget.get("filters") or []
-
-            widget_desc = f"key={widget_key}, type={widget_type}"
-            if widget_value:
-                widget_desc += f", value={widget_value}"
-            if widget_label:
-                widget_desc += f", label={widget_label}"
-            if widget_filters:
-                widget_desc += f", filters={widget_filters}"
-            widget_summaries.append(widget_desc)
-
-        return ", ".join(widget_summaries)
+        await self._close_pending_tool_calls(
+            error_message="Request cancelled by user",
+            messages=await self._build_messages_from_db(),
+        )
+        self._start_conversation_loop()
 
     async def handle_clear_history(self) -> None:
         await self._clear_running_state()
@@ -1740,12 +2122,19 @@ class AgentHarness:
             print(f"[agent] {msg.get('action', 'unknown')} -> {msg.get('status', 'unknown')}")
             await self.handle_action_response(msg)
         elif msg_type == "kernel_message":
+            print(f"[agent] Kernel message: {msg}")
+
             nested_msg = msg.get("message", {})
             nested_type = nested_msg.get("type")
             if nested_type == "cell_result":
                 cell_id = nested_msg.get("cell_id")
                 has_exception = nested_msg.get("has_exception", False)
-                exception = nested_msg.get("exception", "")
+                exception = nested_msg.get("exception")
+                display_name = nested_msg.get("display_name")
+
+                logs = nested_msg.get("logs", None)
+                if logs is not None and len(logs) > 4096:
+                    logs = logs[-4096:]
 
                 if cell_id is not None:
                     self.executing_cells.discard(str(cell_id))
@@ -1755,6 +2144,8 @@ class AgentHarness:
                     "cell_id": cell_id,
                     "success": not has_exception,
                     "exception": exception,
+                    "logs": logs,
+                    "display_name": display_name,
                 })
             elif nested_type == "start_cell":
                 cell_id = nested_msg.get("cell_id")
