@@ -26,6 +26,11 @@ external_docs = [
         "path": str(Path(__file__).parent / "docs/vizgen_workflow.md"),
         "type": "file",
     },
+    {
+        "name": "spatial_annotation_docs",
+        "path": str(Path(__file__).parent / "docs/spatial_annotation.md"),
+        "type": "file",
+    },
 ]
 
 system_instruction = """

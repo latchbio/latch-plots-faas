@@ -1059,6 +1059,33 @@ class AgentHarness:
                 "summary": f"Failed to {operation} observation column: {result.get('error', 'Unknown error')}",
             }
 
+        async def smart_ui_spotlight(args: dict) -> dict:
+            keyword = args.get("keyword")
+            widget_key = args.get("widget_key")
+
+            print(f"[tool] smart_ui_spotlight keyword={keyword}, widget_key={widget_key}")
+
+            params = {
+                "keyword": keyword
+            }
+            if widget_key is not None:
+                params["widget_key"] = widget_key
+
+            result = await self.atomic_operation("smart_ui_spotlight", params)
+            if result.get("status") == "success":
+                return {
+                    "tool_name": "smart_ui_spotlight",
+                    "success": True,
+                    "summary": f"Highlighted UI element: {keyword}",
+                    "keyword": keyword,
+                }
+
+            return {
+                "tool_name": "smart_ui_spotlight",
+                "success": False,
+                "summary": f"Failed to highlight UI element: {result.get('error', 'Unknown error')}",
+            }
+
         self.tools.append({
             "name": "create_cell",
             "description": "Create a new code cell at specified position. The cell will automatically run after creation.",
@@ -1610,6 +1637,27 @@ class AgentHarness:
             }
         })
         self.tool_map["h5_manage_obs"] = h5_manage_obs
+
+        self.tools.append({
+            "name": "smart_ui_spotlight",
+            "description": "Highlight a UI element to guide the user's attention.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "keyword": {
+                        "type": "string",
+                        "enum": ["lasso_select", "file_upload"],
+                        "description": "The UI element to highlight"
+                    },
+                    "widget_key": {
+                        "type": "string",
+                        "description": "Optional full widget key including tf_id and widget_id in the format <tf_id>/<widget_id> for keywords related to a specific widget (e.g. lasso_select)"
+                    }
+                },
+                "required": ["keyword"]
+            }
+        })
+        self.tool_map["smart_ui_spotlight"] = smart_ui_spotlight
 
         if len(self.tools) > 0:
             self.tools[-1]["cache_control"] = {"type": "ephemeral"}
