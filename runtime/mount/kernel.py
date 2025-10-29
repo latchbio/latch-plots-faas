@@ -520,8 +520,7 @@ def _split_violin_groups(
 
         # note(tim): clear any indexes that will cause trouble in precalc_violin
         child.pop(index_axis, None)
-        # todo(tim): also handle the subplot case where there can
-        # be more index axis levels e.g. x1
+        # todo(tim): handle subplot cases with multiple index axis levels, e.g., x1
         child.pop(f"{index_axis}0", None)
         child.pop(f"d{index_axis}", None)
         child["name"] = str(label)
