@@ -14,6 +14,7 @@ import signal
 import socket
 import sys
 import traceback
+from base64 import b64decode
 from collections import defaultdict
 from copy import copy, deepcopy
 from dataclasses import asdict, dataclass, field
@@ -57,7 +58,6 @@ from plotly_utils.precalc_box import precalc_box
 from plotly_utils.precalc_violin import precalc_violin
 from socketio_thread import SocketIoThread
 from stdio_over_socket import SocketWriter, text_socket_writer
-from base64 import b64decode
 
 ad = auto_install.ad
 
@@ -488,7 +488,7 @@ def _split_violin_groups(
 
     idx_arr = np.asarray(trace.get(index_axis))
     data_field = trace.get(data_axis)
-    
+
     # note(tim): plotly makes this field base64
     if isinstance(data_field, dict) and "bdata" in data_field and "dtype" in data_field:
         vals_arr = np.frombuffer(b64decode(data_field["bdata"]), dtype=np.dtype(data_field["dtype"]))
@@ -496,7 +496,7 @@ def _split_violin_groups(
         vals_arr = np.asarray(data_field)
 
     categories, cat_idx = np.unique(idx_arr, return_inverse=True)
-    
+
     if len(categories) <= 1:
         return None, False
 
@@ -509,7 +509,7 @@ def _split_violin_groups(
     cat_idx = cat_idx.astype(np.int64, copy=False)
     order_idx = np.argsort(cat_idx, kind="stable")
     cat_idx_sorted = cat_idx[order_idx]
-    
+
     # find where to split the categories
     split_idx = np.flatnonzero(np.diff(cat_idx_sorted)) + 1
     groups = np.split(order_idx, split_idx)
@@ -517,10 +517,10 @@ def _split_violin_groups(
     for label, idxs in zip(order, groups):
         child = deepcopy(trace)
         child[data_axis] = vals_arr[idxs]
-        
+
         # note(tim): clear any indexes that will cause trouble in precalc_violin
         child.pop(index_axis, None)
-        # todo(tim): also handle the subplot case where there can 
+        # todo(tim): also handle the subplot case where there can
         # be more index axis levels e.g. x1
         child.pop(f"{index_axis}0", None)
         child.pop(f"d{index_axis}", None)
