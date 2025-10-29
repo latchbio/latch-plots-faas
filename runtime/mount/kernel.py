@@ -938,8 +938,6 @@ class Kernel:
 
         total = len(data)
 
-        await self.update_kernel_snapshot_status("save_kernel_snapshot", "start", {"progress_bytes": 0, "total_bytes": total})
-
         with (snapshot_dir / snapshot_f_name).open("wb") as f:
             saved_since_last = 0
             for start in range(0, total, snapshot_chunk_bytes):
