@@ -1093,12 +1093,15 @@ class AgentHarness:
 
         async def smart_ui_spotlight(args: dict) -> dict:
             keyword = args.get("keyword")
+            widget_key = args.get("widget_key")
 
-            print(f"[tool] smart_ui_spotlight keyword={keyword}")
+            print(f"[tool] smart_ui_spotlight keyword={keyword}, widget_key={widget_key}")
 
             params = {
                 "keyword": keyword
             }
+            if widget_key is not None:
+                params["widget_key"] = widget_key
 
             result = await self.atomic_operation("smart_ui_spotlight", params)
             if result.get("status") == "success":
@@ -1677,6 +1680,10 @@ class AgentHarness:
                         "type": "string",
                         "enum": ["lasso_select", "file_upload"],
                         "description": "The UI element to highlight"
+                    },
+                    "widget_key": {
+                        "type": "string",
+                        "description": "Optional full widget key including tf_id and widget_id in the format <tf_id>/<widget_id> for keywords related to a specific widget (e.g. lasso_select)"
                     }
                 },
                 "required": ["keyword"]
