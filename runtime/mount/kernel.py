@@ -935,7 +935,10 @@ class Kernel:
                 f.write(data[start:end])
 
                 saved_since_last += (end - start)
-                if saved_since_last >= snapshot_progress_interval_bytes or end == total:
+                if end == total:
+                    break
+
+                if saved_since_last >= snapshot_progress_interval_bytes:
                     await self.update_kernel_snapshot_status("save_kernel_snapshot", "progress", {"progress_bytes": end, "total_bytes": total})
                     saved_since_last = 0
 
@@ -962,7 +965,10 @@ class Kernel:
                 data.extend(chunk)
                 read_since_last += len(chunk)
 
-                if read_since_last >= snapshot_progress_interval_bytes or len(data) == total:
+                if len(data) == total:
+                    break
+
+                if read_since_last >= snapshot_progress_interval_bytes:
                     await self.update_kernel_snapshot_status("load_kernel_snapshot", "progress", {"progress_bytes":  len(data), "total_bytes": total})
                     read_since_last = 0
 
