@@ -31,6 +31,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from mount.socketio import SocketIo
+from mount.utils import gql_query
 
 
 class EvalServer:
@@ -81,6 +82,7 @@ class EvalServer:
                 "AGENT_DEBUG": "1",
             },
             preexec_fn=lambda: os.nice(5),
+            limit=1024 * 1024,
         )
 
         async def stream_output(stream, prefix=""):
@@ -93,14 +95,17 @@ class EvalServer:
                     if len(decoded) > 1000:
                         decoded = decoded[:1000] + "... [TRUNCATED]"
                     print(f"[agent] {prefix}{decoded}", flush=True)
-                except ValueError as e:
-                    if "exceed the limit" in str(e):
+                except (ValueError, asyncio.LimitOverrunError) as e:
+                    if "limit" in str(e).lower():
                         chunk = await stream.read(8192)
                         if not chunk:
                             break
                         print(f"[agent] {prefix}[Large output truncated: {len(chunk)} bytes]", flush=True)
                     else:
                         raise
+                except Exception as e:
+                    print(f"[agent] {prefix}[Error reading output: {e}]", flush=True)
+                    break
 
         asyncio.create_task(stream_output(self.agent_proc.stdout, ""))
         asyncio.create_task(stream_output(self.agent_proc.stderr, "[stderr] "))
@@ -217,8 +222,6 @@ class EvalServer:
                 self.session_id = int(console_init.get("session_id"))
     
                 # Clear history for this session
-                from run_local_eval import get_eval_config
-                from mount.utils import gql_query
                 auth_token_sdk, _, _ = get_eval_config()
 
                 try:
@@ -356,8 +359,6 @@ class EvalServer:
                     self.cell_status[cell_id] = "error" if has_exception else "ran"
 
     async def check_for_completion(self):
-        from run_local_eval import get_eval_config
-        from mount.utils import gql_query
         auth_token_sdk, _, _ = get_eval_config()
 
         try:
@@ -387,6 +388,27 @@ class EvalServer:
                                 return
         except Exception as e:
             print(f"[eval] Error checking for completion: {e}")
+
+    async def fetch_full_conversation_history(self) -> list[dict]:
+        auth_token_sdk, _, _ = get_eval_config()
+
+        try:
+            resp = await gql_query(
+                auth=auth_token_sdk,
+                query="""
+                    query AgentHistory($sessionId: BigInt!) {
+                        agentHistories(condition: {sessionId: $sessionId, removed: false}, orderBy: ID_ASC) {
+                            nodes { id payload }
+                        }
+                    }
+                """,
+                variables={"sessionId": str(self.session_id)},
+            )
+            nodes = resp.get("data", {}).get("agentHistories", {}).get("nodes", [])
+            return [node.get("payload", {}) for node in nodes]
+        except Exception as e:
+            print(f"[eval] Error fetching conversation history: {e}")
+            return []
 
     def is_done(self) -> bool:
         if not self.eval_complete:
@@ -447,15 +469,18 @@ async def run_eval(test_case: TestCase, port: int, latch_dir: Path) -> TestResul
 
     notebook_state = server.notebook_context
 
+    print("[eval] Fetching full conversation history from database...")
+    conversation_history = await server.fetch_full_conversation_history()
+
     test_result = TestResult(
         test_id=test_case.id,
-        conversation_history=server.conversation_history,
+        conversation_history=conversation_history,
         notebook_state=notebook_state,
         duration_ms=duration_ms,
     )
 
     print(f"\n[eval] Eval completed in {duration_ms / 1000:.2f}s")
-    print(f"[eval] Total conversation turns: {len(server.conversation_history)}")
+    print(f"[eval] Total conversation turns: {len(conversation_history)}")
     cells = notebook_state.get("context", {}).get("cells", [])
     globals_count = len(notebook_state.get("globals", {}))
     reactivity_len = len(notebook_state.get("reactivity", ""))

@@ -82,19 +82,22 @@ class LLMJudge:
             content = msg.get("content", "")
 
             if isinstance(content, str):
-                lines.append(f"{role.upper()}: {content[:500]}")
+                lines.append(f"{role.upper()}: {content}")
             elif isinstance(content, list):
                 for block in content:
                     if isinstance(block, dict):
                         block_type = block.get("type")
                         if block_type == "text":
-                            text = block.get("text", "")[:500]
+                            text = block.get("text", "")
                             lines.append(f"{role.upper()}: {text}")
                         elif block_type == "tool_use":
                             tool_name = block.get("name", "unknown")
+                            tool_input = block.get("input", {})
                             lines.append(f"{role.upper()}: [Called tool: {tool_name}]")
+                            if tool_name in ("ask_user", "submit_response"):
+                                lines.append(f"  Input: {tool_input}")
                         elif block_type == "tool_result":
-                            result = block.get("content", "")[:200]
+                            result = block.get("content", "")
                             lines.append(f"{role.upper()}: [Tool result: {result}]")
 
         return "\n".join(lines)
@@ -109,9 +112,8 @@ class LLMJudge:
             source = cell.get("source", "")
             status = cell.get("status", "unknown")
 
-            source_preview = source[:200] if isinstance(source, str) else str(source)[:200]
             lines.append(f"\nCell {i} ({cell_type}, status: {status}):")
-            lines.append(f"  {source_preview}")
+            lines.append(f"  {source}")
 
             if cell.get("outputs"):
                 lines.append(f"  Outputs: {len(cell['outputs'])} items")
@@ -131,10 +133,8 @@ class LLMJudge:
                 lines.append(f"\n{var_name} ({var_type}):")
                 for key, value in var_info.items():
                     if key != "type":
-                        value_str = str(value)[:200]
-                        lines.append(f"  {key}: {value_str}")
+                        lines.append(f"  {key}: {value}")
             else:
-                var_str = str(var_info)[:200]
-                lines.append(f"\n{var_name}: {var_str}")
+                lines.append(f"\n{var_name}: {var_info}")
 
         return "\n".join(lines)
