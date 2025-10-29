@@ -441,6 +441,21 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
 
                 continue
 
+            elif msg["type"] == "widget_values_updated":
+                if a_proc.conn_a is not None:
+                    agent_msg = {
+                        "type": "widget_values_updated",
+                        "keys": msg.get("keys", [])
+                    }
+                    if "values" in msg:
+                        agent_msg["values"] = msg["values"]
+                    
+                    await a_proc.conn_a.send({
+                        "type": "kernel_message",
+                        "message": agent_msg
+                    })
+                # todo(tim): add back continue to not send to frontend
+
             await plots_ctx_manager.broadcast_message(orjson.dumps(msg).decode())
 
         except Exception:

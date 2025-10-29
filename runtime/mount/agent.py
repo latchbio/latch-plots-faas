@@ -2200,6 +2200,13 @@ class AgentHarness:
                 cell_id = nested_msg.get("cell_id")
                 if cell_id is not None:
                     self.executing_cells.add(str(cell_id))
+            elif nested_type == "widget_values_updated":
+                keys = nested_msg.get("keys", [])
+                values = nested_msg.get("values", {})
+                if values:
+                    print(f"[agent] Widget values updated: {keys} with values")
+                else:
+                    print(f"[agent] Widget values updated: {keys}")
         else:
             print(f"[agent] Unknown message type: {msg_type}")
 
