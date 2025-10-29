@@ -2742,6 +2742,13 @@ class AgentHarness:
                 cell_id = nested_msg.get("cell_id")
                 if cell_id is not None and self.current_request_id is not None:
                     self.executing_cells.add(str(cell_id))
+            elif nested_type == "widget_values_updated":
+                keys = nested_msg.get("keys", [])
+                values = nested_msg.get("values", {})
+                if values:
+                    print(f"[agent] Widget values updated: {keys} with values")
+                else:
+                    print(f"[agent] Widget values updated: {keys}")
         elif msg_type == "get_full_prompt":
             tx_id = msg.get("tx_id")
             print(f"[agent] Get full prompt request (tx_id={tx_id})")

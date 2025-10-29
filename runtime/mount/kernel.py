@@ -1870,6 +1870,7 @@ class Kernel:
                 )
 
         if msg["type"] == "set_widget_value":
+            updated_keys = []
             for w_key, payload in msg["data"].items():
                 try:
                     if w_key not in self.widget_signals:
@@ -1879,10 +1880,22 @@ class Kernel:
                         self.widget_signals[w_key](
                             orjson.loads(payload), _ui_update=True
                         )
+                    updated_keys.append(w_key)
                 except Exception:
                     traceback.print_exc()
                     continue
 
+            if updated_keys:
+                message = {
+                    "type": "widget_values_updated",
+                    "keys": updated_keys
+                }
+                
+                aligner_values = {k: msg["data"][k] for k in updated_keys if "value.image_aligner_step" in k}
+                if aligner_values:
+                    message["values"] = aligner_values
+                
+                await self.send(message)
             return
 
         if msg["type"] == "globals_summary":
