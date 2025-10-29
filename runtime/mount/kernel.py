@@ -15,7 +15,7 @@ import socket
 import sys
 import traceback
 from base64 import b64decode
-from collections import defaultdict, deque
+from collections import defaultdict
 from copy import copy, deepcopy
 from dataclasses import asdict, dataclass, field, fields
 from io import TextIOWrapper
@@ -877,17 +877,14 @@ class Kernel:
                 if sig.id not in s_signals:
                     s_signals[sig.id] = sig.serialize()
 
-            def collect_nested_widget_signals(widget: BaseWidget) -> None:
-                queue = deque([widget])
-                while len(queue) > 0:
-                    current_widget = queue.popleft()
+            def collect_widget_signals(widget: BaseWidget) -> None:
+                if widget._has_signal:
+                    add_and_check_listeners(widget._signal)
 
-                    for widget_field in fields(current_widget):
-                        field_value = getattr(current_widget, widget_field.name, None)
-                        if isinstance(field_value, BaseWidget):
-                            if field_value._has_signal:
-                                add_and_check_listeners(field_value._signal)
-                            queue.append(field_value)
+                for widget_field in fields(widget):
+                    field_value = getattr(widget, widget_field.name, None)
+                    if isinstance(field_value, BaseWidget):
+                        collect_widget_signals(field_value)
 
             for node in self.cell_rnodes.values():
                 s_nodes[node.id] = node.serialize()
@@ -907,7 +904,7 @@ class Kernel:
                 elif isinstance(val._value, Signal):
                     s_globals[k] = val._value.serialize()
                 elif isinstance(val._value, BaseWidget):
-                    collect_nested_widget_signals(val._value)
+                    collect_widget_signals(val._value)
                     if val._value._has_signal:
                         assert val._value._signal.id in s_signals, f"missing {val._value._signal.id}"
                         s_globals[k] = val._value.serialize()
