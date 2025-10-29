@@ -63,7 +63,7 @@ ad = auto_install.ad
 
 sys.path.append(str(Path(__file__).parent.absolute()))
 from subsample import downsample_df, initialize_duckdb
-from utils import KernelSnapshotStatus, PlotConfig, get_presigned_url
+from utils import KernelSnapshotStatus, PlotConfig, get_presigned_url, orjson_encoder
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -929,7 +929,7 @@ class Kernel:
                 "url_dataframes": {},
             }
 
-            data = orjson.dumps(s_depens)
+            data = orjson.dumps(s_depens, default=orjson_encoder)
         except Exception:
             await self.update_kernel_snapshot_status("save_kernel_snapshot", "error", {"error_msg": traceback.format_exc()})
             return
