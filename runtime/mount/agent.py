@@ -62,6 +62,8 @@ class AgentHarness:
     system_prompt: str = ""
     agent_session_id: int | None = None
     latest_notebook_context: dict = field(default_factory=dict)
+    current_status: str = "thinking"
+
 
     mode_config: dict[Mode, tuple[str, int | None]] = field(default_factory=lambda: {
         Mode.planning: ("claude-sonnet-4-5-20250929", 4096),
@@ -703,6 +705,8 @@ class AgentHarness:
                 else:
                     self.should_auto_continue = should_continue
                     self.pending_auto_continue = False
+
+                self.current_status = next_status
 
                 return {
                     "tool_name": "submit_response",
@@ -2202,14 +2206,16 @@ class AgentHarness:
                 if cell_id is not None:
                     self.executing_cells.discard(str(cell_id))
 
-                await self.pending_messages.put({
-                    "type": "cell_result",
-                    "cell_id": cell_id,
-                    "success": not has_exception,
-                    "exception": exception,
-                    "logs": logs,
-                    "display_name": display_name,
-                })
+                # Don't wake agent if waiting for user widget input (status will change to "thinking" when widget updates)
+                if self.current_status != "awaiting_user_widget_input":
+                    await self.pending_messages.put({
+                        "type": "cell_result",
+                        "cell_id": cell_id,
+                        "success": not has_exception,
+                        "exception": exception,
+                        "logs": logs,
+                        "display_name": display_name,
+                    })
             elif nested_type == "start_cell":
                 cell_id = nested_msg.get("cell_id")
                 if cell_id is not None:
@@ -2217,14 +2223,17 @@ class AgentHarness:
             elif nested_type == "widget_values_updated":
                 keys = nested_msg.get("keys", [])
                 values = nested_msg.get("values", {})
-                
-                # Always wake agent for widget changes - they queue up if agent is busy
-                print(f"[agent] Widget values updated: {keys} - waking agent")
-                await self.pending_messages.put({
-                    "type": "widget_values_updated",
-                    "keys": keys,
-                    "values": values
-                })
+                 # Wake agent if waiting for user widget input (any widget change counts)
+                if self.current_status == "awaiting_user_widget_input":
+                    print(f"[agent] Widget values updated: {keys} - waking agent (awaiting widget input)")
+                    self.current_status = "thinking"
+                    await self.pending_messages.put({
+                        "type": "widget_values_updated",
+                        "keys": keys,
+                        "values": values
+                    })
+                else:
+                    print(f"[agent] Widget values updated: {keys} (no wake - not awaiting widget input)")
         else:
             print(f"[agent] Unknown message type: {msg_type}")
 
