@@ -382,6 +382,11 @@ class AgentHarness:
             }
             print(f"[agent] Widget update triggered turn: {keys}")
             
+            # Reset status immediately to prevent rapid-fire duplicate wakes
+            if self.current_status == "awaiting_user_widget_input":
+                self.current_status = "thinking"
+                print("[agent] Reset status from awaiting_user_widget_input to thinking")
+            
             await self._insert_history(
                 event_type="anthropic_message",
                 payload={
