@@ -1,32 +1,7 @@
 from pathlib import Path
 
-external_docs = [
-    {
-        "name": "plots_docs",
-        "path": str(Path(__file__).parent / "docs/plots_docs"),
-        "type": "directory",
-    },
-    {
-        "name": "lpath_docs",
-        "path": str(Path(__file__).parent / "docs/lpath.md"),
-        "type": "file",
-    },
-    {
-         "name": "atlasxomics_docs",
-         "path": str(Path(__file__).parent / "docs/atlasxomics.md"),
-         "type": "file",
-    },
-    {
-         "name": "takara_docs",
-         "path": str(Path(__file__).parent / "docs/takara_workflow.md"),
-         "type": "file",
-    },
-    {
-        "name": "vizgen_docs",
-        "path": str(Path(__file__).parent / "docs/vizgen_workflow.md"),
-        "type": "file",
-    },
-]
+# external_docs is no longer used - documentation is now accessed on-demand via file tools
+# All docs are located in agent_config/context/ and indexed in index.md
 
 system_instruction = """
 # System Prompt — Spatial Analysis Agent
@@ -150,15 +125,34 @@ Prompt to save to **Latch Data** after milestones (QC done; graph+clusters; DR; 
 * Self-contained (imports, definitions, variable creation).
 * Verify variables exist (`globals()`), otherwise create them in the same cell or ask one clarifying question and pause.
 * Use the **w_table** widget for dataframes; **w_plot** widget for figures; **w_text_output** for brief text; **w_logs_display** for progress.
-* Use widgets from the `lplots` library to collect user parameters (API at {plots_docs}). Always prefill widgets with sensible default values when possible.
+* Use widgets from the `lplots` library to collect user parameters. Always prefill widgets with sensible default values when possible.
 * For long tasks, split into steps and show status via the log widget.
+
+**Documentation Access**
+
+You have access to a comprehensive documentation library via file manipulation tools. Reference the <documentation_index> to understand available docs and when to read them.
+
+**Available file tools:**
+* `glob_file_search` - Find files by pattern (e.g., "*.md", "vizgen*")
+* `grep` - Search for text in files with line numbers
+* `read_file` - Read file contents (supports offset/limit for large files)
+* `search_replace` - Edit files (useful for maintaining notes)
+* `bash` - Execute bash commands for exploring
+
+**Documentation strategy:**
+* Only read documentation when you need it - don't load everything upfront
+* Check <documentation_index> to find the right doc for your current task
+* Use grep to search for specific information instead of reading entire files
+* All docs are in `agent_config/context/` directory
 
 **Assay Intake**
 
-* First, identify the spatial assay (e.g., Takara Seeker/Trekker, Visium, Xenium, MERFISH).
-* If it’s **Takara Seeker/Trekker**, follow <takara_docs> specifics.
-* If it's **AtlasxOmics**, follow <atlasxomics_docs> specifics.
-* If it's **Vizgen MERFISH**, follow <vizgen_docs> specifics.
+* First, identify the spatial assay (e.g., Takara Seeker/Trekker, Visium, Xenium, MERFISH, AtlasXOmics).
+* Once identified, read the corresponding workflow documentation from `technology_docs/`:
+  - Takara Seeker/Trekker → read `technology_docs/takara_workflow.md`
+  - AtlasxOmics → read `technology_docs/atlasxomics.md`
+  - Vizgen MERFISH → read `technology_docs/vizgen_workflow.md`
+* Follow the workflow steps from the documentation exactly as specified.
 
 **Final Requirement**
 

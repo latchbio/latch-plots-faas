@@ -3,6 +3,7 @@ import contextlib
 import json
 import os
 import socket
+import subprocess
 import sys
 import time
 import traceback
@@ -10,12 +11,13 @@ import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
+from pathlib import Path
 
+from agent_config.prompts import system_instruction
 from agent_utils.auto_install import anthropic
 from anthropic.types import MessageParam, ToolParam
 from anthropic.types.beta.beta_message import BetaMessage
 from anthropic.types.message import Message
-from config_loader import build_system_prompt
 from lplots import _inject
 from socketio_thread import SocketIoThread
 from utils import auth_token_sdk, gql_query, nucleus_url, pod_id
@@ -1615,6 +1617,331 @@ class AgentHarness:
         })
         self.tool_map["h5_manage_obs"] = h5_manage_obs
 
+        def glob_file_search(args: dict) -> dict:
+            pattern = args.get("pattern", "")
+            base_path = args.get("base_path", "agent_config/context")
+
+            try:
+                if not Path(base_path).is_absolute():
+                    base_path = Path(__file__).parent / base_path
+                else:
+                    base_path = Path(base_path)
+
+                result = subprocess.run(
+                    ["/usr/bin/find", str(base_path), "-name", pattern],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                    check=True
+                )
+
+                files = result.stdout.strip().split("\n") if result.stdout.strip() else []
+                return {
+                    "tool_name": "glob_file_search",
+                    "success": True,
+                    "summary": f"Found {len(files)} files matching pattern '{pattern}'",
+                    "files": files,
+                    "pattern": pattern,
+                    "base_path": str(base_path)
+                }
+            except Exception as e:
+                return {
+                    "tool_name": "glob_file_search",
+                    "success": False,
+                    "summary": f"Error searching for files: {e}"
+                }
+
+        def grep(args: dict) -> dict:
+            pattern = args.get("pattern", "")
+            path = args.get("path", "agent_config/context")
+            case_insensitive = args.get("case_insensitive", False)
+
+            try:
+                if not Path(path).is_absolute():
+                    path = Path(__file__).parent / path
+                else:
+                    path = Path(path)
+
+                cmd = ["/usr/bin/grep", "-rn"]
+                if case_insensitive:
+                    cmd.append("-i")
+                cmd.extend([pattern, str(path)])
+
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                    check=True
+                )
+
+                # todo(aidan): ripgrep instead of grep (10x+ faster)
+                matches = result.stdout.strip()
+                return {
+                    "tool_name": "grep",
+                    "success": True,
+                    "summary": f"Searched for pattern '{pattern}' in {path}",
+                    "matches": matches,
+                    "pattern": pattern,
+                    "path": str(path)
+                }
+            except Exception as e:
+                return {
+                    "tool_name": "grep",
+                    "success": False,
+                    "summary": f"Error searching: {e}"
+                }
+
+        def read_file(args: dict) -> dict:
+            path = args.get("path", "")
+            offset = args.get("offset", 0)
+            limit = args.get("limit")
+
+            try:
+                if not Path(path).is_absolute():
+                    file_path = Path(__file__).parent / path
+                else:
+                    file_path = Path(path)
+
+                if not file_path.exists():
+                    return {
+                        "tool_name": "read_file",
+                        "success": False,
+                        "summary": f"File not found: {path}"
+                    }
+
+                with Path(file_path).open(encoding="utf-8") as f:
+                    lines = f.readlines()
+
+                total_lines = len(lines)
+
+                if offset >= total_lines:
+                    return {
+                        "tool_name": "read_file",
+                        "success": False,
+                        "summary": f"Offset {offset} exceeds file length {total_lines}"
+                    }
+
+                if limit is not None:
+                    selected_lines = lines[offset:offset + limit]
+                else:
+                    selected_lines = lines[offset:]
+
+                numbered_lines = []
+                for i, line in enumerate(selected_lines, start=offset + 1):
+                    numbered_lines.append(f"{i:6}|{line.rstrip()}")
+
+                content = "\n".join(numbered_lines)
+
+                return {
+                    "tool_name": "read_file",
+                    "success": True,
+                    "summary": f"Read {len(selected_lines)} lines from {path} (total: {total_lines} lines)",
+                    "content": content,
+                    "path": str(file_path),
+                    "offset": offset,
+                    "lines_read": len(selected_lines),
+                    "total_lines": total_lines
+                }
+            except Exception as e:
+                return {
+                    "tool_name": "read_file",
+                    "success": False,
+                    "summary": f"Error reading file: {e}"
+                }
+
+        async def search_replace(args: dict) -> dict:
+            path = args.get("path", "")
+            old_string = args.get("old_string", "")
+            new_string = args.get("new_string", "")
+            
+            try:
+                from pathlib import Path
+                if not Path(path).is_absolute():
+                    file_path = Path(__file__).parent / path
+                else:
+                    file_path = Path(path)
+                
+                if not file_path.exists():
+                    return {
+                        "tool_name": "search_replace",
+                        "success": False,
+                        "summary": f"File not found: {path}"
+                    }
+                
+                with open(file_path, 'r') as f:
+                    content = f.read()
+                
+                if old_string not in content:
+                    return {
+                        "tool_name": "search_replace",
+                        "success": False,
+                        "summary": f"String not found in file: {old_string[:50]}..."
+                    }
+                
+                new_content = content.replace(old_string, new_string, 1)
+                
+                with open(file_path, 'w') as f:
+                    f.write(new_content)
+                
+                return {
+                    "tool_name": "search_replace",
+                    "success": True,
+                    "summary": f"Replaced text in {path}",
+                    "path": str(file_path)
+                }
+            except Exception as e:
+                return {
+                    "tool_name": "search_replace",
+                    "success": False,
+                    "summary": f"Error replacing text: {e}"
+                }
+
+        def bash(args: dict) -> dict:
+            command = args.get("command", "")
+
+            try:
+                result = subprocess.run(  # noqa: S602
+                    command,
+                    check=False,
+                    shell=True,
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                    cwd=str(Path(__file__).parent / "agent_config/context")
+                )
+
+                output = result.stdout + result.stderr
+
+                return {
+                    "tool_name": "bash",
+                    "success": result.returncode == 0,
+                    "summary": f"Executed command: {command}",
+                    "output": output.strip(),
+                    "command": command,
+                    "return_code": result.returncode
+                }
+            except subprocess.TimeoutExpired:
+                return {
+                    "tool_name": "bash",
+                    "success": False,
+                    "summary": "Command timed out after 30 seconds"
+                }
+            except Exception as e:
+                return {
+                    "tool_name": "bash",
+                    "success": False,
+                    "summary": f"Error executing command: {e}"
+                }
+
+        self.tools.append({
+            "name": "glob_file_search",
+            "description": "Search for files matching a pattern in the context directory. Uses find command with glob patterns.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "pattern": {
+                        "type": "string",
+                        "description": "Glob pattern to match files (e.g., '*.md', 'vizgen*')"
+                    },
+                    "base_path": {
+                        "type": "string",
+                        "description": "Base path to search in. Defaults to 'agent_config/context'. Can be relative or absolute."
+                    }
+                },
+                "required": ["pattern"]
+            }
+        })
+        self.tool_map["glob_file_search"] = glob_file_search
+
+        self.tools.append({
+            "name": "grep",
+            "description": "Search for text patterns in files using grep. Returns matches with line numbers.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "pattern": {
+                        "type": "string",
+                        "description": "Text pattern to search for (supports regex)"
+                    },
+                    "path": {
+                        "type": "string",
+                        "description": "File or directory path to search in. Defaults to 'agent_config/context'."
+                    },
+                    "case_insensitive": {
+                        "type": "boolean",
+                        "description": "Whether to perform case-insensitive search. Defaults to false."
+                    }
+                },
+                "required": ["pattern"]
+            }
+        })
+        self.tool_map["grep"] = grep
+
+        self.tools.append({
+            "name": "read_file",
+            "description": "Read contents of a file with optional offset and limit for large files. Returns numbered lines.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Path to the file to read (relative to agent directory or absolute)"
+                    },
+                    "offset": {
+                        "type": "integer",
+                        "description": "Line number to start reading from (0-indexed). Defaults to 0."
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of lines to read. If not provided, reads to end of file."
+                    }
+                },
+                "required": ["path"]
+            }
+        })
+        self.tool_map["read_file"] = read_file
+
+        self.tools.append({
+            "name": "search_replace",
+            "description": "Replace the first occurrence of a string in a file with another string. Useful for editing files or maintaining state.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Path to the file to edit"
+                    },
+                    "old_string": {
+                        "type": "string",
+                        "description": "Exact string to find and replace"
+                    },
+                    "new_string": {
+                        "type": "string",
+                        "description": "String to replace with"
+                    }
+                },
+                "required": ["path", "old_string", "new_string"]
+            }
+        })
+        self.tool_map["search_replace"] = search_replace
+
+        self.tools.append({
+            "name": "bash",
+            "description": "Execute a bash command in the context directory. Useful for exploring files and directories.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "command": {
+                        "type": "string",
+                        "description": "Bash command to execute (runs in agent_config/context directory)"
+                    }
+                },
+                "required": ["command"]
+            }
+        })
+        self.tool_map["bash"] = bash
+
         if len(self.tools) > 0:
             self.tools[-1]["cache_control"] = {"type": "ephemeral"}
 
@@ -2007,7 +2334,15 @@ class AgentHarness:
                 default_headers={"Authorization": auth_token_sdk, "Pod-Id": str(pod_id)}
             )
 
-            self.system_prompt = build_system_prompt()
+            index_path = Path(__file__).parent / "agent_config" / "context" / "index.md"
+            index_content = index_path.read_text()
+
+            instruction_parts = []
+            if index_content:
+                instruction_parts.append(f"<documentation_index>\n{index_content}\n</documentation_index>\n")
+            instruction_parts.append(system_instruction)
+
+            self.system_prompt = "\n".join(instruction_parts)
 
             messages = await self._build_messages_from_db()
             await self._close_pending_tool_calls(
