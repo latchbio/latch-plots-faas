@@ -1,0 +1,15 @@
+{
+  "id": "drg_neuron_t1",
+  "task": "Assign exactly one cluster the label 'neuron' using only spatial ATAC gene activity/gene scores from adata and cluster IDs in adata.obs['cluster'].\n\nYou must:\n1. Load and examine the AnnData object\n2. Identify marker genes for neurons (SNAP25, CALCA, SCN10A)\n3. Compute expression statistics for these markers across all clusters\n4. Choose the cluster with the strongest neuron signature\n5. Sample approximately 50 cells from your chosen cluster\n6. Sample approximately 50 cells from other clusters (combined)\n7. Compute median expression per cluster for the marker genes\n\nOutput your final answer in the following format:\n<EVAL_ANSWER>\n{\n  \"label\": \"neuron\",\n  \"chosen_cluster\": \"<cluster_id>\",\n  \"samples_chosen\": [\n    {\"SNAP25\": 4.2, \"CALCA\": 3.1, \"SCN10A\": 5.6},\n    ...\n  ],\n  \"samples_other\": [\n    {\"SNAP25\": 1.2, \"CALCA\": 0.8, \"SCN10A\": 1.1},\n    ...\n  ],\n  \"cluster_medians\": {\n    \"cluster_0\": {\"SNAP25\": 4.2, \"CALCA\": 3.1, \"SCN10A\": 5.6},\n    \"cluster_1\": {\"SNAP25\": 1.2, \"CALCA\": 0.8, \"SCN10A\": 1.1},\n    ...\n  }\n}\n</EVAL_ANSWER>\n\nIMPORTANT: Include the complete samples_chosen, samples_other arrays (50 cells each) and cluster_medians for all clusters.",
+  "data_node": "latch://38438.account/AtlasxOmics/Human_DRG_Price_plotsLite/combined_sm_ge.h5ad",
+  "grader": {
+    "type": "cell_typing",
+    "config": {
+      "markers": ["SNAP25", "CALCA", "SCN10A"],
+      "thresholds": {
+        "auroc": 0.75,
+        "gap_ratio": 1.15
+      }
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+    "id": "hsc_typing_1",
+    "task": "Identify hepatic stellate cells",
+    "data_node": "latch://38438.account/AtlasxOmics/Kosta/Kostallari_SOW313_ATAC",
+    "judge_prompt": "Evaluate whether the agent successfully finds and labels hepatic stellate cells. \n\n    Check:\n    1. Load and visualize gene activity score file with `w_h5` widget. \n    2. Ask a question to confirm organism and tissue type.\n    2. Create a form with a button to collect cell types and marker genes from users. The form is populated with sensible defaults. \n    3. Perform gene set scoring using `scanpy.tl.score_genes`.\n    4. Add new label for cell type to `adata.obs`."
+}
