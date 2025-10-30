@@ -646,7 +646,7 @@ class AgentHarness:
                 "success": False,
             }
 
-        async def submit_response(args: dict) -> dict:
+        def submit_response(args: dict) -> dict:
             try:
                 summary = args.get("summary")
                 if summary is not None and not isinstance(summary, str):
@@ -1749,45 +1749,64 @@ class AgentHarness:
                     "summary": f"Error reading file: {e}"
                 }
 
-        async def search_replace(args: dict) -> dict:
+        def search_replace(args: dict) -> dict:
             path = args.get("path", "")
             old_string = args.get("old_string", "")
             new_string = args.get("new_string", "")
-            
+
             try:
-                from pathlib import Path
                 if not Path(path).is_absolute():
                     file_path = Path(__file__).parent / path
                 else:
                     file_path = Path(path)
-                
+
                 if not file_path.exists():
                     return {
                         "tool_name": "search_replace",
                         "success": False,
                         "summary": f"File not found: {path}"
                     }
-                
-                with open(file_path, 'r') as f:
-                    content = f.read()
-                
-                if old_string not in content:
+
+                check_result = subprocess.run(
+                    ["/usr/bin/grep", "-F", old_string, str(file_path)],
+                    capture_output=True,
+                    text=True,
+                    check=False
+                )
+
+                if check_result.returncode != 0:
                     return {
                         "tool_name": "search_replace",
                         "success": False,
                         "summary": f"String not found in file: {old_string[:50]}..."
                     }
-                
-                new_content = content.replace(old_string, new_string, 1)
-                
-                with open(file_path, 'w') as f:
-                    f.write(new_content)
-                
+
+                result = subprocess.run(
+                    [
+                        "/usr/bin/perl", "-i.bak", "-pe",
+                        f"BEGIN{{$count=0}} s/\\Q{old_string}\\E/{new_string}/ if $count++ == 0",
+                        str(file_path)
+                    ],
+                    capture_output=True,
+                    text=True,
+                    check=False
+                )
+
+                backup_file = Path(str(file_path) + ".bak")
+                if backup_file.exists():
+                    backup_file.unlink()
+
+                if result.returncode == 0:
+                    return {
+                        "tool_name": "search_replace",
+                        "success": True,
+                        "summary": f"Replaced text in {path}",
+                        "path": str(file_path)
+                    }
                 return {
                     "tool_name": "search_replace",
-                    "success": True,
-                    "summary": f"Replaced text in {path}",
-                    "path": str(file_path)
+                    "success": False,
+                    "summary": f"perl command failed: {result.stderr}"
                 }
             except Exception as e:
                 return {
