@@ -291,6 +291,10 @@ class AgentHarness:
             )
 
         elif msg_type == "cell_result":
+            if self.current_request_id is None:
+                print(f"[agent] Ignoring cell_result for {msg.get('cell_id')} - no active request")
+                return
+
             cell_id = msg["cell_id"]
             success = msg.get("success", True)
             cell_name = msg.get("display_name", None)
@@ -2085,6 +2089,7 @@ class AgentHarness:
         self.current_request_id = None
         self.should_auto_continue = False
         self.pending_auto_continue = False
+        self.executing_cells.clear()
 
         await self._close_pending_tool_calls(
             error_message="Request cancelled by user",
@@ -2123,6 +2128,10 @@ class AgentHarness:
             await self.handle_action_response(msg)
         elif msg_type == "kernel_message":
             print(f"[agent] Kernel message: {msg}")
+
+            if self.current_request_id is None:
+                print(f"[agent] Ignoring kernel_message - no active request")
+                return
 
             nested_msg = msg.get("message", {})
             nested_type = nested_msg.get("type")
