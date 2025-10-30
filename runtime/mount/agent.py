@@ -369,24 +369,17 @@ class AgentHarness:
                 })
 
         elif msg_type == "widget_values_updated":
-            keys = msg.get("keys", [])
-            values = msg.get("values", {})
-            
-            widget_message = f"Widget values updated: {', '.join(keys)}"
-            widget_content = {
-                "type": "widget_values_updated",
-                "message": widget_message,
-                "keys": keys,
-                "values": values,
-            }
+            keys = [str(k) for k in msg.get("keys", [])]
             print(f"[agent] Widget update triggered turn: {keys}")
+            
+            keys_str = ', '.join(keys) if keys else "unknown widget keys"
             
             await self._insert_history(
                 event_type="anthropic_message",
                 payload={
                     "type": "anthropic_message",
                     "role": "user",
-                    "content": widget_content,
+                    "content": f"User provided input via widget key(s): {keys_str}. Continue with your plan.",
                     "timestamp": int(time.time() * 1000),
                 },
             )
