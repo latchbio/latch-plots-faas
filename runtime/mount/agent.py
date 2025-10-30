@@ -62,6 +62,7 @@ class AgentHarness:
     system_prompt: str = ""
     agent_session_id: int | None = None
     latest_notebook_context: dict = field(default_factory=dict)
+    current_status: str = "thinking"
 
     mode_config: dict[Mode, tuple[str, int | None]] = field(default_factory=lambda: {
         Mode.planning: ("claude-sonnet-4-5-20250929", 4096),
@@ -339,6 +340,29 @@ class AgentHarness:
                     "request_id": self.current_request_id,
                     "hidden": True,
                 })
+
+        elif msg_type == "widget_values_updated":
+            keys = msg.get("keys", [])
+            values = msg.get("values", {})
+            
+            widget_message = f"Widget values updated: {', '.join(keys)}"
+            widget_content = {
+                "type": "widget_values_updated",
+                "message": widget_message,
+                "keys": keys,
+                "values": values,
+            }
+            print(f"[agent] Widget update triggered turn: {keys}")
+            
+            await self._insert_history(
+                event_type="anthropic_message",
+                payload={
+                    "type": "anthropic_message",
+                    "role": "user",
+                    "content": widget_content,
+                    "timestamp": int(time.time() * 1000),
+                },
+            )
 
         elif msg_type == "stop":
             self.conversation_running = False
@@ -689,6 +713,9 @@ class AgentHarness:
                 else:
                     self.should_auto_continue = should_continue
                     self.pending_auto_continue = False
+
+                # Track current status for wake-up logic
+                self.current_status = next_status
 
                 return {
                     "tool_name": "submit_response",
@@ -2203,10 +2230,17 @@ class AgentHarness:
             elif nested_type == "widget_values_updated":
                 keys = nested_msg.get("keys", [])
                 values = nested_msg.get("values", {})
-                if values:
-                    print(f"[agent] Widget values updated: {keys} with values")
+                
+                # Wake agent if waiting for user widget input (any widget change counts)
+                if self.current_status == "awaiting_user_widget_input":
+                    print(f"[agent] Widget values updated: {keys} - waking agent (awaiting widget input)")
+                    await self.pending_messages.put({
+                        "type": "widget_values_updated",
+                        "keys": keys,
+                        "values": values
+                    })
                 else:
-                    print(f"[agent] Widget values updated: {keys}")
+                    print(f"[agent] Widget values updated: {keys} (no wake - not awaiting widget input)")
         else:
             print(f"[agent] Unknown message type: {msg_type}")
 
