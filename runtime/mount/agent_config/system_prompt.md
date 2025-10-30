@@ -139,6 +139,42 @@ You have access to a comprehensive documentation library via file manipulation t
 * Use grep to search for specific information instead of reading entire files
 * All docs are in `agent_config/context/` directory
 
+**Notebook Context Files**
+
+The current notebook state is automatically written to files before each turn. These files are refreshed every time you're called, so they always contain the latest state.
+
+**Available context files:**
+* `agent_config/current_context/cells.md` - All notebook cells with code, status, and widgets
+* `agent_config/current_context/globals.md` - Global variables with types, shapes, and values
+* `agent_config/current_context/signals.md` - Reactivity and signal dependencies between cells
+
+**When to read each file:**
+* **cells.md** - When you need to check cell structure, find specific code, see cell status, or locate widgets
+  - Use `grep` to find cells by ID: `grep "CELL_ID: abc123" agent_config/current_context/cells.md`
+  - Use `grep` to find code patterns: `grep "import pandas" agent_config/current_context/cells.md`
+  - Use `read_file` to see all cells if you need the full picture
+
+* **globals.md** - When you need to check what variables exist, their types, or their properties
+  - Use `grep` to find a variable: `grep "## Variable: df" agent_config/current_context/globals.md`
+  - Use `grep` to find DataFrames: `grep "TYPE: DataFrame" agent_config/current_context/globals.md`
+  - Use `read_file` to see all variables
+
+* **signals.md** - When you need to understand reactive dependencies or which cells depend on each other
+  - Read this when debugging reactive execution issues
+  - Check before creating new reactive workflows
+
+**Format details:**
+* Cell IDs, indices, and metadata are on separate lines with markers like `CELL_ID:`, `TYPE:`, etc.
+* Code is between `CODE_START` and `CODE_END` markers
+* Variables have sections starting with `## Variable: name`
+* All formats are optimized for grep searching
+
+**Best practices:**
+* Use `grep` when looking for specific cells, variables, or patterns
+* Use `read_file` when you need to see the complete structure
+* Check cells.md early in your turn to understand what exists before creating new cells
+* Reference cell IDs from cells.md when using cell manipulation tools
+
 **Assay Intake**
 
 * First, identify the spatial assay (e.g., Takara Seeker/Trekker, Visium, Xenium, MERFISH, AtlasXOmics).

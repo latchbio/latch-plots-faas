@@ -1944,89 +1944,85 @@ class AgentHarness:
         if len(self.tools) > 0:
             self.tools[-1]["cache_control"] = {"type": "ephemeral"}
 
-    async def _get_notebook_context(self) -> str:
+    async def _write_notebook_context_files(self) -> None:
         context_result, globals_result, reactivity_result = await asyncio.gather(
             self.atomic_operation("get_context"),
             self.atomic_operation("request_globals_summary"),
             self.atomic_operation("request_reactivity_summary")
         )
 
-        if context_result.get("status") != "success":
-            return f"Failed to get context: {context_result.get('error', 'Unknown error')}"
+        context_dir = Path(__file__).parent / "agent_config" / "current_context"
+        context_dir.mkdir(parents=True, exist_ok=True)
 
-        context = context_result.get("context", {})
-        self.latest_notebook_context = context
+        if context_result.get("status") == "success":
+            context = context_result.get("context", {})
+            self.latest_notebook_context = context
 
-        cell_count = context.get("cell_count", 0)
-        cells = context.get("cells", [])
+            cell_count = context.get("cell_count", 0)
+            cells = context.get("cells", [])
 
-        globals_data: dict[str, object] | None = None
+            cell_lines = ["# Notebook Cells", f"\nTotal cells: {cell_count}\n"]
+
+            for cell in cells:
+                index = cell.get("index", "?")
+                cell_id = cell.get("cell_id", "?")
+                cell_type = cell.get("cell_type", "unknown")
+                source = cell.get("source")
+                status = cell.get("status", "idle")
+                tf_id = cell.get("tf_id", None)
+
+                cell_lines.append(f"\n## Cell [{index}]")  # noqa: FURB113
+                cell_lines.append(f"CELL_ID: {cell_id}")
+                cell_lines.append(f"CELL_INDEX: {index}")
+                cell_lines.append(f"TYPE: {cell_type}")
+                cell_lines.append(f"STATUS: {status}")
+                if tf_id is not None:
+                    cell_lines.append(f"CODE_CELL_ID: {tf_id}")
+
+                if source is not None:
+                    cell_lines.append("CODE_START")  # noqa: FURB113
+                    cell_lines.append(source)
+                    cell_lines.append("CODE_END")
+
+                widgets = cell.get("widgets")
+                if widgets is not None:
+                    cell_lines.append("\nWIDGETS:")
+                    for w in widgets:
+                        w_type = w.get("type", "unknown")
+                        w_key = w.get("key", "")
+                        w_label = w.get("label", "")
+                        cell_lines.append(f"- WIDGET: {w_type} | {w_label} | {w_key}")
+
+            (context_dir / "cells.md").write_text("\n".join(cell_lines))
+
         if globals_result.get("status") == "success":
             globals_data = globals_result.get("summary", {})
 
-        reactivity_summary: str | None = None
+            if len(globals_data) > 0:
+                global_lines = ["# Global Variables", f"\nTotal: {len(globals_data)} variables\n"]
+
+                for var_name in sorted(globals_data.keys()):
+                    var_info = globals_data[var_name]
+
+                    global_lines.append(f"\n## Variable: {var_name}")
+
+                    if not isinstance(var_info, dict):
+                        global_lines.append(f"VALUE: {var_info}")
+                        continue
+
+                    for key, value in var_info.items():
+                        global_lines.append(f"{key.upper()}: {value}")
+
+                (context_dir / "globals.md").write_text("\n".join(global_lines))
+            else:
+                (context_dir / "globals.md").write_text("# Global Variables\n\nNo global variables defined.\n")
+
         if reactivity_result.get("status") == "success":
             reactivity_summary = reactivity_result.get("summary")
-
-        sections = []
-
-        cell_section = ["## Notebook Cells", f"\nTotal: {cell_count} cells\n"]
-
-        for cell in cells:
-            index = cell.get("index", "?")
-            cell_id = cell.get("cell_id", "?")
-            cell_type = cell.get("cell_type", "unknown")
-            source = cell.get("source", "")
-            status = cell.get("status", "idle")
-            tf_id = cell.get("tf_id", None)
-
-            cell_section += [
-                f"\n### Cell [{index}] (ID: {cell_id})" + (f", (Code cell ID: {tf_id})" if tf_id is not None else ""),
-                f"Type: {cell_type}",
-                f"Status: {status}",
-            ]
-
-            if source is not None:
-                source_display = source[:800] if len(source) > 800 else source
-                truncated = " [TRUNCATED]" if len(source) > 800 else ""
-                cell_section.append(f"```python\n{source_display}\n```{truncated}")
-
-            widgets = cell.get("widgets", None)
-            if widgets is not None:
-                widget_strs = []
-                for w in widgets:
-                    w_type = w.get("type", "unknown")
-                    w_key = w.get("key", "")
-                    w_label = w.get("label", "")
-                    if w_label:
-                        widget_strs.append(f"{w_type} ({w_label}) [{w_key}]")
-                    else:
-                        widget_strs.append(f"{w_type} [{w_key}]")
-                if widget_strs:
-                    cell_section.append(f"Widgets: {', '.join(widget_strs)}")
-
-        sections.append("\n".join(cell_section))
-
-        if globals_data is not None and len(globals_data) > 0:
-            global_section = ["\n## Global Variables", f"\nTotal: {len(globals_data)} variables\n"]
-
-            for var_name in sorted(globals_data.keys()):
-                var_info = globals_data[var_name]
-                if isinstance(var_info, dict):
-                    var_type = var_info.get("type", "unknown")
-                    global_section.append(f"\n**{var_name}** ({var_type})")
-                    for key, value in var_info.items():
-                        if key != "type":
-                            global_section.append(f"  - {key}: {value}")
-                else:
-                    global_section.append(f"\n**{var_name}**: {var_info}")
-
-            sections.append("\n".join(global_section))
-
-        if reactivity_summary is not None:
-            sections.append(reactivity_summary)
-
-        return "\n\n".join(sections)
+            if reactivity_summary is not None:
+                (context_dir / "signals.md").write_text(reactivity_summary)
+            else:
+                (context_dir / "signals.md").write_text("# Reactivity Summary\n\nNo reactive dependencies in this notebook.\n")
 
     async def run_agent_loop(self) -> None:
         assert self.client is not None, "Client not initialized"
@@ -2084,15 +2080,13 @@ class AgentHarness:
                                 can_use_thinking = False
                                 print(f"[agent] Cannot use thinking API: last assistant message starts with {first_block_type}, not thinking")
 
+            await self._write_notebook_context_files()
+
             system_blocks = [
                 {
                     "type": "text",
                     "text": self.system_prompt,
                     "cache_control": {"type": "ephemeral"}
-                },
-                {
-                    "type": "text",
-                    "text": f"<notebook_context>\n{await self._get_notebook_context()}\n</notebook_context>",
                 }
             ]
 

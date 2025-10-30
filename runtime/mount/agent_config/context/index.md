@@ -92,15 +92,31 @@ All paths below are relative to `agent_config/context/`.
 
 **Location**: `current_context/`
 
-**When to use**: You can create files here to maintain state, take notes, or store information across turns.
+**When to use**: These files are automatically refreshed before each turn with the latest notebook state.
 
-**Potential uses**:
+### Automatically Generated Files
+
+**`cells.md`** - Notebook cell structure
+**Read when**: Need to check what cells exist, find specific code, see cell status, or locate widgets
+**Contents**: All notebook cells with searchable markers (CELL_ID, CELL_INDEX, TYPE, STATUS). Code is between CODE_START/CODE_END markers. Optimized for grep searching.
+**Refresh**: Automatic before each turn
+
+**`globals.md`** - Global variables
+**Read when**: Need to check what variables exist, their types, shapes, or properties  
+**Contents**: All global variables with TYPE, SHAPE, COLUMNS, DTYPES, etc. Each variable has its own section starting with `## Variable: name`. Optimized for grep searching.
+**Refresh**: Automatic before each turn
+
+**`signals.md`** - Reactivity and dependencies
+**Read when**: Need to understand which cells depend on each other or debug reactive execution
+**Contents**: Signal dependencies between cells, widget signals, and global variable signals. Shows which cells subscribe to which signals.
+**Refresh**: Automatic before each turn
+
+### Additional Uses
+
+You can also create your own files here via search_replace to:
 - Maintain a running log of analysis steps
-- Store notebook state summaries
-- Track globals/variables across cells
 - Keep notes on user preferences or decisions
-
-This directory is currently empty but available for your use via the search_replace and bash tools.
+- Store temporary state across turns
 
 ---
 
@@ -148,9 +164,15 @@ This directory is currently empty but available for your use via the search_repl
 
 | Topic | File | Key Triggers |
 |-------|------|--------------|
+| **Runtime Context** | | **Auto-refreshed each turn** |
+| Notebook cells | current_context/cells.md | Check cells, find code, cell status |
+| Global variables | current_context/globals.md | Check variables, types, shapes |
+| Reactivity | current_context/signals.md | Understand dependencies |
+| **Technology Workflows** | | |
 | Vizgen MERFISH | technology_docs/vizgen_workflow.md | "Vizgen", "MERFISH", "Merscope" |
 | AtlasXOmics | technology_docs/atlasxomics.md | "AtlasXOmics", "AtlasX", "spatial ATAC" |
 | Takara | technology_docs/takara_workflow.md | "Takara", "Seeker", "Trekker" |
+| **Latch APIs** | | |
 | Remote files | latch_api_docs/lpath.md | "latch://", LPath, remote files |
 | Widgets | latch_api_docs/plots_docs/widget-types.mdx | w_select, w_ldata_picker, user input |
 | Plotting | latch_api_docs/plots_docs/custom-plots.mdx | matplotlib, plotly, w_plot |
