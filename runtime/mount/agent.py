@@ -13,7 +13,6 @@ from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 
-from agent_config.prompts import system_instruction
 from agent_utils.auto_install import anthropic
 from anthropic.types import MessageParam, ToolParam
 from anthropic.types.beta.beta_message import BetaMessage
@@ -2337,10 +2336,13 @@ class AgentHarness:
             index_path = Path(__file__).parent / "agent_config" / "context" / "index.md"
             index_content = index_path.read_text()
 
+            system_prompt_path = Path(__file__).parent / "agent_config" / "system_prompt.md"
+            system_prompt = system_prompt_path.read_text()
+
             instruction_parts = []
             if index_content:
                 instruction_parts.append(f"<documentation_index>\n{index_content}\n</documentation_index>\n")
-            instruction_parts.append(system_instruction)
+            instruction_parts.append(system_prompt)
 
             self.system_prompt = "\n".join(instruction_parts)
 

@@ -155,6 +155,3 @@ This directory is currently empty but available for your use via the search_repl
 | Widgets | latch_api_docs/plots_docs/widget-types.mdx | w_select, w_ldata_picker, user input |
 | Plotting | latch_api_docs/plots_docs/custom-plots.mdx | matplotlib, plotly, w_plot |
 | Signals | latch_api_docs/plots_docs/reactivity.mdx | Signal, reactivity, cross-cell dependencies |
-
-
-
