@@ -71,6 +71,8 @@ class AgentHarness:
         Mode.executing: ("claude-sonnet-4-5-20250929", 1024),
         Mode.debugging: ("claude-sonnet-4-5-20250929", 2048),
     })
+    
+    last_widget_update_time: float = 0.0  # Debounce rapid widget updates
 
     async def send(self, msg: dict[str, object]) -> None:
         msg_type = msg.get("type", "unknown")
@@ -370,6 +372,14 @@ class AgentHarness:
 
         elif msg_type == "widget_values_updated":
             keys = [str(k) for k in msg.get("keys", [])]
+            
+            # Debounce rapid widget updates (e.g., lasso dragging)
+            now = time.time()
+            if now - self.last_widget_update_time < 1.5:
+                print(f"[agent] Widget update debounced: {keys} (last update {now - self.last_widget_update_time:.2f}s ago)")
+                return
+            
+            self.last_widget_update_time = now
             print(f"[agent] Widget update triggered turn: {keys}")
             
             keys_str = ', '.join(keys) if keys else "unknown widget keys"
