@@ -24,6 +24,7 @@ import websockets
 from eval_types import TestCase, TestResult
 from judge import LLMJudge
 from run_local_eval import get_eval_config
+from binary_grader import GRADER_REGISTRY
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent.parent))
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
@@ -478,6 +479,28 @@ async def run_eval(test_case: TestCase, port: int, latch_dir: Path) -> TestResul
         notebook_state=notebook_state,
         duration_ms=duration_ms,
     )
+
+    if test_case.grader:
+        print("[eval] Running binary grader...")
+        grader_type = test_case.grader.get("type")
+        grader_config = test_case.grader.get("config", {})
+
+        if grader_type in GRADER_REGISTRY:
+            grader_cls = GRADER_REGISTRY[grader_type]
+            grader = grader_cls()
+            grader_result = grader.evaluate(test_result, grader_config)
+
+            test_result.grader_result = {
+                "passed": grader_result.passed,
+                "metrics": grader_result.metrics,
+                "reasoning": grader_result.reasoning,
+                "agent_answer": grader_result.agent_answer
+            }
+
+            print(f"[eval] Grader result: {'PASS' if grader_result.passed else 'FAIL'}")
+            print(f"[eval] Grader reasoning:\n{grader_result.reasoning}")
+        else:
+            print(f"[eval] Warning: Unknown grader type '{grader_type}'")
 
     print(f"\n[eval] Eval completed in {duration_ms / 1000:.2f}s")
     print(f"[eval] Total conversation turns: {len(conversation_history)}")

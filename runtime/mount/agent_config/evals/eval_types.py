@@ -13,7 +13,8 @@ class TestCase(BaseModel):
     id: str
     task: str
     data_node: str | None = None
-    judge_prompt: str
+    judge_prompt: str | None = None
+    grader: dict | None = None
 
 
 class TestResult(BaseModel):
@@ -22,3 +23,4 @@ class TestResult(BaseModel):
     notebook_state: dict
     duration_ms: float
     eval_result: EvalResult | None = None
+    grader_result: dict | None = None
