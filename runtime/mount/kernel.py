@@ -1857,6 +1857,7 @@ class Kernel:
                 )
 
         if msg["type"] == "set_widget_value":
+            print(f"[kernel] Received set_widget_value: {list(msg['data'].keys())}")
             updated_keys = []
             for w_key, payload in msg["data"].items():
                 try:
@@ -1882,6 +1883,7 @@ class Kernel:
                 if aligner_values:
                     message["values"] = aligner_values
                 
+                print(f"[kernel] Sending widget_values_updated: {updated_keys}")
                 await self.send(message)
             return
 
