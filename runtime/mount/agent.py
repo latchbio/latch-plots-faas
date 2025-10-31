@@ -63,7 +63,6 @@ class AgentHarness:
     pending_messages: asyncio.Queue = field(default_factory=asyncio.Queue)
     conversation_task: asyncio.Task | None = None
     conversation_running: bool = False
-    system_prompt: str = ""
     agent_session_id: int | None = None
     latest_notebook_context: dict = field(default_factory=dict)
 
@@ -2136,10 +2135,13 @@ class AgentHarness:
 
             await self._write_notebook_context_files()
 
+            system_prompt_path = context_root.parent / "system_prompt.md"
+            system_prompt = system_prompt_path.read_text()
+
             system_blocks = [
                 {
                     "type": "text",
-                    "text": self.system_prompt,
+                    "text": system_prompt,
                     "cache_control": {"type": "ephemeral"}
                 }
             ]
@@ -2385,9 +2387,6 @@ class AgentHarness:
                 base_url=f"{nucleus_url}/infer/plots-agent/anthropic",
                 default_headers={"Authorization": auth_token_sdk, "Pod-Id": str(pod_id)}
             )
-
-            system_prompt_path = context_root.parent / "system_prompt.md"
-            self.system_prompt = system_prompt_path.read_text()
 
             messages = await self._build_messages_from_db()
             await self._close_pending_tool_calls(

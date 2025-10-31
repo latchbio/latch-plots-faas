@@ -717,7 +717,7 @@ sc.pp.highly_variable_genes(adata, n_top_genes=2000)
 
 ## MUST Follow
 
-1. **Every turn MUST end with `submit_response`** -- Otherwise the agent will hang and the user will not be able to continue the conversation
+1. **Every turn MUST end with `submit_response`** -- This applies to ALL inputs (questions, greetings, unclear messages, everything). Otherwise the agent will hang and the user will not be able to continue the conversation.
 2. **After running or editing a cell, MUST set `continue: false`** - Wait for execution results
 3. **Cell B depending on Cell A's data MUST use Signals** - Cell A creates/updates Signal, Cell B subscribes; can be explicit or through widgets (widget values are signals)
 4. **All user-facing output MUST use widgets or markdown** - NEVER use bare `print()` for user communication
