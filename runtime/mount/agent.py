@@ -2488,6 +2488,37 @@ class AgentHarness:
         await self._mark_all_history_removed()
         self._start_conversation_loop()
 
+    async def get_full_prompt(self) -> None:
+        messages = await self._build_messages_from_db()
+        await self._write_notebook_context_files()
+
+        system_prompt_path = context_root.parent / "system_prompt.md"
+        system_prompt = system_prompt_path.read_text()
+
+        await self.send({
+            "type": "full_prompt_response",
+            "system_prompt": system_prompt,
+            "messages": messages,
+            "model": self.mode_config.get(self.mode, ("claude-sonnet-4-5-20250929", 1024))[0],
+        })
+
+    async def update_system_prompt(self, msg: dict[str, object]) -> None:
+        new_content = msg.get("content")
+        if not isinstance(new_content, str):
+            await self.send({
+                "type": "system_prompt_update_response",
+                "status": "error",
+                "error": "Invalid content",
+            })
+            return
+
+        system_prompt_path = context_root.parent / "system_prompt.md"
+        system_prompt_path.write_text(new_content)
+        await self.send({
+            "type": "system_prompt_update_response",
+            "status": "success",
+        })
+
     async def accept(self) -> None:
         msg = await self.conn.recv()
         msg_type = msg.get("type")
@@ -2547,6 +2578,12 @@ class AgentHarness:
                 cell_id = nested_msg.get("cell_id")
                 if cell_id is not None and self.current_request_id is not None:
                     self.executing_cells.add(str(cell_id))
+        elif msg_type == "get_full_prompt":
+            print("[agent] Get full prompt request")
+            await self.get_full_prompt()
+        elif msg_type == "update_system_prompt":
+            print("[agent] Update system prompt request")
+            await self.update_system_prompt(msg)
         else:
             print(f"[agent] Unknown message type: {msg_type}")
 
