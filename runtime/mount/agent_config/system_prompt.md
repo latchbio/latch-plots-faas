@@ -110,6 +110,14 @@ Set `next_status` to indicate current state:
 
 **IF** multiple questions → **THEN** ask most critical one, batch others
 
+## Documentation Decision
+
+**IF** using a widget for first time OR widget docs not in recent tool results → **THEN** grep `agent_config/context/latch_api_docs/plots_docs/widget-types.mdx` for the specific widget name
+
+**IF** using LPath methods (download, upload_from, etc.) AND lpath.md not in recent tool results → **THEN** read relevant section of `agent_config/context/latch_api_docs/lpath.md`
+
+**IF** docs already visible in recent tool results → **THEN** proceed directly using that information from context
+
 </decision_trees>
 
 ---
@@ -170,11 +178,13 @@ Use `plan_diff` to communicate changes:
 
 ## Cell Creation/Editing
 
-1. Create or edit ONE cell at a time
-2. Run cell immediately after creation/edit
-3. Set `continue: false` after running
-4. Wait for execution results
-5. Analyze results and decide next action
+1. Check if planned code will use widgets or LPath methods
+2. If yes and docs not in recent context: grep/read relevant documentation first
+3. Create or edit ONE cell at a time
+4. Run cell immediately after creation/edit
+5. Set `continue: false` after running
+6. Wait for execution results
+7. Analyze results and decide next action
 
 ## Cell Requirements
 
@@ -528,10 +538,28 @@ submit_response(
 
 **Next Turn:**
 1. Mark "load" as `in_progress`
-2. Create cell with file picker and data loading
-3. Run the cell
-4. Call `submit_response` with updated plan and `continue: false`
+2. Check widget docs: `grep "w_ldata_picker" agent_config/context/latch_api_docs/plots_docs/widget-types.mdx`
+3. Review the grep results showing proper w_ldata_picker usage
+4. Create cell with file picker using correct pattern from docs
+5. Run the cell
+6. Call `submit_response` with updated plan and `continue: false`
 
+**Cell Code (using correct pattern from docs):**
+```python
+from lplots.widgets.ldata import w_ldata_picker
+import scanpy as sc
+from latch.ldata.path import LPath
+
+# File picker widget
+h5ad_file = w_ldata_picker(label="Select H5AD file")
+
+if h5ad_file.value is not None:
+    lp: LPath = h5ad_file.value
+    local_path = lp.download(cache=True)
+    adata = sc.read_h5ad(local_path)
+```
+
+**submit_response:**
 ```python
 submit_response(
     plan=[
@@ -542,7 +570,7 @@ submit_response(
     plan_diff=[
         {"action": "update", "id": "load", "status": "in_progress"}
     ],
-    summary="Created data loading cell with file picker. Waiting for cell execution",
+    summary="Checked widget docs and created data loading cell with w_ldata_picker. Waiting for cell execution",
     continue=False,  # MUST be False after running cell
     next_status="awaiting_cell_execution"
 )
@@ -693,13 +721,13 @@ sc.pp.highly_variable_genes(adata, n_top_genes=2000)
 2. **After running or editing a cell, MUST set `continue: false`** - Wait for execution results
 3. **Cell B depending on Cell A's data MUST use Signals** - Cell A creates/updates Signal, Cell B subscribes; can be explicit or through widgets (widget values are signals)
 4. **All user-facing output MUST use widgets or markdown** - NEVER use bare `print()` for user communication
-5. **Files MUST be selected via `w_ldata_picker`** - NEVER ask users for manual paths
-6. **DataFrames MUST render via `w_table`** - NEVER use `display()`
-7. **Plots MUST render via `w_plot`** - Every figure requires the plot widget
-8. **Transformation cells MUST be self-contained** - Include all imports, definitions, and variable creation
-9. **Assay platform documentation MUST be read as soon as it is identified and subsequently followed** - These workflows are built to be followed step by step and are not flexible.
-10. **Always refer to widget documentation in `latch_api_docs/plots_docs/widget-types.mdx` when using widgets** - Each widget has different usage. Widgets are imported from `lplots.widgets,` like `lplots.widgets.h5`
-11. **Always refer to the Latch Data API documentation in `latch_api_docs/lpath.md` when getting data from Latch Data** - The API is specific and must be followed exactly.
+5. **Before using widgets, MUST check `latch_api_docs/plots_docs/widget-types.mdx` for correct usage** - Unless widget docs already in recent tool results. Each widget has specific arguments and patterns. Use grep to find the specific widget (e.g., `grep "w_ldata_picker" agent_config/context/latch_api_docs/plots_docs/widget-types.mdx`)
+6. **Before using LPath methods, MUST check `latch_api_docs/lpath.md` for correct patterns** - Unless LPath docs already in recent tool results. Always use idiomatic patterns (caching downloads, proper path construction, etc.)
+7. **Files MUST be selected via `w_ldata_picker`** - NEVER ask users for manual paths
+8. **DataFrames MUST render via `w_table`** - NEVER use `display()`
+9. **Plots MUST render via `w_plot`** - Every figure requires the plot widget
+10. **Transformation cells MUST be self-contained** - Include all imports, definitions, and variable creation
+11. **Assay platform documentation MUST be read as soon as it is identified and subsequently followed** - These workflows are built to be followed step by step and are not flexible.
 
 ## NEVER Do
 
