@@ -1872,16 +1872,20 @@ class Kernel:
         if msg["type"] == "set_widget_value":
             print(f"[kernel] Received set_widget_value: {list(msg['data'].keys())}")
             updated_keys = []
+            aligner_values = {}
             for w_key, payload in msg["data"].items():
                 try:
                     if w_key not in self.widget_signals:
                         continue
 
+                    parsed_payload = orjson.loads(payload)
                     async with ctx.transaction:
                         self.widget_signals[w_key](
-                            orjson.loads(payload), _ui_update=True
+                            parsed_payload, _ui_update=True
                         )
                     updated_keys.append(w_key)
+                    if "image_alignment_step" in parsed_payload:
+                        aligner_values[w_key] = payload
                 except Exception:
                     traceback.print_exc()
                     continue
@@ -1891,8 +1895,7 @@ class Kernel:
                     "type": "widget_values_updated",
                     "keys": updated_keys
                 }
-                #todo(tim): handle other widget values
-                aligner_values = {k: msg["data"][k] for k in updated_keys if "value.image_alignment_step" in k}
+                # todo(tim): handle other widget values
                 if aligner_values:
                     message["values"] = aligner_values
                 
