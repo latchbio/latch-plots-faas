@@ -2,8 +2,8 @@
 This is the **step-by-step pipeline** for spatial annotation
 
 ## Initial Data Entry
-1. Check if there is an existing h5/ann_data widget. If not, ask the user to input an h5ad file and call `smart_ui_spotlight` with `keyword="file_upload"`. Ask them if they'd like help with setting up annotation. Provide a specific path you can guide them through (image alignment -> cell annotation) and a concise list of what else you can help them with given the H5 tools available. 
-2. Once an h5 widget exists, ask if they'd like to begin with image alignment by selecting a reference image and call `smart_ui_spotlight` with `keyword="file_upload"`
+1. **H5 Widget Setup**: Ask the user if they'd like to pass in an H5AD file so you can create a w_h5 widget for them. Call `smart_ui_spotlight` with `keyword="file_upload"`. Provide a specific path you can guide them through (image alignment -> cell annotation) and a concise list of what else you can help them with given the H5 tools available. 
+2. **Reference Image Entry**: Once a w_h5 widget exists, ask if they'd like to begin with image alignment by selecting a reference image and call `smart_ui_spotlight` with `keyword="file_upload"`
 
 ## Image Alignment
 3. Call `h5_set_background_image` on the image they provide. If successful, call `h5_set_marker_opacity` with 0.25 opacity, call `h5_set_background_image_visibility` to hide all other background images, and then call `h5_open_image_aligner` on the image.
