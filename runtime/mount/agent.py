@@ -369,16 +369,14 @@ class AgentHarness:
                 })
 
         elif msg_type == "widget_values_updated":
-            keys = [str(k) for k in msg.get("keys", [])]
-            
-            keys_str = ', '.join(keys) if keys else "unknown widget keys"
+            keys = ', '.join(str(k) for k in msg.get("keys", []))
             
             await self._insert_history(
                 event_type="anthropic_message",
                 payload={
                     "type": "anthropic_message",
                     "role": "user",
-                    "content": f"User provided input via widget key(s): {keys_str}. Continue with your plan.",
+                    "content": f"User provided input via widget key(s): {keys}. Continue with your plan.",
                     "timestamp": int(time.time() * 1000),
                 },
             )
@@ -2763,8 +2761,9 @@ class AgentHarness:
             elif nested_type == "widget_values_updated":
                 keys = nested_msg.get("keys", [])
                 values = nested_msg.get("values", {})
+       
                 if self.current_status == "awaiting_user_widget_input":
-                    print(f"[agent] Widget values updated: {keys} - waking agent (awaiting widget input)")
+                    print(f"[agent] Widget values updated: {keys} - waking agent")
                     self.current_status = "thinking"
                     await self.pending_messages.put({
                         "type": "widget_values_updated",
@@ -2772,7 +2771,7 @@ class AgentHarness:
                         "values": values
                     })
                 else:
-                    print(f"[agent] Widget values updated: {keys} (no wake - not awaiting widget input)")
+                    print(f"[agent] Widget values updated: {keys} (not awaiting input)")
         elif msg_type == "get_full_prompt":
             tx_id = msg.get("tx_id")
             print(f"[agent] Get full prompt request (tx_id={tx_id})")

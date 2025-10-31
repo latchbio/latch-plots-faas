@@ -1891,8 +1891,8 @@ class Kernel:
                     "type": "widget_values_updated",
                     "keys": updated_keys
                 }
-                
-                aligner_values = {k: msg["data"][k] for k in updated_keys if "value.image_aligner_step" in k}
+                #todo(tim): handle other widget values
+                aligner_values = {k: msg["data"][k] for k in updated_keys if "value.image_alignment_step" in k}
                 if aligner_values:
                     message["values"] = aligner_values
                 
