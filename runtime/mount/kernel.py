@@ -1871,8 +1871,6 @@ class Kernel:
 
         if msg["type"] == "set_widget_value":
             print(f"[kernel] Received set_widget_value: {list(msg['data'].keys())}")
-            updated_keys = []
-            aligner_values = {}
             for w_key, payload in msg["data"].items():
                 try:
                     if w_key not in self.widget_signals:
@@ -1883,24 +1881,12 @@ class Kernel:
                         self.widget_signals[w_key](
                             parsed_payload, _ui_update=True
                         )
-                    updated_keys.append(w_key)
-                    if "image_alignment_step" in parsed_payload:
-                        aligner_values[w_key] = payload
                 except Exception:
                     traceback.print_exc()
                     continue
 
-            if updated_keys:
-                message = {
-                    "type": "widget_values_updated",
-                    "keys": updated_keys
-                }
-                # todo(tim): handle other widget values
-                if aligner_values:
-                    message["values"] = aligner_values
-                
-                print(f"[kernel] Sending widget_values_updated: {updated_keys}")
-                await self.send(message)
+            print(f"[kernel] Sending set_widget_value to agent")
+            await self.send(msg)
             return
 
         if msg["type"] == "globals_summary":

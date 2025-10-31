@@ -368,16 +368,28 @@ class AgentHarness:
                     "hidden": True,
                 })
 
-        elif msg_type == "widget_values_updated":
-            keys = ', '.join(str(k) for k in msg.get("keys", []))
-            values = ', '.join(str(v) for v in msg.get("values", []))
+        elif msg_type == "set_widget_value":
+            keys = ', '.join(str(k) for k in msg.get("data", {}).keys())
+            
+            # todo(tim): add handling of vals other than image alignment step
+            image_aligner_vals = []
+            for k, v in msg.get("data", {}).items():
+                try:
+                    if "image_alignment_step" in (parsed := json.loads(v)):
+                        image_aligner_vals.append(f"{k}: step={parsed['image_alignment_step']}")
+                except Exception:
+                    pass
+            
+            content = f"User provided input via widget key(s): {keys}"
+            if image_aligner_vals:
+                content += f", {', '.join(image_aligner_vals)}"
             
             await self._insert_history(
                 event_type="anthropic_message",
                 payload={
                     "type": "anthropic_message",
                     "role": "user",
-                    "content": f"User provided input via widget key(s): {keys}{f', values: {values}' if values else ''}. Continue with your plan.",
+                    "content": content,
                     "timestamp": int(time.time() * 1000),
                 },
             )
@@ -2759,20 +2771,16 @@ class AgentHarness:
                 cell_id = nested_msg.get("cell_id")
                 if cell_id is not None and self.current_request_id is not None:
                     self.executing_cells.add(str(cell_id))
-            elif nested_type == "widget_values_updated":
-                keys = nested_msg.get("keys", [])
-                values = nested_msg.get("values", {})
-       
+            elif nested_type == "set_widget_value":
                 if self.current_status == "awaiting_user_widget_input":
-                    print(f"[agent] Widget values updated: {keys} - waking agent")
+                    print(f"[agent] Widget values updated - waking agent")
                     self.current_status = "thinking"
                     await self.pending_messages.put({
-                        "type": "widget_values_updated",
-                        "keys": keys,
-                        "values": values
+                        "type": "set_widget_value",
+                        "data": nested_msg.get("data", {})
                     })
                 else:
-                    print(f"[agent] Widget values updated: {keys} (not awaiting input)")
+                    print(f"[agent] Widget values updated (not awaiting input)")
         elif msg_type == "get_full_prompt":
             tx_id = msg.get("tx_id")
             print(f"[agent] Get full prompt request (tx_id={tx_id})")
