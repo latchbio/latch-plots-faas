@@ -370,13 +370,14 @@ class AgentHarness:
 
         elif msg_type == "widget_values_updated":
             keys = ', '.join(str(k) for k in msg.get("keys", []))
+            values = ', '.join(str(v) for v in msg.get("values", []))
             
             await self._insert_history(
                 event_type="anthropic_message",
                 payload={
                     "type": "anthropic_message",
                     "role": "user",
-                    "content": f"User provided input via widget key(s): {keys}. Continue with your plan.",
+                    "content": f"User provided input via widget key(s): {keys}{f', values: {values}' if values else ''}. Continue with your plan.",
                     "timestamp": int(time.time() * 1000),
                 },
             )
