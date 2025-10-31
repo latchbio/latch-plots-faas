@@ -2246,7 +2246,11 @@ class AgentHarness:
                         handler = self.tool_map.get(tool_name)
                         if handler:
                             try:
-                                result = await handler(tool_input)
+                                if asyncio.iscoroutinefunction(handler):
+                                    result = await handler(tool_input)
+                                else:
+                                    result = handler(tool_input)
+
                                 tool_results.append({
                                     "type": "tool_result",
                                     "tool_use_id": tool_id,
@@ -2254,12 +2258,14 @@ class AgentHarness:
                                 })
                             except Exception as e:
                                 print(f"[agent] Tool error: {tool_name}: {e}")
+                                traceback.print_exc()
                                 tool_results.append({
                                     "type": "tool_result",
                                     "tool_use_id": tool_id,
                                     "content": json.dumps({
-                                        "summary": None,
-                                        "error": f"Error executing tool: {e!s}",
+                                        "tool_name": tool_name,
+                                        "summary": f"Error executing {tool_name}: {e!s}",
+                                        "error": str(e),
                                         "success": False,
                                     }),
                                 })
@@ -2268,8 +2274,10 @@ class AgentHarness:
                                 "type": "tool_result",
                                 "tool_use_id": tool_id,
                                 "content": json.dumps({
-                                    "summary": None,
-                                    "error": f"Unknown tool: {tool_name}",
+                                    "tool_name": tool_name,
+                                    "summary": f"Unknown tool: {tool_name}",
+                                    "error": f"Tool '{tool_name}' not found in tool_map",
+                                    "success": False,
                                 }),
                             })
 
