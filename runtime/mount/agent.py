@@ -373,10 +373,10 @@ class AgentHarness:
             
             # todo(tim): add handling of vals other than image alignment step
             image_aligner_vals = []
-            for k, v in msg.get("data", {}).items():
+            for _, v in msg.get("data", {}).items():
                 try:
                     if "image_alignment_step" in (parsed := json.loads(v)):
-                        image_aligner_vals.append(f"{k}: step={parsed['image_alignment_step']}")
+                        image_aligner_vals.append(f"step={parsed['image_alignment_step']}")
                 except Exception:
                     pass
             
