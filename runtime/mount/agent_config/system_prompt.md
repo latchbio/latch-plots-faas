@@ -83,8 +83,8 @@ Call `submit_response` with these parameters:
 
 - `plan`: Array of plan step objects (see Planning section)
 - `plan_diff`: Array describing changes to plan (see Planning section)
-- `summary`: Array of bullet points describing current progress and next step.
-- `questions`: Array of questions for user, or null
+- `summary`: String describing current progress and next step. Use markdown formatting with bullet points if needed. Omit if no summary needed.
+- `questions`: Optional question string for user. Omit if no questions needed.
 - `continue`: Boolean - whether to continue immediately or wait
 - `next_status`: Current agent status (see Status Types below)
 
@@ -547,8 +547,7 @@ submit_response(
         {"action": "add", "id": "qc", "description": "Run quality control"},
         {"action": "add", "id": "viz", "description": "Visualize QC metrics"}
     ],
-    summary=["Created analysis plan", "Next: Load spatial data file"],
-    questions=None,
+    summary="Created analysis plan. Next: Load spatial data file",
     continue=True,
     next_status="executing"
 )
@@ -570,8 +569,7 @@ submit_response(
     plan_diff=[
         {"action": "update", "id": "load", "status": "in_progress"}
     ],
-    summary=["Created data loading cell with file picker", "Waiting for cell execution"],
-    questions=None,
+    summary="Created data loading cell with file picker. Waiting for cell execution",
     continue=False,  # MUST be False after running cell
     next_status="awaiting_cell_execution"
 )
@@ -597,8 +595,7 @@ submit_response(
     plan_diff=[
         {"action": "update", "id": "load"}  # No status change, still fixing
     ],
-    summary=["Fixed import error by adding scanpy import", "Re-running cell"],
-    questions=None,
+    summary="Fixed import error by adding scanpy import. Re-running cell",
     continue=False,  # Wait for execution result
     next_status="fixing"
 )
@@ -615,8 +612,7 @@ submit_response(
     plan_diff=[
         {"action": "complete", "id": "load"}
     ],
-    summary=["Data loaded successfully", "Next: Run quality control metrics"],
-    questions=None,
+    summary="Data loaded successfully. Next: Run quality control metrics",
     continue=True,  # Clear next step
     next_status="executing"
 )
@@ -657,8 +653,7 @@ submit_response(
         {"action": "update", "id": "qc"},
         {"action": "update", "id": "viz"}
     ],
-    summary=["Created QC visualization with metrics table and gene count distribution", "Waiting for cell execution"],
-    questions=None,
+    summary="Created QC visualization with metrics table and gene count distribution. Waiting for cell execution",
     continue=False,
     next_status="awaiting_cell_execution"
 )
@@ -676,10 +671,8 @@ submit_response(
         {"id": "viz_clusters", "description": "Visualize clusters", "status": "todo"}
     ],
     plan_diff=[],
-    summary=["Ready to perform clustering"],
-    questions=[
-        "Clustering resolution affects the granularity of identified cell populations. Lower values (0.4-0.6) produce fewer, broader clusters, while higher values (1.0-2.0) produce more fine-grained clusters. What resolution would you prefer, or should I use the default 0.8?"
-    ],
+    summary="Ready to perform clustering",
+    questions="Clustering resolution affects the granularity of identified cell populations. Lower values (0.4-0.6) produce fewer, broader clusters, while higher values (1.0-2.0) produce more fine-grained clusters. What resolution would you prefer, or should I use the default 0.8?",
     continue=False,  # MUST wait for answer
     next_status="awaiting_user_response"
 )
