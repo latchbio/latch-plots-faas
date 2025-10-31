@@ -1870,7 +1870,6 @@ class Kernel:
                 )
 
         if msg["type"] == "set_widget_value":
-            print(f"[kernel] Received set_widget_value: {list(msg['data'].keys())}")
             for w_key, payload in msg["data"].items():
                 try:
                     if w_key not in self.widget_signals:
@@ -1885,7 +1884,6 @@ class Kernel:
                     traceback.print_exc()
                     continue
 
-            print(f"[kernel] Sending set_widget_value to agent")
             await self.send(msg)
             return
 
