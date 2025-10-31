@@ -1494,7 +1494,7 @@ class AgentHarness:
                     "direction": {
                         "type": "string",
                         "enum": ["in", "out"],
-                        "description": "Zoom direction; use \"in\" to zoom closer, \"out\" to zoom farther"
+                        "description": 'Zoom direction; use "in" to zoom closer, "out" to zoom farther'
                     },
                     "percentage": {
                         "type": "number",
@@ -2386,18 +2386,8 @@ class AgentHarness:
                 default_headers={"Authorization": auth_token_sdk, "Pod-Id": str(pod_id)}
             )
 
-            index_path = context_root / "index.md"
-            index_content = index_path.read_text()
-
             system_prompt_path = Path(__file__).parent / "agent_config" / "system_prompt.md"
-            system_prompt = system_prompt_path.read_text()
-
-            instruction_parts = []
-            if index_content:
-                instruction_parts.append(f"<documentation_index>\n{index_content}\n</documentation_index>\n")
-            instruction_parts.append(system_prompt)
-
-            self.system_prompt = "\n".join(instruction_parts)
+            self.system_prompt = system_prompt_path.read_text()
 
             messages = await self._build_messages_from_db()
             await self._close_pending_tool_calls(
