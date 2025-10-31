@@ -1853,11 +1853,21 @@ class AgentHarness:
 
                 output = result.stdout + result.stderr
 
+                if result.returncode == 0:
+                    return {
+                        "tool_name": "bash",
+                        "success": True,
+                        "summary": f"Executed command: {command}",
+                        "output": output.strip(),
+                        "command": command,
+                        "return_code": result.returncode
+                    }
+
                 return {
                     "tool_name": "bash",
-                    "success": result.returncode == 0,
-                    "summary": f"Executed command: {command}",
-                    "output": output.strip(),
+                    "success": False,
+                    "summary": f"Command failed with exit code {result.returncode}: {command}",
+                    "error": output.strip(),
                     "command": command,
                     "return_code": result.returncode
                 }
@@ -1865,13 +1875,15 @@ class AgentHarness:
                 return {
                     "tool_name": "bash",
                     "success": False,
-                    "summary": "Command timed out after 30 seconds"
+                    "summary": "Command timed out after 30 seconds",
+                    "error": f"Command '{command}' exceeded 30 second timeout"
                 }
             except Exception as e:
                 return {
                     "tool_name": "bash",
                     "success": False,
-                    "summary": f"Error executing command: {e}"
+                    "summary": f"Error executing command: {e}",
+                    "error": str(e)
                 }
 
         self.tools.append({
