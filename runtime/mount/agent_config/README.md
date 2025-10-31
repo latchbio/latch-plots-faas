@@ -12,10 +12,10 @@ This directory contains agent context files which can be modified to customize t
 agent_config/
 ├── system_prompt.md              # System prompt
 ├── context/
-│   ├── technology_docs/          # Platform-specific workflows
-│   │   ├── vizgen_workflow.md
+│   ├── technology_docs/          # Platform-specific documentation
+│   │   ├── vizgen.md
 │   │   ├── atlasxomics.md
-│   │   └── takara_workflow.md
+│   │   └── takara.md
 │   ├── latch_api_docs/           # Latch API references
 │   │   ├── lpath.md
 │   │   └── plots_docs/
@@ -41,7 +41,7 @@ The `system_prompt.md` file contains all behavior instructions and documentation
 The agent accesses documentation on-demand using file tools. To add new documentation:
 
 1. **Create the documentation file** in the appropriate subdirectory:
-   - Platform workflows → `context/technology_docs/`
+   - Assay platform documentation → `context/technology_docs/`
    - Latch APIs → `context/latch_api_docs/`
 
 2. **Update `system_prompt.md`** to reference the new documentation:
@@ -49,14 +49,13 @@ The agent accesses documentation on-demand using file tools. To add new document
 Add to the `<workflow_intake>` or `<documentation_access>` section:
 
 ```markdown
-## Technology Workflows
+## Assay Platform Documentation
 
-When user mentions a spatial assay platform, read the corresponding workflow:
-
-- **Takara Seeker/Trekker** → `technology_docs/takara_workflow.md`
-- **AtlasXOmics** → `technology_docs/atlasxomics.md`
-- **Vizgen MERFISH** → `technology_docs/vizgen_workflow.md`
-- **Proteomics** → `technology_docs/proteomics_workflow.md`  # ← New addition
+Once identified, read corresponding documentation from `technology_docs/`:
+- Takara → `takara.md`
+- AtlasXOmics → `atlasxomics.md`
+- Vizgen MERFISH → `vizgen.md`
+- Proteomics → `proteomics.md`  # ← New addition
 ```
 
 The agent will use this guidance to decide when to read your documentation.
@@ -74,8 +73,8 @@ The agent will use this guidance to decide when to read your documentation.
 
 When the agent needs specific information (e.g., user mentions "Vizgen"), it:
 1. Checks the `<workflow_intake>` or `<documentation_access>` section in its system prompt
-2. Uses `read_file` tool to load `technology_docs/vizgen_workflow.md`
-3. Follows the workflow steps from that documentation
+2. Uses `read_file` tool to load `technology_docs/vizgen.md`
+3. Follows the documented steps from that file
 
 ## Testing Changes
 
@@ -86,9 +85,9 @@ When the agent needs specific information (e.g., user mentions "Vizgen"), it:
 
 ### Example: Add Proteomics Support
 
-1. **Create workflow documentation:**
+1. **Create assay platform documentation:**
    
-   Create `context/technology_docs/proteomics_workflow.md`:
+   Create `context/technology_docs/proteomics.md`:
    ```markdown
    ## Proteomics Analysis Workflow
    
@@ -101,33 +100,10 @@ When the agent needs specific information (e.g., user mentions "Vizgen"), it:
 
 2. **Update the system prompt:**
    
-   Edit `system_prompt.md` in the `<workflow_intake>` section:
-   ```markdown
-   ## Workflow Documentation
-   
-   Once identified, read corresponding workflow from `technology_docs/`:
-   - Takara → `takara_workflow.md`
-   - AtlasXOmics → `atlasxomics.md`
-   - Vizgen MERFISH → `vizgen_workflow.md`
-   - Proteomics → `proteomics_workflow.md`  # ← Added
-   
-   Follow the documented workflow steps precisely.
-   ```
+   Edit `system_prompt.md` in the `<documentation_access>` section
 
 3. **Optionally add trigger guidance:**
    
-   In the `<workflow_intake>` section, you can add platform specific identification guidance:
-   ```markdown
-   ## Assay Identification
-   
-   First, identify the spatial assay platform:
-   - Takara Seeker/Trekker
-   - Visium
-   - Xenium
-   - MERFISH (Vizgen)
-   - AtlasXOmics
-   - Proteomics  # ← Added
-   - Other platforms
-   ```
+   In the `<workflow_intake>` section, you can add platform specific identification guidance.
 
 That's it! The agent will now read the proteomics docs when relevant.

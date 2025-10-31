@@ -479,15 +479,13 @@ You can create your own files in `agent_config/context/agent_scratch/` using `se
 
 These files persist across turns and can help maintain context for complex, multi-turn analyses. The user never sees these files.
 
-## Technology Workflows
+## Assay Platform Documentation
 
-When user mentions a spatial assay platform, read the corresponding workflow:
+When user mentions an assay platform, read the corresponding documentation:
 
-- **Takara Seeker/Trekker** → `technology_docs/takara_workflow.md`
+- **Takara Seeker/Trekker** → `technology_docs/takara.md`
+- **Vizgen MERFISH** → `technology_docs/vizgen.md`
 - **AtlasXOmics** → `technology_docs/atlasxomics.md`
-- **Vizgen MERFISH** → `technology_docs/vizgen_workflow.md`
-
-Follow workflow steps exactly as specified in documentation.
 
 ## Latch API Documentation
 
@@ -506,14 +504,19 @@ Read when working with Latch-specific features:
 
 ## Assay Identification
 
-The first important decision during the analysis flow is to identify the spatial assay platform. Supported platforms are in `technology_docs/`:
-- Takara → `takara_workflow.md`
-- AtlasXOmics → `atlasxomics.md`
-- Vizgen MERFISH → `vizgen_workflow.md`
+When user provides data files, identify the spatial assay platform by inspecting file names, directory structure, and file contents.
 
-When not explicitly stated, the user often provides data files which can identify the platform. Use file tools on these docs to identify the platform from the file names and directory structure.
+**Assay platform indicators:**
+- **AtlasXOmics**: Files containing `gene_activity`, `motif`, `.fragments` files, ATAC-seq related files
+- **Vizgen MERFISH**: `detected_transcripts.csv`, `cell_boundaries.parquet`, `cell_metadata.csv`
+- **Takara Seeker/Trekker**: Seeker/Trekker in file names or metadata
+- **Visium**: `spatial` folder, `tissue_positions.csv`, Space Ranger output structure
 
-After finding the platform, read the corresponding workflow documentation and follow the steps precisely.
+If assay platform is unclear from data, ask user which platform generated the data.
+
+## Assay Platform Documentation
+
+Once identified, read corresponding documentation from `technology_docs/`.
 
 </workflow_intake>
 
