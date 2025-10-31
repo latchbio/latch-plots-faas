@@ -2490,7 +2490,6 @@ class AgentHarness:
 
     async def get_full_prompt(self) -> None:
         messages = await self._build_messages_from_db()
-        await self._write_notebook_context_files()
 
         system_prompt_path = context_root.parent / "system_prompt.md"
         system_prompt = system_prompt_path.read_text()
