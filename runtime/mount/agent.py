@@ -2386,7 +2386,7 @@ class AgentHarness:
                 default_headers={"Authorization": auth_token_sdk, "Pod-Id": str(pod_id)}
             )
 
-            system_prompt_path = Path(__file__).parent / "agent_config" / "system_prompt.md"
+            system_prompt_path = context_root.parent / "system_prompt.md"
             self.system_prompt = system_prompt_path.read_text()
 
             messages = await self._build_messages_from_db()
@@ -2475,6 +2475,13 @@ class AgentHarness:
             error_message="Request cancelled by user",
             messages=await self._build_messages_from_db(),
         )
+
+        for file in (context_root / "agent_scratch").rglob("*"):
+            if file.name == ".gitkeep":
+                continue
+
+            file.unlink()
+
         self._start_conversation_loop()
 
     async def handle_clear_history(self) -> None:
