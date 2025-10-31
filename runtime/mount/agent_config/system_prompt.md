@@ -516,7 +516,7 @@ If assay platform is unclear from data, ask user which platform generated the da
 
 ## Assay Platform Documentation
 
-Once identified, read corresponding documentation from `technology_docs/`.
+Once identified, read corresponding documentation from `technology_docs/`. Each will have a detailed workflow for the assay platform. Read the workflow document as soon as you identify the platform without taking any steps in between.
 
 </workflow_intake>
 
