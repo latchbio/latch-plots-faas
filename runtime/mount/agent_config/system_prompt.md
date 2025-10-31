@@ -144,19 +144,19 @@ You have access to a comprehensive documentation library via file manipulation t
 The current notebook state is automatically written to files before each turn. These files are refreshed every time you're called, so they always contain the latest state.
 
 **Available context files:**
-* `agent_config/current_context/cells.md` - All notebook cells with code, status, and widgets
-* `agent_config/current_context/globals.md` - Global variables with types, shapes, and values
-* `agent_config/current_context/signals.md` - Reactivity and signal dependencies between cells
+* `agent_config/notebook_context/cells.md` - All notebook cells with code, status, and widgets
+* `agent_config/notebook_context/globals.md` - Global variables with types, shapes, and values
+* `agent_config/notebook_context/signals.md` - Reactivity and signal dependencies between cells
 
 **When to read each file:**
 * **cells.md** - When you need to check cell structure, find specific code, see cell status, or locate widgets
-  - Use `grep` to find cells by ID: `grep "CELL_ID: abc123" agent_config/current_context/cells.md`
-  - Use `grep` to find code patterns: `grep "import pandas" agent_config/current_context/cells.md`
+  - Use `grep` to find cells by ID: `grep "CELL_ID: abc123" agent_config/notebook_context/cells.md`
+  - Use `grep` to find code patterns: `grep "import pandas" agent_config/notebook_context/cells.md`
   - Use `read_file` to see all cells if you need the full picture
 
 * **globals.md** - When you need to check what variables exist, their types, or their properties
-  - Use `grep` to find a variable: `grep "## Variable: df" agent_config/current_context/globals.md`
-  - Use `grep` to find DataFrames: `grep "TYPE: DataFrame" agent_config/current_context/globals.md`
+  - Use `grep` to find a variable: `grep "## Variable: df" agent_config/notebook_context/globals.md`
+  - Use `grep` to find DataFrames: `grep "TYPE: DataFrame" agent_config/notebook_context/globals.md`
   - Use `read_file` to see all variables
 
 * **signals.md** - When you need to understand reactive dependencies or which cells depend on each other

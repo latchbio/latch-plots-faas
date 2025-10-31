@@ -90,7 +90,7 @@ All paths below are relative to `agent_config/context/`.
 
 ## Current Context (Runtime State)
 
-**Location**: `current_context/`
+**Location**: `notebook_context/`
 
 **When to use**: These files are automatically refreshed before each turn with the latest notebook state.
 
@@ -165,9 +165,9 @@ You can also create your own files here via search_replace to:
 | Topic | File | Key Triggers |
 |-------|------|--------------|
 | **Runtime Context** | | **Auto-refreshed each turn** |
-| Notebook cells | current_context/cells.md | Check cells, find code, cell status |
-| Global variables | current_context/globals.md | Check variables, types, shapes |
-| Reactivity | current_context/signals.md | Understand dependencies |
+| Notebook cells | notebook_context/cells.md | Check cells, find code, cell status |
+| Global variables | notebook_context/globals.md | Check variables, types, shapes |
+| Reactivity | notebook_context/signals.md | Understand dependencies |
 | **Technology Workflows** | | |
 | Vizgen MERFISH | technology_docs/vizgen_workflow.md | "Vizgen", "MERFISH", "Merscope" |
 | AtlasXOmics | technology_docs/atlasxomics.md | "AtlasXOmics", "AtlasX", "spatial ATAC" |

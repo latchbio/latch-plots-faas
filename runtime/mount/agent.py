@@ -36,6 +36,9 @@ if sandbox_root:
     pathlib.Path.__new__ = patched_path_new
 
 
+context_root = Path(__file__).parent / "agent_config" / "context"
+
+
 class Mode(Enum):
     planning = "planning"
     executing = "executing"
@@ -1635,13 +1638,14 @@ class AgentHarness:
                 )
 
                 files = result.stdout.strip().split("\n") if result.stdout.strip() else []
+                relative_files = [Path(f).relative_to(context_root) for f in files]
+
                 return {
                     "tool_name": "glob_file_search",
                     "success": True,
-                    "summary": f"Found {len(files)} files matching pattern '{pattern}'",
-                    "files": files,
+                    "summary": f"Found {len(relative_files)} files matching pattern '{pattern}'",
+                    "files": relative_files,
                     "pattern": pattern,
-                    "base_path": str(base_path)
                 }
             except Exception as e:
                 return {
@@ -1664,14 +1668,14 @@ class AgentHarness:
 
             try:
                 if not Path(path).is_absolute():
-                    path = Path(__file__).parent / path
+                    search_path = Path(__file__).parent / path
                 else:
-                    path = Path(path)
+                    search_path = Path(path)
 
                 cmd = ["/usr/bin/rg", "--line-number"]
                 if case_insensitive:
                     cmd.append("--ignore-case")
-                cmd.extend([pattern, str(path)])
+                cmd.extend([pattern, str(search_path)])
 
                 result = subprocess.run(
                     cmd,
@@ -1681,25 +1685,27 @@ class AgentHarness:
                     check=False
                 )
 
+                display_path = str(search_path.relative_to(context_root))
+
                 matches = result.stdout.strip()
                 if result.returncode == 0:
                     return {
                         "tool_name": "grep",
                         "success": True,
-                        "summary": f"Found matches for pattern '{pattern}' in {path}",
+                        "summary": f"Found matches for pattern '{pattern}' in {display_path}",
                         "matches": matches,
                         "pattern": pattern,
-                        "path": str(path)
+                        "path": display_path
                     }
 
                 if result.returncode == 1:
                     return {
                         "tool_name": "grep",
                         "success": True,
-                        "summary": f"No matches found for pattern '{pattern}' in {path}",
+                        "summary": f"No matches found for pattern '{pattern}' in {display_path}",
                         "matches": "",
                         "pattern": pattern,
-                        "path": str(path)
+                        "path": display_path
                     }
 
                 return {
@@ -1762,12 +1768,14 @@ class AgentHarness:
 
                 content = "\n".join(numbered_lines)
 
+                display_path = str(file_path.relative_to(context_root))
+
                 return {
                     "tool_name": "read_file",
                     "success": True,
-                    "summary": f"Read {len(selected_lines)} lines from {path} (total: {total_lines} lines)",
+                    "summary": f"Read {len(selected_lines)} lines from {display_path} (total: {total_lines} lines)",
                     "content": content,
-                    "path": str(file_path),
+                    "path": display_path,
                     "offset": offset,
                     "lines_read": len(selected_lines),
                     "total_lines": total_lines
@@ -1814,12 +1822,14 @@ class AgentHarness:
                     check=False
                 )
 
+                display_path = str(file_path.relative_to(context_root))
+
                 if result.returncode == 0:
                     return {
                         "tool_name": "search_replace",
                         "success": True,
-                        "summary": f"Replaced text in {path}",
-                        "path": str(file_path)
+                        "summary": f"Replaced text in {display_path}",
+                        "path": display_path
                     }
 
                 if tmp_file.exists():
@@ -1992,7 +2002,7 @@ class AgentHarness:
             self.atomic_operation("request_reactivity_summary")
         )
 
-        context_dir = Path(__file__).parent / "agent_config" / "current_context"
+        context_dir = context_root / "notebook_context"
         context_dir.mkdir(parents=True, exist_ok=True)
 
         if context_result.get("status") == "success":
@@ -2373,7 +2383,7 @@ class AgentHarness:
                 default_headers={"Authorization": auth_token_sdk, "Pod-Id": str(pod_id)}
             )
 
-            index_path = Path(__file__).parent / "agent_config" / "context" / "index.md"
+            index_path = context_root / "index.md"
             index_content = index_path.read_text()
 
             system_prompt_path = Path(__file__).parent / "agent_config" / "system_prompt.md"

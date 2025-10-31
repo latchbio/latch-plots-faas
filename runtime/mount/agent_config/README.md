@@ -26,7 +26,7 @@ agent_config/
 │   │       ├── custom-plots.mdx
 │   │       ├── reactivity.mdx
 │   │       └── widget-types.mdx
-│   └── current_context/          # For agent to maintain state
+│   └── notebook_context/          # For agent to maintain state
 └── README.md                     # This file
 ```
 
@@ -53,7 +53,7 @@ The agent accesses documentation on-demand using file tools. To add new document
 1. **Create the documentation file** in the appropriate subdirectory:
    - Platform workflows → `context/technology_docs/`
    - Latch APIs → `context/latch_api_docs/`
-   - Temporary notes → `context/current_context/`
+   - Temporary notes → `context/notebook_context/`
 
 2. **Update `context/index.md`** to list the new documentation:
 
