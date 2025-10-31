@@ -1651,7 +1651,14 @@ class AgentHarness:
                 }
 
         def grep(args: dict) -> dict:
-            pattern = args.get("pattern", "")
+            pattern = args.get("pattern")
+            if pattern is None:
+                return {
+                    "tool_name": "grep",
+                    "success": False,
+                    "summary": "Pattern is required"
+                }
+
             path = args.get("path", "agent_config/context")
             case_insensitive = args.get("case_insensitive", False)
 
@@ -1661,9 +1668,9 @@ class AgentHarness:
                 else:
                     path = Path(path)
 
-                cmd = ["/usr/bin/grep", "-rn"]
+                cmd = ["/usr/bin/rg", "--line-number"]
                 if case_insensitive:
-                    cmd.append("-i")
+                    cmd.append("--ignore-case")
                 cmd.extend([pattern, str(path)])
 
                 result = subprocess.run(
@@ -1671,18 +1678,34 @@ class AgentHarness:
                     capture_output=True,
                     text=True,
                     timeout=10,
-                    check=True
+                    check=False
                 )
 
-                # todo(aidan): ripgrep instead of grep (10x+ faster)
                 matches = result.stdout.strip()
+                if result.returncode == 0:
+                    return {
+                        "tool_name": "grep",
+                        "success": True,
+                        "summary": f"Found matches for pattern '{pattern}' in {path}",
+                        "matches": matches,
+                        "pattern": pattern,
+                        "path": str(path)
+                    }
+
+                if result.returncode == 1:
+                    return {
+                        "tool_name": "grep",
+                        "success": True,
+                        "summary": f"No matches found for pattern '{pattern}' in {path}",
+                        "matches": "",
+                        "pattern": pattern,
+                        "path": str(path)
+                    }
+
                 return {
                     "tool_name": "grep",
-                    "success": True,
-                    "summary": f"Searched for pattern '{pattern}' in {path}",
-                    "matches": matches,
-                    "pattern": pattern,
-                    "path": str(path)
+                    "success": False,
+                    "summary": f"Ripgrep error: {result.stderr}"
                 }
             except Exception as e:
                 return {
@@ -1692,7 +1715,14 @@ class AgentHarness:
                 }
 
         def read_file(args: dict) -> dict:
-            path = args.get("path", "")
+            path = args.get("path")
+            if path is None:
+                return {
+                    "tool_name": "read_file",
+                    "success": False,
+                    "summary": "Path is required"
+                }
+
             offset = args.get("offset", 0)
             limit = args.get("limit")
 
@@ -1750,9 +1780,16 @@ class AgentHarness:
                 }
 
         def search_replace(args: dict) -> dict:
-            path = args.get("path", "")
-            old_string = args.get("old_string", "")
+            path = args.get("path")
+            old_string = args.get("old_string")
             new_string = args.get("new_string", "")
+
+            if path is None or old_string is None:
+                return {
+                    "tool_name": "search_replace",
+                    "success": False,
+                    "summary": "Path and old_string are required"
+                }
 
             try:
                 if not Path(path).is_absolute():
@@ -1767,34 +1804,15 @@ class AgentHarness:
                         "summary": f"File not found: {path}"
                     }
 
-                check_result = subprocess.run(
-                    ["/usr/bin/grep", "-F", old_string, str(file_path)],
+                tmp_file = Path(str(file_path) + ".tmp")
+
+                result = subprocess.run(  # noqa: S602
+                    f"rg --passthru --fixed-strings '{old_string}' --replace '{new_string}' {file_path} > {tmp_file} && mv {tmp_file} {file_path}",
+                    shell=True,
                     capture_output=True,
                     text=True,
                     check=False
                 )
-
-                if check_result.returncode != 0:
-                    return {
-                        "tool_name": "search_replace",
-                        "success": False,
-                        "summary": f"String not found in file: {old_string[:50]}..."
-                    }
-
-                result = subprocess.run(
-                    [
-                        "/usr/bin/perl", "-i.bak", "-pe",
-                        f"BEGIN{{$count=0}} s/\\Q{old_string}\\E/{new_string}/ if $count++ == 0",
-                        str(file_path)
-                    ],
-                    capture_output=True,
-                    text=True,
-                    check=False
-                )
-
-                backup_file = Path(str(file_path) + ".bak")
-                if backup_file.exists():
-                    backup_file.unlink()
 
                 if result.returncode == 0:
                     return {
@@ -1803,10 +1821,14 @@ class AgentHarness:
                         "summary": f"Replaced text in {path}",
                         "path": str(file_path)
                     }
+
+                if tmp_file.exists():
+                    tmp_file.unlink()
+
                 return {
                     "tool_name": "search_replace",
                     "success": False,
-                    "summary": f"perl command failed: {result.stderr}"
+                    "summary": f"Ripgrep replace failed: {result.stderr}"
                 }
             except Exception as e:
                 return {
@@ -1874,7 +1896,7 @@ class AgentHarness:
 
         self.tools.append({
             "name": "grep",
-            "description": "Search for text patterns in files using grep. Returns matches with line numbers.",
+            "description": "Search for text patterns in files using ripgrep (rg). Returns matches with line numbers. Fast and supports regex.",
             "input_schema": {
                 "type": "object",
                 "properties": {

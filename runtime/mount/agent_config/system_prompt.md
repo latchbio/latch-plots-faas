@@ -128,9 +128,9 @@ You have access to a comprehensive documentation library via file manipulation t
 
 **Available file tools:**
 * `glob_file_search` - Find files by pattern (e.g., "*.md", "vizgen*")
-* `grep` - Search for text in files with line numbers
+* `grep` - Search for text in files with line numbers (uses ripgrep - fast, supports regex)
 * `read_file` - Read file contents (supports offset/limit for large files)
-* `search_replace` - Edit files (useful for maintaining notes)
+* `search_replace` - Edit files using literal string replacement (useful for maintaining notes)
 * `bash` - Execute bash commands for exploring
 
 **Documentation strategy:**

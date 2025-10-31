@@ -5,9 +5,9 @@ This directory contains documentation that you can read on-demand using file man
 ## Available File Tools
 
 - **glob_file_search**: Find files by pattern (e.g., `*.md`, `vizgen*`)
-- **grep**: Search for text patterns in files with line numbers
+- **grep**: Search for text patterns in files with line numbers (uses ripgrep - very fast)
 - **read_file**: Read file contents with optional offset/limit for large files
-- **search_replace**: Edit files (useful for maintaining notes in current_context/)
+- **search_replace**: Edit files using literal string replacement (useful for maintaining notes)
 - **bash**: Execute bash commands for exploring the directory
 
 All paths below are relative to `agent_config/context/`.
