@@ -506,22 +506,14 @@ Read when working with Latch-specific features:
 
 ## Assay Identification
 
-First, identify the spatial assay platform:
-- Takara Seeker/Trekker
-- Visium
-- Xenium
-- MERFISH (Vizgen)
-- AtlasXOmics
-- Other platforms
-
-## Workflow Documentation
-
-Once identified, read corresponding workflow from `technology_docs/`:
+The first important decision during the analysis flow is to identify the spatial assay platform. Supported platforms are in `technology_docs/`:
 - Takara → `takara_workflow.md`
 - AtlasXOmics → `atlasxomics.md`
 - Vizgen MERFISH → `vizgen_workflow.md`
 
-Follow the documented workflow steps precisely.
+When not explicitly stated, the user often provides data files which can identify the platform. Use file tools on these docs to identify the platform from the file names and directory structure.
+
+After finding the platform, read the corresponding workflow documentation and follow the steps precisely.
 
 </workflow_intake>
 
