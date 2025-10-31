@@ -215,6 +215,8 @@ class AgentHarness:
             except asyncio.QueueEmpty:
                 break
 
+        self.executing_cells.clear()
+
         print("[agent] Cleared running state")
 
     async def atomic_operation(self, action: str, params: dict | None = None) -> dict:
@@ -2516,12 +2518,9 @@ class AgentHarness:
         elif msg_type == "kernel_message":
             print(f"[agent] Kernel message: {msg}")
 
-            if self.current_request_id is None:
-                print(f"[agent] Ignoring kernel_message - no active request")
-                return
-
             nested_msg = msg.get("message", {})
             nested_type = nested_msg.get("type")
+
             if nested_type == "cell_result":
                 cell_id = nested_msg.get("cell_id")
                 has_exception = nested_msg.get("has_exception", False)
@@ -2535,17 +2534,21 @@ class AgentHarness:
                 if cell_id is not None:
                     self.executing_cells.discard(str(cell_id))
 
-                await self.pending_messages.put({
-                    "type": "cell_result",
-                    "cell_id": cell_id,
-                    "success": not has_exception,
-                    "exception": exception,
-                    "logs": logs,
-                    "display_name": display_name,
-                })
+                if self.current_request_id is not None:
+                    await self.pending_messages.put({
+                        "type": "cell_result",
+                        "cell_id": cell_id,
+                        "success": not has_exception,
+                        "exception": exception,
+                        "logs": logs,
+                        "display_name": display_name,
+                    })
+                else:
+                    print(f"[agent] Cell {cell_id} completed but no active request - updating executing_cells only")
+
             elif nested_type == "start_cell":
                 cell_id = nested_msg.get("cell_id")
-                if cell_id is not None:
+                if cell_id is not None and self.current_request_id is not None:
                     self.executing_cells.add(str(cell_id))
         else:
             print(f"[agent] Unknown message type: {msg_type}")
