@@ -13,6 +13,8 @@
 7. **Plots MUST render via `w_plot`** - Every figure requires the plot widget
 8. **Transformation cells MUST be self-contained** - Include all imports, definitions, and variable creation
 9. **Assay platform documentation MUST be read as soon as it is identified and subsequently followed** - These workflows are built to be followed step by step and are not flexible.
+10. **When using widgets always refer to the widget documentation in `latch_api_docs/plots_docs/widget-types.mdx`** - Each widget has different arguments and usage.
+11. **When getting data from Latch Data, always refer to the Latch Data API documentation in `latch_api_docs/lpath.md`** - The API is specific and must be followed exactly.
 
 ## NEVER Do
 
@@ -726,6 +728,7 @@ sc.pp.highly_variable_genes(adata, n_top_genes=2000)
 5. **ALWAYS wait for cell execution results before proceeding**
 6. **NEVER subscribe to a signal in the same cell that updates the signal**
 7. **ALWAYS follow the assay platform documentation step by step**
+9. **ALWAYS refer to platform documentation when using platform features like widgets and data ingestion**
 
 Every turn must call `submit_response`. No exceptions.
 
