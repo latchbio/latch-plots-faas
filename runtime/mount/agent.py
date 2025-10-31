@@ -1640,7 +1640,7 @@ class AgentHarness:
                 )
 
                 files = result.stdout.strip().split("\n") if result.stdout.strip() else []
-                relative_files = [Path(f).relative_to(context_root) for f in files]
+                relative_files = [str(Path(f).relative_to(context_root)) for f in files if f]
 
                 return {
                     "tool_name": "glob_file_search",
@@ -1689,7 +1689,8 @@ class AgentHarness:
 
                 display_path = str(search_path.relative_to(context_root))
 
-                matches = result.stdout.strip()
+                matches = result.stdout.strip().replace(str(context_root) + "/", "")
+
                 if result.returncode == 0:
                     return {
                         "tool_name": "grep",
