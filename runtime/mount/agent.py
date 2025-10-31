@@ -1853,21 +1853,11 @@ class AgentHarness:
 
                 output = result.stdout + result.stderr
 
-                if result.returncode == 0:
-                    return {
-                        "tool_name": "bash",
-                        "success": True,
-                        "summary": f"Executed command: {command}",
-                        "output": output.strip(),
-                        "command": command,
-                        "return_code": result.returncode
-                    }
-
                 return {
                     "tool_name": "bash",
-                    "success": False,
-                    "summary": f"Command failed with exit code {result.returncode}: {command}",
-                    "error": output.strip(),
+                    "success": result.returncode == 0,
+                    "summary": f"Executed command: {command}",
+                    "output": output.strip(),
                     "command": command,
                     "return_code": result.returncode
                 }
@@ -1875,15 +1865,13 @@ class AgentHarness:
                 return {
                     "tool_name": "bash",
                     "success": False,
-                    "summary": "Command timed out after 30 seconds",
-                    "error": f"Command '{command}' exceeded 30 second timeout"
+                    "summary": "Command timed out after 30 seconds"
                 }
             except Exception as e:
                 return {
                     "tool_name": "bash",
                     "success": False,
-                    "summary": f"Error executing command: {e}",
-                    "error": str(e)
+                    "summary": f"Error executing command: {e}"
                 }
 
         self.tools.append({
@@ -2258,10 +2246,9 @@ class AgentHarness:
                         handler = self.tool_map.get(tool_name)
                         if handler:
                             try:
-                                if asyncio.iscoroutinefunction(handler):
-                                    result = await handler(tool_input)
-                                else:
-                                    result = handler(tool_input)
+                                result = handler(tool_input)
+                                if asyncio.iscoroutine(result):
+                                    result = await result
 
                                 tool_results.append({
                                     "type": "tool_result",
@@ -2276,7 +2263,7 @@ class AgentHarness:
                                     "tool_use_id": tool_id,
                                     "content": json.dumps({
                                         "tool_name": tool_name,
-                                        "summary": f"Error executing {tool_name}: {e!s}",
+                                        "summary": f"Error executing tool: {e!s}",
                                         "error": str(e),
                                         "success": False,
                                     }),
@@ -2286,10 +2273,8 @@ class AgentHarness:
                                 "type": "tool_result",
                                 "tool_use_id": tool_id,
                                 "content": json.dumps({
-                                    "tool_name": tool_name,
-                                    "summary": f"Unknown tool: {tool_name}",
-                                    "error": f"Tool '{tool_name}' not found in tool_map",
-                                    "success": False,
+                                    "summary": None,
+                                    "error": f"Unknown tool: {tool_name}",
                                 }),
                             })
 
