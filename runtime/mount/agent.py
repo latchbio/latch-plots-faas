@@ -232,6 +232,7 @@ class AgentHarness:
         response_future = loop.create_future()
         self.pending_operations[tx_id] = response_future
 
+        start_time = time.time()
         try:
             print(f"[agent] -> {action}")
             await self.send({"type": "agent_action", "action": action, "params": params, "tx_id": tx_id})
@@ -247,6 +248,8 @@ class AgentHarness:
         except TimeoutError:
             return {"status": "error", "error": f"OPERATION FAILED: '{action}' timed out after 10 seconds. This operation did NOT complete.", "tx_id": tx_id}
         finally:
+            duration = time.time() - start_time
+            print(f"[agent] {action} took {duration:.3f}s")
             self.pending_operations.pop(tx_id, None)
 
     async def handle_action_response(self, msg: dict[str, object]) -> None:
