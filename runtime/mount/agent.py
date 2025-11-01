@@ -2488,35 +2488,33 @@ class AgentHarness:
         await self._mark_all_history_removed()
         self._start_conversation_loop()
 
-    async def get_full_prompt(self) -> None:
+    async def get_full_prompt(self) -> dict:
         messages = await self._build_messages_from_db()
 
         system_prompt_path = context_root.parent / "system_prompt.md"
         system_prompt = system_prompt_path.read_text()
 
-        await self.send({
-            "type": "full_prompt_response",
+        return {
             "system_prompt": system_prompt,
             "messages": messages,
             "model": self.mode_config.get(self.mode, ("claude-sonnet-4-5-20250929", 1024))[0],
-        })
+        }
 
-    async def update_system_prompt(self, msg: dict[str, object]) -> None:
+    async def update_system_prompt(self, msg: dict[str, object]) -> dict:
         new_content = msg.get("content")
         if not isinstance(new_content, str):
-            await self.send({
-                "type": "system_prompt_update_response",
-                "status": "error",
-                "error": "Invalid content",
-            })
-            return
+            return {"status": "error", "error": "Invalid content"}
 
         system_prompt_path = context_root.parent / "system_prompt.md"
         system_prompt_path.write_text(new_content)
-        await self.send({
-            "type": "system_prompt_update_response",
+
+        messages = await self._build_messages_from_db()
+        return {
             "status": "success",
-        })
+            "system_prompt": new_content,
+            "messages": messages,
+            "model": self.mode_config.get(self.mode, ("claude-sonnet-4-5-20250929", 1024))[0],
+        }
 
     async def accept(self) -> None:
         msg = await self.conn.recv()
@@ -2578,11 +2576,26 @@ class AgentHarness:
                 if cell_id is not None and self.current_request_id is not None:
                     self.executing_cells.add(str(cell_id))
         elif msg_type == "get_full_prompt":
-            print("[agent] Get full prompt request")
-            await self.get_full_prompt()
+            tx_id = msg.get("tx_id")
+            print(f"[agent] Get full prompt request (tx_id={tx_id})")
+
+            result = await self.get_full_prompt()
+            await self.send({
+                "type": "agent_action_response",
+                "tx_id": tx_id,
+                "status": "success",
+                **result
+            })
         elif msg_type == "update_system_prompt":
-            print("[agent] Update system prompt request")
-            await self.update_system_prompt(msg)
+            tx_id = msg.get("tx_id")
+            print(f"[agent] Update system prompt request (tx_id={tx_id})")
+            result = await self.update_system_prompt(msg)
+
+            await self.send({
+                "type": "agent_action_response",
+                "tx_id": tx_id,
+                **result
+            })
         else:
             print(f"[agent] Unknown message type: {msg_type}")
 
