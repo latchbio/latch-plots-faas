@@ -1875,10 +1875,9 @@ class Kernel:
                     if w_key not in self.widget_signals:
                         continue
 
-                    parsed_payload = orjson.loads(payload)
                     async with ctx.transaction:
                         self.widget_signals[w_key](
-                            parsed_payload, _ui_update=True
+                            orjson.loads(payload), _ui_update=True
                         )
                 except Exception:
                     traceback.print_exc()

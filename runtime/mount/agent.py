@@ -72,6 +72,7 @@ class AgentHarness:
         Mode.executing: ("claude-sonnet-4-5-20250929", 1024),
         Mode.debugging: ("claude-sonnet-4-5-20250929", 2048),
     })
+
     async def send(self, msg: dict[str, object]) -> None:
         msg_type = msg.get("type", "unknown")
         print(f"[agent] Sending message: {msg_type}")
@@ -373,7 +374,7 @@ class AgentHarness:
             
             # todo(tim): add handling of vals other than image alignment step
             image_aligner_vals = []
-            for _, v in msg.get("data", {}).items():
+            for v in msg.get("data", {}).values():
                 try:
                     if "image_alignment_step" in (parsed := json.loads(v)):
                         image_aligner_vals.append(f"step={parsed['image_alignment_step']}")
@@ -1716,7 +1717,7 @@ class AgentHarness:
                     },
                     "widget_key": {
                         "type": "string",
-                        "description": "Optional full widget key including tf_id and widget_id in the format <tf_id>/<widget_id> for keywords related to a specific widget (e.g. lasso_select)"
+                        "description": "Optional full widget key including tf_id and widget_id in the format <tf_id>/<widget_id> for keywords related to a specific widget"
                     }
                 },
                 "required": ["keyword"]
@@ -2774,13 +2775,11 @@ class AgentHarness:
                     self.executing_cells.add(str(cell_id))
             elif nested_type == "set_widget_value":
                 if self.current_status == "awaiting_user_widget_input":
-                    print(f"[agent] Widget values updated - waking agent")
+                    self.current_status = "thinking"
                     await self.pending_messages.put({
                         "type": "set_widget_value",
                         "data": nested_msg.get("data", {})
                     })
-                else:
-                    print(f"[agent] Widget values updated (not awaiting input)")
         elif msg_type == "get_full_prompt":
             tx_id = msg.get("tx_id")
             print(f"[agent] Get full prompt request (tx_id={tx_id})")
