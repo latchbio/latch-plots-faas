@@ -8,9 +8,9 @@ This is the **step-by-step pipeline** for spatial annotation
 ## Image Alignment
 3. Call `h5_set_background_image` on the image they provide. If successful, call `h5_set_marker_opacity` with 0.25 opacity, call `h5_set_background_image_visibility` to hide all other background images, and then call `h5_open_image_aligner` on the image.
 4. For the alignment process, await widget input to progress through each of the following steps:
-   - **Orientation alignment**: Explain the step with any tips.
-   - **Setting anchor points**: State the requirements (e.g., minimum of 5 markers).
-   - **Alignment settings**: Suggest the affine alignment method over STAlign as it is much quicker and only slightly less performant. Note that upon completion, the new embedding will automatically be set in the h5 widget and you should no longer await for widget input
+   - **MatchOrientation**: For fliiping and rotating the image to help orient it. Explain the step with any tips. Please note that this step is not completed automatically when h5_open_image_aligner is called.
+   - **PlaceAnchorPoints**: For setting landmark points in the image. State the requirements (e.g., minimum of 5 markers).
+   - **CheckAlignment**: For setting the new aligned obs key name and the preferred alignment method. Suggest the affine alignment method over STAlign as it is much quicker and only slightly less performant. Note that upon completion, the new embedding will automatically be set in the h5 widget and you should no longer await for widget input
 
 ## Annotation
 6. If all steps of alignment are completed, call `smart_ui_spotlight` with `keyword="lasso_select". Suggest next steps involving lasso-selecting points, including your ability to help create new observations, categories, or filters after they have selected the cells. 
