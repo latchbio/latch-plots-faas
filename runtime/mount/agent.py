@@ -472,18 +472,22 @@ class AgentHarness:
 
             print(f"[tool] edit_cell id={cell_id}")
 
+            original_code = None
+
+            # ensure self.latest_notebook_context is up to date
+            await self.tool_map.get("refresh_cells_context")({})
+            cells = self.latest_notebook_context.get("cells", [])
+
+            for cell in cells:
+                if cell.get("cell_id") == cell_id:
+                    original_code = cell.get("source", "")
+                    break
+
             params = {
                 "cell_id": cell_id,
                 "source": new_code,
                 "auto_run": True
             }
-
-            original_code = None
-            cells = self.latest_notebook_context.get("cells", [])
-            for cell in cells:
-                if cell.get("cell_id") == cell_id:
-                    original_code = cell.get("source", "")
-                    break
 
             result = await self.atomic_operation("edit_cell", params)
             if result.get("status") == "success":
