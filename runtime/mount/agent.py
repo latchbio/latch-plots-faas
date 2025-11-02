@@ -1997,20 +1997,16 @@ class AgentHarness:
         })
         self.tool_map["bash"] = bash
 
-        if len(self.tools) > 0:
-            self.tools[-1]["cache_control"] = {"type": "ephemeral"}
+        async def refresh_cells_context(args: dict) -> dict:
+            context_result = await self.atomic_operation("get_context")
 
-    async def _write_notebook_context_files(self) -> None:
-        context_result, globals_result, reactivity_result = await asyncio.gather(
-            self.atomic_operation("get_context"),
-            self.atomic_operation("request_globals_summary"),
-            self.atomic_operation("request_reactivity_summary")
-        )
+            if context_result.get("status") != "success":
+                return {
+                    "tool_name": "refresh_cells_context",
+                    "success": False,
+                    "summary": f"Failed to refresh cells: {context_result.get('error', 'Unknown error')}"
+                }
 
-        context_dir = context_root / "notebook_context"
-        context_dir.mkdir(parents=True, exist_ok=True)
-
-        if context_result.get("status") == "success":
             context = context_result.get("context", {})
             self.latest_notebook_context = context
 
@@ -2049,10 +2045,31 @@ class AgentHarness:
                         w_label = w.get("label", "")
                         cell_lines.append(f"- WIDGET: {w_type} | {w_label} | {w_key}")
 
+            context_dir = context_root / "notebook_context"
+            context_dir.mkdir(parents=True, exist_ok=True)
             (context_dir / "cells.md").write_text("\n".join(cell_lines))
 
-        if globals_result.get("status") == "success":
+            return {
+                "tool_name": "refresh_cells_context",
+                "success": True,
+                "summary": f"Refreshed cells context: {cell_count} cells",
+                "cell_count": cell_count
+            }
+
+        async def refresh_globals_context(args: dict) -> dict:
+            globals_result = await self.atomic_operation("request_globals_summary")
+
+            if globals_result.get("status") != "success":
+                return {
+                    "tool_name": "refresh_globals_context",
+                    "success": False,
+                    "summary": f"Failed to refresh globals: {globals_result.get('error', 'Unknown error')}"
+                }
+
             globals_data = globals_result.get("summary", {})
+
+            context_dir = context_root / "notebook_context"
+            context_dir.mkdir(parents=True, exist_ok=True)
 
             if len(globals_data) > 0:
                 global_lines = ["# Global Variables", f"\nTotal: {len(globals_data)} variables\n"]
@@ -2073,12 +2090,71 @@ class AgentHarness:
             else:
                 (context_dir / "globals.md").write_text("# Global Variables\n\nNo global variables defined.\n")
 
-        if reactivity_result.get("status") == "success":
+            return {
+                "tool_name": "refresh_globals_context",
+                "success": True,
+                "summary": f"Refreshed globals context: {len(globals_data)} variables",
+                "variable_count": len(globals_data)
+            }
+
+        async def refresh_reactivity_context(args: dict) -> dict:
+            reactivity_result = await self.atomic_operation("request_reactivity_summary")
+
+            if reactivity_result.get("status") != "success":
+                return {
+                    "tool_name": "refresh_reactivity_context",
+                    "success": False,
+                    "summary": f"Failed to refresh reactivity: {reactivity_result.get('error', 'Unknown error')}"
+                }
+
             reactivity_summary = reactivity_result.get("summary")
+
+            context_dir = context_root / "notebook_context"
+            context_dir.mkdir(parents=True, exist_ok=True)
+
             if reactivity_summary is not None:
                 (context_dir / "signals.md").write_text(reactivity_summary)
             else:
                 (context_dir / "signals.md").write_text("# Reactivity Summary\n\nNo reactive dependencies in this notebook.\n")
+
+            return {
+                "tool_name": "refresh_reactivity_context",
+                "success": True,
+                "summary": "Refreshed reactivity context"
+            }
+
+        self.tools.append({
+            "name": "refresh_cells_context",
+            "description": "Refresh the cells.md context file with current notebook cell structure and contents.",
+            "input_schema": {
+                "type": "object",
+                "properties": {},
+            },
+        })
+        self.tool_map["refresh_cells_context"] = refresh_cells_context
+
+        self.tools.append({
+            "name": "refresh_globals_context",
+            "description": "Refresh the globals.md context file with current global variables and their metadata.",
+            "input_schema": {
+                "type": "object",
+                "properties": {},
+            },
+        })
+        self.tool_map["refresh_globals_context"] = refresh_globals_context
+
+        self.tools.append({
+            "name": "refresh_reactivity_context",
+            "description": "Refresh the signals.md context file with current reactive signal dependencies.",
+            "input_schema": {
+                "type": "object",
+                "properties": {},
+            },
+        })
+        self.tool_map["refresh_reactivity_context"] = refresh_reactivity_context
+
+        if len(self.tools) > 0:
+            self.tools[-1]["cache_control"] = {"type": "ephemeral"}
 
     async def run_agent_loop(self) -> None:
         assert self.client is not None, "Client not initialized"
@@ -2135,8 +2211,6 @@ class AgentHarness:
                             if first_block_type not in {"thinking", "redacted_thinking"}:
                                 can_use_thinking = False
                                 print(f"[agent] Cannot use thinking API: last assistant message starts with {first_block_type}, not thinking")
-
-            await self._write_notebook_context_files()
 
             system_prompt_path = context_root.parent / "system_prompt.md"
             system_prompt = system_prompt_path.read_text()
@@ -2403,6 +2477,11 @@ class AgentHarness:
                 "status": "ready"
             })
             print("[agent] Initialization complete")
+
+            print("[agent] Initializing context files")
+            await self.tool_map.get("refresh_cells_context")({})
+            await self.tool_map.get("refresh_globals_context")({})
+            await self.tool_map.get("refresh_reactivity_context")({})
 
             self._start_conversation_loop()
 

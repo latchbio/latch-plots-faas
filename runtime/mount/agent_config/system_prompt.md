@@ -397,63 +397,85 @@ See reactivity documentation at `latch_api_docs/plots_docs/reactivity.mdx` for S
 - `search_replace` - Edit files via string replacement (ripgrep implementation)
 - `bash` - Execute bash commands
 
+### Context Refresh Tools
+
+- `refresh_cells_context` - Update cells.md with current notebook structure
+- `refresh_globals_context` - Update globals.md with current variables
+- `refresh_reactivity_context` - Update signals.md with signal dependencies
+
+Use these tools to refresh notebook state files before reading them.
+
 ## Documentation Strategy
 
 1. **Read selectively** - Only read when needed
 2. **Use grep for targeted searches** - Faster than reading entire files
 3. **All docs in** `agent_config/context/` directory
 
-## Context Files (Auto-refreshed Each Turn)
+## Context Files (Refresh On-Demand)
 
-These files contain current notebook state, automatically updated before each turn. You should not edit these files as changes will be lost.
+The notebook state is available in three context files. These files are initialized when you start but are NOT automatically updated - you must explicitly refresh them when needed.
 
 ### cells.md
 **Location:** `agent_config/notebook_context/cells.md`
 
-**Read when:**
-- Need to check what cells exist
-- Finding specific code
-- Checking cell status
-- Locating widgets
+**Refresh when:**
+- Before editing/deleting cells (verify they exist)
+- After creating cells to see updated structure
+- Looking for specific code or widget locations
+- Checking cell execution status
+
+**Refresh tool:** `refresh_cells_context`
+- Returns updated cell count
+- Writes latest cell structure to cells.md
 
 **Search with grep:**
 - Find by ID: `grep "CELL_ID: abc123" agent_config/notebook_context/cells.md`
 - Find by code: `grep "import pandas" agent_config/notebook_context/cells.md`
 
-**Format:**
-- Cell metadata on separate lines: `CELL_ID:`, `CELL_INDEX:`, `TYPE:`, `STATUS:`
-- Code between `CODE_START` and `CODE_END` markers
-- Optimized for grep searching
+**Format:** Cell metadata on separate lines (CELL_ID, CELL_INDEX, TYPE, STATUS), code between CODE_START/CODE_END markers.
 
 ### globals.md
 **Location:** `agent_config/notebook_context/globals.md`
 
-**Read when:**
-- Check what variables exist
-- Check variable types, shapes, properties
+**Refresh when:**
+- Before using variables in new cells
+- After cell executions to check new variables
+- Debugging variable types or shapes
+
+**Refresh tool:** `refresh_globals_context`
+- Returns variable count
+- Writes latest globals summary to globals.md
 
 **Search with grep:**
 - Find variable: `grep "## Variable: df" agent_config/notebook_context/globals.md`
-- Find DataFrames: `grep "TYPE: DataFrame" agent_config/notebook_context/globals.md`
+- Find type: `grep "TYPE: DataFrame" agent_config/notebook_context/globals.md`
 
-**Format:**
-- Each variable has section: `## Variable: name`
-- Metadata: `TYPE:`, `SHAPE:`, `COLUMNS:`, `DTYPES:`
-- Optimized for grep searching
+**Format:** Each variable has section (## Variable: name) with metadata (TYPE, SHAPE, COLUMNS, DTYPES).
 
 ### signals.md
 **Location:** `agent_config/notebook_context/signals.md`
 
-**Read when:**
-- Understanding reactive dependencies
-- Debugging reactive execution
-- Creating reactive workflows
+**Refresh when:**
+- Designing reactive workflows
+- Debugging reactivity issues
+- Before creating cross-cell dependencies
 
-**Contents:**
-- Signal dependencies between cells
-- Widget signals
-- Global variable signals
-- Subscription relationships
+**Refresh tool:** `refresh_reactivity_context`
+- Returns success status
+- Writes latest reactivity graph to signals.md
+
+**Contents:** Signal dependencies between cells, widget signals, global variable signals, subscription relationships.
+
+### Refresh Strategy
+
+**Initial state:** Context files are populated on session start with current notebook state.
+
+**Refresh selectively:**
+- Refresh cells before inspecting/modifying notebook structure
+- Refresh globals after cell executions to verify results
+- Refresh reactivity when working with signals
+
+**Most operations don't need refresh** - The files stay reasonably current since you're the one making changes.
 
 ### Creating Custom Files
 
@@ -728,6 +750,7 @@ sc.pp.highly_variable_genes(adata, n_top_genes=2000)
 9. **Plots MUST render via `w_plot`** - Every figure requires the plot widget
 10. **Transformation cells MUST be self-contained** - Include all imports, definitions, and variable creation
 11. **Assay platform documentation MUST be read as soon as it is identified and subsequently followed** - These workflows are built to be followed step by step and are not flexible.
+12. **Refresh context files when needed** - Call refresh_cells_context, refresh_globals_context, or refresh_reactivity_context when you need current state (e.g., after cell executions, before verifying variables exist)
 
 ## NEVER Do
 
