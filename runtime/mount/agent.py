@@ -65,7 +65,7 @@ class AgentHarness:
     conversation_running: bool = False
     agent_session_id: int | None = None
     latest_notebook_context: dict = field(default_factory=dict)
-    current_status: str = "thinking"
+    current_status: str | None = None
 
     mode_config: dict[Mode, tuple[str, int | None]] = field(default_factory=lambda: {
         Mode.planning: ("claude-sonnet-4-5-20250929", 4096),
@@ -2775,7 +2775,6 @@ class AgentHarness:
             elif nested_type == "set_widget_value":
                 if self.current_status == "awaiting_user_widget_input":
                     print(f"[agent] Widget values updated - waking agent")
-                    self.current_status = "thinking"
                     await self.pending_messages.put({
                         "type": "set_widget_value",
                         "data": nested_msg.get("data", {})
