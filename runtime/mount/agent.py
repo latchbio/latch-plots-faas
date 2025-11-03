@@ -396,10 +396,6 @@ class AgentHarness:
                 },
             )
 
-        elif msg_type == "stop":
-            self.conversation_running = False
-            print("[agent] Stop signal received")
-
     def _has_pending_widget_values(self) -> bool:
         for item in self.pending_messages._queue:
             if item.get("type") == "set_widget_value":
