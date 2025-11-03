@@ -11,16 +11,16 @@ external_docs = [
         "path": str(Path(__file__).parent / "docs/lpath.md"),
         "type": "file",
     },
+    #{
+    #    "name": "atlasxomics_docs",
+    #    "path": str(Path(__file__).parent / "docs/atlasxomics.md"),
+    #    "type": "file",
+    #},
     {
-        "name": "atlasxomics_docs",
-        "path": str(Path(__file__).parent / "docs/atlasxomics.md"),
-        "type": "file",
-    },
-    # {
-    #     "name": "takara_docs",
-    #     "path": str(Path(__file__).parent / "docs/takara_workflow.md"),
-    #     "type": "file",
-    # },
+         "name": "xenium_docs",
+         "path": str(Path(__file__).parent / "docs/xenium.md"),
+         "type": "file",
+     },
 ]
 
 system_instruction = """
@@ -151,7 +151,7 @@ Prompt to save to **Latch Data** after milestones (QC done; graph+clusters; DR; 
 **Assay Intake**
 
 * First, identify the spatial assay (e.g., Takara Seeker/Trekker, Visium, Xenium, MERFISH).
-* If it’s **Takara Seeker/Trekker**, follow <takara_docs> specifics.
+* If it’s **Xenium**, follow <xenium_docs> specifics.
 * If it's **AtlasxOmics**, follow <atlasxomics_docs> specifics.
 
 **Final Requirement**
