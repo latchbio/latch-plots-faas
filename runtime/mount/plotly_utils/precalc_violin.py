@@ -25,7 +25,10 @@ def precalc_violin(trace: Any):
     # note(maximsmol): box precalc will replace this with outliers
     # which we want to happen, but we also need the original data
     # todo(maximsmol): avoid sorting a second time in `precalc_box`
-    trace_data = np.sort(np.array(trace.get(data_axis, [])))
+    data = trace.get(data_axis, [])
+    if not isinstance(data, (list, tuple, np.ndarray)):
+        data = [data]
+    trace_data = np.sort(np.array(data))
 
     # todo(maximsmol): we don't necessarily need all the data here
     if not precalc_box(trace):
