@@ -397,9 +397,14 @@ class AgentHarness:
             )
 
     def _has_pending_widget_values(self) -> bool:
+        # todo(tim): temp adding these prints to see something, pls disregard will delete after
+        queue_types = [item.get("type") for item in self.pending_messages._queue]
+        print(f"[tim] _has_pending_widget_values check: queue has {len(queue_types)} items: {queue_types}")
         for item in self.pending_messages._queue:
             if item.get("type") == "set_widget_value":
+                print(f"[tim] _has_pending_widget_values: found set_widget_value, returning True")
                 return True
+        print(f"[tim] _has_pending_widget_values: no set_widget_value found, returning False")
         return False
 
     async def _complete_turn(self) -> None:
@@ -2762,15 +2767,15 @@ class AgentHarness:
                 if cell_id is not None:
                     self.executing_cells.discard(str(cell_id))
 
-                if self.current_status != "awaiting_user_widget_input" or self._has_pending_widget_values():
-                    await self.pending_messages.put({
-                        "type": "cell_result",
-                        "cell_id": cell_id,
-                        "success": not has_exception,
-                        "exception": exception,
-                        "logs": logs,
-                        "display_name": display_name,
-                    })
+                print(f"[tim] current_status={self.current_status}, has_pending_widget_values={self._has_pending_widget_values()}")
+                await self.pending_messages.put({
+                    "type": "cell_result",
+                    "cell_id": cell_id,
+                    "success": not has_exception,
+                    "exception": exception,
+                    "logs": logs,
+                    "display_name": display_name,
+                })
             elif nested_type == "start_cell":
                 cell_id = nested_msg.get("cell_id")
                 if cell_id is not None and self.current_request_id is not None:
