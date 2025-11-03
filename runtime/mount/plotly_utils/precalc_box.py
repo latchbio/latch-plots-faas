@@ -3,6 +3,18 @@ from typing import Any
 import numpy as np
 
 
+def _get_sorted_numeric_data(trace: Any, axis: str):
+    raw_data = trace.get(axis, [])
+    try:
+        data = np.asarray(raw_data, dtype=np.float64)
+    except (TypeError, ValueError):
+        return None
+
+    if data.ndim == 0 or data.size == 0:
+        return None
+
+    return np.sort(data)
+
 # todo(maximsmol): handle non-numeric data
 def precalc_box(trace: Any):
     if any(
@@ -42,7 +54,9 @@ def precalc_box(trace: Any):
         # todo(maximsmol): support generated index axes
         return False
 
-    data = np.sort(np.array(trace.get(data_axis, [])))
+    data = _get_sorted_numeric_data(trace, data_axis)
+    if data is None:
+        return False
     # todo(maximsmol): do not go through `to_json` to avoid serializing to Python arrays
 
     boxmean = trace.get("boxmean", False)
