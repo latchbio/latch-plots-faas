@@ -143,9 +143,6 @@ class AgentHarness:
     async def _insert_history(self, *, event_type: str, payload: dict, request_id: str | None = None, tx_id: str | None = None) -> None:
         assert self.agent_session_id is not None
 
-        insert_start = time.time()
-        print(f"[agent] _insert_history: starting (event_type={event_type}, request_id={request_id})")
-
         variables = {
             "sessionId": str(self.agent_session_id),
             "eventType": event_type,
@@ -154,7 +151,6 @@ class AgentHarness:
             "txId": tx_id,
         }
 
-        gql_start = time.time()
         await gql_query(
             auth=auth_token_sdk,
             query="""
@@ -166,15 +162,8 @@ class AgentHarness:
             """,
             variables=variables,
         )
-        gql_elapsed = time.time() - gql_start
-        print(f"[agent] _insert_history: gql_query took {gql_elapsed:.3f}s (request_id={request_id})")
 
-        notify_start = time.time()
         await self._notify_history_updated(request_id=request_id)
-        notify_elapsed = time.time() - notify_start
-
-        insert_elapsed = time.time() - insert_start
-        print(f"[agent] _insert_history: completed in {insert_elapsed:.3f}s (notify took {notify_elapsed:.3f}s, request_id={request_id})")
 
     async def _mark_all_history_removed(self) -> None:
         assert self.agent_session_id is not None
@@ -193,7 +182,6 @@ class AgentHarness:
         await self._notify_history_updated()
 
     def _start_conversation_loop(self) -> None:
-        print("[agent] _start_conversation_loop: creating task")
         self.conversation_task = asyncio.create_task(self.run_agent_loop())
 
         def _task_done_callback(task: asyncio.Task) -> None:
@@ -204,7 +192,6 @@ class AgentHarness:
                 traceback.print_exc()
 
         self.conversation_task.add_done_callback(_task_done_callback)
-        print("[agent] _start_conversation_loop: task created and callback added")
 
     async def _clear_running_state(self) -> None:
         if len(self.pending_operations) > 0:
@@ -281,14 +268,10 @@ class AgentHarness:
         print(f"[agent] Mode changed to {mode.value}")
 
     async def _wait_for_message(self) -> None:
-        print(f"[agent] _wait_for_message: waiting for message...")
-        wait_start = time.time()
+        print("[agent] _wait_for_message: waiting for message...")
         msg = await self.pending_messages.get()
-        wait_elapsed = time.time() - wait_start
 
         msg_type = msg.get("type")
-        request_id = msg.get("request_id")
-        print(f"[agent] _wait_for_message: got message type={msg_type} (waited {wait_elapsed:.3f}s, request_id={request_id})")
 
         if msg_type == "resume":
             print("[agent] Resuming turn after tool results")
@@ -2075,8 +2058,9 @@ class AgentHarness:
             return {
                 "tool_name": "refresh_cells_context",
                 "success": True,
-                "summary": f"Refreshed cells context: {cell_count} cells",
-                "cell_count": cell_count
+                "summary": f"Refreshed cells context for {cell_count} cells and stored result in {context_dir / 'cells.md'}",
+                "cell_count": cell_count,
+                "context_path": str(context_dir / "cells.md")
             }
 
         async def refresh_globals_context(args: dict) -> dict:
@@ -2116,8 +2100,9 @@ class AgentHarness:
             return {
                 "tool_name": "refresh_globals_context",
                 "success": True,
-                "summary": f"Refreshed globals context: {len(globals_data)} variables",
-                "variable_count": len(globals_data)
+                "summary": f"Refreshed globals context for {len(globals_data)} variables and stored result in {context_dir / 'globals.md'}",
+                "variable_count": len(globals_data),
+                "context_path": str(context_dir / "globals.md"),
             }
 
         async def refresh_reactivity_context(args: dict) -> dict:
@@ -2143,7 +2128,8 @@ class AgentHarness:
             return {
                 "tool_name": "refresh_reactivity_context",
                 "success": True,
-                "summary": "Refreshed reactivity context"
+                "summary": f"Refreshed reactivity context and stored result in {context_dir / 'signals.md'}",
+                "context_path": str(context_dir / "signals.md"),
             }
 
         self.tools.append({
@@ -2192,14 +2178,14 @@ class AgentHarness:
             if not self.conversation_running:
                 break
 
-            print(f"[agent] run_agent_loop: building messages from DB...")
+            print("[agent] run_agent_loop: building messages from DB...")
             build_start = time.time()
             api_messages = await self._build_messages_from_db()
             build_elapsed = time.time() - build_start
             print(f"[agent] run_agent_loop: built {len(api_messages) if api_messages else 0} messages in {build_elapsed:.3f}s")
 
             if not api_messages or api_messages[-1].get("role") != "user":
-                print(f"[agent] run_agent_loop: skipping (no messages or last message not user)")
+                print("[agent] run_agent_loop: skipping (no messages or last message not user)")
                 continue
 
             turn += 1
@@ -2558,15 +2544,9 @@ class AgentHarness:
         request_id = msg.get("request_id")
         contextual_node_data = msg.get("contextual_node_data")
 
-        print(f"[agent] Processing query: {query}... (request_id={request_id})")
-        start_time = time.time()
-
         full_query = query
         if contextual_node_data:
             full_query = f"{query} \n\nHere is the context of the selected nodes the user would like to use: <ContextualNodeData>{json.dumps(contextual_node_data)}</ContextualNodeData>"
-
-        elapsed = time.time() - start_time
-        print(f"[agent] handle_query took {elapsed:.3f}s, queuing message (request_id={request_id})")
 
         await self.pending_messages.put({
             "type": "user_query",
@@ -2749,6 +2729,7 @@ async def main() -> None:
                 await harness.accept()
             except Exception:
                 traceback.print_exc()
+                break
 
         print("Agent shutting down...")
     finally:

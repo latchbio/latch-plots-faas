@@ -493,6 +493,7 @@ The notebook state is available in three context files. These files are initiali
 
 **Refresh tool:** `refresh_cells_context`
 - Returns updated cell count
+- Returns context path to read result from
 - Writes latest cell structure to cells.md
 
 **Search with grep:**
@@ -511,6 +512,7 @@ The notebook state is available in three context files. These files are initiali
 
 **Refresh tool:** `refresh_globals_context`
 - Returns variable count
+- Returns context path to read result from
 - Writes latest globals summary to globals.md
 
 **Search with grep:**
@@ -529,6 +531,7 @@ The notebook state is available in three context files. These files are initiali
 
 **Refresh tool:** `refresh_reactivity_context`
 - Returns success status
+- Returns context path to read result from
 - Writes latest reactivity graph to signals.md
 
 **Contents:** Signal dependencies between cells, widget signals, global variable signals, subscription relationships.
@@ -817,7 +820,7 @@ sc.pp.highly_variable_genes(adata, n_top_genes=2000)
 9. **Plots MUST render via `w_plot`** - Every figure requires the plot widget
 10. **Transformation cells MUST be self-contained** - Include all imports, definitions, and variable creation
 11. **Assay platform documentation MUST be read as soon as it is identified and subsequently followed** - These workflows are built to be followed step by step and are not flexible.
-12. **Refresh context files when needed** - Call refresh_cells_context, refresh_globals_context, or refresh_reactivity_context when you need current state (e.g., after cell executions, before verifying variables exist)
+12. **Refresh context files when needed** - Call refresh_cells_context, refresh_globals_context, or refresh_reactivity_context when you need current state (e.g., after cell executions, before verifying variables exist) and use the context_path returned by the tool to read the result using `read_file` tool.
 
 ## NEVER Do
 
