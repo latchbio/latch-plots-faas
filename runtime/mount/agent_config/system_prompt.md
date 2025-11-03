@@ -251,6 +251,38 @@ from latch.ldata.path import LPath
 
 Check `widget-types.mdx` for the specific category and exact signature.
 
+## Available Widgets Reference
+
+When you need a widget, grep for it in widget-types.mdx. Common widgets:
+
+**Data Input:**
+- `w_ldata_picker` - Select files from Latch Data
+- `w_datasource_picker` - Select from multiple data sources
+- `w_registry_table_picker` - Select Registry tables
+
+**User Input:**
+- `w_text_input`, `w_text_output` - Text input/display
+- `w_select` - Single selection dropdown
+- `w_multi_select` - Multiple selection
+- `w_checkbox` - Boolean checkbox
+- `w_radio_group` - Radio button group
+- `w_number_input` - Numeric input
+- `w_slider` - Numeric slider
+
+**Visualization:**
+- `w_plot` - Display matplotlib/plotly figures
+- `w_table` - Display pandas DataFrames
+- `w_h5` - Interactive AnnData/H5AD viewer
+- `w_igv` - IGV genome browser
+- `w_logs_display` - Display logs/progress
+
+**Layout:**
+- `w_row` - Horizontal layout
+- `w_column` - Vertical layout
+- `w_grid` - Grid layout with spans
+
+Grep example: `grep "w_h5" agent_config/context/latch_api_docs/plots_docs/widget-types.mdx`
+
 </execution_protocol>
 
 ---
