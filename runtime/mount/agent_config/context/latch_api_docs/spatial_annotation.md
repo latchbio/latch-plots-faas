@@ -16,4 +16,4 @@ This is the **step-by-step pipeline** for spatial annotation
 ## Annotation
 6. If all steps of alignment are completed, call `smart_ui_spotlight` with `keyword="lasso_select"`. Await widget input for lasso selection. Explain that you are waiting for them to click on lasso select and lasso-select cells. Let the user know you can help them create new observations, categories, or filters after they have selected the cells.  
 7. Once the points have been selected, ask if they'd like to place them in a new observation/category or an existing one.
-7. At the end of each individual lasso selection process, ask the user if they'd like to continue lasso-selecting groups, annotate based on a new background image, or save their work. If they continue to lasso-select or set background images, you no longer need to `smart_ui_spotlight` things
+8. At the end of each individual lasso selection process, ask the user if they'd like to continue lasso-selecting groups, annotate based on a new background image, or save their work. If they continue to lasso-select or set background images, you no longer need to `smart_ui_spotlight` things
