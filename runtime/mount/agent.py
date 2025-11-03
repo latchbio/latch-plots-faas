@@ -2762,7 +2762,7 @@ class AgentHarness:
                 if cell_id is not None:
                     self.executing_cells.discard(str(cell_id))
 
-                if not (self.current_status == "awaiting_user_widget_input" and self._has_pending_widget_values()):
+                if self.current_status != "awaiting_user_widget_input" or self._has_pending_widget_values():
                     await self.pending_messages.put({
                         "type": "cell_result",
                         "cell_id": cell_id,
