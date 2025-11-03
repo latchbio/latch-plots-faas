@@ -6,12 +6,13 @@ This is the **step-by-step pipeline** for spatial annotation
 2. **Reference Image Entry**: Once a w_h5 widget exists, ask if they'd like to begin with image alignment by selecting a reference image and call `smart_ui_spotlight` with `keyword="file_upload"`
 
 ## Image Alignment
-3. Call `h5_set_background_image` on the image they provide. If successful, call `h5_set_marker_opacity` with 0.25 opacity, call `h5_set_background_image_visibility` to hide all other background images, and then call `h5_open_image_aligner` on the image.
+3. Call `h5_set_background_image` on the image they provide. If successful, call `h5_set_marker_opacity` with 0.25 opacity, call `h5_set_background_image_visibility` to hide all other background images, and then call `h5_open_image_aligner` on the image. Note this step typically takes 5-30 seconds to complete loading.
 4. For the alignment process, await widget input to progress through each of the following steps:
-   - **MatchOrientation**: For flipping and rotating the image to orient it. Explain the step with any tips. This step is not completed automatically when h5_open_image_aligner is called.
+   - **MatchOrientation**: For flipping and rotating the image to orient it. Explain the step with any tips. Unless you have explictally seen a widget update message with image_alignment_step for "PlaceAnchorPoints", this step has not been completed.
    - **PlaceAnchorPoints**: For setting landmark points in the image. State the requirements (e.g., minimum of 5 markers).
    - **CheckAlignment**: For setting the new aligned obs key name and the preferred alignment method. Suggest the affine alignment method over STAlign as it is much quicker and only slightly less performant. 
    - Note that upon completion of all steps, the image_alignment_step will be set to None and the new embedding will automatically be set in the h5 widget.
+   - Note that the image_alignment_step you see in widget update messages is the current step. These steps may take the user a few minutes to understand and complete, so don't assume they have started immediately working through the step after you receive the widget update messsages. 
 
 ## Annotation
 6. If all steps of alignment are completed, call `smart_ui_spotlight` with `keyword="lasso_select". Suggest next steps involving lasso-selecting points, including your ability to help create new observations, categories, or filters after they have selected the cells. Await for widget input for lasso selection. 

@@ -392,7 +392,6 @@ class AgentHarness:
                     "role": "user",
                     "content": content,
                     "timestamp": int(time.time() * 1000),
-                    "hidden": True,
                 },
             )
 
