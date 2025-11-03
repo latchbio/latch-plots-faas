@@ -441,7 +441,6 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
 
                 continue
 
-
             await plots_ctx_manager.broadcast_message(orjson.dumps(msg).decode())
 
         except Exception:
