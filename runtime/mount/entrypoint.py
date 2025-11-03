@@ -442,7 +442,7 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                 continue
 
             elif msg["type"] == "set_widget_value":
-                if a_proc.conn_a is not None:
+                if current_agent_ctx is None and a_proc.conn_a is not None:
                     await a_proc.conn_a.send({
                         "type": "kernel_message",
                         "message": msg
