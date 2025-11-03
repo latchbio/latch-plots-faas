@@ -42,7 +42,10 @@ def precalc_box(trace: Any):
         # todo(maximsmol): support generated index axes
         return False
 
-    data = np.sort(np.array(trace.get(data_axis, [])))
+    data = trace.get(data_axis, [])
+    if not isinstance(data, (list, tuple, np.ndarray)):
+        data = [data]
+    data = np.sort(np.array(data))
     # todo(maximsmol): do not go through `to_json` to avoid serializing to Python arrays
 
     boxmean = trace.get("boxmean", False)
