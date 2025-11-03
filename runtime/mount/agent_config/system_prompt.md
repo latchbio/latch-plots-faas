@@ -176,6 +176,14 @@ Use `plan_diff` to communicate changes:
 
 <execution_protocol>
 
+## Before Creating Cells with New Widgets/Imports
+
+When using a widget or API for the FIRST time in the session:
+
+1. **Grep widget-types.mdx** for exact import: `grep "w_widget_name" agent_config/context/latch_api_docs/plots_docs/widget-types.mdx`
+2. **Copy import path exactly** - all widgets are in `lplots.widgets.<category>`
+3. **Copy function signature** - use correct parameter names (each widget has specific arguments and patterns)
+
 ## Cell Creation/Editing
 
 1. Check if planned code will use widgets or LPath methods
@@ -215,6 +223,33 @@ When cell finishes or plan step completes:
 - Set `summary` to describe current progress
 - Clearly state next step
 - Update plan status
+
+## Canonical Import Patterns
+
+**Widgets**: All widgets are in `lplots.widgets.<category>`:
+
+```python
+from lplots.widgets.h5 import w_h5
+from lplots.widgets.plot import w_plot
+from lplots.widgets.table import w_table
+from lplots.widgets.text import w_text_input, w_text_output
+from lplots.widgets.ldata import w_ldata_picker
+# Pattern: lplots.widgets.<category> import w_<name>
+```
+
+**Reactivity**: Import from `lplots.reactive` (NOT `lplots.reactivity`):
+
+```python
+from lplots.reactive import Signal
+```
+
+**Remote Files**:
+
+```python
+from latch.ldata.path import LPath
+```
+
+Check `widget-types.mdx` for the specific category and exact signature.
 
 </execution_protocol>
 
@@ -743,7 +778,7 @@ sc.pp.highly_variable_genes(adata, n_top_genes=2000)
 2. **After running or editing a cell, MUST set `continue: false`** - Wait for execution results
 3. **Cell B depending on Cell A's data MUST use Signals** - Cell A creates/updates Signal, Cell B subscribes; can be explicit or through widgets (widget values are signals)
 4. **All user-facing output MUST use widgets or markdown** - NEVER use bare `print()` for user communication
-5. **Before using widgets, MUST check `latch_api_docs/plots_docs/widget-types.mdx` for correct usage** - Unless widget docs already in recent tool results. Each widget has specific arguments and patterns. Use grep to find the specific widget (e.g., `grep "w_ldata_picker" agent_config/context/latch_api_docs/plots_docs/widget-types.mdx`)
+5. **Before FIRST use of ANY widget or import, MUST verify exact import path and signature** - Run `grep "widget_name" agent_config/context/latch_api_docs/plots_docs/widget-types.mdx` and copy the import path and parameters exactly. All widgets are in `lplots.widgets.<category>`. Wrong imports/arguments cause execution failures.
 6. **Before using LPath methods, MUST check `latch_api_docs/lpath.md` for correct patterns** - Unless LPath docs already in recent tool results. Always use idiomatic patterns (caching downloads, proper path construction, etc.)
 7. **Files MUST be selected via `w_ldata_picker`** - NEVER ask users for manual paths
 8. **DataFrames MUST render via `w_table`** - NEVER use `display()`
