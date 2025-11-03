@@ -2474,6 +2474,8 @@ class AgentHarness:
             )
             await self._notify_history_updated()
 
+    _context_init_task: asyncio.Task | None = None
+
     async def handle_init(self, msg: dict[str, object]) -> None:
         print("[agent] Initializing")
 
@@ -2510,17 +2512,15 @@ class AgentHarness:
             })
             print("[agent] Initialization complete")
 
-            print("[agent] Initializing context files")
-            context_start = time.time()
-            await self.tool_map.get("refresh_cells_context")({})
-            await self.tool_map.get("refresh_globals_context")({})
-            await self.tool_map.get("refresh_reactivity_context")({})
-            context_elapsed = time.time() - context_start
-            print(f"[agent] Context files initialized in {context_elapsed:.3f}s")
-
             print("[agent] Starting conversation loop")
             self._start_conversation_loop()
             print("[agent] Conversation loop started")
+
+            self._context_init_task = asyncio.create_task(asyncio.gather(
+                await self.tool_map.get("refresh_cells_context")({}),
+                await self.tool_map.get("refresh_globals_context")({}),
+                await self.tool_map.get("refresh_reactivity_context")({}),
+            ))
 
             most_recent_submit_response = None
             for history_msg in reversed(messages):
@@ -2565,7 +2565,6 @@ class AgentHarness:
         contextual_node_data = msg.get("contextual_node_data")
 
         print(f"[agent] Processing query: {query}... (request_id={request_id})")
-        import time
         start_time = time.time()
 
         full_query = query
