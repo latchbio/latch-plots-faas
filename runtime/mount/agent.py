@@ -91,14 +91,14 @@ class AgentHarness:
             query="""
                 query AgentHistory($sessionId: BigInt!) {
                     agentHistories(condition: {sessionId: $sessionId, removed: false}, orderBy: ID_ASC) {
-                        nodes { id payload }
+                        nodes { id payload requestId }
                     }
                 }
             """,
             variables={"sessionId": str(self.agent_session_id)},
         )
         nodes = resp.get("data", {}).get("agentHistories", {}).get("nodes", [])
-        return [n.get("payload") for n in nodes if n.get("payload")]
+        return [{"payload": n.get("payload"), "request_id": n.get("requestId")} for n in nodes if n.get("payload")]
 
     async def _build_messages_from_db(self) -> list[MessageParam]:
         history = await self._fetch_history_from_db()
@@ -139,6 +139,18 @@ class AgentHarness:
         print(f"[agent] Built {len(anthropic_messages)} messages from DB")
 
         return anthropic_messages
+
+    async def _extract_last_request_id(self) -> str | None:
+        history = await self._fetch_history_from_db()
+
+        for item in reversed(history):
+            if not isinstance(item, dict):
+                continue
+            request_id = item.get("request_id")
+            if request_id is not None:
+                return request_id
+
+        return None
 
     async def _insert_history(self, *, event_type: str, payload: dict, request_id: str | None = None, tx_id: str | None = None) -> None:
         assert self.agent_session_id is not None
@@ -2519,11 +2531,12 @@ class AgentHarness:
                 waiting_states = {"awaiting_cell_execution", "awaiting_user_widget_input"}
 
                 if next_status in waiting_states:
-                    print(f"[agent] Reconnected while {next_status}, prompting LLM to check state and retry")
+                    previous_request_id = await self._extract_last_request_id()
+                    print(f"[agent] Reconnected while {next_status}, prompting LLM to check state and retry (request_id={previous_request_id})")
                     await self.pending_messages.put({
                         "type": "user_query",
                         "content": "The session was reconnected. You were waiting for an action to complete, but it may have finished or failed while offline. Please retry any incomplete actions or continue with your plan.",
-                        "request_id": None,
+                        "request_id": previous_request_id,
                         "hidden": True,
                     })
                 else:
@@ -2729,7 +2742,6 @@ async def main() -> None:
                 await harness.accept()
             except Exception:
                 traceback.print_exc()
-                break
 
         print("Agent shutting down...")
     finally:
