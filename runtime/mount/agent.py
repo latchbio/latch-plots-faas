@@ -2516,12 +2516,6 @@ class AgentHarness:
             self._start_conversation_loop()
             print("[agent] Conversation loop started")
 
-            self._context_init_task = asyncio.create_task(asyncio.gather(
-                await self.tool_map.get("refresh_cells_context")({}),
-                await self.tool_map.get("refresh_globals_context")({}),
-                await self.tool_map.get("refresh_reactivity_context")({}),
-            ))
-
             most_recent_submit_response = None
             for history_msg in reversed(messages):
                 if history_msg.get("role") == "assistant":
