@@ -3,7 +3,7 @@ from typing import Any
 
 import numpy as np
 
-from .precalc_box import precalc_box
+from .precalc_box import _get_sorted_numeric_data, precalc_box
 
 gaussian_const = 1 / sqrt(2 * pi)
 
@@ -25,10 +25,9 @@ def precalc_violin(trace: Any):
     # note(maximsmol): box precalc will replace this with outliers
     # which we want to happen, but we also need the original data
     # todo(maximsmol): avoid sorting a second time in `precalc_box`
-    data = trace.get(data_axis, [])
-    if not isinstance(data, (list, tuple, np.ndarray)):
-        data = [data]
-    trace_data = np.sort(np.array(data))
+    trace_data = _get_sorted_numeric_data(trace, data_axis)
+    if trace_data is None:
+        return
 
     # todo(maximsmol): we don't necessarily need all the data here
     if not precalc_box(trace):
