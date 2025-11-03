@@ -143,6 +143,9 @@ class AgentHarness:
     async def _insert_history(self, *, event_type: str, payload: dict, request_id: str | None = None, tx_id: str | None = None) -> None:
         assert self.agent_session_id is not None
 
+        insert_start = time.time()
+        print(f"[agent] _insert_history: starting (event_type={event_type}, request_id={request_id})")
+
         variables = {
             "sessionId": str(self.agent_session_id),
             "eventType": event_type,
@@ -150,6 +153,8 @@ class AgentHarness:
             "requestId": request_id,
             "txId": tx_id,
         }
+
+        gql_start = time.time()
         await gql_query(
             auth=auth_token_sdk,
             query="""
@@ -161,7 +166,15 @@ class AgentHarness:
             """,
             variables=variables,
         )
+        gql_elapsed = time.time() - gql_start
+        print(f"[agent] _insert_history: gql_query took {gql_elapsed:.3f}s (request_id={request_id})")
+
+        notify_start = time.time()
         await self._notify_history_updated(request_id=request_id)
+        notify_elapsed = time.time() - notify_start
+
+        insert_elapsed = time.time() - insert_start
+        print(f"[agent] _insert_history: completed in {insert_elapsed:.3f}s (notify took {notify_elapsed:.3f}s, request_id={request_id})")
 
     async def _mark_all_history_removed(self) -> None:
         assert self.agent_session_id is not None
@@ -180,6 +193,7 @@ class AgentHarness:
         await self._notify_history_updated()
 
     def _start_conversation_loop(self) -> None:
+        print("[agent] _start_conversation_loop: creating task")
         self.conversation_task = asyncio.create_task(self.run_agent_loop())
 
         def _task_done_callback(task: asyncio.Task) -> None:
@@ -190,6 +204,7 @@ class AgentHarness:
                 traceback.print_exc()
 
         self.conversation_task.add_done_callback(_task_done_callback)
+        print("[agent] _start_conversation_loop: task created and callback added")
 
     async def _clear_running_state(self) -> None:
         if len(self.pending_operations) > 0:
@@ -266,10 +281,14 @@ class AgentHarness:
         print(f"[agent] Mode changed to {mode.value}")
 
     async def _wait_for_message(self) -> None:
+        print(f"[agent] _wait_for_message: waiting for message...")
+        wait_start = time.time()
         msg = await self.pending_messages.get()
+        wait_elapsed = time.time() - wait_start
 
         msg_type = msg.get("type")
-        print(f"[agent] _wait_for_message: got message type={msg_type}")
+        request_id = msg.get("request_id")
+        print(f"[agent] _wait_for_message: got message type={msg_type} (waited {wait_elapsed:.3f}s, request_id={request_id})")
 
         if msg_type == "resume":
             print("[agent] Resuming turn after tool results")
@@ -2166,16 +2185,25 @@ class AgentHarness:
         self.conversation_running = True
         turn = 0
 
+        print("[agent] run_agent_loop: started")
+
         while self.conversation_running:
             await self._wait_for_message()
             if not self.conversation_running:
                 break
 
+            print(f"[agent] run_agent_loop: building messages from DB...")
+            build_start = time.time()
             api_messages = await self._build_messages_from_db()
+            build_elapsed = time.time() - build_start
+            print(f"[agent] run_agent_loop: built {len(api_messages) if api_messages else 0} messages in {build_elapsed:.3f}s")
+
             if not api_messages or api_messages[-1].get("role") != "user":
+                print(f"[agent] run_agent_loop: skipping (no messages or last message not user)")
                 continue
 
             turn += 1
+            print(f"[agent] run_agent_loop: starting turn {turn}")
 
             model, thinking_budget = self.mode_config.get(self.mode, ("claude-sonnet-4-5-20250929", 1024))
 
@@ -2483,11 +2511,16 @@ class AgentHarness:
             print("[agent] Initialization complete")
 
             print("[agent] Initializing context files")
+            context_start = time.time()
             await self.tool_map.get("refresh_cells_context")({})
             await self.tool_map.get("refresh_globals_context")({})
             await self.tool_map.get("refresh_reactivity_context")({})
+            context_elapsed = time.time() - context_start
+            print(f"[agent] Context files initialized in {context_elapsed:.3f}s")
 
+            print("[agent] Starting conversation loop")
             self._start_conversation_loop()
+            print("[agent] Conversation loop started")
 
             most_recent_submit_response = None
             for history_msg in reversed(messages):
@@ -2531,11 +2564,16 @@ class AgentHarness:
         request_id = msg.get("request_id")
         contextual_node_data = msg.get("contextual_node_data")
 
-        print(f"[agent] Processing query: {query}...")
+        print(f"[agent] Processing query: {query}... (request_id={request_id})")
+        import time
+        start_time = time.time()
 
         full_query = query
         if contextual_node_data:
             full_query = f"{query} \n\nHere is the context of the selected nodes the user would like to use: <ContextualNodeData>{json.dumps(contextual_node_data)}</ContextualNodeData>"
+
+        elapsed = time.time() - start_time
+        print(f"[agent] handle_query took {elapsed:.3f}s, queuing message (request_id={request_id})")
 
         await self.pending_messages.put({
             "type": "user_query",
@@ -2544,6 +2582,8 @@ class AgentHarness:
             "display_query": query,
             "display_nodes": contextual_node_data,
         })
+
+        print(f"[agent] Message queued successfully (request_id={request_id})")
 
     async def handle_cancel(self, msg: dict[str, object]) -> None:
         request_id = msg.get("request_id", "unknown")
@@ -2605,8 +2645,9 @@ class AgentHarness:
     async def accept(self) -> None:
         msg = await self.conn.recv()
         msg_type = msg.get("type")
+        msg_request_id = msg.get("request_id")
 
-        print(f"[agent] Received message: {msg_type}")
+        print(f"[agent] accept: received message type={msg_type} (request_id={msg_request_id})")
 
         if msg_type == "init":
             print(f"[agent] Message: {msg_type}")
@@ -2614,8 +2655,12 @@ class AgentHarness:
         elif msg_type == "agent_query":
             query = msg.get("query", "")
             query_preview = query[:60] + "..." if len(query) > 60 else query
-            print(f"[agent] Query: {query_preview}")
+            request_id = msg.get("request_id", "unknown")
+            print(f"[agent] accept: dispatching to handle_query (query={query_preview}, request_id={request_id})")
+            handle_start = time.time()
             await self.handle_query(msg)
+            handle_elapsed = time.time() - handle_start
+            print(f"[agent] accept: handle_query completed in {handle_elapsed:.3f}s (request_id={request_id})")
         elif msg_type == "agent_cancel":
             request_id = msg.get("request_id", "unknown")
             print(f"[agent] Cancel: {request_id}")
