@@ -400,6 +400,12 @@ class AgentHarness:
             self.conversation_running = False
             print("[agent] Stop signal received")
 
+    def _has_pending_widget_values(self) -> bool:
+        for item in self.pending_messages._queue:
+            if item.get("type") == "set_widget_value":
+                return True
+        return False
+
     async def _complete_turn(self) -> None:
         if self.current_request_id is None:
             return
@@ -2760,7 +2766,7 @@ class AgentHarness:
                 if cell_id is not None:
                     self.executing_cells.discard(str(cell_id))
 
-                if self.current_status != "awaiting_user_widget_input":
+                if not (self.current_status == "awaiting_user_widget_input" and self._has_pending_widget_values()):
                     await self.pending_messages.put({
                         "type": "cell_result",
                         "cell_id": cell_id,
