@@ -67,9 +67,9 @@ class AgentHarness:
     latest_notebook_context: dict = field(default_factory=dict)
 
     mode_config: dict[Mode, tuple[str, int | None]] = field(default_factory=lambda: {
-        Mode.planning: ("claude-sonnet-4-5-20250929", 4096),
-        Mode.executing: ("claude-sonnet-4-5-20250929", 1024),
-        Mode.debugging: ("claude-sonnet-4-5-20250929", 2048),
+        Mode.planning: ("claude-sonnet-4-5-20250929", 1024),
+        Mode.executing: ("claude-sonnet-4-5-20250929", 512),
+        Mode.debugging: ("claude-sonnet-4-5-20250929", 1024),
     })
 
     async def send(self, msg: dict[str, object]) -> None:
