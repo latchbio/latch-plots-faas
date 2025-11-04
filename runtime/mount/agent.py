@@ -3,6 +3,7 @@ import contextlib
 import json
 import os
 import socket
+import subprocess
 import sys
 import time
 import traceback
@@ -10,12 +11,12 @@ import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
+from pathlib import Path
 
 from agent_utils.auto_install import anthropic
 from anthropic.types import MessageParam, ToolParam
 from anthropic.types.beta.beta_message import BetaMessage
 from anthropic.types.message import Message
-from config_loader import build_system_prompt
 from lplots import _inject
 from socketio_thread import SocketIoThread
 from utils import auth_token_sdk, gql_query, nucleus_url, pod_id
@@ -33,6 +34,9 @@ if sandbox_root:
         return original_path_new(cls, *args, **kwargs)
 
     pathlib.Path.__new__ = patched_path_new
+
+
+context_root = Path(__file__).parent / "agent_config" / "context"
 
 
 class Mode(Enum):
@@ -59,7 +63,6 @@ class AgentHarness:
     pending_messages: asyncio.Queue = field(default_factory=asyncio.Queue)
     conversation_task: asyncio.Task | None = None
     conversation_running: bool = False
-    system_prompt: str = ""
     agent_session_id: int | None = None
     latest_notebook_context: dict = field(default_factory=dict)
 
@@ -88,24 +91,26 @@ class AgentHarness:
             query="""
                 query AgentHistory($sessionId: BigInt!) {
                     agentHistories(condition: {sessionId: $sessionId, removed: false}, orderBy: ID_ASC) {
-                        nodes { id payload }
+                        nodes { id payload requestId }
                     }
                 }
             """,
             variables={"sessionId": str(self.agent_session_id)},
         )
         nodes = resp.get("data", {}).get("agentHistories", {}).get("nodes", [])
-        return [n.get("payload") for n in nodes if n.get("payload")]
+        return [{"payload": n.get("payload"), "request_id": n.get("requestId")} for n in nodes]
 
     async def _build_messages_from_db(self) -> list[MessageParam]:
         history = await self._fetch_history_from_db()
         anthropic_messages: list[MessageParam] = []
 
         for item in history:
-            t = item.get("type") if isinstance(item, dict) else None
+            payload = item.get("payload")
+
+            t = payload.get("type") if isinstance(payload, dict) else None
             if t == "anthropic_message":
-                role = item.get("role")
-                content = item.get("content")
+                role = payload.get("role")
+                content = payload.get("content")
 
                 if (role == "user" and isinstance(content, dict) and content.get("type") == "cell_result"):
                     exception = content.get("exception")
@@ -137,6 +142,18 @@ class AgentHarness:
 
         return anthropic_messages
 
+    async def _extract_last_request_id(self) -> str | None:
+        history = await self._fetch_history_from_db()
+
+        for item in reversed(history):
+            if not isinstance(item, dict):
+                continue
+            request_id = item.get("request_id")
+            if request_id is not None:
+                return request_id
+
+        return None
+
     async def _insert_history(self, *, event_type: str, payload: dict, request_id: str | None = None, tx_id: str | None = None) -> None:
         assert self.agent_session_id is not None
 
@@ -147,6 +164,7 @@ class AgentHarness:
             "requestId": request_id,
             "txId": tx_id,
         }
+
         await gql_query(
             auth=auth_token_sdk,
             query="""
@@ -158,6 +176,7 @@ class AgentHarness:
             """,
             variables=variables,
         )
+
         await self._notify_history_updated(request_id=request_id)
 
     async def _mark_all_history_removed(self) -> None:
@@ -211,6 +230,8 @@ class AgentHarness:
             except asyncio.QueueEmpty:
                 break
 
+        self.executing_cells.clear()
+
         print("[agent] Cleared running state")
 
     async def atomic_operation(self, action: str, params: dict | None = None) -> dict:
@@ -227,6 +248,7 @@ class AgentHarness:
         response_future = loop.create_future()
         self.pending_operations[tx_id] = response_future
 
+        start_time = time.time()
         try:
             print(f"[agent] -> {action}")
             await self.send({"type": "agent_action", "action": action, "params": params, "tx_id": tx_id})
@@ -242,6 +264,8 @@ class AgentHarness:
         except TimeoutError:
             return {"status": "error", "error": f"OPERATION FAILED: '{action}' timed out after 10 seconds. This operation did NOT complete.", "tx_id": tx_id}
         finally:
+            duration = time.time() - start_time
+            print(f"[agent] {action} took {duration:.3f}s")
             self.pending_operations.pop(tx_id, None)
 
     async def handle_action_response(self, msg: dict[str, object]) -> None:
@@ -258,10 +282,10 @@ class AgentHarness:
         print(f"[agent] Mode changed to {mode.value}")
 
     async def _wait_for_message(self) -> None:
+        print("[agent] _wait_for_message: waiting for message...")
         msg = await self.pending_messages.get()
 
         msg_type = msg.get("type")
-        print(f"[agent] _wait_for_message: got message type={msg_type}")
 
         if msg_type == "resume":
             print("[agent] Resuming turn after tool results")
@@ -464,18 +488,22 @@ class AgentHarness:
 
             print(f"[tool] edit_cell id={cell_id}")
 
+            original_code = None
+
+            # ensure self.latest_notebook_context is up to date
+            await self.tool_map.get("refresh_cells_context")({})
+            cells = self.latest_notebook_context.get("cells", [])
+
+            for cell in cells:
+                if cell.get("cell_id") == cell_id:
+                    original_code = cell.get("source", "")
+                    break
+
             params = {
                 "cell_id": cell_id,
                 "source": new_code,
                 "auto_run": True
             }
-
-            original_code = None
-            cells = self.latest_notebook_context.get("cells", [])
-            for cell in cells:
-                if cell.get("cell_id") == cell_id:
-                    original_code = cell.get("source", "")
-                    break
 
             result = await self.atomic_operation("edit_cell", params)
             if result.get("status") == "success":
@@ -645,7 +673,7 @@ class AgentHarness:
                 "success": False,
             }
 
-        async def submit_response(args: dict) -> dict:
+        def submit_response(args: dict) -> dict:
             try:
                 summary = args.get("summary")
                 if summary is not None and not isinstance(summary, str):
@@ -1488,7 +1516,7 @@ class AgentHarness:
                     "direction": {
                         "type": "string",
                         "enum": ["in", "out"],
-                        "description": "Zoom direction; use \"in\" to zoom closer, \"out\" to zoom farther"
+                        "description": 'Zoom direction; use "in" to zoom closer, "out" to zoom farther'
                     },
                     "percentage": {
                         "type": "number",
@@ -1615,92 +1643,541 @@ class AgentHarness:
         })
         self.tool_map["h5_manage_obs"] = h5_manage_obs
 
-        if len(self.tools) > 0:
-            self.tools[-1]["cache_control"] = {"type": "ephemeral"}
+        def glob_file_search(args: dict) -> dict:
+            pattern = args.get("pattern", "")
+            base_path = args.get("base_path", "agent_config/context")
 
-    async def _get_notebook_context(self) -> str:
-        context_result, globals_result, reactivity_result = await asyncio.gather(
-            self.atomic_operation("get_context"),
-            self.atomic_operation("request_globals_summary"),
-            self.atomic_operation("request_reactivity_summary")
-        )
+            try:
+                if not Path(base_path).is_absolute():
+                    base_path = Path(__file__).parent / base_path
+                else:
+                    base_path = Path(base_path)
 
-        if context_result.get("status") != "success":
-            return f"Failed to get context: {context_result.get('error', 'Unknown error')}"
+                result = subprocess.run(
+                    ["/usr/bin/find", str(base_path), "-name", pattern],
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                    check=True
+                )
 
-        context = context_result.get("context", {})
-        self.latest_notebook_context = context
+                files = result.stdout.strip().split("\n") if result.stdout.strip() else []
+                relative_files = [str(Path(f).relative_to(context_root)) for f in files if f]
 
-        cell_count = context.get("cell_count", 0)
-        cells = context.get("cells", [])
+                return {
+                    "tool_name": "glob_file_search",
+                    "success": True,
+                    "summary": f"Found {len(relative_files)} files matching pattern '{pattern}'",
+                    "files": relative_files,
+                    "pattern": pattern,
+                }
+            except Exception as e:
+                return {
+                    "tool_name": "glob_file_search",
+                    "success": False,
+                    "summary": f"Error searching for files: {e}"
+                }
 
-        globals_data: dict[str, object] | None = None
-        if globals_result.get("status") == "success":
+        def grep(args: dict) -> dict:
+            pattern = args.get("pattern")
+            if pattern is None:
+                return {
+                    "tool_name": "grep",
+                    "success": False,
+                    "summary": "Pattern is required"
+                }
+
+            path = args.get("path", "agent_config/context")
+            case_insensitive = args.get("case_insensitive", False)
+
+            try:
+                if not Path(path).is_absolute():
+                    search_path = Path(__file__).parent / path
+                else:
+                    search_path = Path(path)
+
+                cmd = ["/usr/bin/rg", "--line-number"]
+                if case_insensitive:
+                    cmd.append("--ignore-case")
+                cmd.extend([pattern, str(search_path)])
+
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                    check=False
+                )
+
+                display_path = str(search_path.relative_to(context_root))
+
+                matches = result.stdout.strip().replace(str(context_root) + "/", "")
+
+                if result.returncode == 0:
+                    return {
+                        "tool_name": "grep",
+                        "success": True,
+                        "summary": f"Found matches for pattern '{pattern}' in {display_path}",
+                        "matches": matches,
+                        "pattern": pattern,
+                        "path": display_path
+                    }
+
+                if result.returncode == 1:
+                    return {
+                        "tool_name": "grep",
+                        "success": True,
+                        "summary": f"No matches found for pattern '{pattern}' in {display_path}",
+                        "matches": "",
+                        "pattern": pattern,
+                        "path": display_path
+                    }
+
+                return {
+                    "tool_name": "grep",
+                    "success": False,
+                    "summary": f"Ripgrep error: {result.stderr}"
+                }
+            except Exception as e:
+                return {
+                    "tool_name": "grep",
+                    "success": False,
+                    "summary": f"Error searching: {e}"
+                }
+
+        def read_file(args: dict) -> dict:
+            path = args.get("path")
+            if path is None:
+                return {
+                    "tool_name": "read_file",
+                    "success": False,
+                    "summary": "Path is required"
+                }
+
+            offset = args.get("offset", 0)
+            limit = args.get("limit")
+
+            try:
+                if not Path(path).is_absolute():
+                    file_path = Path(__file__).parent / path
+                else:
+                    file_path = Path(path)
+
+                if not file_path.exists():
+                    return {
+                        "tool_name": "read_file",
+                        "success": False,
+                        "summary": f"File not found: {path}"
+                    }
+
+                with Path(file_path).open(encoding="utf-8") as f:
+                    lines = f.readlines()
+
+                total_lines = len(lines)
+
+                if offset >= total_lines:
+                    return {
+                        "tool_name": "read_file",
+                        "success": False,
+                        "summary": f"Offset {offset} exceeds file length {total_lines}"
+                    }
+
+                if limit is not None:
+                    selected_lines = lines[offset:offset + limit]
+                else:
+                    selected_lines = lines[offset:]
+
+                numbered_lines = []
+                for i, line in enumerate(selected_lines, start=offset + 1):
+                    numbered_lines.append(f"{i:6}|{line.rstrip()}")
+
+                content = "\n".join(numbered_lines)
+
+                display_path = str(file_path.relative_to(context_root))
+
+                return {
+                    "tool_name": "read_file",
+                    "success": True,
+                    "summary": f"Read {len(selected_lines)} lines from {display_path} (total: {total_lines} lines)",
+                    "content": content,
+                    "path": display_path,
+                    "offset": offset,
+                    "lines_read": len(selected_lines),
+                    "total_lines": total_lines
+                }
+            except Exception as e:
+                return {
+                    "tool_name": "read_file",
+                    "success": False,
+                    "summary": f"Error reading file: {e}"
+                }
+
+        def search_replace(args: dict) -> dict:
+            path = args.get("path")
+            old_string = args.get("old_string")
+            new_string = args.get("new_string", "")
+
+            if path is None or old_string is None:
+                return {
+                    "tool_name": "search_replace",
+                    "success": False,
+                    "summary": "Path and old_string are required"
+                }
+
+            try:
+                if not Path(path).is_absolute():
+                    file_path = Path(__file__).parent / path
+                else:
+                    file_path = Path(path)
+
+                if not file_path.exists():
+                    return {
+                        "tool_name": "search_replace",
+                        "success": False,
+                        "summary": f"File not found: {path}"
+                    }
+
+                tmp_file = Path(str(file_path) + ".tmp")
+
+                result = subprocess.run(  # noqa: S602
+                    f"rg --passthru --fixed-strings '{old_string}' --replace '{new_string}' {file_path} > {tmp_file} && mv {tmp_file} {file_path}",
+                    shell=True,
+                    capture_output=True,
+                    text=True,
+                    check=False
+                )
+
+                display_path = str(file_path.relative_to(context_root))
+
+                if result.returncode == 0:
+                    return {
+                        "tool_name": "search_replace",
+                        "success": True,
+                        "summary": f"Replaced text in {display_path}",
+                        "path": display_path
+                    }
+
+                if tmp_file.exists():
+                    tmp_file.unlink()
+
+                return {
+                    "tool_name": "search_replace",
+                    "success": False,
+                    "summary": f"Ripgrep replace failed: {result.stderr}"
+                }
+            except Exception as e:
+                return {
+                    "tool_name": "search_replace",
+                    "success": False,
+                    "summary": f"Error replacing text: {e}"
+                }
+
+        def bash(args: dict) -> dict:
+            command = args.get("command", "")
+
+            try:
+                result = subprocess.run(  # noqa: S602
+                    command,
+                    check=False,
+                    shell=True,
+                    capture_output=True,
+                    text=True,
+                    timeout=30,
+                    cwd=str(Path(__file__).parent / "agent_config/context")
+                )
+
+                output = result.stdout + result.stderr
+
+                return {
+                    "tool_name": "bash",
+                    "success": result.returncode == 0,
+                    "summary": f"Executed command: {command}",
+                    "output": output.strip(),
+                    "command": command,
+                    "return_code": result.returncode
+                }
+            except subprocess.TimeoutExpired:
+                return {
+                    "tool_name": "bash",
+                    "success": False,
+                    "summary": "Command timed out after 30 seconds"
+                }
+            except Exception as e:
+                return {
+                    "tool_name": "bash",
+                    "success": False,
+                    "summary": f"Error executing command: {e}"
+                }
+
+        self.tools.append({
+            "name": "glob_file_search",
+            "description": "Search for files matching a pattern in the context directory. Uses find command with glob patterns.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "pattern": {
+                        "type": "string",
+                        "description": "Glob pattern to match files (e.g., '*.md', 'vizgen*')"
+                    },
+                    "base_path": {
+                        "type": "string",
+                        "description": "Base path to search in. Defaults to 'agent_config/context'. Can be relative or absolute."
+                    }
+                },
+                "required": ["pattern"]
+            }
+        })
+        self.tool_map["glob_file_search"] = glob_file_search
+
+        self.tools.append({
+            "name": "grep",
+            "description": "Search for text patterns in files using ripgrep (rg). Returns matches with line numbers. Fast and supports regex.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "pattern": {
+                        "type": "string",
+                        "description": "Text pattern to search for (supports regex)"
+                    },
+                    "path": {
+                        "type": "string",
+                        "description": "File or directory path to search in. Defaults to 'agent_config/context'."
+                    },
+                    "case_insensitive": {
+                        "type": "boolean",
+                        "description": "Whether to perform case-insensitive search. Defaults to false."
+                    }
+                },
+                "required": ["pattern"]
+            }
+        })
+        self.tool_map["grep"] = grep
+
+        self.tools.append({
+            "name": "read_file",
+            "description": "Read contents of a file with optional offset and limit for large files. Returns numbered lines.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Path to the file to read (relative to agent directory or absolute)"
+                    },
+                    "offset": {
+                        "type": "integer",
+                        "description": "Line number to start reading from (0-indexed). Defaults to 0."
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Maximum number of lines to read. If not provided, reads to end of file."
+                    }
+                },
+                "required": ["path"]
+            }
+        })
+        self.tool_map["read_file"] = read_file
+
+        self.tools.append({
+            "name": "search_replace",
+            "description": "Replace the first occurrence of a string in a file with another string. Useful for editing files or maintaining state.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "path": {
+                        "type": "string",
+                        "description": "Path to the file to edit"
+                    },
+                    "old_string": {
+                        "type": "string",
+                        "description": "Exact string to find and replace"
+                    },
+                    "new_string": {
+                        "type": "string",
+                        "description": "String to replace with"
+                    }
+                },
+                "required": ["path", "old_string", "new_string"]
+            }
+        })
+        self.tool_map["search_replace"] = search_replace
+
+        self.tools.append({
+            "name": "bash",
+            "description": "Execute a bash command in the context directory. Useful for exploring files and directories.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "command": {
+                        "type": "string",
+                        "description": "Bash command to execute (runs in agent_config/context directory)"
+                    }
+                },
+                "required": ["command"]
+            }
+        })
+        self.tool_map["bash"] = bash
+
+        async def refresh_cells_context(args: dict) -> dict:
+            context_result = await self.atomic_operation("get_context")
+
+            if context_result.get("status") != "success":
+                return {
+                    "tool_name": "refresh_cells_context",
+                    "success": False,
+                    "summary": f"Failed to refresh cells: {context_result.get('error', 'Unknown error')}"
+                }
+
+            context = context_result.get("context", {})
+            self.latest_notebook_context = context
+
+            cell_count = context.get("cell_count", 0)
+            cells = context.get("cells", [])
+
+            cell_lines = ["# Notebook Cells", f"\nTotal cells: {cell_count}\n"]
+
+            for cell in cells:
+                index = cell.get("index", "?")
+                cell_id = cell.get("cell_id", "?")
+                cell_type = cell.get("cell_type", "unknown")
+                source = cell.get("source")
+                status = cell.get("status", "idle")
+                tf_id = cell.get("tf_id", None)
+
+                cell_lines.append(f"\n## Cell [{index}]")  # noqa: FURB113
+                cell_lines.append(f"CELL_ID: {cell_id}")
+                cell_lines.append(f"CELL_INDEX: {index}")
+                cell_lines.append(f"TYPE: {cell_type}")
+                cell_lines.append(f"STATUS: {status}")
+                if tf_id is not None:
+                    cell_lines.append(f"CODE_CELL_ID: {tf_id}")
+
+                if source is not None:
+                    cell_lines.append("CODE_START")  # noqa: FURB113
+                    cell_lines.append(source)
+                    cell_lines.append("CODE_END")
+
+                widgets = cell.get("widgets")
+                if widgets is not None:
+                    cell_lines.append("\nWIDGETS:")
+                    for w in widgets:
+                        w_type = w.get("type", "unknown")
+                        w_key = w.get("key", "")
+                        w_label = w.get("label", "")
+                        cell_lines.append(f"- WIDGET: {w_type} | {w_label} | {w_key}")
+
+            context_dir = context_root / "notebook_context"
+            context_dir.mkdir(parents=True, exist_ok=True)
+            (context_dir / "cells.md").write_text("\n".join(cell_lines))
+
+            return {
+                "tool_name": "refresh_cells_context",
+                "success": True,
+                "summary": f"Refreshed cells context for {cell_count} cells and stored result in {context_dir / 'cells.md'}",
+                "cell_count": cell_count,
+                "context_path": str(context_dir / "cells.md")
+            }
+
+        async def refresh_globals_context(args: dict) -> dict:
+            globals_result = await self.atomic_operation("request_globals_summary")
+
+            if globals_result.get("status") != "success":
+                return {
+                    "tool_name": "refresh_globals_context",
+                    "success": False,
+                    "summary": f"Failed to refresh globals: {globals_result.get('error', 'Unknown error')}"
+                }
+
             globals_data = globals_result.get("summary", {})
 
-        reactivity_summary: str | None = None
-        if reactivity_result.get("status") == "success":
+            context_dir = context_root / "notebook_context"
+            context_dir.mkdir(parents=True, exist_ok=True)
+
+            if len(globals_data) > 0:
+                global_lines = ["# Global Variables", f"\nTotal: {len(globals_data)} variables\n"]
+
+                for var_name in sorted(globals_data.keys()):
+                    var_info = globals_data[var_name]
+
+                    global_lines.append(f"\n## Variable: {var_name}")
+
+                    if not isinstance(var_info, dict):
+                        global_lines.append(f"VALUE: {var_info}")
+                        continue
+
+                    for key, value in var_info.items():
+                        global_lines.append(f"{key.upper()}: {value}")
+
+                (context_dir / "globals.md").write_text("\n".join(global_lines))
+            else:
+                (context_dir / "globals.md").write_text("# Global Variables\n\nNo global variables defined.\n")
+
+            return {
+                "tool_name": "refresh_globals_context",
+                "success": True,
+                "summary": f"Refreshed globals context for {len(globals_data)} variables and stored result in {context_dir / 'globals.md'}",
+                "variable_count": len(globals_data),
+                "context_path": str(context_dir / "globals.md"),
+            }
+
+        async def refresh_reactivity_context(args: dict) -> dict:
+            reactivity_result = await self.atomic_operation("request_reactivity_summary")
+
+            if reactivity_result.get("status") != "success":
+                return {
+                    "tool_name": "refresh_reactivity_context",
+                    "success": False,
+                    "summary": f"Failed to refresh reactivity: {reactivity_result.get('error', 'Unknown error')}"
+                }
+
             reactivity_summary = reactivity_result.get("summary")
 
-        sections = []
+            context_dir = context_root / "notebook_context"
+            context_dir.mkdir(parents=True, exist_ok=True)
 
-        cell_section = ["## Notebook Cells", f"\nTotal: {cell_count} cells\n"]
+            if reactivity_summary is not None:
+                (context_dir / "signals.md").write_text(reactivity_summary)
+            else:
+                (context_dir / "signals.md").write_text("# Reactivity Summary\n\nNo reactive dependencies in this notebook.\n")
 
-        for cell in cells:
-            index = cell.get("index", "?")
-            cell_id = cell.get("cell_id", "?")
-            cell_type = cell.get("cell_type", "unknown")
-            source = cell.get("source", "")
-            status = cell.get("status", "idle")
-            tf_id = cell.get("tf_id", None)
+            return {
+                "tool_name": "refresh_reactivity_context",
+                "success": True,
+                "summary": f"Refreshed reactivity context and stored result in {context_dir / 'signals.md'}",
+                "context_path": str(context_dir / "signals.md"),
+            }
 
-            cell_section += [
-                f"\n### Cell [{index}] (ID: {cell_id})" + (f", (Code cell ID: {tf_id})" if tf_id is not None else ""),
-                f"Type: {cell_type}",
-                f"Status: {status}",
-            ]
+        self.tools.append({
+            "name": "refresh_cells_context",
+            "description": "Refresh the cells.md context file with current notebook cell structure and contents.",
+            "input_schema": {
+                "type": "object",
+                "properties": {},
+            },
+        })
+        self.tool_map["refresh_cells_context"] = refresh_cells_context
 
-            if source is not None:
-                source_display = source[:800] if len(source) > 800 else source
-                truncated = " [TRUNCATED]" if len(source) > 800 else ""
-                cell_section.append(f"```python\n{source_display}\n```{truncated}")
+        self.tools.append({
+            "name": "refresh_globals_context",
+            "description": "Refresh the globals.md context file with current global variables and their metadata.",
+            "input_schema": {
+                "type": "object",
+                "properties": {},
+            },
+        })
+        self.tool_map["refresh_globals_context"] = refresh_globals_context
 
-            widgets = cell.get("widgets", None)
-            if widgets is not None:
-                widget_strs = []
-                for w in widgets:
-                    w_type = w.get("type", "unknown")
-                    w_key = w.get("key", "")
-                    w_label = w.get("label", "")
-                    if w_label:
-                        widget_strs.append(f"{w_type} ({w_label}) [{w_key}]")
-                    else:
-                        widget_strs.append(f"{w_type} [{w_key}]")
-                if widget_strs:
-                    cell_section.append(f"Widgets: {', '.join(widget_strs)}")
+        self.tools.append({
+            "name": "refresh_reactivity_context",
+            "description": "Refresh the signals.md context file with current reactive signal dependencies.",
+            "input_schema": {
+                "type": "object",
+                "properties": {},
+            },
+        })
+        self.tool_map["refresh_reactivity_context"] = refresh_reactivity_context
 
-        sections.append("\n".join(cell_section))
-
-        if globals_data is not None and len(globals_data) > 0:
-            global_section = ["\n## Global Variables", f"\nTotal: {len(globals_data)} variables\n"]
-
-            for var_name in sorted(globals_data.keys()):
-                var_info = globals_data[var_name]
-                if isinstance(var_info, dict):
-                    var_type = var_info.get("type", "unknown")
-                    global_section.append(f"\n**{var_name}** ({var_type})")
-                    for key, value in var_info.items():
-                        if key != "type":
-                            global_section.append(f"  - {key}: {value}")
-                else:
-                    global_section.append(f"\n**{var_name}**: {var_info}")
-
-            sections.append("\n".join(global_section))
-
-        if reactivity_summary is not None:
-            sections.append(reactivity_summary)
-
-        return "\n\n".join(sections)
+        if len(self.tools) > 0:
+            self.tools[-1]["cache_control"] = {"type": "ephemeral"}
 
     async def run_agent_loop(self) -> None:
         assert self.client is not None, "Client not initialized"
@@ -1708,16 +2185,25 @@ class AgentHarness:
         self.conversation_running = True
         turn = 0
 
+        print("[agent] run_agent_loop: started")
+
         while self.conversation_running:
             await self._wait_for_message()
             if not self.conversation_running:
                 break
 
+            print("[agent] run_agent_loop: building messages from DB...")
+            build_start = time.time()
             api_messages = await self._build_messages_from_db()
+            build_elapsed = time.time() - build_start
+            print(f"[agent] run_agent_loop: built {len(api_messages) if api_messages else 0} messages in {build_elapsed:.3f}s")
+
             if not api_messages or api_messages[-1].get("role") != "user":
+                print("[agent] run_agent_loop: skipping (no messages or last message not user)")
                 continue
 
             turn += 1
+            print(f"[agent] run_agent_loop: starting turn {turn}")
 
             model, thinking_budget = self.mode_config.get(self.mode, ("claude-sonnet-4-5-20250929", 1024))
 
@@ -1758,15 +2244,14 @@ class AgentHarness:
                                 can_use_thinking = False
                                 print(f"[agent] Cannot use thinking API: last assistant message starts with {first_block_type}, not thinking")
 
+            system_prompt_path = context_root.parent / "system_prompt.md"
+            system_prompt = system_prompt_path.read_text()
+
             system_blocks = [
                 {
                     "type": "text",
-                    "text": self.system_prompt,
+                    "text": system_prompt,
                     "cache_control": {"type": "ephemeral"}
-                },
-                {
-                    "type": "text",
-                    "text": f"<notebook_context>\n{await self._get_notebook_context()}\n</notebook_context>",
                 }
             ]
 
@@ -1885,7 +2370,10 @@ class AgentHarness:
                         handler = self.tool_map.get(tool_name)
                         if handler:
                             try:
-                                result = await handler(tool_input)
+                                result = handler(tool_input)
+                                if asyncio.iscoroutine(result):
+                                    result = await result
+
                                 tool_results.append({
                                     "type": "tool_result",
                                     "tool_use_id": tool_id,
@@ -1893,12 +2381,14 @@ class AgentHarness:
                                 })
                             except Exception as e:
                                 print(f"[agent] Tool error: {tool_name}: {e}")
+                                traceback.print_exc()
                                 tool_results.append({
                                     "type": "tool_result",
                                     "tool_use_id": tool_id,
                                     "content": json.dumps({
-                                        "summary": None,
-                                        "error": f"Error executing tool: {e!s}",
+                                        "tool_name": tool_name,
+                                        "summary": f"Error executing tool: {e!s}",
+                                        "error": str(e),
                                         "success": False,
                                     }),
                                 })
@@ -1984,6 +2474,8 @@ class AgentHarness:
             )
             await self._notify_history_updated()
 
+    _context_init_task: asyncio.Task | None = None
+
     async def handle_init(self, msg: dict[str, object]) -> None:
         print("[agent] Initializing")
 
@@ -2007,8 +2499,6 @@ class AgentHarness:
                 default_headers={"Authorization": auth_token_sdk, "Pod-Id": str(pod_id)}
             )
 
-            self.system_prompt = build_system_prompt()
-
             messages = await self._build_messages_from_db()
             await self._close_pending_tool_calls(
                 error_message="Tool call cancelled - session was ended before completion",
@@ -2022,7 +2512,9 @@ class AgentHarness:
             })
             print("[agent] Initialization complete")
 
+            print("[agent] Starting conversation loop")
             self._start_conversation_loop()
+            print("[agent] Conversation loop started")
 
             most_recent_submit_response = None
             for history_msg in reversed(messages):
@@ -2041,11 +2533,12 @@ class AgentHarness:
                 waiting_states = {"awaiting_cell_execution", "awaiting_user_widget_input"}
 
                 if next_status in waiting_states:
-                    print(f"[agent] Reconnected while {next_status}, prompting LLM to check state and retry")
+                    previous_request_id = await self._extract_last_request_id()
+                    print(f"[agent] Reconnected while {next_status}, prompting LLM to check state and retry (request_id={previous_request_id})")
                     await self.pending_messages.put({
                         "type": "user_query",
                         "content": "The session was reconnected. You were waiting for an action to complete, but it may have finished or failed while offline. Please retry any incomplete actions or continue with your plan.",
-                        "request_id": None,
+                        "request_id": previous_request_id,
                         "hidden": True,
                     })
                 else:
@@ -2066,8 +2559,6 @@ class AgentHarness:
         request_id = msg.get("request_id")
         contextual_node_data = msg.get("contextual_node_data")
 
-        print(f"[agent] Processing query: {query}...")
-
         full_query = query
         if contextual_node_data:
             full_query = f"{query} \n\nHere is the context of the selected nodes the user would like to use: <ContextualNodeData>{json.dumps(contextual_node_data)}</ContextualNodeData>"
@@ -2079,6 +2570,8 @@ class AgentHarness:
             "display_query": query,
             "display_nodes": contextual_node_data,
         })
+
+        print(f"[agent] Message queued successfully (request_id={request_id})")
 
     async def handle_cancel(self, msg: dict[str, object]) -> None:
         request_id = msg.get("request_id", "unknown")
@@ -2095,6 +2588,13 @@ class AgentHarness:
             error_message="Request cancelled by user",
             messages=await self._build_messages_from_db(),
         )
+
+        for file in (context_root / "agent_scratch").rglob("*"):
+            if file.name == ".gitkeep":
+                continue
+
+            file.unlink()
+
         self._start_conversation_loop()
 
     async def handle_clear_history(self) -> None:
@@ -2102,11 +2602,40 @@ class AgentHarness:
         await self._mark_all_history_removed()
         self._start_conversation_loop()
 
+    async def get_full_prompt(self) -> dict:
+        messages = await self._build_messages_from_db()
+
+        system_prompt_path = context_root.parent / "system_prompt.md"
+        system_prompt = system_prompt_path.read_text()
+
+        return {
+            "system_prompt": system_prompt,
+            "messages": messages,
+            "model": self.mode_config.get(self.mode, ("claude-sonnet-4-5-20250929", 1024))[0],
+        }
+
+    async def update_system_prompt(self, msg: dict[str, object]) -> dict:
+        new_content = msg.get("content")
+        if not isinstance(new_content, str):
+            return {"status": "error", "error": "Invalid content"}
+
+        system_prompt_path = context_root.parent / "system_prompt.md"
+        system_prompt_path.write_text(new_content)
+
+        messages = await self._build_messages_from_db()
+        return {
+            "status": "success",
+            "system_prompt": new_content,
+            "messages": messages,
+            "model": self.mode_config.get(self.mode, ("claude-sonnet-4-5-20250929", 1024))[0],
+        }
+
     async def accept(self) -> None:
         msg = await self.conn.recv()
         msg_type = msg.get("type")
+        msg_request_id = msg.get("request_id")
 
-        print(f"[agent] Received message: {msg_type}")
+        print(f"[agent] accept: received message type={msg_type} (request_id={msg_request_id})")
 
         if msg_type == "init":
             print(f"[agent] Message: {msg_type}")
@@ -2114,8 +2643,12 @@ class AgentHarness:
         elif msg_type == "agent_query":
             query = msg.get("query", "")
             query_preview = query[:60] + "..." if len(query) > 60 else query
-            print(f"[agent] Query: {query_preview}")
+            request_id = msg.get("request_id", "unknown")
+            print(f"[agent] accept: dispatching to handle_query (query={query_preview}, request_id={request_id})")
+            handle_start = time.time()
             await self.handle_query(msg)
+            handle_elapsed = time.time() - handle_start
+            print(f"[agent] accept: handle_query completed in {handle_elapsed:.3f}s (request_id={request_id})")
         elif msg_type == "agent_cancel":
             request_id = msg.get("request_id", "unknown")
             print(f"[agent] Cancel: {request_id}")
@@ -2129,12 +2662,9 @@ class AgentHarness:
         elif msg_type == "kernel_message":
             print(f"[agent] Kernel message: {msg}")
 
-            if self.current_request_id is None:
-                print(f"[agent] Ignoring kernel_message - no active request")
-                return
-
             nested_msg = msg.get("message", {})
             nested_type = nested_msg.get("type")
+
             if nested_type == "cell_result":
                 cell_id = nested_msg.get("cell_id")
                 has_exception = nested_msg.get("has_exception", False)
@@ -2148,18 +2678,43 @@ class AgentHarness:
                 if cell_id is not None:
                     self.executing_cells.discard(str(cell_id))
 
-                await self.pending_messages.put({
-                    "type": "cell_result",
-                    "cell_id": cell_id,
-                    "success": not has_exception,
-                    "exception": exception,
-                    "logs": logs,
-                    "display_name": display_name,
-                })
+                if self.current_request_id is not None:
+                    await self.pending_messages.put({
+                        "type": "cell_result",
+                        "cell_id": cell_id,
+                        "success": not has_exception,
+                        "exception": exception,
+                        "logs": logs,
+                        "display_name": display_name,
+                    })
+                else:
+                    print(f"[agent] Cell {cell_id} completed but no active request - updating executing_cells only")
+
             elif nested_type == "start_cell":
                 cell_id = nested_msg.get("cell_id")
-                if cell_id is not None:
+                if cell_id is not None and self.current_request_id is not None:
                     self.executing_cells.add(str(cell_id))
+        elif msg_type == "get_full_prompt":
+            tx_id = msg.get("tx_id")
+            print(f"[agent] Get full prompt request (tx_id={tx_id})")
+
+            result = await self.get_full_prompt()
+            await self.send({
+                "type": "agent_action_response",
+                "tx_id": tx_id,
+                "status": "success",
+                **result
+            })
+        elif msg_type == "update_system_prompt":
+            tx_id = msg.get("tx_id")
+            print(f"[agent] Update system prompt request (tx_id={tx_id})")
+            result = await self.update_system_prompt(msg)
+
+            await self.send({
+                "type": "agent_action_response",
+                "tx_id": tx_id,
+                **result
+            })
         else:
             print(f"[agent] Unknown message type: {msg_type}")
 

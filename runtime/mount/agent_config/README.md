@@ -1,164 +1,106 @@
-# Latch Plots Agent Dev Kit
+# Latch Plots Agent
 
-This directory contains the agent configuration that can be modified to customize the agent's behavior without touching the core codebase.
+This directory contains agent context files which can be modified to customize the agent's behavior.
 
 ## Overview
-
-The agent uses two main configuration files:
-- **`prompts.py`** - System instructions and documentation references
-- **`docs/`** - Workflow documentation files
+- **`system_prompt.md`** - Agent system instructions including documentation guidance
+- **`context/`** - Documentation library accessed via file tools
 
 ## File Structure
 
 ```
 agent_config/
-├── prompts.py              # Agent instructions and doc references
-├── docs/
-│   └── takara_workflow.md  # Example workflow documentation
-└── README.md               # This file
+├── system_prompt.md              # System prompt
+├── context/
+│   ├── technology_docs/          # Platform-specific documentation
+│   │   ├── vizgen.md
+│   │   ├── atlasxomics.md
+│   │   └── takara.md
+│   ├── latch_api_docs/           # Latch API references
+│   │   ├── lpath.md
+│   │   └── plots_docs/
+│   │       ├── custom-plots.mdx
+│   │       ├── reactivity.mdx
+│   │       └── widget-types.mdx
+│   ├── agent_scratch/            # Agent-created notes and state
+│   └── notebook_context/         # Auto-generated runtime state
+│       ├── cells.md              # (populated by the agent calling tool to refresh the context)
+│       ├── globals.md            # (populated by the agent calling tool to refresh the context)
+│       └── signals.md            # (populated by the agent calling tool to refresh the context)
+└── README.md                     # This file
 ```
 
 ## Modifying Agent Behavior
 
-### 1. Edit System Instructions (`prompts.py`)
+### 1. Edit System Instructions (`system_prompt.md`)
 
-The `system_instruction` variable contains the core agent prompt. You can modify:
+The `system_prompt.md` file contains all behavior instructions and documentation guidance.
 
-**Planning behavior:**
-```python
-system_instruction = """
-...
-**Planning**
-- Create a plan only for complex tasks (more than 5 steps)  # ← Modified
-- Once plan is approved, proceed without re-confirming
-...
-"""
-```
+### 2. Add Documentation Files
 
-**Output format:**
-```python
-system_instruction = """
-...
-**Output JSON Object**
-- Use empty array (`[]`) for no items
-- Set `questions: null` unless needing input
-...
-"""
-```
+The agent accesses documentation on-demand using file tools. To add new documentation:
 
-### 2. Add Documentation (`external_docs`)
+1. **Create the documentation file** in the appropriate subdirectory:
+   - Assay platform documentation → `context/technology_docs/`
+   - Latch APIs → `context/latch_api_docs/`
 
-Add new workflow documentation by adding entries to `external_docs`:
+2. **Update `system_prompt.md`** to reference the new documentation:
 
-```python
-external_docs = [
-    # ... existing docs ...
-    {
-        "name": "proteomics_docs",
-        "path": "/opt/latch/latch-plots-faas/runtime/mount/agent_config/docs/proteomics_workflow.md",
-        "type": "file",
-    },
-]
-```
-
-Then create the file at `docs/proteomics_workflow.md`:
+Add to the `<workflow_intake>` and `<documentation_access>` section:
 
 ```markdown
-## Proteomics Analysis Workflow
+## Assay Platform Documentation
 
-1. **Data Loading** - Load mass spec data
-2. **Quality Control** - Filter low-quality peptides
-3. **Normalization** - Apply log transformation
-...
+Once identified, read corresponding documentation from `technology_docs/`:
+- Takara → `takara.md`
+- AtlasXOmics → `atlasxomics.md`
+- Vizgen MERFISH → `vizgen.md`
+- Proteomics → `proteomics.md`  # ← New addition
 ```
 
-The agent will automatically include this as `<proteomics_docs>...</proteomics_docs>` in its instructions.
+The agent will use this guidance to decide when to read your documentation.
 
 ## How It Works
 
 ### Initialization Flow
 
 1. Agent starts up (`agent.py::handle_init`)
-2. `config_loader.py` loads `prompts.py`
-3. `build_full_instruction()` assembles the complete prompt:
-   - Loads external docs (plots_docs, random_pointers, lpath_docs, takara_docs)
-   - Wraps them in XML tags
-   - Appends `system_instruction`
-   - Injects current notebook context
-4. Agent is initialized with combined instructions
+2. Agent loads `system_prompt.md` for complete instructions
+3. System prompt is loaded directly into the agent
 
-### Assembled Instruction Format
+### On-Demand Documentation Access
 
-```
-<plots_docs>
-<plots_docs_custom-plots>
-...
-</plots_docs_custom-plots>
-</plots_docs>
-
-<random_pointers>
-...
-</random_pointers>
-
-<lpath_docs>
-...
-</lpath_docs>
-
-<takara_docs>
-...
-</takara_docs>
-
-You are a spatial data analysis agent...
-[system_instruction content]
-...
-
-<notebook_context>
-[current notebook state]
-</notebook_context>
-```
+When the agent needs specific information (e.g., user mentions "Vizgen"), it:
+1. Checks the `<workflow_intake>` or `<documentation_access>` section in its system prompt
+2. Uses `read_file` tool to load `technology_docs/vizgen.md`
+3. Follows the documented steps from that file
 
 ## Testing Changes
 
-After modifying configuration files, restart the agent process to apply changes:
-
-1. Changes apply on next agent initialization
-2. No pod rebuild required
-3. Check logs for loading errors: `[config_loader] Warning: ...`
-
-## External Documentation
-
-These paths are managed separately and should not be modified here:
-
-- `/opt/latch/nucleus-llm-inference/prompt_components/plots_docs/` - Plot widget documentation
-- `/opt/latch/nucleus-llm-inference/prompt_components/random_pointers/` - General instructions
-- `/opt/latch/nucleus-llm-inference/prompt_components/lpath.py` - LPath API docs
+1. Changes to `system_prompt.md` apply on next agent initialization
+2. Changes to docs in `context/` are available immediately (agent reads on-demand)
 
 ## Examples
 
 ### Example: Add Proteomics Support
 
-1. Create `docs/proteomics_workflow.md` with workflow steps
-2. Add to `external_docs` in `prompts.py`:
-   ```python
-   {
-       "name": "proteomics_docs",
-       "path": "/opt/latch/plots-faas/runtime/mount/agent_config/docs/proteomics_workflow.md",
-       "type": "file",
-   }
-   ```
-3. Modify `system_instruction` to reference it:
-   ```python
-   - **For Planning**:
-       - Ask user about assay type (spatial, proteomics, etc.)
-       - If proteomics, follow <proteomics_docs> workflow
+1. **Create assay platform documentation:**
+
+   Create `context/technology_docs/proteomics.md`:
+   ```markdown
+   ## Proteomics Analysis Workflow
+   
+   1. **Data Loading** - Load mass spec data using Pandas
+   2. **Quality Control** - Filter low-quality peptides
+   3. **Normalization** - Apply log transformation
+   4. **Statistical Analysis** - Run differential expression tests
+   ...
    ```
 
-## Troubleshooting
+2. **Update the system prompt:**
+   
+   Edit `system_prompt.md` in the `<documentation_access>` section
 
-**"Config module not found"**
-- Check file path in error message
-- Ensure files are in `/opt/latch/plots-faas/runtime/mount/agent_config/`
-
-**Changes not applying**
-- Restart agent process
-- Verify no syntax errors in modified files
+3. **Optionally add trigger guidance:**
+   
+   In the `<workflow_intake>` section, you can add platform specific identification guidance.
