@@ -155,8 +155,23 @@ class AgentHarness:
 
         return None
 
-    async def _insert_history(self, *, event_type: str, payload: dict, request_id: str | None = None, tx_id: str | None = None) -> None:
+    async def _insert_history(
+        self,
+        *,
+        event_type: str = "anthropic_message",
+        role: str = "user",
+        payload: dict,
+        request_id: str | None = None,
+        tx_id: str | None = None,
+    ) -> None:
         assert self.agent_session_id is not None
+
+        payload = {
+            "type": event_type,
+            "role": role,
+            "timestamp": int(time.time() * 1000),
+            **payload,
+        }
 
         variables = {
             "sessionId": str(self.agent_session_id),
@@ -296,10 +311,7 @@ class AgentHarness:
             self.current_request_id = msg.get("request_id")
 
             payload = {
-                "type": "anthropic_message",
-                "role": "user",
                 "content": msg["content"],
-                "timestamp": int(time.time() * 1000),
             }
 
             if msg.get("display_query") is not None:
@@ -310,7 +322,6 @@ class AgentHarness:
                 payload["hidden"] = msg["hidden"]
 
             await self._insert_history(
-                event_type="anthropic_message",
                 payload=payload,
                 request_id=self.current_request_id,
             )
@@ -350,12 +361,8 @@ class AgentHarness:
                 print(f"[agent] Cell {cell_id} failed")
 
             await self._insert_history(
-                event_type="anthropic_message",
                 payload={
-                    "type": "anthropic_message",
-                    "role": "user",
                     "content": result_content,
-                    "timestamp": int(time.time() * 1000),
                 },
             )
 
@@ -378,20 +385,16 @@ class AgentHarness:
                 try:
                     if "image_alignment_step" in (parsed := json.loads(v)):
                         image_aligner_vals.append(f"step={parsed['image_alignment_step']}")
-                except Exception:
-                    pass
+                except Exception as e:
+                    print(f"[agent] Failed to parse widget value for image_alignment_step: {e}, value: {v}")
             
             content = f"User provided input via widget key(s): {keys}"
-            if image_aligner_vals:
+            if len(image_aligner_vals) != 0:
                 content += f", {', '.join(image_aligner_vals)}"
             
             await self._insert_history(
-                event_type="anthropic_message",
                 payload={
-                    "type": "anthropic_message",
-                    "role": "user",
                     "content": content,
-                    "timestamp": int(time.time() * 1000),
                     "hidden": True,
                 },
             )
@@ -2421,12 +2424,9 @@ class AgentHarness:
             response_content = response.model_dump()["content"]
             if response_content is not None and (not isinstance(response_content, list) or len(response_content) > 0):
                 await self._insert_history(
-                    event_type="anthropic_message",
+                    role="assistant",
                     payload={
-                        "type": "anthropic_message",
-                        "role": "assistant",
                         "content": response_content,
-                        "timestamp": int(time.time() * 1000),
                         "duration": duration_seconds,
                     },
                 )
@@ -2493,12 +2493,8 @@ class AgentHarness:
 
                 if len(tool_results) > 0:
                     await self._insert_history(
-                        event_type="anthropic_message",
                         payload={
-                            "type": "anthropic_message",
-                            "role": "user",
                             "content": tool_results,
-                            "timestamp": int(time.time() * 1000),
                         },
                     )
                 else:
@@ -2543,10 +2539,7 @@ class AgentHarness:
         if len(pending_tool_ids) > 0:
             print(f"[agent] Closing {len(pending_tool_ids)} pending tool calls")
             await self._insert_history(
-                event_type="anthropic_message",
                 payload={
-                    "type": "anthropic_message",
-                    "role": "user",
                     "content": [
                         {
                             "type": "tool_result",
@@ -2558,7 +2551,6 @@ class AgentHarness:
                         }
                         for tool_id in pending_tool_ids
                     ],
-                    "timestamp": int(time.time() * 1000),
                 },
             )
             await self._notify_history_updated()
