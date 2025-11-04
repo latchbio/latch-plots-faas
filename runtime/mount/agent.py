@@ -2768,14 +2768,15 @@ class AgentHarness:
                     self.executing_cells.discard(str(cell_id))
 
                 print(f"[tim] current_status={self.current_status}, has_pending_widget_values={self._has_pending_widget_values()}")
-                await self.pending_messages.put({
-                    "type": "cell_result",
-                    "cell_id": cell_id,
-                    "success": not has_exception,
-                    "exception": exception,
-                    "logs": logs,
-                    "display_name": display_name,
-                })
+                if self.current_status != "awaiting_user_widget_input" or self._has_pending_widget_values():
+                    await self.pending_messages.put({
+                        "type": "cell_result",
+                        "cell_id": cell_id,
+                        "success": not has_exception,
+                        "exception": exception,
+                        "logs": logs,
+                        "display_name": display_name,
+                    })
             elif nested_type == "start_cell":
                 cell_id = nested_msg.get("cell_id")
                 if cell_id is not None and self.current_request_id is not None:
