@@ -13,6 +13,7 @@ This is the **step-by-step pipeline** for spatial annotation
    - **CheckAlignment**: For setting the new aligned obs key name and the preferred alignment method. Suggest the affine alignment method over STAlign as it is much quicker and only slightly less performant. 
    - Note that upon completion of all steps, the image_alignment_step will be set to None and the new embedding will automatically be set in the h5 widget.
    - The image_alignment_step you see in widget update messages is the current step.
+   - If the image aligner is inactive, there will be no value for image_alignment_step
 
 ## Annotation
 6. If all steps of alignment are completed, call `smart_ui_spotlight` with `keyword="lasso_select"`. Await widget input for lasso selection. Explain that you are waiting for them to click on lasso select and lasso-select cells. Let the user know you can help them create new observations, categories, or filters after they have selected the cells.  

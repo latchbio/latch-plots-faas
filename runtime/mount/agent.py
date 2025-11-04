@@ -66,6 +66,7 @@ class AgentHarness:
     agent_session_id: int | None = None
     latest_notebook_context: dict = field(default_factory=dict)
     current_status: str | None = None
+    has_set_widget_value: bool = False
 
     mode_config: dict[Mode, tuple[str, int | None]] = field(default_factory=lambda: {
         Mode.planning: ("claude-sonnet-4-5-20250929", 4096),
@@ -398,17 +399,6 @@ class AgentHarness:
                     "hidden": True,
                 },
             )
-
-    def _has_pending_widget_values(self) -> bool:
-        # todo(tim): temp adding these prints to see something, pls disregard will delete after
-        queue_types = [item.get("type") for item in self.pending_messages._queue]
-        print(f"[tim] _has_pending_widget_values check: queue has {len(queue_types)} items: {queue_types}")
-        for item in self.pending_messages._queue:
-            if item.get("type") == "set_widget_value":
-                print(f"[tim] _has_pending_widget_values: found set_widget_value, returning True")
-                return True
-        print(f"[tim] _has_pending_widget_values: no set_widget_value found, returning False")
-        return False
 
     async def _complete_turn(self) -> None:
         if self.current_request_id is None:
@@ -761,6 +751,8 @@ class AgentHarness:
                     self.pending_auto_continue = False
 
                 self.current_status = next_status
+                if next_status == "awaiting_user_widget_input":
+                    self.has_set_widget_value = False
 
                 return {
                     "tool_name": "submit_response",
@@ -2742,7 +2734,7 @@ class AgentHarness:
             await self.handle_action_response(msg)
         elif msg_type == "kernel_message":
             print(f"[tim] kernel_message handler START")
-            print(f"[tim] current_request_id={self.current_request_id}, current_status={self.current_status}, has_pending_widget_values={self._has_pending_widget_values()}")
+            print(f"[tim] current_request_id={self.current_request_id}, current_status={self.current_status}, has_set_widget_value={self.has_set_widget_value}")
             print(f"[agent] Kernel message: {msg}")
 
             nested_msg = msg.get("message", {})
@@ -2760,17 +2752,19 @@ class AgentHarness:
 
                 if cell_id is not None:
                     self.executing_cells.discard(str(cell_id))
+                if self.current_status == "awaiting_user_widget_input" and not self.has_set_widget_value:
+                    print(f"[tim] not adding cell_result because current_status={self.current_status}, has_set_widget_value={self.has_set_widget_value}")
+                    return
 
-                print(f"[tim] current_status={self.current_status}, has_pending_widget_values={self._has_pending_widget_values()}")
-                if self.current_status != "awaiting_user_widget_input" or self._has_pending_widget_values():
-                    await self.pending_messages.put({
-                        "type": "cell_result",
-                        "cell_id": cell_id,
-                        "success": not has_exception,
-                        "exception": exception,
-                        "logs": logs,
-                        "display_name": display_name,
-                    })
+                print(f"[tim] putting cell_result")
+                await self.pending_messages.put({
+                    "type": "cell_result",
+                    "cell_id": cell_id,
+                    "success": not has_exception,
+                    "exception": exception,
+                    "logs": logs,
+                    "display_name": display_name,
+                })
             elif nested_type == "start_cell":
                 cell_id = nested_msg.get("cell_id")
                 if cell_id is not None and self.current_request_id is not None:
@@ -2779,6 +2773,7 @@ class AgentHarness:
                 if self.current_status == "awaiting_user_widget_input":
                     self.current_status = "thinking"
                     print(f"[tim] putting set_widget_value")
+                    self.has_set_widget_value = True
                     await self.pending_messages.put({
                         "type": "set_widget_value",
                         "data": nested_msg.get("data", {})
