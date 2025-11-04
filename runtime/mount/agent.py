@@ -2742,7 +2742,7 @@ class AgentHarness:
             await self.handle_action_response(msg)
         elif msg_type == "kernel_message":
             print(f"[tim] kernel_message handler START")
-            print(f"[tim] current_request_id={self.current_request_id}")
+            print(f"[tim] current_request_id={self.current_request_id}, current_status={self.current_status}, has_pending_widget_values={self._has_pending_widget_values()}")
             print(f"[agent] Kernel message: {msg}")
 
             nested_msg = msg.get("message", {})
@@ -2778,6 +2778,7 @@ class AgentHarness:
             elif nested_type == "set_widget_value":
                 if self.current_status == "awaiting_user_widget_input":
                     self.current_status = "thinking"
+                    print(f"[tim] putting set_widget_value")
                     await self.pending_messages.put({
                         "type": "set_widget_value",
                         "data": nested_msg.get("data", {})
