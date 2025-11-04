@@ -26,6 +26,11 @@ external_docs = [
         "path": str(Path(__file__).parent / "docs/vizgen_workflow.md"),
         "type": "file",
     },
+    {
+        "name": "marker_gene_annotation_docs",
+        "path": str(Path(__file__).parent / "docs/cell_type.md"),
+        "type": "file",
+    },
 ]
 
 system_instruction = """

@@ -6,7 +6,7 @@ This is the **authoritative step-by-step pipeline** for AtlasxOmics experiment. 
 2. **Data Loading** - load data using **Scanpy** and display it with `w_h5`.
 3. **Clustering (workflow only)** - Launch the AtlasXOmics clustering workflow using `w_workflow(wf_name="wf.__init__.opt_workflow", ...)`. Fallback to `scanpy` only if this fails.
 4. **Differential Gene Activity or Motif Enrichment Comparison** - Use `w_workflow(wf_name="wf.__init__.compare_workflow", ...)`
-5.  **Cell Type Annotation** - assign biological meaning to clusters using gene sets. 
+5. **Cell Type Annotation** — Use CellGuide marker database (see {marker_gene_annotation_docs})
 
 The section below defines detailed guidelines for each of the above steps.
 
@@ -289,13 +289,7 @@ groupings_file = LatchFile(remote_path)
 
 ### **Cell Type Annotation**
 
-- If the dataset context is unclear, first ask the user to confirm the **organism** and **tissue type**. **Do NOT proceed** until the user has answered the question. 
-- **Always render a form with sensible defaults** to avoid tedious manual input. The form should support **multiple candidate cell types**, e.g. one row per cell type:
-  - `cell_type`: **text input**, pre-filled with a common or inferred cell type.
-  - `marker_genes`: **multiselect widget**, pre-populated with default marker genes for that cell type.
-- You **must auto-populate all fields with reasonable defaults using domain knowledge**. Users should only adjust values if needed, not enter them from scratch.
-- Add a **button** after the form to trigger gene set scoring. 
-- For **spatial ATAC-seq** only, infer cell identity by computing **gene activity or gene set scores** (e.g., `scanpy.tl.score_genes`) and ranking cell types based on marker enrichment.
+
 
 ## Data Assumptions
 
