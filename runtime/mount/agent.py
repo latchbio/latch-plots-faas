@@ -98,17 +98,19 @@ class AgentHarness:
             variables={"sessionId": str(self.agent_session_id)},
         )
         nodes = resp.get("data", {}).get("agentHistories", {}).get("nodes", [])
-        return [{"payload": n.get("payload"), "request_id": n.get("requestId")} for n in nodes if n.get("payload")]
+        return [{"payload": n.get("payload"), "request_id": n.get("requestId")} for n in nodes]
 
     async def _build_messages_from_db(self) -> list[MessageParam]:
         history = await self._fetch_history_from_db()
         anthropic_messages: list[MessageParam] = []
 
         for item in history:
-            t = item.get("type") if isinstance(item, dict) else None
+            payload = item.get("payload")
+
+            t = payload.get("type") if isinstance(payload, dict) else None
             if t == "anthropic_message":
-                role = item.get("role")
-                content = item.get("content")
+                role = payload.get("role")
+                content = payload.get("content")
 
                 if (role == "user" and isinstance(content, dict) and content.get("type") == "cell_result"):
                     exception = content.get("exception")
