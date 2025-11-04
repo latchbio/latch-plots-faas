@@ -24,9 +24,9 @@ agent_config/
 │   │       └── widget-types.mdx
 │   ├── agent_scratch/            # Agent-created notes and state
 │   └── notebook_context/         # Auto-generated runtime state
-│       ├── cells.md              # (created at runtime)
-│       ├── globals.md            # (created at runtime)
-│       └── signals.md            # (created at runtime)
+│       ├── cells.md              # (populated by the agent calling tool to refresh the context)
+│       ├── globals.md            # (populated by the agent calling tool to refresh the context)
+│       └── signals.md            # (populated by the agent calling tool to refresh the context)
 └── README.md                     # This file
 ```
 
@@ -46,7 +46,7 @@ The agent accesses documentation on-demand using file tools. To add new document
 
 2. **Update `system_prompt.md`** to reference the new documentation:
 
-Add to the `<workflow_intake>` or `<documentation_access>` section:
+Add to the `<workflow_intake>` and `<documentation_access>` section:
 
 ```markdown
 ## Assay Platform Documentation
@@ -67,7 +67,6 @@ The agent will use this guidance to decide when to read your documentation.
 1. Agent starts up (`agent.py::handle_init`)
 2. Agent loads `system_prompt.md` for complete instructions
 3. System prompt is loaded directly into the agent
-4. Agent is initialized with all behavioral guidance
 
 ### On-Demand Documentation Access
 
@@ -86,7 +85,7 @@ When the agent needs specific information (e.g., user mentions "Vizgen"), it:
 ### Example: Add Proteomics Support
 
 1. **Create assay platform documentation:**
-   
+
    Create `context/technology_docs/proteomics.md`:
    ```markdown
    ## Proteomics Analysis Workflow
@@ -105,5 +104,3 @@ When the agent needs specific information (e.g., user mentions "Vizgen"), it:
 3. **Optionally add trigger guidance:**
    
    In the `<workflow_intake>` section, you can add platform specific identification guidance.
-
-That's it! The agent will now read the proteomics docs when relevant.
