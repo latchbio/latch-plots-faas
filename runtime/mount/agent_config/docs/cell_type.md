@@ -189,7 +189,7 @@ tissues_per_organism["Mus musculus"]
 **Key parameters**:
 
 - Use `method='wilcoxon'` for non-parametric testing
-- Set `n_genes=200` to get top 200 genes
+- Set `n_genes=None` to get all genes. Filter if needed later.
 - Group by `"cluster"` column in `adata.obs`
 - If multiple samples exist, include the sample identifier in the grouping
 
@@ -317,7 +317,7 @@ sc.tl.rank_genes_groups(
     adata,
     groupby="cluster",
     method='wilcoxon',
-    n_genes=200,  # Get top 200 genes
+    n_genes=None,  # Get all genes
     use_raw=False
 )
 
@@ -340,7 +340,7 @@ for sample in adata.obs["sample_id"].unique():
         adata_subset,
         groupby="cluster",
         method='wilcoxon',
-        n_genes=200,
+        n_genes=None,
         use_raw=False
     )
     
