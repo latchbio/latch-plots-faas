@@ -22,7 +22,6 @@ os.environ.setdefault("OTEL_SDK_DISABLED", "true")
 
 import websockets
 from eval_types import TestCase, TestResult
-from judge import LLMJudge
 from run_local_eval import get_eval_config
 from binary_grader import GRADER_REGISTRY
 
@@ -155,14 +154,9 @@ class EvalServer:
             return None
 
     async def get_notebook_context_from_console(self):
-        print("[eval] Requesting notebook context, globals, and reactivity from console...")
+        print("[eval] Requesting notebook context from console...")
 
-        context_result, globals_result, reactivity_result = await asyncio.gather(
-            self._send_action_request("get_context"),
-            self._send_action_request("request_globals_summary"),
-            self._send_action_request("request_reactivity_summary"),
-            return_exceptions=True
-        )
+        context_result = await self._send_action_request("get_context")
 
         result = {}
 
@@ -172,21 +166,7 @@ class EvalServer:
             print(f"[eval] Failed to get notebook context: {context_result}")
             result["context"] = {}
 
-        if isinstance(globals_result, dict) and globals_result is not None:
-            result["globals"] = globals_result.get("summary", {})
-        else:
-            print(f"[eval] Failed to get globals: {globals_result}")
-            result["globals"] = {}
-
-        if isinstance(reactivity_result, dict) and reactivity_result is not None:
-            result["reactivity"] = reactivity_result.get("summary", "")
-        else:
-            print(f"[eval] Failed to get reactivity: {reactivity_result}")
-            result["reactivity"] = ""
-
-        print(f"[eval] Got notebook context: {len(result.get('context', {}).get('cells', []))} cells, "
-              f"{len(result.get('globals', {}))} globals, "
-              f"reactivity: {len(result.get('reactivity', ''))} chars")
+        print(f"[eval] Got notebook context: {len(result.get('context', {}).get('cells', []))} cells")
 
         return result
 
@@ -505,9 +485,7 @@ async def run_eval(test_case: TestCase, port: int, latch_dir: Path) -> TestResul
     print(f"\n[eval] Eval completed in {duration_ms / 1000:.2f}s")
     print(f"[eval] Total conversation turns: {len(conversation_history)}")
     cells = notebook_state.get("context", {}).get("cells", [])
-    globals_count = len(notebook_state.get("globals", {}))
-    reactivity_len = len(notebook_state.get("reactivity", ""))
-    print(f"[eval] Final notebook state: {len(cells)} cells, {globals_count} globals, {reactivity_len} chars reactivity")
+    print(f"[eval] Final notebook state: {len(cells)} cells")
 
     return test_result
 
@@ -547,30 +525,6 @@ async def main():
     (latch_dir / "nucleus-url").write_text("https://nucleus.latch.bio")
 
     result = await run_eval(test_case, args.port, latch_dir)
-
-    auth_token_sdk, nucleus_url, pod_id = get_eval_config()
-    judge = LLMJudge(
-        api_key="dummy",
-        base_url=f"{nucleus_url}/infer/plots-agent/anthropic",
-        headers={"Authorization": auth_token_sdk, "Pod-Id": str(pod_id)}
-    )
-
-    print("\n[eval] Judging result...")
-    eval_result = await judge.evaluate(test_case, result)
-    result.eval_result = eval_result
-
-    print(f"\n{'=' * 70}")
-    print(f"Score: {eval_result.score:.2f}")
-    print(f"Passed: {'✓ PASS' if eval_result.passed else '✗ FAIL'}")
-    print("\nReasoning:")
-    print(eval_result.reasoning)
-    print(f"\nSuccesses ({len(eval_result.successes)}):")
-    for success in eval_result.successes:
-        print(f"  ✓ {success}")
-    print(f"\nFailures ({len(eval_result.failures)}):")
-    for failure in eval_result.failures:
-        print(f"  ✗ {failure}")
-    print("=" * 70)
 
     output_file = eval_dir / f"result_{test_case.id}.json"
     with open(output_file, "w") as f:

@@ -1,0 +1,24 @@
+{
+  "id": "curio_off_target",
+  "task": "Tell me the percentage of off-target beads in this sample.\n\nOutput your final answer in the following format:\n<EVAL_ANSWER>\n{\n  \"total_beads\": <number>,\n  \"on_target_beads\": <number>,\n  \"off_target_beads\": <number>,\n  \"off_target_percentage\": <percentage>,\n  \"threshold_description\": \"<description of threshold used>\"\n}\n</EVAL_ANSWER>",
+  "data_node": "latch://38438.account/curio_ovary/GSM7689281_adata_ovary_1hr_spatial_raw_counts_susampled.h5ad",
+  "grader": {
+    "type": "numeric_tolerance",
+    "config": {
+      "ground_truth": {
+        "off_target_percentage": 55.1,
+        "total_beads": 27020
+      },
+      "tolerances": {
+        "off_target_percentage": {
+          "type": "absolute",
+          "value": 5.0
+        },
+        "total_beads": {
+          "type": "absolute",
+          "value": 100
+        }
+      }
+    }
+  }
+}
