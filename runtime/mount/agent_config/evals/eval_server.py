@@ -23,7 +23,7 @@ os.environ.setdefault("OTEL_SDK_DISABLED", "true")
 import websockets
 from eval_types import TestCase, TestResult
 from run_local_eval import get_eval_config
-from binary_grader import GRADER_REGISTRY
+from graders import GRADER_REGISTRY
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent.parent))
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
@@ -500,6 +500,7 @@ async def main():
     args = parser.parse_args()
 
     eval_dir = Path(__file__).parent
+    results_dir = eval_dir / "results"
     eval_file = eval_dir / args.eval
 
     with open(eval_file) as f:
@@ -529,7 +530,8 @@ async def main():
 
     result = await run_eval(test_case, args.port, latch_dir)
 
-    output_file = eval_dir / f"result_{test_case.id}.json"
+    results_dir.mkdir(exist_ok=True)
+    output_file = results_dir / f"result_{test_case.id}.json"
     with open(output_file, "w") as f:
         json.dump(result.model_dump(), f, indent=2)
     print(f"\n[eval] Result saved to {output_file}")
