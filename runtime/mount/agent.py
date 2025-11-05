@@ -1919,17 +1919,17 @@ class AgentHarness:
 
         self.tools.append({
             "name": "glob_file_search",
-            "description": "Search for files matching a pattern in the context directory. Uses find command with glob patterns.",
+            "description": "Search for files matching a pattern. Defaults to searching the context directory. For nested paths use patterns like 'technology_docs/*.md'.",
             "input_schema": {
                 "type": "object",
                 "properties": {
                     "pattern": {
                         "type": "string",
-                        "description": "Glob pattern to match files (e.g., '*.md', 'vizgen*')"
+                        "description": "Glob pattern to match files. Use '*.md' for all markdown files, 'technology_docs/*.md' for files in a subdirectory."
                     },
                     "base_path": {
                         "type": "string",
-                        "description": "Base path to search in. Defaults to 'agent_config/context'. Can be relative or absolute."
+                        "description": "Base path to search in. Defaults to 'agent_config/context'. Use relative paths from agent directory."
                     }
                 },
                 "required": ["pattern"]
@@ -2011,13 +2011,13 @@ class AgentHarness:
 
         self.tools.append({
             "name": "bash",
-            "description": "Execute a bash command in the context directory. Useful for exploring files and directories.",
+            "description": "Execute a bash command. The working directory is already set to the context directory, so use relative paths (e.g., 'ls technology_docs/' not 'ls agent_config/context/technology_docs/').",
             "input_schema": {
                 "type": "object",
                 "properties": {
                     "command": {
                         "type": "string",
-                        "description": "Bash command to execute (runs in agent_config/context directory)"
+                        "description": "Bash command to execute. Working directory is the context directory, use relative paths."
                     }
                 },
                 "required": ["command"]
