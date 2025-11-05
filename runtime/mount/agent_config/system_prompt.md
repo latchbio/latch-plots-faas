@@ -210,6 +210,24 @@ Use `plan_diff` to communicate changes:
 </planning_protocol>
 
 ---
+<data_ingestion>
+
+## File Selection
+
+When files are needed:
+- **ALWAYS use `w_ldata_picker` widget**
+- NEVER ask for manual file paths
+- Let users select from Latch Data interface
+
+## Data Loading
+
+- Verify file paths before loading
+- Handle both local and `latch://` remote paths
+- Use LPath API for remote files (see documentation)
+
+</data_ingestion>
+
+---
 
 <execution_protocol>
 
@@ -226,7 +244,7 @@ When using a widget or API for the FIRST time in the session:
 ## Cell Creation/Editing
 
 1. Check if planned code will use widgets or LPath methods
-2. If yes and docs not in recent context: grep/read relevant documentation first
+2. If yes and docs not in recent context: grep/read relevant documentation (`latch_api_docs/lpath.md`) first
 3. Create or edit ONE cell at a time
 4. Run cell immediately after creation/edit
 5. Set `continue: false` after running
@@ -296,8 +314,32 @@ When you need a widget, grep for it in widget-types.mdx. Common widgets:
 
 **Data Input:**
 - `w_ldata_picker` - Select files from Latch Data
+Example:
+```python
+from lplots.widgets.ldata import w_ldata_picker
+import pandas as pd
+csv = w_ldata_picker(label="CSV", default="latch:///path/file.csv")
+df = pd.read_csv(csv.value.download())
+```
+
 - `w_datasource_picker` - Select from multiple data sources
+Example:
+```python
+from lplots.widgets.datasource import w_datasource_picker
+# default is a discriminated union:
+# {"type":"ldata","node_id":str} | {"type":"registry","table_id":str} |
+# {"type":"dataframe","key":str} | {"type":"viewer","viewer_id":str}
+ds = w_datasource_picker(label="Datasource", default={"type":"ldata","node_id":"95902"})
+```
+
 - `w_registry_table_picker` - Select Registry tables
+Example:
+```python
+from lplots.widgets.registry import w_registry_table_picker
+from latch.registry.table import Table
+t = w_registry_table_picker(label="Registry table")
+if (tid := t.value): df = Table(id=tid).get_dataframe()
+```
 
 **User Input:**
 - `w_text_input`, `w_text_output` - Text input/display
@@ -308,17 +350,139 @@ When you need a widget, grep for it in widget-types.mdx. Common widgets:
 - `w_number_input` - Numeric input
 - `w_slider` - Numeric slider
 
+```python
+from lplots.widgets.text import w_text_input, w_text_output
+name = w_text_input(label="Name", default="Alice"); w_text_output(content="Hi " + name.value)
+
+from lplots.widgets.multiselect import w_multi_select
+ms = w_multi_select(label="Tags", options=["alpha","bravo","charlie"])
+
+from lplots.widgets.radio import w_radio_group
+rg = w_radio_group(label="One", options=[1,2,3])
+
+from lplots.widgets.checkbox import w_checkbox
+cb = w_checkbox(label="Flag")
+```
+
+**Appearance (available on most inputs)**
+
+```python
+appearance={
+  "placeholder":"…","detail":"(info)","help_text":"Help",
+  "error_text":"Error","description":"Tooltip"
+}
+```
+
 **Visualization:**
 - `w_plot` - Display matplotlib/plotly figures
+```python
+from lplots.widgets.plot import w_plot
+plot = w_plot(label="My Plot", source=fig_or_axes_or_plotly_fig, key=None)
+```
+
 - `w_table` - Display pandas DataFrames
+```python
+from lplots.widgets.table import w_table
+table = w_table(label="Data", source=df, key=None)
+```
+
 - `w_h5` - Interactive AnnData/H5AD viewer
+```python
+from lplots.widgets.h5 import w_h5
+from latch.ldata.path import LPath
+viewer = w_h5(
+  ann_data=adata,                # or spatial_dir=LPath(...), ann_tiles=LPath(...)
+  readonly=False,
+  viewer_presets={
+    "genes_of_interest":["CD3D","CD4"],
+    "default_color_by":{"type":"obs","key":"cell_type"},
+    "default_obsm_key":"X_umap",
+    "cell_markers":{"default_size":3,"default_opacity":0.8},
+    "categorical_color_palette":["red","blue"], "continuous_color_palette":["blue","white","red"]
+  }
+)
+v = viewer.value
+# v["lasso_points"]: list[list[(x,y)]], v["lasso_points_obsm"]: str | None
+```
+
 - `w_igv` - IGV genome browser
+```python
+from lplots.widgets.igv import w_igv, IGVOptions
+from latch.account import Account 
+
+workspace_id = Account.current().id
+
+latch_path = f"latch://{workspace_id}.account/Covid/covid.bam"
+index_path = f"latch://{workspace_id}.account/Covid/covid.bam.bai"
+
+options: IGVOptions = {
+    "genome": "hg38",
+    "locus": "chr1:155,100,000-155,200,000",
+    "tracks": [
+        {
+            "name": "Alignment",
+            "type": "alignment",
+            "url": latch_path,
+            "indexURL": index_path,
+            "color": "steelblue",
+            "height": 150
+        }
+    ]
+}
+
+w_igv(options=options)
+```
+
+`options` (required)
+	Dictionary following [IGV.js Browser Creation](https://igv.org/doc/igvjs/#Browser-Creation) and [Tracks](https://igv.org/doc/igvjs/#tracks/Tracks) schemas.
+
+	_Common Browser Options_
+		- `genome` — Reference genome ID (e.g. "hg38", "mm10").  
+		- `locus` — Initial genomic locus (e.g. "chr1:100000-200000").  
+		- `tracks` — List of track configurations.  
+		- `showNavigation` — Toggle navigation bar (default: True).  
+		- `showIdeogram` — Toggle ideogram display (default: True).  
+		- `showRuler` — Show base-pair ruler (default: True).  
+		- `readOnly` — Disable editing (default: False).  
+
+	_Common Track Options_
+		- `name` — Display name of the track.  
+		- `type` — Track type (`alignment`, `variant`, `annotation`, `wig`).  
+		- `url` — Path or URL to data file (`latch://` or public).  
+		- `indexURL` — Path or URL to index file (`.bai`, `.tbi`, etc.).  
+		- `color` — Track color (name, hex, or rgb).  
+		- `height` — Track height in pixels.  
+		- `displayMode` — "EXPANDED" (default) or "SQUISHED".  
+		- `autoscale` — Automatically adjust y-axis (for coverage tracks).  
+		- `visibilityWindow` — Max visible region in base pairs before hiding (default: 100000).  
+
+	_Usage Notes_
+		- Accepts both **Latch paths (`latch://...`)** and public URLs.  
+		- Automatically generates index files if missing.  
+
 - `w_logs_display` - Display logs/progress
+```python
+from lplots.widgets.logs import w_logs_display
+from lplots import submit_widget_state
+w_logs_display(); submit_widget_state()
+```
 
 **Layout:**
 - `w_row` - Horizontal layout
 - `w_column` - Vertical layout
 - `w_grid` - Grid layout with spans
+```python
+from lplots.widgets.row import w_row
+from lplots.widgets.column import w_column
+from lplots.widgets.grid import w_grid
+# Horizontal
+w_row(items=[...])
+# Vertical
+w_column(items=[...])
+# Grid (context manager, supports spans)
+with w_grid(columns=12) as g:
+    g.add(item=..., col_span=4, row_span=1)
+```
 
 Grep example: `grep "w_h5" agent_config/context/latch_api_docs/plots_docs/widget-types.mdx`
 
@@ -429,25 +593,6 @@ Use BOTH when needed:
 - Never use `display()` or bare `plt.show()`
 
 </visualization_rules>
-
----
-
-<data_ingestion>
-
-## File Selection
-
-When files are needed:
-- **ALWAYS use `w_ldata_picker` widget**
-- NEVER ask for manual file paths
-- Let users select from Latch Data interface
-
-## Data Loading
-
-- Verify file paths before loading
-- Handle both local and `latch://` remote paths
-- Use LPath API for remote files (see documentation)
-
-</data_ingestion>
 
 ---
 

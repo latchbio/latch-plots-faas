@@ -51,6 +51,7 @@ class AgentHarness:
     initialized: bool = False
     client: anthropic.AsyncAnthropic | None = None
     mode: Mode = Mode.planning
+    system_prompt: str | None = None
     pending_operations: dict[str, asyncio.Future] = field(default_factory=dict)
     executing_cells: set[str] = field(default_factory=set)
     tools: list[ToolParam] = field(default_factory=list)
@@ -1653,8 +1654,15 @@ class AgentHarness:
                 else:
                     base_path = Path(base_path)
 
+                if "/" in pattern:
+                    flag = "-path"
+                    search_pattern = f"*/{pattern}"
+                else:
+                    flag = "-name"
+                    search_pattern = pattern
+
                 result = subprocess.run(
-                    ["/usr/bin/find", str(base_path), "-name", pattern],
+                    ["/usr/bin/find", str(base_path), flag, search_pattern],
                     capture_output=True,
                     text=True,
                     timeout=5,
@@ -1911,17 +1919,17 @@ class AgentHarness:
 
         self.tools.append({
             "name": "glob_file_search",
-            "description": "Search for files matching a pattern in the context directory. Uses find command with glob patterns.",
+            "description": "Search for files matching a pattern. Defaults to searching the context directory. For nested paths use patterns like 'technology_docs/*.md'.",
             "input_schema": {
                 "type": "object",
                 "properties": {
                     "pattern": {
                         "type": "string",
-                        "description": "Glob pattern to match files (e.g., '*.md', 'vizgen*')"
+                        "description": "Glob pattern to match files. Use '*.md' for all markdown files, 'technology_docs/*.md' for files in a subdirectory."
                     },
                     "base_path": {
                         "type": "string",
-                        "description": "Base path to search in. Defaults to 'agent_config/context'. Can be relative or absolute."
+                        "description": "Base path to search in. Defaults to 'agent_config/context'. Use relative paths from agent directory."
                     }
                 },
                 "required": ["pattern"]
@@ -2003,13 +2011,13 @@ class AgentHarness:
 
         self.tools.append({
             "name": "bash",
-            "description": "Execute a bash command in the context directory. Useful for exploring files and directories.",
+            "description": "Execute a bash command. The working directory is already set to the context directory, so use relative paths (e.g., 'ls technology_docs/' not 'ls agent_config/context/technology_docs/').",
             "input_schema": {
                 "type": "object",
                 "properties": {
                     "command": {
                         "type": "string",
-                        "description": "Bash command to execute (runs in agent_config/context directory)"
+                        "description": "Bash command to execute. Working directory is the context directory, use relative paths."
                     }
                 },
                 "required": ["command"]
@@ -2244,13 +2252,12 @@ class AgentHarness:
                                 can_use_thinking = False
                                 print(f"[agent] Cannot use thinking API: last assistant message starts with {first_block_type}, not thinking")
 
-            system_prompt_path = context_root.parent / "system_prompt.md"
-            system_prompt = system_prompt_path.read_text()
+            assert self.system_prompt is not None
 
             system_blocks = [
                 {
                     "type": "text",
-                    "text": system_prompt,
+                    "text": self.system_prompt,
                     "cache_control": {"type": "ephemeral"}
                 }
             ]
@@ -2499,6 +2506,9 @@ class AgentHarness:
                 default_headers={"Authorization": auth_token_sdk, "Pod-Id": str(pod_id)}
             )
 
+            system_prompt_path = context_root.parent / "system_prompt.md"
+            self.system_prompt = system_prompt_path.read_text()
+
             messages = await self._build_messages_from_db()
             await self._close_pending_tool_calls(
                 error_message="Tool call cancelled - session was ended before completion",
@@ -2605,13 +2615,42 @@ class AgentHarness:
     async def get_full_prompt(self) -> dict:
         messages = await self._build_messages_from_db()
 
-        system_prompt_path = context_root.parent / "system_prompt.md"
-        system_prompt = system_prompt_path.read_text()
+        context_dir = context_root / "notebook_context"
+
+        def read_context_file(filename: str) -> str:
+            file_path = context_dir / filename
+            if file_path.exists():
+                return file_path.read_text()
+            return f"# {filename}\n\nFile not yet generated."
+
+        cells_content = read_context_file("cells.md")
+        globals_content = read_context_file("globals.md")
+        signals_content = read_context_file("signals.md")
+
+        def build_tree(path: Path, prefix: str = "") -> list[str]:
+            lines = []
+            entries = sorted(path.iterdir(), key=lambda p: (not p.is_dir(), p.name))
+            for entry in entries:
+                if entry.is_dir():
+                    lines.append(f"{prefix}{entry.name}/")
+                    lines.extend(build_tree(entry, prefix + "  "))
+                else:
+                    lines.append(f"{prefix}{entry.name}")
+
+            return lines
+
+        tree_lines = ["# Context Directory Structure", "", "context/"]
+        tree_lines.extend(build_tree(context_root, "  "))
+        tree_content = "\n".join(tree_lines)
 
         return {
-            "system_prompt": system_prompt,
+            "system_prompt": self.system_prompt,
             "messages": messages,
             "model": self.mode_config.get(self.mode, ("claude-sonnet-4-5-20250929", 1024))[0],
+            "cells": cells_content,
+            "globals": globals_content,
+            "signals": signals_content,
+            "tree": tree_content,
         }
 
     async def update_system_prompt(self, msg: dict[str, object]) -> dict:
@@ -2621,13 +2660,12 @@ class AgentHarness:
 
         system_prompt_path = context_root.parent / "system_prompt.md"
         system_prompt_path.write_text(new_content)
+        self.system_prompt = new_content
 
-        messages = await self._build_messages_from_db()
+        full_prompt = await self.get_full_prompt()
         return {
             "status": "success",
-            "system_prompt": new_content,
-            "messages": messages,
-            "model": self.mode_config.get(self.mode, ("claude-sonnet-4-5-20250929", 1024))[0],
+            **full_prompt,
         }
 
     async def accept(self) -> None:
