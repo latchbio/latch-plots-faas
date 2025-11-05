@@ -2739,6 +2739,7 @@ class AgentHarness:
 
             nested_msg = msg.get("message", {})
             nested_type = nested_msg.get("type")
+
             print(f"[tim] nested_type={nested_type}")
             if nested_type == "cell_result":
                 cell_id = nested_msg.get("cell_id")
