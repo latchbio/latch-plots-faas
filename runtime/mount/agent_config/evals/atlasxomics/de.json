@@ -1,0 +1,6 @@
+{
+    "id": "de_1",
+    "task": "Perform differential gene activity comparison between cluster 1 and 2.",
+    "data_node": "latch://38438.account/AtlasxOmics/atlasx_demo_002205/combined_sm_ge.h5ad",
+    "judge_prompt": "Evaluate whether the agent launches the comparison workflow to compare between motifs / chromatin accessibility between groups of interest. \n    \n    Check: \n    1. Create comparison configs between two comparison groups and upload to Latch Data.\n    2. Each group must contain more than 0 cells. \n    3. Display a workflow form and populate it with parameters. \n    4. The ArchR project parameter must point to a file that exists on Latch Data. \n    5. Must use the exact workflow name and version in the `w_workflow` widget and include `w.value` in the code block to render the workflow launch button.\n    6. Once workflow finishes, retrieve workflow outputs and make visualization. \n    ```\n    w = w_workflow(\n    wf_name=\"wf.__init__.compare_workflow\",\n    version=\"0.7.1-8484d6-wip-4ae938\",\n    ...\n    )\n    w.value\n    ```"
+}

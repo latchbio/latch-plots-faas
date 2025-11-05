@@ -23,6 +23,9 @@ dependencies = [
     "dill>=0.3.9",
     "anndata>=0.10.10",
     "anthropic>=0.71.0",
+    "scikit-learn>=1.7.2",
+    "scipy>=1.15.2",
+    "statsmodels>=0.14.5",
 ]
 requires-python = "==3.11.*"
 readme = "README.md"
