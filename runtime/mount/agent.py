@@ -2757,21 +2757,24 @@ class AgentHarness:
                     return
 
                 print(f"[tim] putting cell_result")
-                await self.pending_messages.put({
-                    "type": "cell_result",
-                    "cell_id": cell_id,
-                    "success": not has_exception,
-                    "exception": exception,
-                    "logs": logs,
-                    "display_name": display_name,
-                })
+                if self.current_request_id is not None:
+                    await self.pending_messages.put({
+                        "type": "cell_result",
+                        "cell_id": cell_id,
+                        "success": not has_exception,
+                        "exception": exception,
+                        "logs": logs,
+                        "display_name": display_name,
+                    })
+                else:
+                    print(f"[agent] Cell {cell_id} completed but no active request - updating executing_cells only")
+
             elif nested_type == "start_cell":
                 cell_id = nested_msg.get("cell_id")
                 if cell_id is not None and self.current_request_id is not None:
                     self.executing_cells.add(str(cell_id))
             elif nested_type == "set_widget_value":
                 if self.current_status == "awaiting_user_widget_input":
-                    self.current_status = "thinking"
                     print(f"[tim] putting set_widget_value")
                     self.has_set_widget_value = True
                     await self.pending_messages.put({
