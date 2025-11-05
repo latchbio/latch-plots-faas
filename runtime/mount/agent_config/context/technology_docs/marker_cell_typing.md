@@ -281,30 +281,6 @@ summary[cluster] = {
 - New column `adata.obs["cell_type"]` with cell type annotations for each cell
 - Each cell inherits the annotation of its cluster
 
-### Step 6: Validate Annotations with Violin Plots
-
-**Objective**: Visualize marker gene expression across clusters to validate cell type annotations.
-
-**Process**:
-
-- Rank marker genes by their log fold changes for each cluster
-- Select top N marker genes per cluster (e.g., top 20)
-- Create violin plots using scanpy to visualize expression patterns
-- Verify that annotated clusters show expected marker gene expression
-
-**Key considerations**:
-
-- **Gene ranking**: Use log fold changes from differential expression analysis to rank markers
-- **Top N selection**: Limit to top markers per cluster to avoid cluttered plots
-- **Visualization**: Use scanpy's `sc.pl.violin()` to show expression distribution across clusters
-- **Validation**: Check that clusters show high expression of their assigned cell type markers
-
-**Output**:
-
-- Ranked marker genes per cluster (DataFrame)
-- Violin plots showing marker gene expression patterns
-- Visual validation of annotation quality
-
 ## Implementation Guide
 
 ### Step 1: Differential Expression Analysis
@@ -589,110 +565,6 @@ def annotate_adata(adata, cluster_summary, cluster_col="cluster", cell_type_col=
     return adata
 ```
 
-### Validate Annotations with Violin Plots
-
-```python
-import scanpy as sc
-
-def rank_by_score(ranked_genes_df, cluster_summary, list_key="markers_for_most_common_cell_type", top_n=None):
-    """
-    Rank marker genes by their log fold changes for each cluster.
-    
-    Args:
-        ranked_genes_df: DataFrame from differential expression analysis with columns:
-            "names", "group", "logfoldchanges", "pvals_adj"
-        cluster_summary: Dictionary from summarize_clusters() mapping cluster → annotation details
-        list_key: Key in cluster_summary to get marker genes (default: "markers_for_most_common_cell_type")
-        top_n: Number of top genes to return per cluster (None = all)
-    
-    Returns:
-        dict: {cluster_id: DataFrame} mapping cluster ID to ranked marker genes DataFrame
-    """
-    out = {}
-    for k, v in cluster_summary.items():
-        cid = int(k)
-        markers = set(v.get(list_key, []))
-        
-        # Filter to markers for this cluster
-        df = ranked_genes_df[
-            (ranked_genes_df["group"] == cid) & 
-            (ranked_genes_df["names"].isin(markers))
-        ].copy()
-        
-        # Sort by log fold change (descending)
-        df = df.sort_values("logfoldchanges", ascending=False)
-        
-        # Return top N or all
-        out[cid] = df.head(top_n) if top_n else df
-    
-    return out
-
-
-def plot_marker_validation(adata, ranked_dict, cluster_col="cluster", n_plots=5):
-    """
-    Create violin plots for top marker genes to validate annotations.
-    
-    Args:
-        adata: AnnData object with annotations
-        ranked_dict: Dictionary from rank_by_score() mapping cluster_id → DataFrame
-        cluster_col: Name of cluster column in adata.obs
-        n_plots: Number of top genes to plot per cluster
-    
-    Returns:
-        None (displays plots)
-    """
-    for cluster_id, marker_df in ranked_dict.items():
-        if marker_df.empty:
-            print(f"Cluster {cluster_id}: No markers found, skipping plot")
-            continue
-        
-        # Get top N marker genes for this cluster
-        top_genes = marker_df["names"].head(n_plots).tolist()
-        
-        if not top_genes:
-            continue
-        
-        # Get cell type annotation for this cluster
-        cell_type = adata.obs[adata.obs[cluster_col] == cluster_id]["cell_type"].iloc[0] if len(adata.obs[adata.obs[cluster_col] == cluster_id]) > 0 else "Unknown"
-        
-        print(f"\nCluster {cluster_id} ({cell_type}) - Top {len(top_genes)} markers:")
-        print(f"  Genes: {', '.join(top_genes)}")
-        
-        # Create violin plot
-        sc.pl.violin(
-            adata,
-            keys=top_genes,
-            groupby=cluster_col,
-            rotation=90,
-            multi_panel=True,
-            title=f"Cluster {cluster_id}: {cell_type}"
-        )
-
-
-# Usage example
-# Rank markers by score
-ranked = rank_by_score(
-    ranked_genes_df=ranked_genes_df,
-    cluster_summary=cluster_summary,
-    list_key="markers_for_most_common_cell_type",
-    top_n=20
-)
-
-# Get top marker genes for a specific cluster
-cluster_id = 0  # Example cluster
-if cluster_id in ranked:
-    top_markers = ranked[cluster_id]["names"].unique()
-    print(f"Top markers for cluster {cluster_id}: {list(top_markers)}")
-
-# Create validation plots
-plot_marker_validation(
-    adata=adata,
-    ranked_dict=ranked,
-    cluster_col="cluster",
-    n_plots=5  # Plot top 5 markers per cluster
-)
-```
-
 ### Complete Example Usage
 
 ```python
@@ -755,25 +627,8 @@ adata = annotate_adata(
     cell_type_col="cell_type"
 )
 
-# 5. Validate annotations with violin plots
-# Rank marker genes by score for each cluster
-ranked_markers = rank_by_score(
-    ranked_genes_df=ranked_genes_df,
-    cluster_summary=cluster_summary,
-    list_key="markers_for_most_common_cell_type",
-    top_n=20
-)
-
-# Create violin plots to validate annotations
-plot_marker_validation(
-    adata=adata,
-    ranked_dict=ranked_markers,
-    cluster_col="cluster",
-    n_plots=5  # Plot top 5 markers per cluster
-)
-
 # The adata object now has adata.obs["cell_type"] column with annotations
-# Violin plots show marker gene expression patterns for validation
+# Ready for downstream analysis and visualization
 ```
 
 ## Important Considerations
@@ -815,7 +670,7 @@ When multiple cell types have the same highest marker gene count, use the follow
 
 #### 3. **Expression Pattern Validation**
 
-- **Check marker expression**: Use violin plots to verify which cell type's markers show stronger expression
+- **Check marker expression**: Verify which cell type's markers show stronger expression in the data
 - **Visual inspection**: Compare expression levels across clusters for tied cell types
 - **Expected patterns**: Choose the cell type whose markers show expected spatial or expression patterns
 
