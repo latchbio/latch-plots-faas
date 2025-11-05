@@ -2733,14 +2733,11 @@ class AgentHarness:
             print(f"[agent] {msg.get('action', 'unknown')} -> {msg.get('status', 'unknown')}")
             await self.handle_action_response(msg)
         elif msg_type == "kernel_message":
-            print(f"[tim] kernel_message handler START")
-            print(f"[tim] current_request_id={self.current_request_id}, current_status={self.current_status}, has_set_widget_value={self.has_set_widget_value}")
             print(f"[agent] Kernel message: {msg}")
 
             nested_msg = msg.get("message", {})
             nested_type = nested_msg.get("type")
 
-            print(f"[tim] nested_type={nested_type}")
             if nested_type == "cell_result":
                 cell_id = nested_msg.get("cell_id")
                 has_exception = nested_msg.get("has_exception", False)
@@ -2754,10 +2751,9 @@ class AgentHarness:
                 if cell_id is not None:
                     self.executing_cells.discard(str(cell_id))
                 if self.current_status == "awaiting_user_widget_input" and not self.has_set_widget_value:
-                    print(f"[tim] not adding cell_result because current_status={self.current_status}, has_set_widget_value={self.has_set_widget_value}")
+                    print(f"[agent] Not adding cell {cell_id} result because awaiting_user_widget_input and have not seen set_widget_value")
                     return
 
-                print(f"[tim] putting cell_result")
                 if self.current_request_id is not None:
                     await self.pending_messages.put({
                         "type": "cell_result",
@@ -2776,7 +2772,6 @@ class AgentHarness:
                     self.executing_cells.add(str(cell_id))
             elif nested_type == "set_widget_value":
                 if self.current_status == "awaiting_user_widget_input":
-                    print(f"[tim] putting set_widget_value")
                     self.has_set_widget_value = True
                     await self.pending_messages.put({
                         "type": "set_widget_value",
