@@ -2187,6 +2187,148 @@ class AgentHarness:
         if len(self.tools) > 0:
             self.tools[-1]["cache_control"] = {"type": "ephemeral"}
 
+    async def _handle_stream(self, *, use_beta_api: bool, **kwargs) -> tuple[Message | BetaMessage, float]:
+        """Handle streaming API response, send WebSocket updates, and return complete message."""
+        start_time = time.time()
+
+        # Send stream start notification
+        await self.send({
+            "type": "agent_stream_start",
+            "timestamp": int(time.time() * 1000),
+        })
+
+        # Track accumulated content blocks
+        content_blocks: list[dict] = []
+        current_block_index = -1
+
+        # Usage tracking
+        usage_data = None
+
+        try:
+            # Select appropriate stream based on API type
+            stream_ctx = self.client.beta.messages.stream(**kwargs) if use_beta_api else self.client.messages.stream(**kwargs)
+
+            async with stream_ctx as stream:
+                async for event in stream:
+                    event_type = event.type
+
+                    if event_type == "message_start":
+                        message_data = event.message
+                        if hasattr(message_data, "usage") and message_data.usage:
+                            usage_data = message_data.usage
+
+                    elif event_type == "content_block_start":
+                        current_block_index = event.index
+                        block = event.content_block
+
+                        # Initialize the content block
+                        block_dict = {"type": block.type}
+                        if block.type == "text":
+                            block_dict["text"] = ""
+                        elif block.type == "thinking":
+                            block_dict["thinking"] = ""
+                        elif block.type == "tool_use":
+                            block_dict["id"] = block.id
+                            block_dict["name"] = block.name
+                            block_dict["input"] = {}
+
+                        content_blocks.append(block_dict)
+
+                        # Send block start notification
+                        await self.send({
+                            "type": "agent_stream_block_start",
+                            "block_index": current_block_index,
+                            "block_type": block.type,
+                            "block_id": block.id if block.type == "tool_use" else None,
+                            "block_name": block.name if block.type == "tool_use" else None,
+                        })
+
+                    elif event_type == "content_block_delta":
+                        delta = event.delta
+                        block_index = event.index
+
+                        if delta.type == "text_delta":
+                            content_blocks[block_index]["text"] += delta.text
+                            await self.send({
+                                "type": "agent_stream_delta",
+                                "block_index": block_index,
+                                "block_type": "text",
+                                "delta": delta.text,
+                            })
+
+                        elif delta.type == "thinking_delta":
+                            content_blocks[block_index]["thinking"] += delta.thinking
+                            await self.send({
+                                "type": "agent_stream_delta",
+                                "block_index": block_index,
+                                "block_type": "thinking",
+                                "delta": delta.thinking,
+                            })
+
+                        elif delta.type == "input_json_delta":
+                            # For tool_use, accumulate the input JSON
+                            # Note: Tools are executed after complete message, not during stream
+                            partial_json = delta.partial_json
+                            await self.send({
+                                "type": "agent_stream_delta",
+                                "block_index": block_index,
+                                "block_type": "tool_use",
+                                "delta": partial_json,
+                            })
+
+                    elif event_type == "content_block_stop":
+                        block_index = event.index
+                        await self.send({
+                            "type": "agent_stream_block_stop",
+                            "block_index": block_index,
+                        })
+
+                    elif event_type == "message_delta":
+                        if hasattr(event, "usage") and event.usage:
+                            usage_data = event.usage
+
+                    elif event_type == "message_stop":
+                        pass  # Message completed
+
+                # Get the final message from the stream
+                final_message = await stream.get_final_message()
+
+            duration_seconds = time.time() - start_time
+
+            # Send usage update if available
+            if usage_data is not None:
+                cache_read_input_tokens = getattr(usage_data, "cache_read_input_tokens", None) or 0
+                cache_creation_input_tokens = getattr(usage_data, "cache_creation_input_tokens", None) or 0
+
+                await self.send({
+                    "type": "agent_usage_update",
+                    "input_tokens": usage_data.input_tokens,
+                    "cache_read_input_tokens": cache_read_input_tokens,
+                    "cache_creation_input_tokens": cache_creation_input_tokens,
+                    "context_limit": 200_000,  # todo(aidan): store this info in db per model config
+                })
+
+            # Send stream complete notification
+            await self.send({
+                "type": "agent_stream_complete",
+            })
+
+            print(f"[agent] Stream completed in {duration_seconds:.3f}s, {len(content_blocks)} blocks")
+
+            return final_message, duration_seconds
+
+        except Exception as e:
+            print(f"[agent] Stream error: {e}")
+            traceback.print_exc()
+
+            # Send error notification
+            await self.send({
+                "type": "agent_stream_complete",
+                "error": str(e),
+            })
+
+            raise
+
     async def run_agent_loop(self) -> None:
         assert self.client is not None, "Client not initialized"
 
@@ -2279,38 +2421,11 @@ class AgentHarness:
                 use_beta_api = True
 
             try:
-                start_time = time.time()
-
-                if use_beta_api:
-                    response: BetaMessage = await self.client.beta.messages.create(**kwargs)
-                else:
-                    response: Message = await self.client.messages.create(**kwargs)
-
-                duration_seconds = time.time() - start_time
-
-                if response.usage is not None:
-                    usage = response.usage
-
-                    # todo(aidan): store this info in db per model config
-                    context_limit = 200_000
-
-                    cache_read_input_tokens = usage.cache_read_input_tokens
-                    if cache_read_input_tokens is None:
-                        cache_read_input_tokens = 0
-
-                    cache_creation_input_tokens = usage.cache_creation_input_tokens
-                    if cache_creation_input_tokens is None:
-                        cache_creation_input_tokens = 0
-
-                    usage_data = {
-                        "type": "agent_usage_update",
-                        "input_tokens": usage.input_tokens,
-                        "cache_read_input_tokens": cache_read_input_tokens,
-                        "cache_creation_input_tokens": cache_creation_input_tokens,
-                        "context_limit": context_limit,
-                    }
-
-                    await self.send(usage_data)
+                # Use streaming API
+                response, duration_seconds = await self._handle_stream(
+                    use_beta_api=use_beta_api,
+                    **kwargs
+                )
 
             except Exception as e:
                 print(f"[agent] API error: {e}")
