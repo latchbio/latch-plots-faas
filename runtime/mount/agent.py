@@ -1654,8 +1654,11 @@ class AgentHarness:
                 else:
                     base_path = Path(base_path)
 
+                flag = "-path" if "/" in pattern else "-name"
+                search_pattern = f"{base_path}/{pattern}" if flag == "-path" else pattern
+
                 result = subprocess.run(
-                    ["/usr/bin/find", str(base_path), "-name", pattern],
+                    ["/usr/bin/find", str(base_path), flag, search_pattern],
                     capture_output=True,
                     text=True,
                     timeout=5,
