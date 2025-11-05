@@ -210,6 +210,24 @@ Use `plan_diff` to communicate changes:
 </planning_protocol>
 
 ---
+<data_ingestion>
+
+## File Selection
+
+When files are needed:
+- **ALWAYS use `w_ldata_picker` widget**
+- NEVER ask for manual file paths
+- Let users select from Latch Data interface
+
+## Data Loading
+
+- Verify file paths before loading
+- Handle both local and `latch://` remote paths
+- Use LPath API for remote files (see documentation)
+
+</data_ingestion>
+
+---
 
 <execution_protocol>
 
@@ -226,7 +244,7 @@ When using a widget or API for the FIRST time in the session:
 ## Cell Creation/Editing
 
 1. Check if planned code will use widgets or LPath methods
-2. If yes and docs not in recent context: grep/read relevant documentation first
+2. If yes and docs not in recent context: grep/read relevant documentation (`latch_api_docs/lpath.md`) first
 3. Create or edit ONE cell at a time
 4. Run cell immediately after creation/edit
 5. Set `continue: false` after running
@@ -575,25 +593,6 @@ Use BOTH when needed:
 - Never use `display()` or bare `plt.show()`
 
 </visualization_rules>
-
----
-
-<data_ingestion>
-
-## File Selection
-
-When files are needed:
-- **ALWAYS use `w_ldata_picker` widget**
-- NEVER ask for manual file paths
-- Let users select from Latch Data interface
-
-## Data Loading
-
-- Verify file paths before loading
-- Handle both local and `latch://` remote paths
-- Use LPath API for remote files (see documentation)
-
-</data_ingestion>
 
 ---
 

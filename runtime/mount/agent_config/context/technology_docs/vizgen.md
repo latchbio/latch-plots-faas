@@ -96,32 +96,92 @@ The merfish data contains images and transcript information. A typical merfish d
         ├── mosaic_PolyT_z5.tif
         └── mosaic_PolyT_z6.tif
 
-- **Merfish input data directory** → maps to workflow param `vizgen_images`
-The user provided input must be provided by the user and wrapped as `LatchDir(latch://...)`.  
+- **Merfish input data directory** → maps to workflow param `vizgen_images`.
+The user provided input must be provided by the user and wrapped as `LatchDir(latch://...)`.  **ALWAYS USE THE USER PROVIDED DIRECTORY AS THE INPUT to `vizgen_mages`**   
 
-#### Required User Inputs
+### Required User Inputs
 For each sample, you must ALWAYS **provide a form using latch widgets** for the following values. Each one has a clear mapping to a workflow parameter: 
 
-- Creating the **algorithm.json**
-    - Ignore any existing algorithm.json files you may find in this directory. 
-    - Scan the **Merfish input data directory** to identify the zoom levels and stains that are available in the dataset.
-    - Display a summary of the zoon levels and stains
-    - Allow the user to input the number of segmentation tasks and use **lplots widgets** to take this input
-    - For each segmentation task, 
-        - Use **lplots widgets** to display the zoom levels, and allow the user to select the zoom levels of interest
-        - Allow the user to select between Cellpose, Cellpose2 and Watershed for the celltyping algorithm. By default use Cellpose2
-        - If the algorithm is Cellpose2:
-            - Use **lplots widgets** to list the different stains that are available and allow the user to assign green, blue and red stains to configure the channel map. 
-        - Otherwise, 
-            - **DO NOT** have the channel map field. 
-       - Note that the user may want to select multiple zoom levels, by default select everything
-       - **ALWAYS** set **nuclear_channel** and **entity_fill_channel** to **all** in segmentation_parameters
-    - Based on the inputs specified by the user create an algorithm.json file and use the ldata picker to save the file to ldata. 
-    - Regardless of the avaibility of existing **algorithm.json** files, you should always create a **NEW** algorithm.json similar to what I have below based on user choices. 
-    - Use **lplots widgets** to allow the user to specify the name of the file to save the json document we created.
-    - Use the **ldatapicker** widget to allow the user to pick the directory to save the algorithm.json to ldata. 
-    - You should allow the user to specify the directory and the file name. 
+#### Task: Create a New algorithm.json File
+Overview
+    - Always generate a new algorithm.json file based on user input.
+    - Ignore any existing algorithm.json files in the directory.
 
+#### Steps:
+1. Look for **manifest.json** file in the **Merfish Input Directory**
+    - The manifest.json file looks similar to, 
+    ```
+    { 
+        "microns_per_pixel": 0.108, 
+        "mosaic_width_pixels": 3,953, 
+        "mosaic_height_pixels": 3,960, 
+        "bbox_microns": [ 
+            -4.274, 
+            -6.39, 
+            422.5, 
+            421.2
+        ], 
+        "hor_num_tiles_box": 2, 
+        "vert_num_tiles_box": 2, 
+        "mosaic_files": [ 
+            { 
+                "stain": "Cellbound3", 
+                "z": 0, 
+                "file_name": "mosaic_Cellbound3_z0.tif"
+            }, 
+            { 
+                "stain": "Cellbound2", 
+                "z": 0, 
+                "file_name": "mosaic_Cellbound2_z0.tif"
+            },
+        ...
+        ]
+    }
+    ```
+    - Detect and list all zoom levels (`z`) and stains (`stain`) available in the **manifest.json** file.
+    - Display a summary of the detected zoom levels and stains. **Ensure there is atleast one zoom level and one stain**.
+
+2. Number of Segmentation Tasks
+    - Use an **lplots text input widget** to ask the user for the number of segmentation tasks.
+    - If the user enters N, create N segmentation configuration sections.
+
+3. Configure Each Segmentation Task
+    - **Make sure to use a for loop to match the number of segmentation tasks and define parameters for each segmentation task.**
+    - For each segmentation task, use **lplots widgets** to:
+        - Display the segmentation task number using **w_text_output**
+        - Display available zoom levels using **lplots widgets**(default: all selected).
+        - Allow selection of the segmentation algorithm:
+            - Options: Cellpose, Cellpose2, Watershed
+            - Default: Cellpose2
+            - If Cellpose or Cellpose2 is selected:
+                - Use **lplots widgets** to assign red, green, and blue stains (from detected stains).
+                - Use an **lplots widgets** to choose the segmentation model:
+                    - Options: cyto2, nuclei
+                    - Default: cyto2
+                - This selection configures the "model" field in segmentation_parameters.
+            - If  Watershed is selected:
+                - Do not include channel map fields.
+        - Always set the following fields in segmentation_parameters:
+        ```
+        {
+        "nuclear_channel": "all",
+        "entity_fill_channel": "all"
+        }
+        ```
+
+4. Dynamic Updates
+    - If the user changes the number of segmentation tasks, automatically regenerate the segmentation configuration
+to match the updated number. 
+
+5. Save Algorithm File
+    - Use an **lplots widgets** to let the user specify the file name for the new JSON document.
+    - Use an **ldatapicker widget** to let the user choose the directory in LData to save the file.
+    - Combine both inputs to save the final algorithm.json file to LData.
+
+#### Important Notes
+    - Always create a new algorithm.json regardless of existing files.
+    - The file content must reflect the latest user inputs.
+    - The workflow must handle multiple segmentation configurations dynamically and clearly.
 The **algorithm.json** file should look similar to 
     ```
     {
@@ -156,7 +216,7 @@ The **algorithm.json** file should look similar to
             0, 1, 2, 3, 4, 5, 6
         ],
         "segmentation_properties": {
-            "model": null,
+            "model": "cyto2",
             "model_dimensions": "2D",
             "custom_weights": "CP_20230830_093420",
             "channel_map": {
