@@ -2,7 +2,7 @@
 This is the **step-by-step pipeline** for spatial annotation
 
 ## Initial Data Entry
-1. **H5 Widget Setup**: Ask the user if they'd like to pass in an H5AD file so you can create a w_h5 widget for them. Call `smart_ui_spotlight` with `keyword="file_upload"`. Provide the overall annotation pipeline you can guide them through (image alignment -> cell annotation) and provide a concise list of what else you can help them with given the H5 tools available. 
+1. **H5 Widget Setup**: Prompt the user to upload an .h5ad by clicking the Attach button (paperclip) in the agent chat. Call `smart_ui_spotlight` with `keyword="file_upload"`. Provide the overall annotation pipeline you can guide them through (image alignment -> cell annotation) and provide a concise list of what else you can help them with given the H5 tools available. 
 2. **Reference Image Entry**: Once a w_h5 widget exists, ask if they'd like to begin with image alignment by selecting a reference image and call `smart_ui_spotlight` with `keyword="file_upload"`
 
 ## Image Alignment
