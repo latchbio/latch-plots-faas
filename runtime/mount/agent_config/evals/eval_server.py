@@ -225,11 +225,14 @@ class EvalServer:
             if msg.get("type") == "agent_status" and msg.get("status") == "ready":
                 data_context = ""
                 if self.test_case.data_node:
-                    contextual_data = [{
-                        "type": "File",
-                        "path": self.test_case.data_node,
-                        "id": self.test_case.data_node.replace("latch:///", "").replace(".csv", ""),
-                    }]
+                    data_nodes = self.test_case.data_node if isinstance(self.test_case.data_node, list) else [self.test_case.data_node]
+                    contextual_data = []
+                    for node in data_nodes:
+                        contextual_data.append({
+                            "type": "File",
+                            "path": node,
+                            "id": node.replace("latch:///", "").replace(".csv", "").replace(".h5ad", ""),
+                        })
                     data_context = f"\n\nHere is the context of the selected nodes the user would like to use: <ContextualNodeData>{json.dumps(contextual_data)}</ContextualNodeData>"
 
                 initial_query = textwrap.dedent(f"""
