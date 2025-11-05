@@ -14,9 +14,10 @@ import signal
 import socket
 import sys
 import traceback
+from base64 import b64decode
 from collections import defaultdict
 from copy import copy, deepcopy
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 from io import TextIOWrapper
 from pathlib import Path
 from traceback import format_exc
@@ -57,13 +58,12 @@ from plotly_utils.precalc_box import precalc_box
 from plotly_utils.precalc_violin import precalc_violin
 from socketio_thread import SocketIoThread
 from stdio_over_socket import SocketWriter, text_socket_writer
-from base64 import b64decode
 
 ad = auto_install.ad
 
 sys.path.append(str(Path(__file__).parent.absolute()))
 from subsample import downsample_df, initialize_duckdb
-from utils import KernelSnapshotStatus, PlotConfig, get_presigned_url
+from utils import KernelSnapshotStatus, PlotConfig, get_presigned_url, orjson_encoder
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -488,7 +488,7 @@ def _split_violin_groups(
 
     idx_arr = np.asarray(trace.get(index_axis))
     data_field = trace.get(data_axis)
-    
+
     # note(tim): plotly makes this field base64
     if isinstance(data_field, dict) and "bdata" in data_field and "dtype" in data_field:
         vals_arr = np.frombuffer(b64decode(data_field["bdata"]), dtype=np.dtype(data_field["dtype"]))
@@ -496,7 +496,7 @@ def _split_violin_groups(
         vals_arr = np.asarray(data_field)
 
     categories, cat_idx = np.unique(idx_arr, return_inverse=True)
-    
+
     if len(categories) <= 1:
         return None, False
 
@@ -509,7 +509,7 @@ def _split_violin_groups(
     cat_idx = cat_idx.astype(np.int64, copy=False)
     order_idx = np.argsort(cat_idx, kind="stable")
     cat_idx_sorted = cat_idx[order_idx]
-    
+
     # find where to split the categories
     split_idx = np.flatnonzero(np.diff(cat_idx_sorted)) + 1
     groups = np.split(order_idx, split_idx)
@@ -517,11 +517,10 @@ def _split_violin_groups(
     for label, idxs in zip(order, groups):
         child = deepcopy(trace)
         child[data_axis] = vals_arr[idxs]
-        
+
         # note(tim): clear any indexes that will cause trouble in precalc_violin
         child.pop(index_axis, None)
-        # todo(tim): also handle the subplot case where there can 
-        # be more index axis levels e.g. x1
+        # todo(tim): handle subplot cases with multiple index axis levels, e.g., x1
         child.pop(f"{index_axis}0", None)
         child.pop(f"d{index_axis}", None)
         child["name"] = str(label)
@@ -878,6 +877,15 @@ class Kernel:
                 if sig.id not in s_signals:
                     s_signals[sig.id] = sig.serialize()
 
+            def collect_widget_signals(widget: BaseWidget) -> None:
+                if widget._has_signal:
+                    add_and_check_listeners(widget._signal)
+
+                for widget_field in fields(widget):
+                    field_value = getattr(widget, widget_field.name, None)
+                    if isinstance(field_value, BaseWidget):
+                        collect_widget_signals(field_value)
+
             for node in self.cell_rnodes.values():
                 s_nodes[node.id] = node.serialize()
                 for sig in node.signals.values():
@@ -896,6 +904,7 @@ class Kernel:
                 elif isinstance(val._value, Signal):
                     s_globals[k] = val._value.serialize()
                 elif isinstance(val._value, BaseWidget):
+                    collect_widget_signals(val._value)
                     if val._value._has_signal:
                         assert val._value._signal.id in s_signals, f"missing {val._value._signal.id}"
                         s_globals[k] = val._value.serialize()
@@ -919,14 +928,12 @@ class Kernel:
                 "url_dataframes": {},
             }
 
-            data = orjson.dumps(s_depens)
+            data = orjson.dumps(s_depens, default=orjson_encoder)
         except Exception:
             await self.update_kernel_snapshot_status("save_kernel_snapshot", "error", {"error_msg": traceback.format_exc()})
             return
 
         total = len(data)
-
-        await self.update_kernel_snapshot_status("save_kernel_snapshot", "start", {"progress_bytes": 0, "total_bytes": total})
 
         with (snapshot_dir / snapshot_f_name).open("wb") as f:
             saved_since_last = 0
@@ -935,7 +942,10 @@ class Kernel:
                 f.write(data[start:end])
 
                 saved_since_last += (end - start)
-                if saved_since_last >= snapshot_progress_interval_bytes or end == total:
+                if end == total:
+                    break
+
+                if saved_since_last >= snapshot_progress_interval_bytes:
                     await self.update_kernel_snapshot_status("save_kernel_snapshot", "progress", {"progress_bytes": end, "total_bytes": total})
                     saved_since_last = 0
 
@@ -962,7 +972,10 @@ class Kernel:
                 data.extend(chunk)
                 read_since_last += len(chunk)
 
-                if read_since_last >= snapshot_progress_interval_bytes or len(data) == total:
+                if len(data) == total:
+                    break
+
+                if read_since_last >= snapshot_progress_interval_bytes:
                     await self.update_kernel_snapshot_status("load_kernel_snapshot", "progress", {"progress_bytes":  len(data), "total_bytes": total})
                     read_since_last = 0
 

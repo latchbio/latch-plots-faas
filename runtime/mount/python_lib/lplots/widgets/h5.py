@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from typing import Literal, TypedDict
 
 from latch.ldata.path import LPath
+
 from lplots.h5.utils import auto_install
 from lplots.h5.utils.persistence import use_anndata_key
 
@@ -94,6 +95,9 @@ class H5(widget.BaseWidget):
     def sample(self) -> H5Value:
         res = self._signal.sample()
         return self._value(res)
+
+
+_emit.widget_registry[h5_widget_type] = H5
 
 
 def w_h5(

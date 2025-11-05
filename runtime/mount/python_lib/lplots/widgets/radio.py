@@ -1,5 +1,6 @@
 from collections.abc import Iterable
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Literal, NotRequired
 
 from ..reactive import Signal
@@ -12,8 +13,8 @@ radio_group_type: Literal["radio_group"] = "radio_group"
 class RadioGroupState(_emit.WidgetState[radio_group_type, str]):
     label: str
     readonly: bool
-    options: list[str]
-    default: NotRequired[str | None]
+    options: list[str | int | float | bool | datetime]
+    default: NotRequired[str | int | float | bool | datetime | None]
     appearance: NotRequired[FormInputAppearance | None]
     direction: Literal["horizontal", "vertical"]
     required: bool
@@ -25,8 +26,8 @@ class RadioGroups(widget.BaseWidget):
     _state: RadioGroupState
     _signal: Signal[object | str]
 
-    def _value(self, val: object) -> str | None:
-        if not isinstance(val, str) or val not in self._state["options"]:
+    def _value(self, val: object) -> str | int | float | bool | datetime | None:
+        if val not in self._state["options"]:
             val = self._state.get("default")
             if val is None:
                 return None
@@ -34,11 +35,11 @@ class RadioGroups(widget.BaseWidget):
         return val
 
     @property
-    def value(self) -> str | None:
+    def value(self) -> str | int | float | bool | datetime | None:
         res = self._signal()
         return self._value(res)
 
-    def sample(self) -> str | None:
+    def sample(self) -> str | int | float | bool | datetime | None:
         res = self._signal.sample()
         return self._value(res)
 
@@ -51,8 +52,8 @@ def w_radio_group(
     key: str | None = None,
     label: str,
     readonly: bool = False,
-    options: Iterable[str],
-    default: str | None = None,
+    options: Iterable[str | int | float | bool | datetime],
+    default: str | int | float | bool | datetime | None = None,
     appearance: FormInputAppearance | None = None,
     required: bool = False,
     direction: Literal["horizontal", "vertical"] = "horizontal",
