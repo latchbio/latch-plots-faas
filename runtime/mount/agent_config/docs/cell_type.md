@@ -257,6 +257,8 @@ summary[cluster] = {
 }
 ```
 
+**Note**: When multiple cell types have the same highest marker count, `most_common_cell_type` will be a list containing all tied cell types. See "Resolving Tied Cell Types" below for refinement strategies.
+
 ### Step 5: Annotate AnnData Object
 
 **Objective**: Add cell type annotations to `adata.obs` as a new column for downstream analysis and visualization.
@@ -794,6 +796,45 @@ plot_marker_validation(
   - Novel cell type not in database
   - Poor marker gene quality
 - **Multiple top cell types**: When ties occur, all top cell types are returned (may indicate similar cell lineages)
+
+### Resolving Tied Cell Types
+
+When multiple cell types have the same highest marker gene count, use the following strategies to select a single final annotation:
+
+#### 1. **Marker Gene Quality (Recommended)**
+
+- **Rank by marker strength**: Use `rank_by_score()` to rank markers by log fold change
+- **Select top markers**: Choose the cell type with stronger/more significant markers
+- **Implementation**: Compare average log fold changes of markers supporting each tied cell type
+
+#### 2. **Hierarchical Relationships**
+
+- **Prefer more specific terms**: If one tied cell type is a subtype of another, choose the more specific one
+  - Example: Choose `"excitatory neuron"` over `"neuron"` if both are tied
+- **Use ontology relationships**: Check if cell types are related (parent/child) in cell ontology
+
+#### 3. **Expression Pattern Validation**
+
+- **Check marker expression**: Use violin plots to verify which cell type's markers show stronger expression
+- **Visual inspection**: Compare expression levels across clusters for tied cell types
+- **Expected patterns**: Choose the cell type whose markers show expected spatial or expression patterns
+
+#### 4. **Biological Context**
+
+- **Tissue specificity**: If tissue is known, prefer cell types that are more common in that tissue
+- **Known cell lineages**: Use domain knowledge about expected cell types in the dataset
+- **Literature support**: Reference known marker combinations for the tissue/organism
+
+#### 5. **Consensus Across Samples**
+
+- **Cross-sample agreement**: If multiple samples exist, check which cell type is more consistently identified across samples
+- **Use `genes_70`**: Consider using `genes_70` (≥70% consensus) instead of `genes_all` (100% consensus) to break ties
+
+#### 6. **Manual Review**
+
+- **User input**: Present tied options to the user for manual selection
+- **Expert annotation**: Consult domain experts for ambiguous cases
+- **Temporary annotation**: Use a combined annotation (e.g., `"neuron, excitatory"`) until resolved
 
 ### Interpreting Results
 
