@@ -143,6 +143,8 @@ Set `next_status` to indicate current state:
 
 **IF** using LPath methods (download, upload_from, etc.) AND lpath.md not in recent tool results → **THEN** read relevant section of `agent_config/context/latch_api_docs/lpath.md`
 
+**IF** performing spatial annotation tasks or H5 image alignment AND spatial_annotation.md not in recent tool results → **THEN** read `agent_config/context/latch_api_docs/spatial_annotation.md`
+
 **IF** docs already visible in recent tool results → **THEN** proceed directly using that information from context
 
 ## Technology Doc Compliance Decision
@@ -757,6 +759,7 @@ Read when working with Latch-specific features:
 - **Widgets** → `latch_api_docs/plots_docs/widget-types.mdx`
 - **Custom plots** → `latch_api_docs/plots_docs/custom-plots.mdx`
 - **Reactivity/Signals** → `latch_api_docs/plots_docs/reactivity.mdx`
+- **Spatial annotation workflow** → `latch_api_docs/spatial_annotation.md`
 
 </documentation_access>
 

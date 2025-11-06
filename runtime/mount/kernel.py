@@ -1883,6 +1883,7 @@ class Kernel:
                     traceback.print_exc()
                     continue
 
+            await self.send(msg)
             return
 
         if msg["type"] == "globals_summary":

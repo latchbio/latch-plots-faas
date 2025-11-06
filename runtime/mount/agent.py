@@ -66,6 +66,8 @@ class AgentHarness:
     conversation_running: bool = False
     agent_session_id: int | None = None
     latest_notebook_context: dict = field(default_factory=dict)
+    current_status: str | None = None
+    has_set_widget_value: bool = False
 
     mode_config: dict[Mode, tuple[str, int | None]] = field(default_factory=lambda: {
         Mode.planning: ("claude-sonnet-4-5-20250929", 4096),
@@ -155,8 +157,23 @@ class AgentHarness:
 
         return None
 
-    async def _insert_history(self, *, event_type: str, payload: dict, request_id: str | None = None, tx_id: str | None = None) -> None:
+    async def _insert_history(
+        self,
+        *,
+        event_type: str = "anthropic_message",
+        role: str = "user",
+        payload: dict,
+        request_id: str | None = None,
+        tx_id: str | None = None,
+    ) -> None:
         assert self.agent_session_id is not None
+
+        payload = {
+            "type": event_type,
+            "role": role,
+            "timestamp": int(time.time() * 1000),
+            **payload,
+        }
 
         variables = {
             "sessionId": str(self.agent_session_id),
@@ -296,10 +313,7 @@ class AgentHarness:
             self.current_request_id = msg.get("request_id")
 
             payload = {
-                "type": "anthropic_message",
-                "role": "user",
                 "content": msg["content"],
-                "timestamp": int(time.time() * 1000),
             }
 
             if msg.get("display_query") is not None:
@@ -310,7 +324,6 @@ class AgentHarness:
                 payload["hidden"] = msg["hidden"]
 
             await self._insert_history(
-                event_type="anthropic_message",
                 payload=payload,
                 request_id=self.current_request_id,
             )
@@ -350,12 +363,8 @@ class AgentHarness:
                 print(f"[agent] Cell {cell_id} failed")
 
             await self._insert_history(
-                event_type="anthropic_message",
                 payload={
-                    "type": "anthropic_message",
-                    "role": "user",
                     "content": result_content,
-                    "timestamp": int(time.time() * 1000),
                 },
             )
 
@@ -368,6 +377,29 @@ class AgentHarness:
                     "request_id": self.current_request_id,
                     "hidden": True,
                 })
+
+        elif msg_type == "set_widget_value":
+            keys = ', '.join(str(k) for k in msg.get("data", {}).keys())
+            
+            # todo(tim): add handling of vals other than image alignment step
+            image_aligner_vals = []
+            for v in msg.get("data", {}).values():
+                try:
+                    if "image_alignment_step" in (parsed := json.loads(v)):
+                        image_aligner_vals.append(f"step={parsed['image_alignment_step']}")
+                except Exception as e:
+                    print(f"[agent] Failed to parse widget value for image_alignment_step: {e}, value: {v}")
+            
+            content = f"User provided input via widget key(s): {keys}"
+            if len(image_aligner_vals) != 0:
+                content += f", {', '.join(image_aligner_vals)}"
+            
+            await self._insert_history(
+                payload={
+                    "content": content,
+                    "hidden": True,
+                },
+            )
 
     async def _complete_turn(self) -> None:
         if self.current_request_id is None:
@@ -718,6 +750,10 @@ class AgentHarness:
                 else:
                     self.should_auto_continue = should_continue
                     self.pending_auto_continue = False
+
+                self.current_status = next_status
+                if next_status == "awaiting_user_widget_input":
+                    self.has_set_widget_value = False
 
                 return {
                     "tool_name": "submit_response",
@@ -1090,6 +1126,33 @@ class AgentHarness:
                 "tool_name": "h5_manage_obs",
                 "success": False,
                 "summary": f"Failed to {operation} observation column: {result.get('error', 'Unknown error')}",
+            }
+
+        async def smart_ui_spotlight(args: dict) -> dict:
+            keyword = args.get("keyword")
+            widget_key = args.get("widget_key")
+
+            print(f"[tool] smart_ui_spotlight keyword={keyword}, widget_key={widget_key}")
+
+            params = {
+                "keyword": keyword
+            }
+            if widget_key is not None:
+                params["widget_key"] = widget_key
+
+            result = await self.atomic_operation("smart_ui_spotlight", params)
+            if result.get("status") == "success":
+                return {
+                    "tool_name": "smart_ui_spotlight",
+                    "success": True,
+                    "summary": f"Highlighted UI element: {keyword}",
+                    "keyword": keyword,
+                }
+
+            return {
+                "tool_name": "smart_ui_spotlight",
+                "success": False,
+                "summary": f"Failed to highlight UI element: {result.get('error', 'Unknown error')}",
             }
 
         self.tools.append({
@@ -1643,6 +1706,27 @@ class AgentHarness:
             }
         })
         self.tool_map["h5_manage_obs"] = h5_manage_obs
+
+        self.tools.append({
+            "name": "smart_ui_spotlight",
+            "description": "Highlight a UI element to guide the user's attention.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "keyword": {
+                        "type": "string",
+                        "enum": ["lasso_select", "file_upload"],
+                        "description": "The UI element to highlight"
+                    },
+                    "widget_key": {
+                        "type": "string",
+                        "description": "Optional full widget key including tf_id and widget_id in the format <tf_id>/<widget_id> for keywords related to a specific widget"
+                    }
+                },
+                "required": ["keyword"]
+            }
+        })
+        self.tool_map["smart_ui_spotlight"] = smart_ui_spotlight
 
         def glob_file_search(args: dict) -> dict:
             pattern = args.get("pattern", "")
@@ -2339,12 +2423,9 @@ class AgentHarness:
             response_content = response.model_dump()["content"]
             if response_content is not None and (not isinstance(response_content, list) or len(response_content) > 0):
                 await self._insert_history(
-                    event_type="anthropic_message",
+                    role="assistant",
                     payload={
-                        "type": "anthropic_message",
-                        "role": "assistant",
                         "content": response_content,
-                        "timestamp": int(time.time() * 1000),
                         "duration": duration_seconds,
                     },
                 )
@@ -2411,12 +2492,8 @@ class AgentHarness:
 
                 if len(tool_results) > 0:
                     await self._insert_history(
-                        event_type="anthropic_message",
                         payload={
-                            "type": "anthropic_message",
-                            "role": "user",
                             "content": tool_results,
-                            "timestamp": int(time.time() * 1000),
                         },
                     )
                 else:
@@ -2461,10 +2538,7 @@ class AgentHarness:
         if len(pending_tool_ids) > 0:
             print(f"[agent] Closing {len(pending_tool_ids)} pending tool calls")
             await self._insert_history(
-                event_type="anthropic_message",
                 payload={
-                    "type": "anthropic_message",
-                    "role": "user",
                     "content": [
                         {
                             "type": "tool_result",
@@ -2476,7 +2550,6 @@ class AgentHarness:
                         }
                         for tool_id in pending_tool_ids
                     ],
-                    "timestamp": int(time.time() * 1000),
                 },
             )
             await self._notify_history_updated()
@@ -2715,6 +2788,9 @@ class AgentHarness:
 
                 if cell_id is not None:
                     self.executing_cells.discard(str(cell_id))
+                if self.current_status == "awaiting_user_widget_input" and not self.has_set_widget_value:
+                    print(f"[agent] Not adding cell {cell_id} result because awaiting_user_widget_input and have not seen set_widget_value")
+                    return
 
                 if self.current_request_id is not None:
                     await self.pending_messages.put({
@@ -2732,6 +2808,13 @@ class AgentHarness:
                 cell_id = nested_msg.get("cell_id")
                 if cell_id is not None and self.current_request_id is not None:
                     self.executing_cells.add(str(cell_id))
+            elif nested_type == "set_widget_value":
+                if self.current_status == "awaiting_user_widget_input":
+                    self.has_set_widget_value = True
+                    await self.pending_messages.put({
+                        "type": "set_widget_value",
+                        "data": nested_msg.get("data", {})
+                    })
         elif msg_type == "get_full_prompt":
             tx_id = msg.get("tx_id")
             print(f"[agent] Get full prompt request (tx_id={tx_id})")
