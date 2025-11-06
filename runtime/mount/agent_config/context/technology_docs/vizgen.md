@@ -382,7 +382,7 @@ In your summary response, explicitly instruct users to click this button to star
 
 #### Input directory to workflow
 
-**ALWAYS USE THE USER PROVIDED DIRECTORY AS THE INPUT to `vizgen_mages`**   
+**ALWAYS USE THE USER PROVIDED DIRECTORY AS THE INPUT to `vizgen_images`**   
 The input should point to the top-level dataset directory, not its subfolders.
 DO:
     ```
