@@ -328,7 +328,7 @@ for sample in adata.obs["sample_id"].unique():
     adata_subset = adata[adata.obs["sample_id"] == sample].copy()
 
     sc.tl.rank_genes_groups(
-        ad_s,
+        adata_subset,
         groupby="cluster",
         method="wilcoxon",
         n_genes=None,  # all genes
