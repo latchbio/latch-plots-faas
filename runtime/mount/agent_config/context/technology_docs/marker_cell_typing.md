@@ -10,7 +10,7 @@ There are two general strategies depending on data quality and clustering resolu
 
 - **Approach 2**: Cluster-based annotation — identifies marker genes per cluster and matches them to known cell types; requires clear, biologically meaningful clusters.
 
-**Always verify with users what approach they want to take**
+**Always confirm with the user which approach to use before proceeding.** Do _not_ automatically default to cluster-based annotation just because "cluster" exists in `adata.obs`.
 
 --
 
