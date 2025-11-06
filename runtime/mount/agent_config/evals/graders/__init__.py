@@ -3,12 +3,14 @@ from .cell_typing import CellTypingGrader
 from .numeric_tolerance import NumericToleranceGrader
 from .label_set_jaccard import LabelSetJaccardGrader
 from .distribution_comparison import DistributionComparisonGrader
+from .marker_gene_precision_recall import MarkerGenePrecisionRecallGrader
 
 GRADER_REGISTRY = {
     "cell_typing": CellTypingGrader,
     "numeric_tolerance": NumericToleranceGrader,
     "label_set_jaccard": LabelSetJaccardGrader,
     "distribution_comparison": DistributionComparisonGrader,
+    "marker_gene_precision_recall": MarkerGenePrecisionRecallGrader,
 }
 
 __all__ = [
@@ -18,5 +20,6 @@ __all__ = [
     "NumericToleranceGrader",
     "LabelSetJaccardGrader",
     "DistributionComparisonGrader",
+    "MarkerGenePrecisionRecallGrader",
     "GRADER_REGISTRY",
 ]
