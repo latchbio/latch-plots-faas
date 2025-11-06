@@ -2221,7 +2221,6 @@ class AgentHarness:
                         current_block_index = event.index
                         block = event.content_block
 
-                        # Initialize the content block
                         block_dict = {"type": block.type}
                         if block.type == "text":
                             block_dict["text"] = ""
@@ -2234,14 +2233,16 @@ class AgentHarness:
 
                         content_blocks.append(block_dict)
 
-                        # Send block start notification
-                        await self.send({
+                        block_start_msg = {
                             "type": "agent_stream_block_start",
                             "block_index": current_block_index,
                             "block_type": block.type,
-                            "block_id": block.id if block.type == "tool_use" else None,
-                            "block_name": block.name if block.type == "tool_use" else None,
-                        })
+                        }
+                        if block.type == "tool_use":
+                            block_start_msg["block_id"] = block.id
+                            block_start_msg["block_name"] = block.name
+
+                        await self.send(block_start_msg)
 
                     elif event_type == "content_block_delta":
                         delta = event.delta
