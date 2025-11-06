@@ -1,12 +1,12 @@
 ## Analysis Guideline
 
-This is the **authoritative step-by-step pipeline** for AtlasXomics experiment. Follow steps in order. 
+This is the **authoritative step-by-step pipeline** for AtlasxOmics experiment. Follow steps in order.
 
-1. **Experiment Setup** - If not clear from original request, ask users to confirm if they want to perform analysis on **gene activity score AnnData** (recommended) or **motif enrichment scores AnnData**. 
+1. **Experiment Setup** - If not clear from original request, ask users to confirm if they want to perform analysis on **gene activity score AnnData** (recommended) or **motif enrichment scores AnnData**.
 2. **Data Loading** - load data using **Scanpy** and display it with `w_h5`.
-3. **Clustering (workflow only)** - Launch the AtlasXomics clustering workflow using `w_workflow(wf_name="wf.__init__.opt_workflow", ...)`. Fallback to `scanpy` only if this fails.
+3. **Clustering (workflow only)** - Launch the AtlasXOmics clustering workflow using `w_workflow(wf_name="wf.__init__.opt_workflow", ...)`. Fallback to `scanpy` only if this fails.
 4. **Differential Gene Activity or Motif Enrichment Comparison** - Use `w_workflow(wf_name="wf.__init__.compare_workflow", ...)`
-5.  **Cell Type Annotation** - assign biological meaning to clusters using gene sets. 
+5. **Cell Type Annotation** — Use CellGuide marker database (see file `technology_docs/marker_cell_typing.md`)
 
 The section below defines detailed guidelines for each of the above steps.
 

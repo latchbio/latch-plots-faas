@@ -1,0 +1,22 @@
+{
+    "id": "human_liver_hepatic_stellate_clusters_v1",
+    "task": "Perform cell type annotation on this human liver dataset. Identify and return all clusters that correspond to hepatic stellate cells using gene activity scores. Output your final answer exactly in the following format:\n<EVAL_ANSWER>\n{\n  \"cell_types_predicted\": [<list of all cluster labels corresponding to hepatic stellate cells>]\n}\n</EVAL_ANSWER>",
+    "data_node": [
+        "latch://38438.account/AtlasxOmics/Kosta/Kostallari_SOW313_ATAC/combined_sm_ge.h5ad"
+    ],
+    "grader": {
+      "type": "label_set_jaccard",
+      "config": {
+        "ground_truth_labels": [
+          "5"
+        ],
+        "scoring": {
+          "method": "jaccard_index",
+          "set_definition": "Compare the SET of predicted labels (after mapping) against the ground truth label set. Multiple predicted clusters are allowed as long as all correspond to hepatic stellate cells.",
+          "pass_threshold": 1.0,
+          "description": "Passes only if all predicted clusters correspond exactly to the ground truth label: hepatic_stellate_cell."
+        }
+      }
+    }
+  }
+  

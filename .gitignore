@@ -9,3 +9,5 @@ __pycache__
 
 sandbox
 runtime/mount/agent_config/evals/result_*.json
+runtime/mount/agent_config/evals/results/*
+runtime/mount/agent_config/context/notebook_context/cells.md
