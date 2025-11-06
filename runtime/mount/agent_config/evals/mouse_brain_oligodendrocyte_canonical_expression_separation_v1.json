@@ -1,0 +1,21 @@
+{
+  "id": "mouse_brain_oligodendrocyte_canonical_expression_separation_v1",
+  "task": "Attached is an annotated mouse brain AnnData object with cell type annotations stored in `adata.obs['predicted_cell_type']`. For each canonical oligodendrocyte marker gene (Olig1, Sox10, Mbp, Mog, Aspa, Hapln2) compute its expression separation statistic (e.g., AUROC of expression in 'Oligodendrocyte' vs all other cell types). Return EXACTLY in the following format:\n<EVAL_ANSWER>\n{\n  \"per_gene_stats\": [\n    {\"gene\": \"Mbp\", \"auroc\": 0.95},\n    {\"gene\": \"Plp1\", \"auroc\": 0.90}, ...\n  ],\n  \"mean_auroc\": 0.88\n}\n</EVAL_ANSWER>",
+  "data_node": [
+    "latch://38438.account/AtlasxOmics/Pieper_154_brain_ArchRFull_10Core/annotated/D01900_NG05698_TBI_24hr.annotated.h5ad"
+  ],
+  "grader": {
+    "type": "marker_gene_separation",
+    "config": {
+      "scoring": {
+        "method": "auroc_fraction_and_mean",
+        "pass_thresholds": {
+          "mean_auroc": 0.85,
+          "fraction_high": 0.70,
+          "per_gene_cutoff": 0.80
+        },
+        "description": "Pass if ≥70 % of canonical markers have AUROC ≥ 0.8 and the mean AUROC ≥ 0.85, reflecting visually distinct violin-plot separation."
+      }
+    }
+  }
+}

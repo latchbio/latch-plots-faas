@@ -4,6 +4,7 @@ from .numeric_tolerance import NumericToleranceGrader
 from .label_set_jaccard import LabelSetJaccardGrader
 from .distribution_comparison import DistributionComparisonGrader
 from .marker_gene_precision_recall import MarkerGenePrecisionRecallGrader
+from .marker_gene_separation import MarkerGeneSeparationGrader
 
 GRADER_REGISTRY = {
     "cell_typing": CellTypingGrader,
@@ -11,6 +12,7 @@ GRADER_REGISTRY = {
     "label_set_jaccard": LabelSetJaccardGrader,
     "distribution_comparison": DistributionComparisonGrader,
     "marker_gene_precision_recall": MarkerGenePrecisionRecallGrader,
+    "marker_gene_separation": MarkerGeneSeparationGrader,
 }
 
 __all__ = [
@@ -21,5 +23,6 @@ __all__ = [
     "LabelSetJaccardGrader",
     "DistributionComparisonGrader",
     "MarkerGenePrecisionRecallGrader",
+    "MarkerGeneSeparationGrader",
     "GRADER_REGISTRY",
 ]
