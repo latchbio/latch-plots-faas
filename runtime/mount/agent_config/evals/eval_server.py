@@ -238,7 +238,17 @@ class EvalServer:
                 initial_query = textwrap.dedent(f"""
                     First, delete all cells in the notebook to start fresh. Then: {self.test_case.task}
 
-                    IMPORTANT: When you have completed this task, include the text "[EVAL_COMPLETE]" at the end of your summary in submit_response.
+                    IMPORTANT: When you have completed this task:
+                    1. Format your final answer as a JSON object wrapped in <EVAL_ANSWER></EVAL_ANSWER> tags within your submit_response summary.
+                    2. Include the text "[EVAL_COMPLETE]" at the end of your summary in submit_response.
+
+                    Example format:
+                    <EVAL_ANSWER>
+                    {{
+                      "field1": value1,
+                      "field2": value2
+                    }}
+                    </EVAL_ANSWER>
                     {data_context}
                 """).strip()
 
