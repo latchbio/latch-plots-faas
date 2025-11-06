@@ -2187,25 +2187,19 @@ class AgentHarness:
         if len(self.tools) > 0:
             self.tools[-1]["cache_control"] = {"type": "ephemeral"}
 
-    async def _handle_stream(self, *, use_beta_api: bool, **kwargs) -> tuple[Message | BetaMessage, float]:
-        """Handle streaming API response, send WebSocket updates, and return complete message."""
+    async def handle_stream(self, *, use_beta_api: bool, **kwargs) -> tuple[Message | BetaMessage, float]:  # noqa: ANN003
         start_time = time.time()
 
-        # Send stream start notification
         await self.send({
             "type": "agent_stream_start",
             "timestamp": int(time.time() * 1000),
         })
 
-        # Track accumulated content blocks
         content_blocks: list[dict] = []
         current_block_index = -1
-
-        # Usage tracking
         usage_data = None
 
         try:
-            # Select appropriate stream based on API type
             stream_ctx = self.client.beta.messages.stream(**kwargs) if use_beta_api else self.client.messages.stream(**kwargs)
 
             async with stream_ctx as stream:
@@ -2267,8 +2261,6 @@ class AgentHarness:
                             })
 
                         elif delta.type == "input_json_delta":
-                            # For tool_use, accumulate the input JSON
-                            # Note: Tools are executed after complete message, not during stream
                             partial_json = delta.partial_json
                             await self.send({
                                 "type": "agent_stream_delta",
@@ -2289,14 +2281,12 @@ class AgentHarness:
                             usage_data = event.usage
 
                     elif event_type == "message_stop":
-                        pass  # Message completed
+                        pass
 
-                # Get the final message from the stream
                 final_message = await stream.get_final_message()
 
             duration_seconds = time.time() - start_time
 
-            # Send usage update if available
             if usage_data is not None:
                 cache_read_input_tokens = getattr(usage_data, "cache_read_input_tokens", None) or 0
                 cache_creation_input_tokens = getattr(usage_data, "cache_creation_input_tokens", None) or 0
@@ -2309,7 +2299,6 @@ class AgentHarness:
                     "context_limit": 200_000,  # todo(aidan): store this info in db per model config
                 })
 
-            # Send stream complete notification
             await self.send({
                 "type": "agent_stream_complete",
             })
@@ -2322,7 +2311,6 @@ class AgentHarness:
             print(f"[agent] Stream error: {e}")
             traceback.print_exc()
 
-            # Send error notification
             await self.send({
                 "type": "agent_stream_complete",
                 "error": str(e),
@@ -2422,8 +2410,7 @@ class AgentHarness:
                 use_beta_api = True
 
             try:
-                # Use streaming API
-                response, duration_seconds = await self._handle_stream(
+                response, duration_seconds = await self.handle_stream(
                     use_beta_api=use_beta_api,
                     **kwargs
                 )
