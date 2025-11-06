@@ -2,63 +2,19 @@
 
 ## Overview
 
-This guide provides a **step-by-step pipeline** for annotating cell types in spatial biology datasets using marker gene analysis and the CellGuide database. The workflow identifies marker genes per cluster, finds consensus markers across conditions, and matches them against known cell type markers in CellGuide.
+This guide provides a step-by-step pipeline for annotating cell types in spatial biology datasets using marker gene analysis and the CellGuide database.
 
-## Prerequisites
+There are two general strategies depending on data quality and clustering resolution:
 
-- **AnnData object** (`adata`) with:
-  - `adata.obs["cluster"]` - cluster assignments for each cell (required)
-  - Sample/condition identifier column (optional, varies by dataset):
-    - Common names: `"sample"`, `"condition"`, `"batch"`
-    - **Must introspect `adata.obs.columns` to determine available columns**
-  - Gene expression data in `adata.X` or `adata.layers`
-- **CellGuide database** (`cellguide_marker_gene_database_per_gene.json`) - JSON file containing marker genes for known cell types
-  - May need to download from Latch Data (see Database Setup below)
-- **Organism and tissue context** - Required for accurate CellGuide lookups (e.g., `"Mus musculus"`, `"brain"`)
+- **Approach 1**: Gene set scoring — uses predefined marker gene sets to assign cell types directly; _does not_ require well-separated clusters.
 
-**Important**: Different `adata` objects use different column names. Always introspect the structure before making assumptions.
+- **Approach 2**: Cluster-based annotation — identifies marker genes per cluster and matches them to known cell types; requires clear, biologically meaningful clusters.
+
+**Always verify with users what approach they want to take**
+
+--
 
 ## CellGuide Database Setup
-
-### Downloading from Latch Data
-
-Download and load **both CellGuide databases** plus tissue options from Latch Data:
-
-```python
-import json
-from latch.ldata.path import LPath
-from pathlib import Path
-
-# Download per-gene database (for annotation)
-db_per_gene_lpath = LPath("latch:///cellguide_marker_gene_database_per_gene.json")
-local_db_per_gene_path = Path(f"{db_per_gene_lpath.node_id()}.json")
-db_per_gene_lpath.download(local_db_per_gene_path, cache=True)
-
-# Load per-gene database into memory
-with open(local_db_per_gene_path, "r") as f:
-    marker_db_per_gene = json.load(f)
-
-# Download per-celltype database (for validation/lookup)
-db_per_celltype_lpath = LPath("latch:///cellguide_marker_gene_database_per_celltype.json")
-local_db_per_celltype_path = Path(f"{db_per_celltype_lpath.node_id()}.json")
-db_per_celltype_lpath.download(local_db_per_celltype_path, cache=True)
-
-# Load per-celltype database into memory
-with open(local_db_per_celltype_path, "r") as f:
-    marker_db_per_celltype = json.load(f)
-
-# Download tissue options database
-tissues_lpath = LPath("latch:///tissues_per_organism.json")
-local_tissues_path = Path(f"{tissues_lpath.node_id()}.json")
-tissues_lpath.download(local_tissues_path, cache=True)
-
-# Load tissue options into memory
-with open(local_tissues_path, "r") as f:
-    tissues_per_organism = json.load(f)
-
-# For annotation workflow, use the per-gene database path
-db_path = local_db_per_gene_path
-```
 
 ### Database Overview
 
@@ -153,6 +109,70 @@ tissues_per_organism["Mus musculus"]
 - **Cell ontology terms**: includes varying granularity (e.g., `"neuron"` vs `"excitatory neuron"`)
 
 **Note**: This guide uses the **per-gene database** for automated annotation. The per-celltype database is useful for validation and manual annotation workflows. The **tissue options database** helps determine available tissues for a given organism, which is useful for UI validation and user guidance.
+
+### Downloading from Latch Data
+
+Download and load **both CellGuide databases** plus tissue options from Latch Data:
+
+```python
+import json
+from latch.ldata.path import LPath
+from pathlib import Path
+
+# Download per-gene database (for annotation)
+db_per_gene_lpath = LPath("latch:///cellguide_marker_gene_database_per_gene.json")
+local_db_per_gene_path = Path(f"{db_per_gene_lpath.node_id()}.json")
+db_per_gene_lpath.download(local_db_per_gene_path, cache=True)
+
+# Load per-gene database into memory
+with open(local_db_per_gene_path, "r") as f:
+    marker_db_per_gene = json.load(f)
+
+# Download per-celltype database (for validation/lookup)
+db_per_celltype_lpath = LPath("latch:///cellguide_marker_gene_database_per_celltype.json")
+local_db_per_celltype_path = Path(f"{db_per_celltype_lpath.node_id()}.json")
+db_per_celltype_lpath.download(local_db_per_celltype_path, cache=True)
+
+# Load per-celltype database into memory
+with open(local_db_per_celltype_path, "r") as f:
+    marker_db_per_celltype = json.load(f)
+
+# Download tissue options database
+tissues_lpath = LPath("latch:///tissues_per_organism.json")
+local_tissues_path = Path(f"{tissues_lpath.node_id()}.json")
+tissues_lpath.download(local_tissues_path, cache=True)
+
+# Load tissue options into memory
+with open(local_tissues_path, "r") as f:
+    tissues_per_organism = json.load(f)
+
+# For annotation workflow, use the per-gene database path
+db_path = local_db_per_gene_path
+```
+
+---
+# **Approach 1**: Gene set scoring
+
+This approach assigns cell types by scoring predefined marker gene sets across cells, without requiring prior clustering. For multi-sample datasets, scoring should be performed per condition or sample to capture biological variation.
+
+---
+# **Approach 2**: Cluster-based Annotation
+
+The workflow identifies marker genes per cluster, finds consensus markers across conditions, and matches them against known cell type markers in CellGuide.
+
+## Prerequisites
+
+- **AnnData object** (`adata`) with:
+  - `adata.obs["cluster"]` - cluster assignments for each cell (required)
+  - Sample/condition identifier column (optional, varies by dataset):
+    - Common names: `"sample"`, `"condition"`, `"batch"`
+    - **Must introspect `adata.obs.columns` to determine available columns**
+  - Gene expression data in `adata.X` or `adata.layers`
+- **CellGuide database** (`cellguide_marker_gene_database_per_gene.json`) - JSON file containing marker genes for known cell types
+  - May need to download from Latch Data (see Database Setup below)
+- **Organism and tissue context** - Required for accurate CellGuide lookups (e.g., `"Mus musculus"`, `"brain"`)
+
+**Important**: Different `adata` objects use different column names. Always introspect the structure before making assumptions.
 
 ## Step-by-step Guide
 
@@ -586,72 +606,6 @@ def annotate_adata(adata, cluster_summary, cluster_col="cluster", cell_type_col=
     return adata
 ```
 
-### Complete Example Usage
-
-```python
-import scanpy as sc
-import pandas as pd
-from pathlib import Path
-from latch.ldata.path import LPath
-
-# 0. Download and load CellGuide databases from Latch Data
-db_per_gene_lpath = LPath("latch:///cellguide_marker_gene_database_per_gene.json")
-local_db_per_gene_path = Path(f"{db_per_gene_lpath.node_id()}.json")
-db_per_gene_lpath.download(local_db_per_gene_path, cache=True)
-
-# Load per-gene database into memory
-with open(local_db_per_gene_path, "r") as f:
-    marker_db_per_gene = json.load(f)
-
-# Download per-celltype database (for validation/lookup)
-db_per_celltype_lpath = LPath("latch:///cellguide_marker_gene_database_per_celltype.json")
-local_db_per_celltype_path = Path(f"{db_per_celltype_lpath.node_id()}.json")
-db_per_celltype_lpath.download(local_db_per_celltype_path, cache=True)
-
-# Load per-celltype database into memory
-with open(local_db_per_celltype_path, "r") as f:
-    marker_db_per_celltype = json.load(f)
-
-# Download tissue options database
-tissues_lpath = LPath("latch:///tissues_per_organism.json")
-local_tissues_path = Path(f"{tissues_lpath.node_id()}.json")
-tissues_lpath.download(local_tissues_path, cache=True)
-
-# Load tissue options into memory
-with open(local_tissues_path, "r") as f:
-    tissues_per_organism = json.load(f)
-
-# For annotation workflow, use the per-gene database path
-db_path = local_db_per_gene_path
-
-# 1. Perform differential expression analysis
-# (See Step 1 above for single vs. multiple samples)
-
-# 2. Run cell type annotation
-cluster_summary, celltype_markers_dict = summarize_clusters(
-    adata=adata,
-    ranked_genes_df=ranked_genes_df,
-    db_path=db_path,
-    organism="Mus musculus",  # Confirm with user if unclear
-    tissue="brain"            # Confirm with user if unclear
-)
-
-# 3. Display results
-import json
-print(json.dumps(cluster_summary, indent=2))
-
-# 4. Annotate AnnData object with cell types
-adata = annotate_adata(
-    adata=adata,
-    cluster_summary=cluster_summary,
-    cluster_col="cluster",
-    cell_type_col="cell_type"
-)
-
-# The adata object now has adata.obs["cell_type"] column with annotations
-# Ready for downstream analysis and visualization
-```
-
 ## Important Considerations
 
 ### When to Use This Method
@@ -672,58 +626,3 @@ adata = annotate_adata(
   - Novel cell type not in database
   - Poor marker gene quality
 - **Multiple top cell types**: When ties occur, all top cell types are returned (may indicate similar cell lineages)
-
-### Resolving Tied Cell Types
-
-When multiple cell types have the same highest marker gene count, use the following strategies to select a single final annotation:
-
-#### 1. **Marker Gene Quality (Recommended)**
-
-- **Rank by marker strength**: Use `rank_by_score()` to rank markers by log fold change
-- **Select top markers**: Choose the cell type with stronger/more significant markers
-- **Implementation**: Compare average log fold changes of markers supporting each tied cell type
-
-#### 2. **Hierarchical Relationships**
-
-- **Prefer more specific terms**: If one tied cell type is a subtype of another, choose the more specific one
-  - Example: Choose `"excitatory neuron"` over `"neuron"` if both are tied
-- **Use ontology relationships**: Check if cell types are related (parent/child) in cell ontology
-
-#### 3. **Expression Pattern Validation**
-
-- **Check marker expression**: Verify which cell type's markers show stronger expression in the data
-- **Visual inspection**: Compare expression levels across clusters for tied cell types
-- **Expected patterns**: Choose the cell type whose markers show expected spatial or expression patterns
-
-#### 4. **Biological Context**
-
-- **Tissue specificity**: If tissue is known, prefer cell types that are more common in that tissue
-- **Known cell lineages**: Use domain knowledge about expected cell types in the dataset
-- **Literature support**: Reference known marker combinations for the tissue/organism
-
-#### 5. **Consensus Across Samples**
-
-- **Cross-sample agreement**: If multiple samples exist, check which cell type is more consistently identified across samples
-- **Use `genes_70`**: Consider using `genes_70` (≥70% consensus) instead of `genes_all` (100% consensus) to break ties
-
-#### 6. **Manual Review**
-
-- **User input**: Present tied options to the user for manual selection
-- **Expert annotation**: Consult domain experts for ambiguous cases
-- **Temporary annotation**: Use a combined annotation (e.g., `"neuron, excitatory"`) until resolved
-
-### Interpreting Results
-
-- **`most_common_cell_type`**: Primary cell type annotation(s) based on marker gene overlap
-- **`cell_type_counts`**: Full breakdown showing how many markers support each candidate cell type
-- **`markers_for_most_common_cell_type`**: Specific genes that support the annotation (useful for validation)
-- **`genes_all` vs `genes_70`**: Use `genes_all` for strict consensus; `genes_70` for more lenient consensus
-
-### Integration with Agent Workflow
-
-When implementing this in the agent:
-
-1. **Confirm organism and tissue** with user via form/widget if not clear from context
-2. **Display results** in a readable format (tables, visualizations)
-3. **Allow user review** before applying annotations to `adata.obs`
-4. **Handle edge cases** gracefully (empty results, ambiguous annotations)
