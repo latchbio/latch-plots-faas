@@ -1,0 +1,25 @@
+{
+  "id": "celltype_proportion_consistency_tbi_24hr_v1",
+  "task": "Attached is an annotated AnnData object. Subset to `adata.obs['condition'] == 'TBI_24hr'`. For this condition, compute the per-sample proportion of each predicted cell type (proportion = count of that cell type in the sample / total cells in that sample). Cell type labels are in `adata.obs['predicted_cell_type']`, and sample identifiers are in `adata.obs['sample']`. Return a JSON object with fields: cell_types (list of all unique cell types), samples (list of objects, each containing 'sample' (sample name) and 'proportions' (object mapping each cell type to its proportion in that sample)).",
+  "data_node": [
+    "latch://38438.account/AtlasxOmics/Pieper_154_brain_ArchRFull_10Core/annotated/D01900_NG05698_TBI_24hr.annotated.h5ad"
+  ],
+  "grader": {
+    "type": "proportion_consistency",
+    "config": {
+      "test": {
+        "name": "chi_square_with_cramers_v",
+        "description": "Performs a chi-square test of independence on the per-sample × cell-type proportion table to detect significant heterogeneity across replicates within the TBI_24hr condition, and computes Cramér's V as an effect size."
+      },
+      "scoring": {
+        "method": "chi_square_and_effect_size",
+        "stat_definition": "The chi-square test evaluates whether cell type proportions vary significantly between TBI_24hr samples; Cramér's V quantifies the strength of that variation.",
+        "pass_thresholds": {
+          "chi2_q_min": 0.05,
+          "cramers_v_max": 0.15
+        },
+        "description": "Pass if heterogeneity in cell type proportions across TBI_24hr replicates is non-significant after Benjamini–Hochberg correction (q ≥ 0.05) and the effect size is small (Cramér's V ≤ 0.15)."
+      }
+    }
+  }
+}
