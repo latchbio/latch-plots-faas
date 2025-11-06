@@ -289,18 +289,31 @@ summary[cluster] = {
 
 ```python
 import scanpy as sc
+import pandas as pd
 
-# Perform marker gene identification
+# thresholds (tune as needed)
+PVAL_MAX = 0.05
+LFC_MIN  = 0.5
+TOP_PER_GROUP = 300  # optional cap after filtering
+
+# 1) Rank ALL genes per cluster
 sc.tl.rank_genes_groups(
     adata,
     groupby="cluster",
-    method='wilcoxon',
-    n_genes=300,  # Get top genes
-    use_raw=False
+    method="wilcoxon",
+    n_genes=adata.shape[1],  # all genes
+    use_raw=False,
 )
 
-# Convert to DataFrame
-ranked_genes_df = sc.get.rank_genes_groups_df(adata, group=None)
+# 2) Collect results (default order is by 'scores')
+df = sc.get.rank_genes_groups_df(adata, group=None)
+
+# 3) Filter by significance and effect size, then sort by LFC
+df = df.query("pvals_adj < @PVAL_MAX and logfoldchanges > @LFC_MIN").copy()
+df = df.sort_values(["group", "logfoldchanges"], ascending=[True, False])
+
+# 4) (Optional) keep only top N per cluster after filtering
+ranked_genes_df = df.groupby("group", as_index=False).head(TOP_PER_GROUP).reset_index(drop=True)
 ```
 
 **Multiple samples/conditions dataset**:
@@ -309,26 +322,39 @@ ranked_genes_df = sc.get.rank_genes_groups_df(adata, group=None)
 import scanpy as sc
 import pandas as pd
 
-# Perform per-sample marker identification
+# thresholds (tune as needed)
+PVAL_MAX = 0.05
+LFC_MIN  = 0.5
+TOP_PER_GROUP = 300  # optional cap after filtering
+
 all_results = []
 for sample in adata.obs["sample_id"].unique():
-    adata_subset = adata[adata.obs["sample_id"] == sample].copy()
-    
-    sc.tl.rank_genes_groups(
-        adata_subset,
-        groupby="cluster",
-        method='wilcoxon',
-        n_genes=300,
-        use_raw=False
-    )
-    
-    # Extract results and add sample identifier
-    result_df = sc.get.rank_genes_groups_df(adata_subset, group=None)
-    result_df["sample_id"] = sample
-    all_results.append(result_df)
+    ad_s = adata[adata.obs["sample_id"] == sample].copy()
 
-# Combine all results
-ranked_genes_df = pd.concat(all_results, ignore_index=True)
+    # rank ALL genes per cluster
+    sc.tl.rank_genes_groups(
+        ad_s,
+        groupby="cluster",
+        method="wilcoxon",
+        n_genes=ad_s.shape[1],
+        use_raw=False,
+    )
+
+    df_i = sc.get.rank_genes_groups_df(ad_s, group=None)
+    df_i["sample_id"] = sample
+    all_results.append(df_i)
+
+# concat, filter by stats/effect size, sort by LFC
+df = pd.concat(all_results, ignore_index=True)
+df = df.query("pvals_adj < @PVAL_MAX and logfoldchanges > @LFC_MIN").copy()
+df = df.sort_values(["sample_id", "group", "logfoldchanges"], ascending=[True, True, False])
+
+# optional: keep only top N per (sample, group)
+ranked_genes_df = (
+    df.groupby(["sample_id", "group"], as_index=False)
+      .head(TOP_PER_GROUP)
+      .reset_index(drop=True)
+)
 ```
 
 ### Step 2 & 3: Find Consensus Markers and Lookup Cell Types
