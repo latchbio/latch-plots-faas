@@ -97,7 +97,7 @@ The merfish data contains images and transcript information. A typical merfish d
         └── mosaic_PolyT_z6.tif
 
 - **Merfish input data directory** → maps to workflow param `vizgen_images`.
-The user provided input must be provided by the user and wrapped as `LatchDir(latch://...)`.  **ALWAYS USE THE USER PROVIDED DIRECTORY AS THE INPUT to `vizgen_mages`**   
+The user provided input must be provided by the user and wrapped as `LatchDir(latch://...)`.  
 
 ### Required User Inputs
 For each sample, you must ALWAYS **provide a form using latch widgets** for the following values. Each one has a clear mapping to a workflow parameter: 
@@ -146,8 +146,8 @@ Overview
     - If the user enters N, create N segmentation configuration sections.
 
 3. Configure Each Segmentation Task
-    - **Make sure to use a for loop to match the number of segmentation tasks and define parameters for each segmentation task.**
-    - For each segmentation task, use **lplots widgets** to:
+    - **USE A FOR LOOP** to match the number of segmentation tasks and define parameters for each segmentation task
+    - For each segmentation task 1..N:
         - Display the segmentation task number using **w_text_output**
         - Display available zoom levels using **lplots widgets**(default: all selected).
         - Allow selection of the segmentation algorithm:
@@ -164,14 +164,14 @@ Overview
         - Always set the following fields in segmentation_parameters:
         ```
         {
-        "nuclear_channel": "all",
-        "entity_fill_channel": "all"
+            "nuclear_channel": "all",
+            "entity_fill_channel": "all"
         }
         ```
 
 4. Dynamic Updates
     - If the user changes the number of segmentation tasks, automatically regenerate the segmentation configuration
-to match the updated number. 
+to match the updated number using **lplots signals**. 
 
 5. Save Algorithm File
     - Use an **lplots widgets** to let the user specify the file name for the new JSON document.
@@ -379,7 +379,20 @@ When you use the `w_ldata_picker` widget to populate the `output_directory` or `
 Use the code below as a template, that uses `w_workflow`. The code will generate a “Launch” button. Always make sure you are activating the workflow by `execution = w.value`, where w is the workflow.
 
 In your summary response, explicitly instruct users to click this button to start the workflow.
-                     
+
+#### Input directory to workflow
+
+**ALWAYS USE THE USER PROVIDED DIRECTORY AS THE INPUT to `vizgen_mages`**   
+The input should point to the top-level dataset directory, not its subfolders.
+DO:
+    ```
+    LatchDir("latch://.../202305010900_U2OS_small_set_VMSC00000")
+    ```
+DO NOT:
+    ```
+    LatchDir("latch://.../202305010900_U2OS_small_set_VMSC00000/region_0")
+    ```
+
 #### Example Implementation
 
 ```python
