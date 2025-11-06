@@ -210,19 +210,59 @@ def lookup_cellguide_celltypes(genes, organism, tissue, db_path):
 
 Combine marker overlap and CellGuide results into a summary dictionary.
 
-```python
-def summarize_clusters(adata, ranked_df, db_path, organism="Mus musculus", tissue="brain"):
+```python 
+from collections import Counter
+import json
+
+def summarize_clusters(adata, ranked_df, db_path, organism="Mus musculus", tissue="brain", min_markers=3):
+    with open(db_path) as f:
+        db = json.load(f)
+
+    def lookup_cellguide_celltypes(genes):
+        results = {}
+        for g in genes:
+            org_entry = db.get(g, {}).get(organism, {})
+            cts = org_entry.get(tissue) or org_entry.get("All Tissues")
+            if cts:
+                results[g] = cts
+        return results
+
     summary = {}
     for c in sorted(adata.obs["cluster"].unique()):
         genes_all, genes_70 = find_overlap_genes(c, ranked_df)
-        lookup = lookup_cellguide_celltypes(genes_all, organism, tissue, db_path)
+        lookup = lookup_cellguide_celltypes(genes_all)
+
         if not lookup:
-            summary[c] = {"genes_all": genes_all, "genes_70": genes_70, "most_common_cell_type": []}
+            summary[c] = {
+                "genes_all": genes_all,
+                "genes_70": genes_70,
+                "most_common_cell_type": [],
+                "cell_type_counts": {},
+                "markers_for_most_common_cell_type": [],
+            }
             continue
-        from collections import Counter
+
+        # Count supporting markers per cell type
         counter = Counter(ct for v in lookup.values() for ct in v)
-        top_cts = [ct for ct, n in counter.items() if n == max(counter.values())]
+
+        # Enforce threshold: only consider cell types with ≥ min_markers
+        eligible = {ct: n for ct, n in counter.items() if n >= min_markers}
+        if not eligible:
+            summary[c] = {
+                "genes_all": genes_all,
+                "genes_70": genes_70,
+                "most_common_cell_type": [],
+                "cell_type_counts": dict(counter),  # keep raw counts for debugging
+                "markers_for_most_common_cell_type": [],
+            }
+            continue
+
+        max_support = max(eligible.values())
+        top_cts = [ct for ct, n in eligible.items() if n == max_support]
+
+        # Markers that support at least one top cell type
         top_markers = [g for g, v in lookup.items() if any(ct in top_cts for ct in v)]
+
         summary[c] = {
             "genes_all": genes_all,
             "genes_70": genes_70,
