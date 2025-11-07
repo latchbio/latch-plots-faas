@@ -67,7 +67,7 @@ class AgentHarness:
     agent_session_id: int | None = None
     latest_notebook_context: dict = field(default_factory=dict)
     current_status: str | None = None
-    has_set_widget_value: bool = False
+    expected_widgets: dict[str, object | None] = field(default_factory=dict)
 
     mode_config: dict[Mode, tuple[str, int | None]] = field(default_factory=lambda: {
         Mode.planning: ("claude-sonnet-4-5-20250929", 4096),
@@ -729,6 +729,7 @@ class AgentHarness:
 
                 plan_items = args.get("plan", [])
                 plan_diff_items = args.get("plan_diff", [])
+                expected_widgets = args.get("expected_widgets", [])
 
                 print("[tool] submit_response called with:")
                 print(f"  - next_status: {next_status}")
@@ -742,6 +743,7 @@ class AgentHarness:
                 print(f"  - summary: {summary}")
                 print(f"  - questions: {questions}")
                 print(f"  - continue: {should_continue}")
+                print(f"  - expected_widgets: {expected_widgets}")
 
                 if should_continue and self.executing_cells:
                     print(f"[tool] Deferring auto-continue - {len(self.executing_cells)} cells still executing: {self.executing_cells}")
@@ -753,7 +755,7 @@ class AgentHarness:
 
                 self.current_status = next_status
                 if next_status == "awaiting_user_widget_input":
-                    self.has_set_widget_value = False
+                    self.expected_widgets = dict.fromkeys(map(str, expected_widgets))
 
                 return {
                     "tool_name": "submit_response",
@@ -1271,6 +1273,11 @@ class AgentHarness:
                     "summary": {"type": "string", "description": "Summary text to help the user. This can be a message to the user or a description of what was accomplished. Use markdown formatting with bullet points if needed. Omit if no summary needed."},
                     "questions": {"type": "string", "description": "Optional question text for the user. Omit if no questions needed."},
                     "next_status": {"type": "string", "description": "What the agent will do next", "enum": ["executing", "fixing", "thinking", "awaiting_user_response", "awaiting_cell_execution", "awaiting_user_widget_input", "done"]},
+                    "expected_widgets": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Optional list of full widget keys (<tf_id>/<widget_id>) to await when next_status is 'awaiting_user_widget_input'"
+                    },
                     "continue": {
                         "type": "boolean",
                         "description": "Set to true to immediately continue to the next step without waiting for user input. Set to false when waiting for user input or when all work is complete.",
@@ -1715,7 +1722,7 @@ class AgentHarness:
                 "properties": {
                     "keyword": {
                         "type": "string",
-                        "enum": ["lasso_select", "file_upload"],
+                        "enum": ["lasso_select", "file_upload", "widget_input"],
                         "description": "The UI element to highlight"
                     },
                     "widget_key": {
@@ -2891,7 +2898,7 @@ class AgentHarness:
 
                 if cell_id is not None:
                     self.executing_cells.discard(str(cell_id))
-                if self.current_status == "awaiting_user_widget_input" and not self.has_set_widget_value:
+                if self.current_status == "awaiting_user_widget_input" and not all(v is None for v in self.expected_widgets.values()):
                     print(f"[agent] Not adding cell {cell_id} result because awaiting_user_widget_input and have not seen set_widget_value")
                     return
 
@@ -2913,11 +2920,13 @@ class AgentHarness:
                     self.executing_cells.add(str(cell_id))
             elif nested_type == "set_widget_value":
                 if self.current_status == "awaiting_user_widget_input":
-                    self.has_set_widget_value = True
-                    await self.pending_messages.put({
-                        "type": "set_widget_value",
-                        "data": nested_msg.get("data", {})
-                    })
+                    self.expected_widgets[nested_msg.get("key")] = nested_msg.get("value")
+                    if all(v is not None for v in self.expected_widgets.values()):
+                        await self.pending_messages.put({
+                            "type": "set_widget_value",
+                            "data": self.expected_widgets
+                        })
+
         elif msg_type == "get_full_prompt":
             tx_id = msg.get("tx_id")
             print(f"[agent] Get full prompt request (tx_id={tx_id})")

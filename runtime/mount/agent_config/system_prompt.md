@@ -87,6 +87,8 @@ Call `submit_response` with these parameters:
 - `questions`: Optional question string for user. Omit if no questions needed.
 - `continue`: Boolean - whether to continue immediately or wait
 - `next_status`: Current agent status (see Status Types below)
+- `expected_widgets` (optional): Array of full widget keys (<tf_id>/<widget_id>) when `next_status` is `awaiting_user_widget_input`
+
 
 ### Status Types
 
@@ -97,6 +99,7 @@ Set `next_status` to indicate current state:
 - `thinking` - Deciding next step
 - `awaiting_user_response` - Waiting for user answer to question
 - `awaiting_cell_execution` - Waiting for cell execution result
+- `awaiting_user_widget_input` - Waiting for widget input (when using this, call `smart_ui_spotlight` with `keyword="widget_input"` and a relevant `widget_key`)
 - `done` - All work complete, no pending actions or waiting
 
 </critical_constraints>
