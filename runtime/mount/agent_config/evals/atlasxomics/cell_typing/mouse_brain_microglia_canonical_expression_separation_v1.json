@@ -1,0 +1,21 @@
+{
+  "id": "mouse_brain_microglia_canonical_expression_separation_v1",
+  "task": "Attached is an annotated mouse brain AnnData object with cell type annotations stored in `adata.obs['predicted_cell_type']`. For each canonical microglia marker gene (C1qa, Trem2, Tmem119, P2ry12, Cx3cr1, Itgam) compute its expression separation statistic using AUROC of expression in 'Microglia' vs all other cell types. Return a JSON object with fields: per_gene_stats (list of objects with 'gene' and 'auroc' fields for each of the 6 genes), mean_auroc (the average AUROC across all genes).",
+  "data_node": [
+    "latch://38438.account/AtlasxOmics/Pieper_154_brain_ArchRFull_10Core/annotated/D01900_NG05698_TBI_24hr.annotated.h5ad"
+  ],
+  "grader": {
+    "type": "marker_gene_separation",
+    "config": {
+      "scoring": {
+        "method": "auroc_fraction_and_mean",
+        "pass_thresholds": {
+          "mean_auroc": 0.85,
+          "fraction_high": 0.70,
+          "per_gene_cutoff": 0.80
+        },
+        "description": "Pass if ≥70 % of canonical markers have AUROC ≥ 0.8 and the mean AUROC ≥ 0.85, reflecting visually distinct violin-plot separation."
+      }
+    }
+  }
+}

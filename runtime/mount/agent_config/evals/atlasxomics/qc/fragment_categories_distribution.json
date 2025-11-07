@@ -1,0 +1,30 @@
+{
+  "id": "spatial_atac_qc_fragment_categories_distribution_v1",
+  "task": "Attached is a spatial single-cell ATAC AnnData project. Evaluate quality control metrics and perform filtering (if necessary). Post-QC, compute the percentage of fragments in each category (Nucleosome-free, Mono-nucleosome, Di-nucleosome, Tri-nucleosome) on the remaining high-quality cells. The values in in adata.obsm['fragment_paired'] should be used to compute the percentages. Return a JSON object with fields: total_cells (number representing total fragments), cell_type_distribution (object mapping each fragment category name to its percentage of total fragments). The percentages should sum to ~100%.",
+  "data_node": ["latch://38438.account/AtlasxOmics/Kosta/Kostallari_SOW313_ATAC/combined_Healthy.h5ad"],
+  "grader": {
+    "type": "distribution_comparison",
+    "config": {
+      "ground_truth": {
+        "total_cells": 191280035,
+        "cell_type_distribution": {
+          "Nucleosome-free": 60.0,
+          "Mono-nucleosome": 25.0,
+          "Di-nucleosome": 10.0,
+          "Tri-nucleosome": 5.0
+        }
+      },
+      "tolerances": {
+        "total_cells": {
+          "type": "absolute",
+          "value": 191280035
+        },
+        "cell_type_percentages": {
+          "type": "absolute",
+          "value": 10.0,
+          "description": "Each fragment category percentage must be within ±5% of ground truth"
+        }
+      }
+    }
+  }
+}

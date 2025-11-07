@@ -38,6 +38,14 @@ class NumericToleranceGrader(BinaryGrader):
                 relative_error = abs(actual_value - expected_value) / abs(expected_value) if expected_value != 0 else float('inf')
                 within_tolerance = relative_error <= tolerance_value
                 error = relative_error
+            elif tolerance_type == "min":
+                # For min threshold, expected_value is the minimum threshold
+                within_tolerance = actual_value >= expected_value
+                error = expected_value - actual_value if actual_value < expected_value else 0
+            elif tolerance_type == "max":
+                # For max threshold, expected_value is the maximum threshold
+                within_tolerance = actual_value <= expected_value
+                error = actual_value - expected_value if actual_value > expected_value else 0
             else:
                 within_tolerance = False
                 error = float('inf')
@@ -49,9 +57,14 @@ class NumericToleranceGrader(BinaryGrader):
 
             if not within_tolerance:
                 all_pass = False
-                failures.append(f"{field}: {actual_value} vs {expected_value} (error: {error:.2f}, tolerance: {tolerance_value})")
+                if tolerance_type == "min":
+                    failures.append(f"{field}: {actual_value} (minimum required: {expected_value})")
+                elif tolerance_type == "max":
+                    failures.append(f"{field}: {actual_value} (maximum allowed: {expected_value})")
+                else:
+                    failures.append(f"{field}: {actual_value} vs {expected_value} (error: {error:.2f}, tolerance: {tolerance_value})")
 
-        reasoning = self._format_numeric_reasoning(ground_truth, agent_answer, metrics, failures, all_pass)
+        reasoning = self._format_numeric_reasoning(ground_truth, tolerances, agent_answer, metrics, failures, all_pass)
 
         return GraderResult(
             passed=all_pass,
@@ -60,7 +73,7 @@ class NumericToleranceGrader(BinaryGrader):
             agent_answer=agent_answer
         )
 
-    def _format_numeric_reasoning(self, ground_truth, agent_answer, metrics, failures, passed):
+    def _format_numeric_reasoning(self, ground_truth, tolerances, agent_answer, metrics, failures, passed):
         lines = []
         lines.append(f"Numeric Tolerance Check: {'PASS' if passed else 'FAIL'}")
         lines.append("")
@@ -72,7 +85,14 @@ class NumericToleranceGrader(BinaryGrader):
                 error = metrics[f"{field}_error"]
                 field_pass = metrics[f"{field}_pass"]
                 check = "✓" if field_pass else "✗"
-                lines.append(f"- {field}: {actual} vs {expected} (error: {error:.2f}) {check}")
+                tolerance_config = tolerances.get(field, {})
+                tolerance_type = tolerance_config.get("type", "absolute")
+                if tolerance_type == "min":
+                    lines.append(f"- {field}: {actual} (minimum: {expected}) {check}")
+                elif tolerance_type == "max":
+                    lines.append(f"- {field}: {actual} (maximum: {expected}) {check}")
+                else:
+                    lines.append(f"- {field}: {actual} vs {expected} (error: {error:.2f}) {check}")
 
         if not passed:
             lines.append("")

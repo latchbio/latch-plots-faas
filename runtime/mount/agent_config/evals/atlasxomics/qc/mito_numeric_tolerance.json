@@ -1,0 +1,19 @@
+{
+  "id": "spatial_atac_qc_mito_fraction_numeric_tolerance_v1",
+  "task": "Attached is a spatial single-cell ATAC AnnData project. Perform QC filtering, then compute mitochondrial fraction on the remaining high-quality cells. Return the mean mitochondrial fraction value.",
+  "data_node": ["latch://38438.account/AtlasxOmics/Kosta/Kostallari_SOW313_ATAC/combined_Healthy.h5ad"],
+  "grader": {
+    "type": "numeric_tolerance",
+    "config": {
+      "ground_truth": {
+        "mean_mito_fraction": 0.2
+      },
+      "tolerances": {
+        "mean_mito_fraction": {
+          "type": "max"
+        }
+      },
+      "description": "Mean mitochondrial fraction must be <= 0.10 (10%). The maximum threshold is 0.10."
+    }
+  }
+}

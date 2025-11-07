@@ -1,0 +1,27 @@
+{
+  "id": "mouse_brain_microglia_marker_genes_top20_v1",
+  "task": "Attached is an annotated mouse brain AnnData object with cell type annotations stored in `adata.obs['predicted_cell_type']`. For the cell type classified as 'Microglia', perform a 1-vs-all Wilcoxon differential expression test against all other cell types. Sort genes by log fold change (descending), then Wilcoxon score (descending), filter for adjusted p-value < 0.05, and report the Top-20 ranked genes for the 'Microglia' population. Do not invent or simulate gene names.\n\nALWAYS output your final answer EXACTLY in the following format:\n<EVAL_ANSWER>\n{\n  \"top_marker_genes\": [\"Gene1\", \"Gene2\", ..., \"Gene20\"]\n}\n</EVAL_ANSWER>",
+  "data_node": [
+    "latch://38438.account/AtlasxOmics/Pieper_154_brain_ArchRFull_10Core/annotated/D01900_NG05698_TBI_24hr.annotated.h5ad"
+  ],
+  "grader": {
+    "type": "marker_gene_precision_recall",
+    "config": {
+      "canonical_markers": [
+        "C1qa", "C1qb", "C1qc", "Trem2", "Tmem119",
+        "P2ry12", "Cx3cr1", "Itgam", "Itgax", "Cd68",
+        "Cd9", "Axl", "Ly86", "Ctsb", "Ctsd",
+        "Apoe", "Ccl2", "Ccl3", "Ccl4", "Fcgr3"
+      ],
+      "scoring": {
+        "method": "precision_and_recall",
+        "set_definition": "Compare the agent's Top-20 predicted microglia marker genes to the canonical set. Precision@20 = |pred ∩ canon| / 20. Recall@20 = |pred ∩ canon| / |canon|.",
+        "pass_thresholds": {
+          "precision_at_k": 0.60,
+          "recall_at_k": 0.50
+        },
+        "description": "Passes only if both Precision@20 ≥ 0.60 and Recall@20 ≥ 0.50."
+      }
+    }
+  }
+}
