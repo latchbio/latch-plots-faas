@@ -7,7 +7,11 @@ __pycache__
 /.envrc
 /.venv
 
+<<<<<<< Updated upstream
 runtime/mount/agent_config/evals/result_*.json
 runtime/mount/agent_config/evals/results/*
 runtime/mount/agent_config/context/notebook_context/cells.md
+=======
+sandbox
+>>>>>>> Stashed changes
 runtime/mount/agent_config/evals/results
