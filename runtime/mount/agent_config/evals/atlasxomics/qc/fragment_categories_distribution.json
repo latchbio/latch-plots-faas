@@ -17,7 +17,7 @@
       "tolerances": {
         "total_cells": {
           "type": "absolute",
-          "value": 191280035
+          "value": 10000000
         },
         "cell_type_percentages": {
           "type": "absolute",

@@ -1,0 +1,22 @@
+{
+  "id": "atlasxomics_coarse_clustering_threshold_v1",
+  "task": "Perform a coarse, high-level clustering on the attached spatial single-cell ATAC AnnData object. Return the number of clusters.",
+  "data_node": [
+    "latch://38438.account/AtlasxOmics/Human_DRG_Price_plotsLite/combined_sm_ge.h5ad"
+  ],
+  "grader": {
+    "type": "numeric_tolerance",
+    "config": {
+      "ground_truth": {
+        "num_clusters": 6 
+      },
+      "tolerances": {
+        "num_clusters": {
+          "type": "absolute",
+          "value": 1
+        }
+      },
+      "description": "Evaluate agent's ability to pick reasonable coarse thresholds. Coarse clustering should identify approximately six broad groups in this dataset."
+    }
+  }
+}
