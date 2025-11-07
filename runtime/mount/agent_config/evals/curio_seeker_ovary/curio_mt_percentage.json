@@ -1,0 +1,39 @@
+{
+  "id": "curio_mt_percentage",
+  "task": "Identify mitochondrial genes (those starting with 'MT-' or 'mt-'), calculate the percentage of counts from these genes, and report summary statistics. Return a JSON object with fields: n_mt_genes (number of mitochondrial genes found), on_tissue_beads (total number of on-tissue beads/cells), mean_mt_percentage (mean percentage of mitochondrial counts), median_mt_percentage (median percentage of mitochondrial counts), std_mt_percentage (standard deviation of mitochondrial percentage).",
+  "data_node": "latch://38438.account/curio_ovary/adata_after_background_removal.h5ad",
+  "grader": {
+    "type": "numeric_tolerance",
+    "config": {
+      "ground_truth": {
+        "n_mt_genes": 13,
+        "on_tissue_beads": 12131,
+        "mean_mt_percentage": 4.05,
+        "median_mt_percentage": 3.73,
+        "std_mt_percentage": 1.86
+      },
+      "tolerances": {
+        "n_mt_genes": {
+          "type": "absolute",
+          "value": 0
+        },
+        "on_tissue_beads": {
+          "type": "absolute",
+          "value": 500
+        },
+        "mean_mt_percentage": {
+          "type": "absolute",
+          "value": 0.5
+        },
+        "median_mt_percentage": {
+          "type": "absolute",
+          "value": 0.5
+        },
+        "std_mt_percentage": {
+          "type": "absolute",
+          "value": 0.3
+        }
+      }
+    }
+  }
+}

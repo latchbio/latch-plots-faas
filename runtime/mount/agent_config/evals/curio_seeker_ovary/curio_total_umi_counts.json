@@ -1,0 +1,34 @@
+{
+  "id": "curio_total_umi_counts",
+  "task": "Calculate the total UMI counts (sum of all gene counts) for each on-tissue bead in this Seeker dataset. Report summary statistics. Return a JSON object with fields: on_tissue_beads (total number of on-tissue beads), mean_total_counts (mean total UMI counts per bead), median_total_counts (median total UMI counts per bead), std_total_counts (standard deviation of total counts per bead).",
+  "data_node": "latch://38438.account/curio_ovary/adata_after_background_removal.h5ad",
+  "grader": {
+    "type": "numeric_tolerance",
+    "config": {
+      "ground_truth": {
+        "on_tissue_beads": 12131,
+        "mean_total_counts": 650.9,
+        "median_total_counts": 414.0,
+        "std_total_counts": 678.0
+      },
+      "tolerances": {
+        "on_tissue_beads": {
+          "type": "absolute",
+          "value": 500
+        },
+        "mean_total_counts": {
+          "type": "absolute",
+          "value": 15.0
+        },
+        "median_total_counts": {
+          "type": "absolute",
+          "value": 15.0
+        },
+        "std_total_counts": {
+          "type": "absolute",
+          "value": 30.0
+        }
+      }
+    }
+  }
+}

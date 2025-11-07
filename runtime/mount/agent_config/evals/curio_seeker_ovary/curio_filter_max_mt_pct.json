@@ -1,0 +1,24 @@
+{
+  "id": "curio_filter_max_mt_pct",
+  "task": "Filter beads with high mitochondrial percentage (indicating stressed or dying cells) using a reasonable maximum threshold. Return a JSON object with fields: on_tissue_beads (initial number), beads_after_filtering (number remaining after filter).",
+  "data_node": "latch://38438.account/curio_ovary/adata_after_background_removal.h5ad",
+  "grader": {
+    "type": "numeric_tolerance",
+    "config": {
+      "ground_truth": {
+        "on_tissue_beads": 12131,
+        "beads_after_filtering": 12123
+      },
+      "tolerances": {
+        "on_tissue_beads": {
+          "type": "absolute",
+          "value": 500
+        },
+        "beads_after_filtering": {
+          "type": "absolute",
+          "value": 100
+        }
+      }
+    }
+  }
+}
