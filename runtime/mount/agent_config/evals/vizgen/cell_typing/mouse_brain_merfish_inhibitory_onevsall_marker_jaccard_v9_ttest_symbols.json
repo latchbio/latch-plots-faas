@@ -1,0 +1,20 @@
+{
+  "id": "mouse_brain_merfish_inhibitory_onevsall_marker_jaccard_v9_ttest_symbols",
+  "task": "Input: processed MERFISH AnnData (mouse brain). Using expression-only data from the processed MERFISH mouse brain AnnData, perform one-vs-all t-test differential expression per cluster (logFC > 0, adj p ≤ 0.05), rank genes by logFC then −log₁₀(p_adj), convert to uppercase gene symbols (deduplicate, remove Ensembl IDs), identify clusters expressing inhibitory interneuron markers, and return the combined inhibitory interneuron marker genes in top genes from those inhibitory interneuron clusters as markers_predicted.",
+  "data_node": ["latch://38438.account/Mouse_Aging_subsetted.h5ad"],
+  "grader": {
+    "type": "label_set_jaccard",
+    "config": {
+      "ground_truth_marker_sets": {
+        "Inhibitory interneuron": ["SST", "PVALB", "VIP", "LAMP5"]
+      },
+      "scoring": {
+        "method": "jaccard_index",
+        "k_top_agent_markers": 9,
+        "per_label_thresholds": { "Inhibitory interneuron": 0.44 },
+        "penalize_extra_labels": false,
+        "description": "Pass if Jaccard ≥ 0.44 (≥80% overlap with 4 GT markers using top-9)."
+      }
+    }
+  }
+}
