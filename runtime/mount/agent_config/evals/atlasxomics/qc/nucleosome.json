@@ -1,0 +1,24 @@
+{
+    "id": "spatial_atac_qc_nucleosome_signal_v1",
+    "task": "Attached is a spatial single-cell ATAC AnnData project. Perform QC filtering, then compute nucleosome signal distribution statistics on the remaining high-quality cells. Return EXACTLY in the following format:\n<EVAL_ANSWER>\n{\n  \"nucleosome_signal_stats\": {\"mean\": <float>, \"median\": <float>, \"p10\": <float>, \"p90\": <float>}\n}\n</EVAL_ANSWER>",
+    "data_node": ["latch://38438.account/AtlasxOmics/Kosta/Kostallari_SOW313_ATAC/combined_Healthy.h5ad"],
+    "grader": {
+      "type": "qc_metric_distribution",
+      "config": {
+        "columns": { "qc_mask_col": "qc_pass", "metric_col": "nucleosome_signal" },
+        "stats": ["mean", "median", "p10", "p90"],
+        "pass_thresholds": {
+          "mean":   { "max": 4.0 },
+          "median": { "max": 3.5 },
+          "p10":    { "max": 2.0 },
+          "p90":    { "max": 5.0 }
+        },
+        "must_pass": ["mean", "median", "p10", "p90"],
+        "scoring": {
+          "method": "band_thresholds",
+          "description": "Evaluates nucleosome signal distribution after QC filtering. Each metric must satisfy its threshold (lower is better). PASS if all `must_pass` metrics are below or equal to thresholds; otherwise FAIL."
+        }
+      }
+    }
+  }
+  

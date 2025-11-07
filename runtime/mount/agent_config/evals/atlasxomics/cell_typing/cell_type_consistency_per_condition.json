@@ -1,0 +1,26 @@
+{
+    "id": "celltype_proportion_consistency_tbi_24hhr",
+    "task": "Attached is an annotated AnnData object. Subset to adata.obs['condition'] == 'TBI_24hr'. Test whether cell type proportions are consistent across biological replicates. Cell type labels in `adata.obs['predicted_cell_type']`, samples in `adata.obs['sample']`.",
+    "data_node": [
+        "latch://38438.account/AtlasxOmics/Pieper_154_brain_ArchRFull_10Core/annotated/D01900_NG05698_TBI_24hr.annotated.h5ad"
+    ],
+    "grader": {
+      "type": "proportion_consistency",
+      "config": {
+        "test": {
+          "name": "chi_square_with_cramers_v",
+          "description": "Tests if sample-level cell type proportions vary significantly within a specific condition."
+        },
+        "scoring": {
+          "method": "chi_square_and_effect_size",
+          "stat_definition": "For samples under TBI_24hr, the chi-square test detects heterogeneity in cell type proportions; Cramér's V measures its magnitude.",
+          "pass_thresholds": {
+            "chi2_q_min": 0.05,
+            "cramers_v_max": 0.15
+          },
+          "description": "Pass if no significant heterogeneity (q ≥ 0.05) and small effect size (V ≤ 0.15) across conditin replicates."
+        }
+      }
+    }
+}
+  
