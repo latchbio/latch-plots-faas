@@ -9,9 +9,9 @@
     "config": {
       "scoring": {
         "pass_thresholds": {
-          "ami_min": 0.35
+          "ami_max": 0.2
         },
-        "description": "Adjusted mutual information between clusters and conditions should be at least 0.35, indicating meaningful association without being entirely condition-driven."
+        "description": "Adjusted mutual information between clusters and conditions should remain ≤ 0.2, indicating clusters are not dominated by differences in conditions"
       }
     }
   }
