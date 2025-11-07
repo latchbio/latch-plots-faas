@@ -1,3 +1,5 @@
+# pyright: reportMissingImports=false
+
 from typing import List
 
 import numpy as np
@@ -8,7 +10,7 @@ from eval_types import TestResult
 
 
 class AdjustedMutualInformationGrader(BinaryGrader):
-    """Evaluate cluster-condition association via adjusted mutual information."""
+    """Evaluate cluster–sample association via adjusted mutual information."""
 
     def evaluate(self, test_result: TestResult, config: dict) -> GraderResult:
         scoring = config.get("scoring", {})
@@ -26,7 +28,7 @@ class AdjustedMutualInformationGrader(BinaryGrader):
                 agent_answer=None,
             )
 
-        required_fields = ["clusters", "conditions", "contingency"]
+        required_fields = ["clusters", "samples", "contingency"]
         missing = [field for field in required_fields if field not in agent_answer]
         if missing:
             return GraderResult(
@@ -37,7 +39,7 @@ class AdjustedMutualInformationGrader(BinaryGrader):
             )
 
         clusters = agent_answer["clusters"]
-        conditions = agent_answer["conditions"]
+        samples = agent_answer["samples"]
         contingency = agent_answer["contingency"]
 
         if not isinstance(clusters, list) or not clusters:
@@ -48,11 +50,11 @@ class AdjustedMutualInformationGrader(BinaryGrader):
                 agent_answer=agent_answer,
             )
 
-        if not isinstance(conditions, list) or not conditions:
+        if not isinstance(samples, list) or not samples:
             return GraderResult(
                 passed=False,
                 metrics={},
-                reasoning="'conditions' must be a non-empty list",
+                reasoning="'samples' must be a non-empty list",
                 agent_answer=agent_answer,
             )
 
@@ -74,7 +76,7 @@ class AdjustedMutualInformationGrader(BinaryGrader):
                 agent_answer=agent_answer,
             )
 
-        expected_shape = (len(clusters), len(conditions))
+        expected_shape = (len(clusters), len(samples))
         if matrix.shape != expected_shape:
             return GraderResult(
                 passed=False,
@@ -103,19 +105,19 @@ class AdjustedMutualInformationGrader(BinaryGrader):
             )
 
         cluster_labels: List[str] = []
-        condition_labels: List[str] = []
+        sample_labels: List[str] = []
         for ci, cluster in enumerate(clusters):
-            for cj, condition in enumerate(conditions):
-                count = matrix[ci, cj]
+            for sj, sample in enumerate(samples):
+                count = matrix[ci, sj]
                 if count <= 0:
                     continue
                 n = int(round(count))
                 if n <= 0:
                     continue
                 cluster_labels.extend([cluster] * n)
-                condition_labels.extend([condition] * n)
+                sample_labels.extend([sample] * n)
 
-        if not cluster_labels or not condition_labels:
+        if not cluster_labels or not sample_labels:
             return GraderResult(
                 passed=False,
                 metrics={},
@@ -123,7 +125,7 @@ class AdjustedMutualInformationGrader(BinaryGrader):
                 agent_answer=agent_answer,
             )
 
-        ami_value = adjusted_mutual_info_score(cluster_labels, condition_labels)
+        ami_value = adjusted_mutual_info_score(cluster_labels, sample_labels)
 
         passes_min = ami_value >= ami_min
         passes_max = True if ami_max is None else ami_value <= ami_max
@@ -134,7 +136,7 @@ class AdjustedMutualInformationGrader(BinaryGrader):
             "ami_min_threshold": ami_min,
             "ami_max_threshold": ami_max,
             "clusters": clusters,
-            "conditions": conditions,
+            "samples": samples,
         }
 
         reasoning_lines: List[str] = []

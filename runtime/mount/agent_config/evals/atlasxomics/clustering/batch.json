@@ -1,6 +1,6 @@
 {
   "id": "atlasxomics_cluster_condition_contingency_v1",
-  "task": "Attached is a spatial single-cell ATAC AnnData object with sample metadata in `adata.obs['sample']` and condition metadata in `adata.obs['condition']`. Perform clustering and store the cluster assignments in `adata.obs['cluster']`. Next, tabulate how many cells fall into each (cluster, condition) pair and return the contingency table.\n\nALWAYS output your final answer EXACTLY in the following format:\n<EVAL_ANSWER>\n{\n  \"clusters\": [\"cluster_1\", \"cluster_2\", ...],\n  \"conditions\": [\"condition_a\", \"condition_b\", ...],\n  \"contingency\": [[c1a, c1b, ...], [c2a, c2b, ...], ...]\n}\n</EVAL_ANSWER>",
+  "task": "Attached is a spatial single-cell ATAC AnnData object with sample metadata in `adata.obs['sample']`. Perform clustering and store the cluster assignments in `adata.obs['cluster']`. Next, tabulate how many cells fall into each (cluster, sample) pair and return the contingency table.\n\nALWAYS output your final answer EXACTLY in the following format:\n<EVAL_ANSWER>\n{\n  \"clusters\": [\"cluster_1\", \"cluster_2\", ...],\n  \"samples\": [\"sample_a\", \"sample_b\", ...],\n  \"contingency\": [[c1a, c1b, ...], [c2a, c2b, ...], ...]\n}\n</EVAL_ANSWER>",
   "data_node": [
     "latch://38438.account/AtlasxOmics/Human_DRG_Price_plotsLite/combined_sm_ge.h5ad"
   ],
@@ -11,7 +11,7 @@
         "pass_thresholds": {
           "ami_max": 0.2
         },
-        "description": "Adjusted mutual information between clusters and conditions should remain ≤ 0.2, indicating clusters are not dominated by differences in conditions"
+        "description": "Adjusted mutual information between clusters and samples should remain ≤ 0.2, indicating clusters are not dominated by technical variation between samples."
       }
     }
   }
