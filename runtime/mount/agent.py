@@ -2889,7 +2889,7 @@ class AgentHarness:
                 if cell_id is not None:
                     self.executing_cells.discard(str(cell_id))
                 if self.current_status == "awaiting_user_widget_input" and not all(v is None for v in self.expected_widgets.values()):
-                    print(f"[agent] Not adding cell {cell_id} result because awaiting_user_widget_input and have not seen set_widget_value")
+                    print(f"[agent] Not adding cell {cell_id} result because awaiting_user_widget_input and still expecting widget updates")
                     return
 
                 if self.current_request_id is not None:
@@ -2910,13 +2910,17 @@ class AgentHarness:
                     self.executing_cells.add(str(cell_id))
             elif nested_type == "set_widget_value":
                 if self.current_status == "awaiting_user_widget_input":
-                    self.expected_widgets[nested_msg.get("key")] = nested_msg.get("value")
-                    if all(v is not None for v in self.expected_widgets.values()):
-                        await self.pending_messages.put({
-                            "type": "set_widget_value",
-                            "data": self.expected_widgets
-                        })
-
+                    key = nested_msg.get("key")
+                    if key in self.expected_widgets:
+                        self.expected_widgets[key] = nested_msg.get("value")
+                        if all(v is not None for v in self.expected_widgets.values()):
+                            print(f"[tim] All expected widgets received, sending set_widget_value")
+                            await self.pending_messages.put({
+                                "type": "set_widget_value",
+                                "data": self.expected_widgets
+                            })
+                    else: 
+                        print(f"[tim] Unexpected widget key: {key}")
         elif msg_type == "get_full_prompt":
             tx_id = msg.get("tx_id")
             print(f"[agent] Get full prompt request (tx_id={tx_id})")

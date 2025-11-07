@@ -89,7 +89,6 @@ Call `submit_response` with these parameters:
 - `next_status`: Current agent status (see Status Types below)
 - `expected_widgets`: Optional array of full widget keys (<tf_id>/<widget_id>) when `next_status` is `awaiting_user_widget_input`
 
-
 ### Status Types
 
 Set `next_status` to indicate current state:
