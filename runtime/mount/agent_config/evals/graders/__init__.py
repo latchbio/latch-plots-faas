@@ -7,6 +7,7 @@ from .marker_gene_precision_recall import MarkerGenePrecisionRecallGrader
 from .marker_gene_separation import MarkerGeneSeparationGrader
 from .proportion_consistency import ProportionConsistencyGrader
 from .spatial_adjacency_simple import SpatialAdjacencySimpleGrader
+from .adjusted_mutual_information import AdjustedMutualInformationGrader
 
 GRADER_REGISTRY = {
     "cell_typing": CellTypingGrader,
@@ -17,6 +18,7 @@ GRADER_REGISTRY = {
     "marker_gene_separation": MarkerGeneSeparationGrader,
     "proportion_consistency": ProportionConsistencyGrader,
     "spatial_adjacency_simple": SpatialAdjacencySimpleGrader,
+    "adjusted_mutual_information": AdjustedMutualInformationGrader,
 }
 
 __all__ = [
@@ -30,5 +32,6 @@ __all__ = [
     "MarkerGeneSeparationGrader",
     "ProportionConsistencyGrader",
     "SpatialAdjacencySimpleGrader",
+    "AdjustedMutualInformationGrader",
     "GRADER_REGISTRY",
 ]
