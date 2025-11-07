@@ -2911,18 +2911,20 @@ class AgentHarness:
                     self.executing_cells.add(str(cell_id))
             elif nested_type == "set_widget_value":
                 if self.current_status == "awaiting_user_widget_input":
-                    key = nested_msg.get("key")
-                    if key in self.expected_widgets:
-                        self.expected_widgets[key] = nested_msg.get("value")
-                        print(f"[tim] received expected widget, expected widgets after update: {self.expected_widgets}")
-                        if all(v is not None for v in self.expected_widgets.values()):
-                            print(f"[tim] All expected widgets received, sending set_widget_value")
-                            await self.pending_messages.put({
-                                "type": "set_widget_value",
-                                "data": self.expected_widgets
-                            })
-                    else: 
-                        print(f"[tim] Unexpected widget key: {key}")
+                    data = nested_msg.get("data", {})
+                    for key, value in data.items():
+                        if key in self.expected_widgets:
+                            self.expected_widgets[key] = value
+                            print(f"[tim] received expected widget {key}, expected widgets after update: {self.expected_widgets}")
+                        else:
+                            print(f"[tim] Unexpected widget key: {key}")
+                    
+                    if all(v is not None for v in self.expected_widgets.values()):
+                        print(f"[tim] All expected widgets received, sending set_widget_value")
+                        await self.pending_messages.put({
+                            "type": "set_widget_value",
+                            "data": self.expected_widgets
+                        })
         elif msg_type == "get_full_prompt":
             tx_id = msg.get("tx_id")
             print(f"[agent] Get full prompt request (tx_id={tx_id})")
