@@ -379,20 +379,10 @@ class AgentHarness:
                 })
 
         elif msg_type == "set_widget_value":
-            keys = ', '.join(str(k) for k in msg.get("data", {}).keys())
-            
-            # todo(tim): add handling of vals other than image alignment step
-            image_aligner_vals = []
-            for v in msg.get("data", {}).values():
-                try:
-                    if "image_alignment_step" in (parsed := json.loads(v)):
-                        image_aligner_vals.append(f"step={parsed['image_alignment_step']}")
-                except Exception as e:
-                    print(f"[agent] Failed to parse widget value for image_alignment_step: {e}, value: {v}")
-            
-            content = f"User provided input via widget key(s): {keys}"
-            if len(image_aligner_vals) != 0:
-                content += f", {', '.join(image_aligner_vals)}"
+            data = msg.get("data", {})
+            widget_info = ', '.join(f"{k}={v}" for k, v in data.items())
+            content = f"User provided input via widget(s): {widget_info}"
+            print(f"[tim] {content}")
             
             await self._insert_history(
                 payload={
@@ -755,7 +745,7 @@ class AgentHarness:
 
                 self.current_status = next_status
                 if next_status == "awaiting_user_widget_input":
-                    self.expected_widgets = dict.fromkeys(map(str, expected_widgets))
+                    self.expected_widgets = {str(k): None for k in expected_widgets}
 
                 return {
                     "tool_name": "submit_response",

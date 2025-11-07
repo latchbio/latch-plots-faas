@@ -87,7 +87,7 @@ Call `submit_response` with these parameters:
 - `questions`: Optional question string for user. Omit if no questions needed.
 - `continue`: Boolean - whether to continue immediately or wait
 - `next_status`: Current agent status (see Status Types below)
-- `expected_widgets` (optional): Array of full widget keys (<tf_id>/<widget_id>) when `next_status` is `awaiting_user_widget_input`
+- `expected_widgets`: Optional array of full widget keys (<tf_id>/<widget_id>) when `next_status` is `awaiting_user_widget_input`
 
 
 ### Status Types
