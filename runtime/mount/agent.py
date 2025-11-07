@@ -746,6 +746,7 @@ class AgentHarness:
                 self.current_status = next_status
                 if next_status == "awaiting_user_widget_input":
                     self.expected_widgets = {str(k): None for k in expected_widgets}
+                    print(f"[tim] Expected widgets: {self.expected_widgets}")
 
                 return {
                     "tool_name": "submit_response",
@@ -2913,6 +2914,7 @@ class AgentHarness:
                     key = nested_msg.get("key")
                     if key in self.expected_widgets:
                         self.expected_widgets[key] = nested_msg.get("value")
+                        print(f"[tim] received expected widget, expected widgets after update: {self.expected_widgets}")
                         if all(v is not None for v in self.expected_widgets.values()):
                             print(f"[tim] All expected widgets received, sending set_widget_value")
                             await self.pending_messages.put({
