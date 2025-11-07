@@ -971,6 +971,15 @@ wheels = [
 ]
 
 [[package]]
+name = "joblib"
+version = "1.5.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/e8/5d/447af5ea094b9e4c4054f82e223ada074c552335b9b4b2d14bd9b35a67c4/joblib-1.5.2.tar.gz", hash = "sha256:3faa5c39054b2f03ca547da9b2f52fde67c06240c31853f306aea97f13647b55", size = 331077 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1e/e8/685f47e0d754320684db4425a0967f7d3fa70126bffd76110b7009a0090f/joblib-1.5.2-py3-none-any.whl", hash = "sha256:4e1f0bdbb987e6d843c70cf43714cb276623def372df3c22fe5266b2670bc241", size = 308396 },
+]
+
+[[package]]
 name = "jsonschema"
 version = "4.23.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1186,7 +1195,10 @@ dependencies = [
     { name = "pillow" },
     { name = "plotly" },
     { name = "psycopg" },
+    { name = "scikit-learn" },
+    { name = "scipy" },
     { name = "seaborn" },
+    { name = "statsmodels" },
     { name = "uvloop" },
 ]
 
@@ -1213,7 +1225,10 @@ requires-dist = [
     { name = "pillow", specifier = ">=11.0.0" },
     { name = "plotly", specifier = ">=5.22.0" },
     { name = "psycopg", specifier = "<3.2" },
+    { name = "scikit-learn", specifier = ">=1.7.2" },
+    { name = "scipy", specifier = ">=1.15.2" },
     { name = "seaborn", specifier = ">=0.13.2" },
+    { name = "statsmodels", specifier = ">=0.14.5" },
     { name = "uvloop", specifier = ">=0.19.0" },
 ]
 
@@ -1645,6 +1660,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/7d/15/ad6ce226e8138315f2451c2aeea985bf35ee910afb477bae7477dc3a8f3b/paramiko-3.5.1.tar.gz", hash = "sha256:b2c665bc45b2b215bd7d7f039901b14b067da00f3a11e6640995fd58f2664822", size = 1566110 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/15/f8/c7bd0ef12954a81a1d3cea60a13946bd9a49a0036a5927770c461eade7ae/paramiko-3.5.1-py3-none-any.whl", hash = "sha256:43b9a0501fc2b5e70680388d9346cf252cfb7d00b0667c39e80eb43a408b8f61", size = 227298 },
+]
+
+[[package]]
+name = "patsy"
+version = "1.0.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/be/44/ed13eccdd0519eff265f44b670d46fbb0ec813e2274932dc1c0e48520f7d/patsy-1.0.2.tar.gz", hash = "sha256:cdc995455f6233e90e22de72c37fcadb344e7586fb83f06696f54d92f8ce74c0", size = 399942 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f1/70/ba4b949bdc0490ab78d545459acd7702b211dfccf7eb89bbc1060f52818d/patsy-1.0.2-py2.py3-none-any.whl", hash = "sha256:37bfddbc58fcf0362febb5f54f10743f8b21dd2aa73dec7e7ef59d1b02ae668a", size = 233301 },
 ]
 
 [[package]]
@@ -2242,6 +2269,25 @@ wheels = [
 ]
 
 [[package]]
+name = "scikit-learn"
+version = "1.7.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "joblib" },
+    { name = "numpy" },
+    { name = "scipy" },
+    { name = "threadpoolctl" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/98/c2/a7855e41c9d285dfe86dc50b250978105dce513d6e459ea66a6aeb0e1e0c/scikit_learn-1.7.2.tar.gz", hash = "sha256:20e9e49ecd130598f1ca38a1d85090e1a600147b9c02fa6f15d69cb53d968fda", size = 7193136 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/43/83/564e141eef908a5863a54da8ca342a137f45a0bfb71d1d79704c9894c9d1/scikit_learn-1.7.2-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:c7509693451651cd7361d30ce4e86a1347493554f172b1c72a39300fa2aea79e", size = 9331967 },
+    { url = "https://files.pythonhosted.org/packages/18/d6/ba863a4171ac9d7314c4d3fc251f015704a2caeee41ced89f321c049ed83/scikit_learn-1.7.2-cp311-cp311-macosx_12_0_arm64.whl", hash = "sha256:0486c8f827c2e7b64837c731c8feff72c0bd2b998067a8a9cbc10643c31f0fe1", size = 8648645 },
+    { url = "https://files.pythonhosted.org/packages/ef/0e/97dbca66347b8cf0ea8b529e6bb9367e337ba2e8be0ef5c1a545232abfde/scikit_learn-1.7.2-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:89877e19a80c7b11a2891a27c21c4894fb18e2c2e077815bcade10d34287b20d", size = 9715424 },
+    { url = "https://files.pythonhosted.org/packages/f7/32/1f3b22e3207e1d2c883a7e09abb956362e7d1bd2f14458c7de258a26ac15/scikit_learn-1.7.2-cp311-cp311-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:8da8bf89d4d79aaec192d2bda62f9b56ae4e5b4ef93b6a56b5de4977e375c1f1", size = 9509234 },
+    { url = "https://files.pythonhosted.org/packages/9f/71/34ddbd21f1da67c7a768146968b4d0220ee6831e4bcbad3e03dd3eae88b6/scikit_learn-1.7.2-cp311-cp311-win_amd64.whl", hash = "sha256:9b7ed8d58725030568523e937c43e56bc01cadb478fc43c042a9aca1dacb3ba1", size = 8894244 },
+]
+
+[[package]]
 name = "scipy"
 version = "1.15.2"
 source = { registry = "https://pypi.org/simple" }
@@ -2355,6 +2401,27 @@ wheels = [
 ]
 
 [[package]]
+name = "statsmodels"
+version = "0.14.5"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+    { name = "packaging" },
+    { name = "pandas" },
+    { name = "patsy" },
+    { name = "scipy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/64/cc/8c1bf59bf8203dea1bf2ea811cfe667d7bcc6909c83d8afb02b08e30f50b/statsmodels-0.14.5.tar.gz", hash = "sha256:de260e58cccfd2ceddf835b55a357233d6ca853a1aa4f90f7553a52cc71c6ddf", size = 20525016 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/14/30/fd49902b30416b828de763e161c0d6e2cc04d119ae4fbdd3f3b43dc8f1be/statsmodels-0.14.5-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:4b7091a8442076c708c926de3603653a160955e80a2b6d931475b7bb8ddc02e5", size = 10053330 },
+    { url = "https://files.pythonhosted.org/packages/ca/c1/2654541ff6f5790d01d1e5ba36405fde873f4a854f473e90b4fe56b37333/statsmodels-0.14.5-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:128872be8f3208f4446d91ea9e4261823902fc7997fee7e1a983eb62fd3b7c6e", size = 9735555 },
+    { url = "https://files.pythonhosted.org/packages/ce/da/6ebb64d0db4e86c0d2d9cde89e03247702da0ab191789f7813d4f9a348da/statsmodels-0.14.5-cp311-cp311-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:f2ad5aee04ae7196c429df2174df232c057e478c5fa63193d01c8ec9aae04d31", size = 10307522 },
+    { url = "https://files.pythonhosted.org/packages/67/49/ac803ca093ec3845184a752a91cd84511245e1f97103b15cfe32794a3bb0/statsmodels-0.14.5-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:f402fc793458dd6d96e099acb44cd1de1428565bf7ef3030878a8daff091f08a", size = 10474665 },
+    { url = "https://files.pythonhosted.org/packages/f0/c8/ae82feb00582f4814fac5d2cb3ec32f93866b413cf5878b2fe93688ec63c/statsmodels-0.14.5-cp311-cp311-musllinux_1_2_x86_64.whl", hash = "sha256:26c028832730aebfbfd4e7501694e1f9ad31ec8536e776716673f4e7afd4059a", size = 10713120 },
+    { url = "https://files.pythonhosted.org/packages/05/ac/4276459ea71aa46e2967ea283fc88ee5631c11f29a06787e16cf4aece1b8/statsmodels-0.14.5-cp311-cp311-win_amd64.whl", hash = "sha256:ec56f771d9529cdc17ed2fb2a950d100b6e83a7c5372aae8ac5bb065c474b856", size = 9640980 },
+]
+
+[[package]]
 name = "structlog"
 version = "25.2.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2370,6 +2437,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/ab/e2/e9a00f0ccb71718418230718b3d900e71a5d16e701a3dae079a21e9cd8f8/text-unidecode-1.3.tar.gz", hash = "sha256:bad6603bb14d279193107714b288be206cac565dfa49aa5b105294dd5c4aab93", size = 76885 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a6/a5/c0b6468d3824fe3fde30dbb5e1f687b291608f9473681bbf7dabbf5a87d7/text_unidecode-1.3-py2.py3-none-any.whl", hash = "sha256:1311f10e8b895935241623731c2ba64f4c455287888b18189350b67134a822e8", size = 78154 },
+]
+
+[[package]]
+name = "threadpoolctl"
+version = "3.6.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/b7/4d/08c89e34946fce2aec4fbb45c9016efd5f4d7f24af8e5d93296e935631d8/threadpoolctl-3.6.0.tar.gz", hash = "sha256:8ab8b4aa3491d812b623328249fab5302a68d2d71745c8a4c719a2fcaba9f44e", size = 21274 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/32/d5/f9a850d79b0851d1d4ef6456097579a9005b31fea68726a4ae5f2d82ddd9/threadpoolctl-3.6.0-py3-none-any.whl", hash = "sha256:43a0b8fd5a2928500110039e43a5eed8480b918967083ea48dc3ab9f13c4a7fb", size = 18638 },
 ]
 
 [[package]]

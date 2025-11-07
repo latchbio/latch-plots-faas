@@ -15,6 +15,7 @@ Always follow steps **in order**. Apply **Seeker-specific preprocessing** when r
    - If the user declines, **revert to the original AnnData**.
 
 ### **PREPROCESSING**
+
 5. **Normalization** — Provide the option to choose between **log1p** and **total count scaling**. Apply **log1p transformation** by default on the QC-filtered dataset.
 6. **Feature Selection** — identify **highly variable genes (HVGs)**.
    - Use sc.pp.highly_variable_genes(..., subset=True) to subset the data to the selected HVGs.
@@ -37,26 +38,10 @@ Always follow steps **in order**. Apply **Seeker-specific preprocessing** when r
     Allow users to review or override annotations.
 ---
 
-✅ **General Rules**
-- **DO NOT** delete cells unless explicitly prompted by the user.
-- **DO NOT** create duplicated cells.
-- Always use markdown to summarize text output after each analysis step. **DO NOT** use ```print()```.
-- Always produce **visual outputs** at every stage. Use ```w_plot()``` and ```w_table()``` to display plots and tables on the UI
-- Always use ```w_h5``` for spatial embedding and UMAP. For all other plots, use Plotly instead.
-Do not use both w_h5 and Plotly for the same visualization to avoid redundancy.
-- Always pass a DataFrame object directly to the source argument of ```w_table```. Do not pass a method call or expression (e.g., df.head(), df.round(3), df.sort_values(...)) directly into ```w_table```.
-- Apply sensible defaults
-- Add well formatted markdown
-- Always maintain a clear distinction between **Seeker** and **Trekker** workflows.
-- Prioritize **transparency**, **reproducibility**, and **interactivity** throughout the analysis.
-
-Some pointers on steps.
-
 ### Experiment Setup
 
 - You must ask users to confirm whether their experiment is Seeker 3x3, Seeker 10x10, or Trekker.
 - The user's answer will directly influence the code written for background removal.
-
 
 ### Background Removal
 
@@ -97,6 +82,7 @@ You must **parse user answers**, **normalize them into the required formats**, a
 These must be provided by the user and wrapped as `LatchFile(latch://...)`.
 
 #### Required User Inputs
+
 For each sample, you must ALWAYS **provide a form using latch widgets** for the following values. Each one has a clear mapping to a workflow parameter:
 
 - **Sample ID** → `sample_id`
