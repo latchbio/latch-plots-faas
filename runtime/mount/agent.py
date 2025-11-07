@@ -382,7 +382,6 @@ class AgentHarness:
             data = msg.get("data", {})
             widget_info = ', '.join(f"{k}={v}" for k, v in data.items())
             content = f"User provided input via widget(s): {widget_info}"
-            print(f"[tim] {content}")
             
             await self._insert_history(
                 payload={
@@ -746,7 +745,6 @@ class AgentHarness:
                 self.current_status = next_status
                 if next_status == "awaiting_user_widget_input":
                     self.expected_widgets = {str(k): None for k in expected_widgets}
-                    print(f"[tim] Expected widgets: {self.expected_widgets}")
 
                 return {
                     "tool_name": "submit_response",
@@ -2915,12 +2913,8 @@ class AgentHarness:
                     for key, value in data.items():
                         if key in self.expected_widgets:
                             self.expected_widgets[key] = value
-                            print(f"[tim] received expected widget {key}, expected widgets after update: {self.expected_widgets}")
-                        else:
-                            print(f"[tim] Unexpected widget key: {key}")
                     
                     if all(v is not None for v in self.expected_widgets.values()):
-                        print(f"[tim] All expected widgets received, sending set_widget_value")
                         await self.pending_messages.put({
                             "type": "set_widget_value",
                             "data": self.expected_widgets
