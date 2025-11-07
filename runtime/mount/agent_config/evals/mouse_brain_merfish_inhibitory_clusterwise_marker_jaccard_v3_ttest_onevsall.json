@@ -1,0 +1,18 @@
+{
+    "id": "mouse_brain_merfish_inhibitory_onevsall_marker_jaccard_v5_ttest_min",
+    "task": "Input: processed MERFISH AnnData. Use expression only. Use existing clusters or compute Leiden (PCA=50, n_neighbors=30, resolution=0.6). For each cluster, run one-vs-all DE with t-test, filter positive logFC and adj p≤0.05, rank by logFC then −log10(p_adj), take **top-9** (uppercase). Assign clusters to **Inhibitory interneuron** based on marker expression; return pooled, de-duplicated **top-9 Inhibitory markers** as `markers_predicted`.\n\nOutput:\n<EVAL_ANSWER>{\"markers_predicted\": [\"GENE1\", ...]}</EVAL_ANSWER>",
+    "data_node": ["latch://38438.account/Mouse_Aging_subsetted.h5ad"],
+    "grader": {
+      "type": "label_set_jaccard",
+      "config": {
+        "ground_truth_marker_sets": { "Inhibitory interneuron": ["SST","PVALB","VIP","LAMP5"] },
+        "scoring": {
+          "method": "jaccard_index",
+          "k_top_agent_markers": 9,
+          "per_label_thresholds": { "Inhibitory interneuron": 0.51 },
+          "penalize_extra_labels": false,
+          "description": "Pass if Jaccard ≥ 0.51."
+        }
+      }
+    }
+  }

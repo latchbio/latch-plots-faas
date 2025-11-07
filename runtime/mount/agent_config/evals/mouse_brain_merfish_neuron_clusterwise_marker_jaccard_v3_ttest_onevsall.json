@@ -1,0 +1,23 @@
+{
+  "id": "mouse_brain_merfish_neuron_onevsall_marker_jaccard_v5_ttest_min",
+  "task": "Input: one processed MERFISH AnnData (mouse brain). Use expression only. If a cluster label exists in `adata.obs`, use it; else compute Leiden (PCA=50, n_neighbors=30, resolution=0.6). For each cluster, run one-vs-all differential expression with t-test (Scanpy `rank_genes_groups(groups=[c], reference='rest', method='t-test')`), keep genes with positive logFC and adj p≤0.05, rank by logFC then −log10(p_adj), and take the top-14 (uppercase). Using only these DE lists (no spatial and no provided marker lists), assign the label **Neuron** to clusters whose top markers collectively indicate neuronal identity. Return the pooled, de-duplicated top-14 markers for all clusters labeled Neuron as `markers_predicted`.\n\nOutput:\n<EVAL_ANSWER>{\"markers_predicted\": [\"GENE1\", ...]}</EVAL_ANSWER>",
+  "data_node": ["latch://38438.account/Mouse_Aging_subsetted.h5ad"],
+  "grader": {
+    "type": "label_set_jaccard",
+    "config": {
+      "ground_truth_marker_sets": {
+        "Neuron": ["SST","PVALB","VIP","LAMP5","CALB2","DRD1","DRD2","LHX6","CHAT"]
+      },
+      "scoring": {
+        "method": "jaccard_index",
+        "k_top_agent_markers": 14,
+        "per_label_thresholds": {
+          "Neuron": 0.51
+        },
+        "penalize_extra_labels": false,
+        "description": "Pass if Jaccard( predicted top-14, Neuron ground-truth ) ≥ 0.51."
+      }
+    }
+  }
+}
+
