@@ -1,0 +1,25 @@
+{
+  "id": "collecting_duct_subcluster_distribution",
+  "task": "Using the kidney Xenium dataset with per-cell spatial centroids (x, y), subset the AnnData to cells where adata.obs['CN'] equals 'CN5: Collecting Duct Niche'. Then cluster the cells into 3 subclusters and assign labels using the exact vocabulary: PC, ICA, ICB. Use the following marker genes to guide labeling (higher expression in the indicated subtype vs others):\n\nPC: Aqp2\nICA: Atp6v1b1, Slc4a1\nICB: Slc26a4\n\nThen report the distribution of these CD subtypes as percentages of total CD cells. Percentages should sum to ~100%. Include any missing subtypes with 0%.\n\nVocabulary: PC, ICA, ICB\n\n",
+  "data_node": "latch://38438.account/Scratch/xenium/evals/xenium_mouse_kidney_no_celltype_postprocess.h5ad",
+  "grader": {
+    "type": "distribution_comparison",
+    "config": {
+      "ground_truth": {
+        "total_cells": 36441,
+        "cell_type_distribution": {
+          "PC": 30.22,
+          "ICA": 14.22,
+          "ICB": 55.56,
+        }
+      },
+      "tolerances": {
+        "cell_type_percentages": {
+          "type": "absolute",
+          "value": 3.0,
+          "description": "Each cell type percentage must be within ±3% of ground truth"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "id": "kidney_podocyte_nphs2_expression_separation_v1",
+  "task": "Attached is a kidney AnnData object with cell type annotations stored in `adata.obs['cell_type']`. Subset adata to adata.obs['time']=='Hour4', then compute the expression separation statistic (AUROC) for the canonical Podocyte marker 'Nphs2' by comparing expression in 'Podocyte' vs all other cell types (1-vs-all).",
+  "data_node": [
+    "latch://38438.account/Scratch/xenium/evals/evals_output/kidney_agent_annotated_20_cells.h5ad"
+  ],
+  "grader": {
+    "type": "marker_gene_separation",
+    "config": {
+      "scoring": {
+        "method": "auroc_fraction_and_mean",
+        "pass_thresholds": {
+          "mean_auroc": 0.90,
+          "fraction_high": 1.00,
+          "per_gene_cutoff": 0.90
+        },
+        "description": "Single-marker case: require AUROC(Nphs2: Podocyte vs rest) ≥ 0.90. With one gene, fraction_high=1.0 enforces that Nphs2 clears the 0.90 cutoff and mean_auroc equals the same AUROC."
+      }
+    }
+  }
+}

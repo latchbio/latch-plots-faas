@@ -1,0 +1,20 @@
+{
+  "id": "xenium_batch_correction_same_batch_fraction",
+  "task": "Given adata.obsm['X_pca'] with 50 PCs and adata.obs['ident'] as batch labels, run Harmony to produce adata.obsm['X_pca_harmony'] (cells × 50). Build a 30-NN graph on this corrected embedding (Euclidean distance, approximate neighbors OK). Return: n_obs, n_vars, n_batches, n_pcs, same_batch_fraction_30nn_mean (mean fraction of neighbors from the same sample).",
+  "data_node": "latch://38438.account/Scratch/xenium/Output/xenium_mouse_kidney_no_celltype_postprocess_100k.h5ad",
+  "grader": {
+    "type": "numeric_tolerance",
+    "config": {
+      "ground_truth": {
+        "n_batches": 12,
+        "n_pcs": 50,
+        "same_batch_fraction_30nn_mean": 0.1384
+      },
+      "tolerances": {
+        "n_batches": { "type": "absolute", "value": 0 },
+        "n_pcs": { "type": "absolute", "value": 40 },
+        "same_batch_fraction_30nn_mean": { "type": "absolute", "value": 0.1 }
+      }
+    }
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "id": "kidney_pericytes_canonical_expression_separation",
+  "task": "Attached is an annotated kidney AnnData object with cell type annotations stored in `adata.obs['cell_type']`. For canonical marker gene (Myh11) compute its expression separation statistic (e.g., AUROC of expression in pericytes/smooth muscle labeled as 'Per-SMC' vs all other cell types).",
+  "data_node": [
+    "latch://38438.account/Scratch/xenium/evals/evals_output/kidney_agent_annotated_20_cells.h5ad"
+  ],
+  "grader": {
+    "type": "marker_gene_separation",
+    "config": {
+      "scoring": {
+        "method": "auroc_fraction_and_mean",
+        "pass_thresholds": {
+          "mean_auroc": 0.85,
+          "fraction_high": 0.70,
+          "per_gene_cutoff": 0.80
+        },
+        "description": "Pass if ≥70 % of canonical markers have AUROC ≥ 0.8 and the mean AUROC ≥ 0.85, reflecting visually distinct violin-plot separation."
+      }
+    }
+  }
+}

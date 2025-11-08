@@ -1,0 +1,24 @@
+{
+    "id": "classify_interstitial_cells_distribution",
+    "task": "Using the kidney Xenium dataset with per-cell spatial centroids (x, y) for interstitial cells, classify interstitial cells into fibroblasts (Fib) vs pericyte/smooth muscle (Per-SMC) and list marker genes. Assign each cell to one of the 2 populations in the vocabulary below, then report the overall distribution as the percentage of total cells per type. Use exact vocabulary strings. The percentages should sum to ~100%.\n\nVocabulary: Fib, Per-SMC\n\n",
+    "data_node": "latch://38438.account/Scratch/xenium/evals/xenium_kidney_interstitial_cells.h5ad",
+    "grader": {
+      "type": "distribution_comparison",
+      "config": {
+        "ground_truth": {
+          "total_cells": 215009,
+          "cell_type_distribution": {
+            "Fib": 74.57,
+            "Per-SMC": 25.43,
+          }
+        },
+        "tolerances": {
+          "cell_type_percentages": {
+            "type": "absolute",
+            "value": 3.0,
+            "description": "Each cell type percentage must be within ±3% of ground truth"
+          }
+        }
+      }
+    }
+  }

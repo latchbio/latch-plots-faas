@@ -1,0 +1,28 @@
+{
+  "id": "kidney_uro_marker_gene_top20",
+  "task": "Attached is an annotated mouse kidney Xenium AnnData object with cell type annotations stored in `adata.obs['cell_type']`. For the cell type classified as 'Uro', perform a 1-vs-all Wilcoxon differential expression test against all other cell types. Sort genes by log fold change (descending), then Wilcoxon score (descending), filter for adjusted p-value < 0.05, and report the Top-20 ranked genes for the 'Uro' population.\n\nOutput your final answer EXACTLY in the following format:\n<EVAL_ANSWER>\n{\n  \"top_marker_genes\": [\"Gene1\", \"Gene2\", ..., \"Gene20\"]\n}\n</EVAL_ANSWER>",
+  "data_node": "latch://38438.account/Scratch/xenium/evals/evals_output/kidney_agent_annotated_20_cells.h5ad",
+  "grader": {
+    "type": "marker_gene_precision_recall",
+    "config": {
+      "canonical_markers": [
+        "Krt15", "Upk1b", "Msln",
+        "Krt5", "Krt14", "Krt19",
+        "Abcc3", "Ano1", "Klf5",
+        "Efnb2", "Akr1b3", "Runx1",
+        "Gprc5a", "Spp1", "Muc20",
+        "Kcnma1", "Cd24a", "Tpm1",
+        "Proser2", "Tnfrsf11a",
+      ],
+      "scoring": {
+        "method": "precision_and_recall",
+        "set_definition": "Compare the agent's Top-20 predicted Uro marker genes to the canonical set",
+        "pass_thresholds": {
+          "precision_at_k": 0.60,
+          "recall_at_k": 0.50
+        },
+        "description": "Passes only if both Precision@20 ≥ 0.60 and Recall@20 ≥ 0.50."
+      }
+    }
+  }
+}

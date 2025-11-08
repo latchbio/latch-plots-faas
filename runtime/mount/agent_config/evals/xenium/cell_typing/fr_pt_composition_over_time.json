@@ -1,0 +1,26 @@
+{
+  "id": "fr_pt_grouped_fraction_trend_v1",
+  "task": "Attached is an AnnData object. Using the grouping column `adata.obs['time']` (levels: {Sham, 4h, 12h, 2d, 14d, 6w}), compute the fraction of target cells (`FR-PT`) per group and determine whether the fraction has increased by the comparison group (`14d`). Return EXACTLY in the following format:\n<EVAL_ANSWER>\n{\n  \"per_group\": [\n    {\"group\": \"Sham\", \"count_target\": 0, \"count_all\": 0, \"percent\": 0.0},\n    {\"group\": \"4h\",   \"count_target\": 0, \"count_all\": 0, \"percent\": 0.0},\n    {\"group\": \"12h\",  \"count_target\": 0, \"count_all\": 0, \"percent\": 0.0},\n    {\"group\": \"2d\",   \"count_target\": 0, \"count_all\": 0, \"percent\": 0.0},\n    {\"group\": \"14d\",  \"count_target\": 0, \"count_all\": 0, \"percent\": 0.0},\n    {\"group\": \"6w\",   \"count_target\": 0, \"count_all\": 0, \"percent\": 0.0}\n  ],\n  \"increases_by_compare_group\": true,\n  \"delta_vs_baseline_pct\": 0.0\n}\n</EVAL_ANSWER>\nNotes:\n- Define targets with `predicted_cell_type == 'FR-PT'`.\n- percent = 100 * count_target / count_all for each group.\n- If a group is missing in the data, include it with zeros so all listed levels appear in order: [Sham, 4h, 12h, 2d, 14d, 6w].",
+  "data_node": [
+    "latch://38438.account/Scratch/xenium/evals/evals_output/kidney_agent_annotated_20_cells.h5ad"
+  ],
+    "grader": {
+    "type": "grouped_fraction_trend",
+    "config": {
+      "scoring": {
+        "pass_thresholds": {
+          "index_field": "time",
+          "label_field": "cell_type",
+          "target_label": "FR-PT",
+          "group_order": ["Sham","4h","12h","2d","14d","6w"],
+          "baseline_group": "Sham",
+          "compare_group": "14d",
+          "test_type": "fisher",
+          "alternative": "greater", // "greater" | "less" | "two-sided"
+          "alpha": 0.05
+        },
+        "description": "Pass if FR-PT fraction at 14d is significantly higher than baseline (Fisher exact, one-sided, α=0.05)."
+      }
+    }
+  }
+}

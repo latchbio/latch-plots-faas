@@ -1,0 +1,25 @@
+{
+  "id": "kidney_ic_pc_spatial_adjacency_v1",
+  "task": "Using the provided annotated AnnData (same x, y centroids), quantify spatial adjacency between intercalated cells (IC; labels 'ICA' or 'ICB') and principal cells (PC). For each IC, find its nearest PC and compute the IC→PC distance in microns. Save a CSV named `ic_to_pc_nn.csv` with columns: `cell_id_ic, nearest_pc_id, distance_um`. Then return EXACTLY the following JSON block summarizing adjacency:\n<EVAL_ANSWER>\n{\n  \"median_ic_to_pc_um\": 0.0,\n  \"p90_ic_to_pc_um\": 0.0,\n  \"pct_ic_within_15um\": 0.0,\n  \"pct_ic_mixed_within_55um\": 0.0,\n  \"adjacency_pass\": true\n}\n</EVAL_ANSWER>\n\nNotes:\n- Treat 'ICA' and 'ICB' as IC cells; 'PC' as principal cells.\n- Distances are Euclidean in microns using the provided centroids.\n- `pct_ic_within_15um` = 100 * fraction of IC cells whose nearest PC is ≤ 15 µm.\n- `pct_ic_mixed_within_55um` = 100 * fraction of IC cells that have at least one PC within 55 µm.\n- If no IC or no PC cells exist, set all summary metrics to 0 and `adjacency_pass` to false.\n",
+  "data_node": [
+    "latch://38438.account/Scratch/xenium/evals/evals_output/kidney_agent_annotated_20_cells.h5ad"
+  ],
+  "grader": {
+    "type": "spatial_adjacency_simple",
+    "config": {
+      "scoring": {
+        "pass_thresholds": {
+          "max_median_ic_to_pc_um": 25.0,
+          "max_p90_ic_to_pc_um": 80.0,
+          "min_pct_ic_within_15um": 60.0,
+          "min_pct_ic_mixed_within_55um": 60.0
+        },
+        "description": "Pass if IC→PC median distance ≤ 25 µm, 90th percentile ≤ 80 µm, ≥ 60% of IC have a PC within 15 µm, and ≥ 60% of IC have at least one PC within 55 µm."
+      },
+      "artifacts": {
+        "required_csv": "ic_to_pc_nn.csv",
+        "schema": ["cell_id_ic", "nearest_pc_id", "distance_um"]
+      }
+    }
+  }
+}
