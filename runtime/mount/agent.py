@@ -654,6 +654,28 @@ class AgentHarness:
                 "deleted_count": deleted_count,
             }
 
+        async def rename_notebook(args: dict) -> dict:
+            title = args["title"]
+            print(f"[tool] rename_notebook title={title}")
+            params = {"title": title}
+            
+            result = await self.atomic_operation("rename_notebook", params)
+            if result.get("status") == "success":
+                new_title = result.get("title", title)
+                msg = f"Notebook renamed to '{new_title}'"
+                return {
+                    "tool_name": "rename_notebook",
+                    "success": True,
+                    "summary": msg,
+                    "title": new_title,
+                }
+
+            return {
+                "tool_name": "rename_notebook",
+                "summary": f"Failed to rename notebook: {result.get('error', 'Unknown error')}",
+                "success": False,
+            }
+
         async def set_widget(args: dict) -> dict:
             key = args.get("key")
             action_summary = args.get("action_summary")
@@ -1249,6 +1271,19 @@ class AgentHarness:
             },
         })
         self.tool_map["delete_all_cells"] = delete_all_cells
+
+        self.tools.append({
+            "name": "rename_notebook",
+            "description": "Rename the current plot notebook.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string", "description": "New notebook title (<=6 words, Title Case)"},
+                },
+                "required": ["title"],
+            },
+        })
+        self.tool_map["rename_notebook"] = rename_notebook
 
         self.tools.append({
             "name": "submit_response",
@@ -2118,10 +2153,11 @@ class AgentHarness:
             context = context_result.get("context", {})
             self.latest_notebook_context = context
 
+            notebook_title = context.get("notebook_title")
             cell_count = context.get("cell_count", 0)
             cells = context.get("cells", [])
 
-            cell_lines = ["# Notebook Cells", f"\nTotal cells: {cell_count}\n"]
+            cell_lines = [f"# Notebook Cells for {notebook_title}, Total cells: {cell_count}\n"]
 
             for cell in cells:
                 index = cell.get("index", "?")
