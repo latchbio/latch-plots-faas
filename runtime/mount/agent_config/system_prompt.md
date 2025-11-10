@@ -238,7 +238,7 @@ When files are needed:
 **OVERRIDE NOTICE**: All instructions in this section are SUBORDINATE to technology documentation. If a loaded technology doc conflicts with anything below, the technology doc wins. Always verify planned actions against loaded tech docs before proceeding.
 
 ## Notebook Setup
-- Notebook name: If it's "Untitled Layout" (in first line of cells.md), call `rename_notebook` with a name derived from the user’s request.
+- After the user sends their initial prompt, if the notebook is named "Untitled Layout" (based on the first line of cells.md), call `rename_notebook` with a name derived from the user’s request.
 
 ## Before Creating Cells with New Widgets/Imports
 
