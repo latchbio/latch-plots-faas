@@ -441,6 +441,39 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
 
                 continue
 
+            elif msg["type"] == "execute_code_response" and "agent_tx_id" in msg:
+                tx_id = msg.get("agent_tx_id")
+
+                if a_proc.conn_a is not None:
+                    print(f"[entrypoint] Routing execute_code response to agent (tx_id={tx_id})")
+                    await a_proc.conn_a.send({
+                        "type": "agent_action_response",
+                        "tx_id": tx_id,
+                        "status": msg.get("status", "error"),
+                        "result": msg.get("result"),
+                        "stdout": msg.get("stdout"),
+                        "stderr": msg.get("stderr"),
+                        "exception": msg.get("exception"),
+                        "error": msg.get("error")
+                    })
+
+                continue
+
+            elif msg["type"] == "get_global_info_response" and "agent_tx_id" in msg:
+                tx_id = msg.get("agent_tx_id")
+
+                if a_proc.conn_a is not None:
+                    print(f"[entrypoint] Routing get_global_info response to agent (tx_id={tx_id})")
+                    await a_proc.conn_a.send({
+                        "type": "agent_action_response",
+                        "tx_id": tx_id,
+                        "status": msg.get("status", "error"),
+                        "info": msg.get("info"),
+                        "error": msg.get("error")
+                    })
+
+                continue
+
             await plots_ctx_manager.broadcast_message(orjson.dumps(msg).decode())
 
         except Exception:
@@ -485,6 +518,46 @@ async def handle_agent_messages(conn_a: SocketIo) -> None:
                 })
             else:
                 print("[entrypoint] Kernel not connected, cannot route reactivity request")
+                await conn_a.send({
+                    "type": "agent_action_response",
+                    "tx_id": msg.get("tx_id"),
+                    "status": "error",
+                    "error": "Kernel not connected"
+                })
+            continue
+
+        if msg_type == "agent_action" and msg.get("action") == "execute_code":
+            if k_proc.conn_k is not None:
+                tx_id = msg.get("tx_id")
+                code = msg.get("params", {}).get("code", "")
+                print(f"[entrypoint] Routing execute_code to kernel (tx_id={tx_id})")
+
+                await k_proc.conn_k.send({
+                    "type": "execute_code",
+                    "code": code,
+                    "agent_tx_id": tx_id
+                })
+            else:
+                await conn_a.send({
+                    "type": "agent_action_response",
+                    "tx_id": msg.get("tx_id"),
+                    "status": "error",
+                    "error": "Kernel not connected"
+                })
+            continue
+
+        if msg_type == "agent_action" and msg.get("action") == "get_global_info":
+            if k_proc.conn_k is not None:
+                tx_id = msg.get("tx_id")
+                key = msg.get("params", {}).get("key", "")
+                print(f"[entrypoint] Routing get_global_info to kernel (tx_id={tx_id})")
+
+                await k_proc.conn_k.send({
+                    "type": "get_global_info",
+                    "key": key,
+                    "agent_tx_id": tx_id
+                })
+            else:
                 await conn_a.send({
                     "type": "agent_action_response",
                     "tx_id": msg.get("tx_id"),

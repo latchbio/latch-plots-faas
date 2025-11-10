@@ -1068,4 +1068,3 @@ Good names prevent accidental reuse and loops:
 - `tmp`, `data`, `state`
 
 **Best Practice:** Create a new signal for each stage of analysis (e.g., `adata_qc` → `adata_clustered` → `adata_annotated`) instead of constantly overwriting the same signal.
-

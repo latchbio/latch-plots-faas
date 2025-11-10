@@ -2105,6 +2105,93 @@ class AgentHarness:
         })
         self.tool_map["bash"] = bash
 
+        async def execute_code(args: dict) -> dict:
+            code = args.get("code")
+            if code is None:
+                return {
+                    "tool_name": "execute_code",
+                    "success": False,
+                    "summary": "No code provided"
+                }
+
+            print(f"[tool] execute_code: {code[:50]}...")
+
+            result = await self.atomic_operation("execute_code", {"code": code})
+
+            if result.get("status") == "success":
+                return {
+                    "tool_name": "execute_code",
+                    "success": True,
+                    "summary": "Code executed successfully",
+                    "result": result.get("result"),
+                    "stdout": result.get("stdout"),
+                    "stderr": result.get("stderr"),
+                }
+
+            return {
+                "tool_name": "execute_code",
+                "success": False,
+                "summary": f"Execution failed: {result.get('error', 'Unknown error')}",
+                "exception": result.get("exception"),
+                "stdout": result.get("stdout"),
+                "stderr": result.get("stderr"),
+            }
+
+        self.tools.append({
+            "name": "execute_code",
+            "description": "Execute arbitrary Python code in the notebook kernel and return the result, stdout, stderr, and any exceptions. Use this to test imports, print values, or run simple inspection code.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "code": {"type": "string", "description": "Python code to execute"}
+                },
+                "required": ["code"]
+            }
+        })
+        self.tool_map["execute_code"] = execute_code
+
+        async def get_global_info(args: dict) -> dict:
+            key = args.get("key")
+            if key is None:
+                return {
+                    "tool_name": "get_global_info",
+                    "success": False,
+                    "summary": "No key provided"
+                }
+
+            print(f"[tool] get_global_info: {key}")
+
+            result = await self.atomic_operation("get_global_info", {"key": key})
+
+            if result.get("status") == "success":
+                info = result.get("info", {})
+                return {
+                    "tool_name": "get_global_info",
+                    "success": True,
+                    "summary": f"Retrieved info for global '{key}'",
+                    "key": key,
+                    "info": info
+                }
+
+            return {
+                "tool_name": "get_global_info",
+                "success": False,
+                "summary": f"Failed to get global info: {result.get('error', 'Unknown error')}"
+            }
+
+        self.tools.append({
+            "name": "get_global_info",
+            "description": "Get rich information about a specific global variable including its type, shape, columns, dtypes, etc. Especially useful for DataFrames and AnnData objects.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "key": {"type": "string", "description": "Name of the global variable to inspect"}
+                },
+                "required": ["key"]
+            }
+        })
+        self.tool_map["get_global_info"] = get_global_info
+
         async def refresh_cells_context(args: dict) -> dict:
             context_result = await self.atomic_operation("get_context")
 

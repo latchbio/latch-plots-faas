@@ -7,6 +7,7 @@ if __name__ == "__main__":
 
 import ast
 import asyncio
+import io
 import math
 import pprint
 import re
@@ -16,6 +17,7 @@ import sys
 import traceback
 from base64 import b64decode
 from collections import defaultdict
+from contextlib import redirect_stderr, redirect_stdout
 from copy import copy, deepcopy
 from dataclasses import asdict, dataclass, field, fields
 from io import TextIOWrapper
@@ -1129,6 +1131,40 @@ class Kernel:
 
         return res
 
+    async def _exec_code_simple(self, code: str, filename: str = "<code>") -> dict:
+        stdout_capture = io.StringIO()
+        stderr_capture = io.StringIO()
+        result_value = None
+        exception_msg = None
+        error_msg = None
+
+        try:
+            with redirect_stdout(stdout_capture), redirect_stderr(stderr_capture):
+                result_value = eval(  # noqa: S307
+                    compile(
+                        code,
+                        filename=filename,
+                        mode="exec",
+                        flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT,
+                    ),
+                    self.k_globals
+                )
+
+                if asyncio.iscoroutine(result_value):
+                    result_value = await result_value
+        except Exception as e:
+            exception_msg = traceback.format_exc()
+            error_msg = str(e)
+
+        return {
+            "status": "success" if exception_msg is None else "error",
+            "result": str(result_value) if result_value is not None else "",
+            "stdout": stdout_capture.getvalue(),
+            "stderr": stderr_capture.getvalue(),
+            "exception": exception_msg,
+            "error": error_msg,
+        }
+
     async def exec(self, *, cell_id: str, code: str, _from_stub: bool = False) -> None:
         filename = f"<cell {cell_id}>"
 
@@ -1481,48 +1517,57 @@ class Kernel:
             }
         )
 
+    @staticmethod
+    def _get_single_global_info(value: object) -> dict:
+        if isinstance(value, Signal):
+            value = value.sample()
+
+        if isinstance(value, pd.DataFrame):
+            return {
+                "type": "DataFrame",
+                "columns": list(value.columns)[:50],
+                "dtypes": {
+                    str(k): str(v) for k, v in list(value.dtypes.items())[:50]
+                },
+                "column_preview_truncated": len(value.columns) > 50,
+                "shape": value.shape,
+            }
+
+        if isinstance(value, pd.Series):
+            return {
+                "type": "Series",
+                "dtype": str(value.dtype),
+                "shape": value.shape,
+            }
+
+        if isinstance(value, ad.AnnData):
+            obs_dtypes_full = {str(k): str(v) for k, v in value.obs.dtypes.items()}
+            var_dtypes_full = (
+                {str(k): str(v) for k, v in value.var.dtypes.items()}
+                if hasattr(value.var, "dtypes")
+                else {}
+            )
+
+            return {
+                "type": "AnnData",
+                "n_obs": value.n_obs,
+                "n_vars": value.n_vars,
+                "obs_dtypes": dict(list(obs_dtypes_full.items())[:50]),
+                "obs_dtypes_truncated": len(obs_dtypes_full) > 50,
+                "var_dtypes": dict(list(var_dtypes_full.items())[:50]),
+                "var_dtypes_truncated": len(var_dtypes_full) > 50,
+                "obsm_keys": list(value.obsm.keys()) if hasattr(value, "obsm") else [],
+            }
+
+        return {
+            "type": type(value).__name__,
+            "repr": str(value)[:1000]
+        }
+
     async def send_globals_summary(self, agent_tx_id: str | None = None) -> None:
         summary = {}
         for key, value in self.k_globals.items():
-            if isinstance(value, Signal):
-                value = value.sample()
-
-            if isinstance(value, pd.DataFrame):
-                summary[key] = {
-                    "type": "DataFrame",
-                    "columns": list(value.columns)[:50],
-                    "dtypes": {
-                        str(k): str(v) for k, v in list(value.dtypes.items())[:50]
-                    },
-                    "column_preview_truncated": len(value.columns) > 50,
-                    "shape": value.shape,
-                }
-            elif isinstance(value, pd.Series):
-                summary[key] = {
-                    "type": "Series",
-                    "dtype": str(value.dtype),
-                    "shape": value.shape,
-                }
-            elif isinstance(value, ad.AnnData):
-                obs_dtypes_full = {str(k): str(v) for k, v in value.obs.dtypes.items()}
-                var_dtypes_full = (
-                    {str(k): str(v) for k, v in value.var.dtypes.items()}
-                    if hasattr(value.var, "dtypes")
-                    else {}
-                )
-
-                summary[key] = {
-                    "type": "AnnData",
-                    "n_obs": value.n_obs,
-                    "n_vars": value.n_vars,
-                    "obs_dtypes": dict(list(obs_dtypes_full.items())[:50]),
-                    "obs_dtypes_truncated": len(obs_dtypes_full) > 50,
-                    "var_dtypes": dict(list(var_dtypes_full.items())[:50]),
-                    "var_dtypes_truncated": len(var_dtypes_full) > 50,
-                    "obsm_keys": list(value.obsm.keys()) if hasattr(value, "obsm") else [],
-                }
-            else:
-                summary[key] = {"type": type(value).__name__}
+            summary[key] = self._get_single_global_info(value)
 
         msg = {"type": "globals_summary", "summary": summary}
         if agent_tx_id is not None:
@@ -1910,6 +1955,39 @@ class Kernel:
 
         if msg["type"] == "save_kernel_snapshot":
             await self.save_kernel_snapshot()
+            return
+
+        if msg["type"] == "execute_code":
+            agent_tx_id = msg.get("agent_tx_id")
+            code = msg.get("code", "")
+            result = await self._exec_code_simple(code, filename="<agent_code>")
+
+            await self.send({
+                "type": "execute_code_response",
+                "agent_tx_id": agent_tx_id,
+                **result
+            })
+            return
+
+        if msg["type"] == "get_global_info":
+            agent_tx_id = msg.get("agent_tx_id")
+            key = msg.get("key", "")
+
+            if key not in self.k_globals:
+                await self.send({
+                    "type": "get_global_info_response",
+                    "agent_tx_id": agent_tx_id,
+                    "status": "error",
+                    "error": f"Global variable '{key}' not found"
+                })
+                return
+
+            await self.send({
+                "type": "get_global_info_response",
+                "agent_tx_id": agent_tx_id,
+                "status": "success",
+                "info": self._get_single_global_info(self.k_globals[key])
+            })
             return
 
         if msg["type"] == "h5":
