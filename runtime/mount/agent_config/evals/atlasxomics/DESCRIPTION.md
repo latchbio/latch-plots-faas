@@ -338,7 +338,7 @@ For each evaluation you will find the biological motivation, the analytic goal, 
 
   ```json
   {
-    "cell_types_predicted": ["5"]
+    "cell_types_predicted": ["4", "5", "6"]
   }
   ```
 
@@ -430,3 +430,32 @@ For each evaluation you will find the biological motivation, the analytic goal, 
 ---
 
 ## Differential Accessibility (`atlasxomics/de`)
+
+### Pseudobulk differential comparison
+
+- **Eval**: [1_vs_all_pseudobulk_1](de/pseudobulk.json)
+- **What & Why**: Pseudobulk strategies aggregate single-cell accessibility counts and test for differential activity between groups (e.g., a focal cluster versus all others). This mirrors bulk ATAC analyses while retaining cluster resolution, revealing cluster-specific regulatory programs.
+- **Goal**: Compare cluster 5 against all other clusters, identify the top 10 upregulated genes (or peaks) in cluster 5, and return those gene names in ranked order.
+- **Input**: `latch://38438.account/AtlasxOmics/Kosta/Kostallari_SOW313_ATAC/combined_sm_ge.h5ad`
+- **Expected Output**:
+
+  ```json
+  {
+    "top_marker_genes": [
+      "IFNA16",
+      "MIR520D",
+      "KRTAP2-3",
+      "MIR1238",
+      "KRTAP22-1",
+      "OPN1MW",
+      "MIR521-2",
+      "CD79A",
+      "PPIAL4C",
+      "KRTAP22-2"
+    ]
+  }
+  ```
+
+- **Ground Truth**: The ranked upregulated genes shown above.
+- **Tolerance**: Jaccard similarity between the agent’s top-10 set and the ground-truth set must be ≥ 0.8 (i.e., at least 8 of the 10 genes must match).
+- **Core Test**: Ensures the agent can execute a one-vs-all pseudobulk comparison, identify the dominant cluster 5 signatures, and return the canonical upregulated genes.
