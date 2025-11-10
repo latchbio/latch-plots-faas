@@ -2124,7 +2124,6 @@ class AgentHarness:
                     "success": True,
                     "summary": "Code executed successfully",
                     "code": code,
-                    "result": result.get("result"),
                     "stdout": result.get("stdout"),
                     "stderr": result.get("stderr"),
                 }
