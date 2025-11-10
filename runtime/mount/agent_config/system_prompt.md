@@ -238,8 +238,7 @@ When files are needed:
 **OVERRIDE NOTICE**: All instructions in this section are SUBORDINATE to technology documentation. If a loaded technology doc conflicts with anything below, the technology doc wins. Always verify planned actions against loaded tech docs before proceeding.
 
 ## Notebook Setup
-
-- Notebook title: If it's "Untitled Layout" (in first line of cells.md), call `rename_notebook` with a title derived from the user’s request.
+- Notebook name: If it's "Untitled Layout" (in first line of cells.md), call `rename_notebook` with a name derived from the user’s request.
 
 ## Before Creating Cells with New Widgets/Imports
 
@@ -684,7 +683,6 @@ The notebook state is available in three context files. These files are initiali
 - Checking cell execution status
 
 **Refresh tool:** `refresh_cells_context`
-- Returns notebook title
 - Returns updated cell count
 - Returns context path to read result from
 - Writes latest cell structure to cells.md
