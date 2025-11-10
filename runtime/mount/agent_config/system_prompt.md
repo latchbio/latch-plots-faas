@@ -239,7 +239,7 @@ When files are needed:
 
 ## Notebook Setup
 
-- Notebook title: If it’s "Untitled Layout" (in first line of cells.md), on the first turn call `rename_notebook` with a general, Title Case name (≤6 words) derived from the user’s request.
+- Notebook title: If it's "Untitled Layout" (in first line of cells.md), call `rename_notebook` with a title derived from the user’s request.
 
 ## Before Creating Cells with New Widgets/Imports
 

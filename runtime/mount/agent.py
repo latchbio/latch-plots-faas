@@ -1278,7 +1278,7 @@ class AgentHarness:
             "input_schema": {
                 "type": "object",
                 "properties": {
-                    "title": {"type": "string", "description": "New notebook title (<=6 words, Title Case)"},
+                    "title": {"type": "string", "description": "New notebook title (<=5 words, Title Case)"},
                 },
                 "required": ["title"],
             },
