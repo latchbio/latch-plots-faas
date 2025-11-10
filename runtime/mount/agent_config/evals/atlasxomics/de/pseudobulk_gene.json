@@ -1,0 +1,28 @@
+{
+    "id": "1_vs_all_pseudobulk_gene_1",
+    "task": "Perform differential comparison between to find differentially expressed genes between group A (cluster 5) and group B (all other clusters). Return a list of the top 10 upregulated genes in group A.",
+    "data_node":["latch://38438.account/AtlasxOmics/Kosta/Kostallari_SOW313_ATAC/combined_sm_ge.h5ad"],
+    "grader": {
+      "type": "label_set_jaccard",
+      "config": {
+        "ground_truth_labels": [
+          "IFNA16",
+          "MIR520D",
+          "KRTAP2-3",
+          "MIR1238",
+          "KRTAP22-1",
+          "OPN1MW",
+          "MIR521-2",
+          "CD79A",
+          "PPIAL4C",
+          "KRTAP22-2"
+        ],
+        "scoring": {
+          "method": "jaccard_index",
+          "set_definition": "Compare the SET of predicted labels against the ground_truth_labels.",
+          "pass_threshold": 0.8,
+          "description": "Jaccard ≥ 0.80 required to pass"
+        }
+      }
+    }
+  }

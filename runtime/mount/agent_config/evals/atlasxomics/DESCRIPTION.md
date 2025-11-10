@@ -342,9 +342,9 @@ For each evaluation you will find the biological motivation, the analytic goal, 
   }
   ```
 
-- **Ground Truth**: Cluster “5”.
+- **Ground Truth**: Clusters “4”, “5”, and “6”.
 - **Tolerance**: Jaccard similarity must equal 1.0.
-- **Core Test**: Ensures the agent pinpoints the known hepatic stellate cluster without spurious labels.
+- **Core Test**: Ensures the agent pinpoints all hepatic stellate clusters without spurious labels.
 
 ### Top-20 marker recovery panels
 
@@ -431,11 +431,11 @@ For each evaluation you will find the biological motivation, the analytic goal, 
 
 ## Differential Accessibility (`atlasxomics/de`)
 
-### Pseudobulk differential comparison
+### Pseudobulk gene differential comparison
 
-- **Eval**: [1_vs_all_pseudobulk_1](de/pseudobulk.json)
-- **What & Why**: Pseudobulk strategies aggregate single-cell accessibility counts and test for differential activity between groups (e.g., a focal cluster versus all others). This mirrors bulk ATAC analyses while retaining cluster resolution, revealing cluster-specific regulatory programs.
-- **Goal**: Compare cluster 5 against all other clusters, identify the top 10 upregulated genes (or peaks) in cluster 5, and return those gene names in ranked order.
+- **Eval**: [1_vs_all_pseudobulk_gene_1](de/pseudobulk_gene.json)
+- **What & Why**: Aggregating accessibility counts within a cluster (pseudobulk) stabilises signal for differential tests. Identifying the top genes upregulated in cluster 5 highlights lineage-specific regulatory programs.
+- **Goal**: Compare cluster 5 against all other clusters and return the top 10 genes upregulated in cluster 5.
 - **Input**: `latch://38438.account/AtlasxOmics/Kosta/Kostallari_SOW313_ATAC/combined_sm_ge.h5ad`
 - **Expected Output**:
 
@@ -456,6 +456,35 @@ For each evaluation you will find the biological motivation, the analytic goal, 
   }
   ```
 
-- **Ground Truth**: The ranked upregulated genes shown above.
-- **Tolerance**: Jaccard similarity between the agent’s top-10 set and the ground-truth set must be ≥ 0.8 (i.e., at least 8 of the 10 genes must match).
-- **Core Test**: Ensures the agent can execute a one-vs-all pseudobulk comparison, identify the dominant cluster 5 signatures, and return the canonical upregulated genes.
+- **Ground Truth**: The 10-gene list shown above.
+- **Tolerance**: Jaccard similarity with the ground-truth set must be ≥ 0.80 (at least 8 of 10 genes must match).
+- **Core Test**: Confirms the agent can perform a gene-level pseudobulk comparison and recover canonical upregulated genes.
+
+### Pseudobulk motif differential comparison
+
+- **Eval**: [1_vs_all_pseudobulk_motif_1](de/pseudobulk_motif.json)
+- **What & Why**: Motif-level pseudobulk analysis reveals transcription factor programs enriched in a cluster. Recovering the expected motifs for cluster 5 verifies correct motif aggregation and ranking.
+- **Goal**: Compare cluster 5 against all other clusters and return the top 10 motifs upregulated in cluster 5.
+- **Input**: `latch://38438.account/AtlasxOmics/Kosta/Kostallari_SOW313_ATAC/combined_sm_ge.h5ad`
+- **Expected Output**:
+
+  ```json
+  {
+    "top_marker_genes": [
+      "SPI1_322",
+      "ELF2_326",
+      "BCL11A_194",
+      "BCL11B_825",
+      "SPIB_336",
+      "KLF5_175",
+      "ZNF148_222",
+      "MAZ_178",
+      "KLF4_208",
+      "PURA_813"
+    ]
+  }
+  ```
+
+- **Ground Truth**: The 10 motifs listed above.
+- **Tolerance**: Jaccard similarity with the ground-truth set must be ≥ 0.80 (at least 8 of 10 motifs must match).
+- **Core Test**: Verifies the agent can aggregate motif accessibility, run pseudobulk comparisons, and report the expected motif signatures.
