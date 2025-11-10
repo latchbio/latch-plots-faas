@@ -2,9 +2,9 @@
 
 **Core concept**
 
-* Every widget is a Python object. Assign to a variable; the live user selection is at `.value`.
-* Widgets render in **call order**.
-* **Reactive execution:** any cell that touches `some_widget.value` re-runs when that value changes. To *read once without reactivity*, use `some_widget._signal.sample()`.
+- Every widget is a Python object. Assign to a variable; the live user selection is at `.value`.
+- Widgets render in **call order**.
+- **Reactive execution:** any cell that touches `some_widget.value` re-runs when that value changes. To _read once without reactivity_, use `some_widget._signal.sample()`.
 
 **Common patterns**
 
@@ -17,13 +17,27 @@ opt.value  # -> "a" | "b" | "c"
 # Latch Data file -> pandas
 from lplots.widgets.ldata import w_ldata_picker
 import pandas as pd
-csv = w_ldata_picker(label="CSV", default="latch:///path/file.csv")
+csv = w_ldata_picker(
+    label="CSV",
+    default="latch:///path/file.csv",
+    file_type="file"  # "file", "dir", or "any"
+)
 df = pd.read_csv(csv.value.download())  # .download() yields local path
 ```
 
 ---
 
 ## Inputs
+
+**Latch Data browser**
+
+```python
+from lplots.widgets.ldata import w_ldata_browser
+from latch.ldata.path import LPath
+# Displays contents of a specific Latch Data directory
+browser = w_ldata_browser(label="Browse Files", dir="latch:///my_dir")
+# browser.value returns the LPath to the directory
+```
 
 **Datasource picker**
 
@@ -35,7 +49,7 @@ from lplots.widgets.datasource import w_datasource_picker
 ds = w_datasource_picker(label="Datasource", default={"type":"ldata","node_id":"95902"})
 ```
 
-**Registry table → dataframe**
+**Registry table picker → dataframe**
 
 ```python
 from lplots.widgets.registry import w_registry_table_picker
@@ -44,20 +58,59 @@ t = w_registry_table_picker(label="Registry table")
 if (tid := t.value): df = Table(id=tid).get_dataframe()
 ```
 
+**Registry table viewer**
+
+```python
+from lplots.widgets.registry import w_registry_table
+# Display a specific Registry table with row selection
+rt = w_registry_table(label="Sample Data", table_id="12345")
+# rt.value returns {"table": Table, "selected_rows": list[Record]}
+```
+
+**Dataframe picker**
+
+```python
+from lplots.widgets.dataframe import w_dataframe_picker
+# Select from DataFrames in the current notebook kernel
+df_picker = w_dataframe_picker(label="Select DataFrame")
+selected_df = df_picker.value  # Returns the selected DataFrame
+```
+
 **Text / Selectors**
 
 ```python
 from lplots.widgets.text import w_text_input, w_text_output
-name = w_text_input(label="Name", default="Alice"); w_text_output(content="Hi " + name.value)
+name = w_text_input(label="Name", default="Alice")
+# w_text_output supports appearance with message_box: "danger" | "info" | "success" | "warning" | "primary" | "neutral"
+w_text_output(content="Hi " + name.value, appearance={"message_box": "success"})
+
+from lplots.widgets.select import w_select
+sel = w_select(label="Choose", options=["a", "b", "c"], default="a", required=False)
 
 from lplots.widgets.multiselect import w_multi_select
-ms = w_multi_select(label="Tags", options=["alpha","bravo","charlie"])
+ms = w_multi_select(label="Tags", options=["alpha","bravo","charlie"], default=["alpha"], required=False)
 
 from lplots.widgets.radio import w_radio_group
-rg = w_radio_group(label="One", options=[1,2,3])
+rg = w_radio_group(label="One", options=[1,2,3], default=1, direction="horizontal", required=False)  # direction: "horizontal" | "vertical"
 
 from lplots.widgets.checkbox import w_checkbox
-cb = w_checkbox(label="Flag")
+# Note: checkbox has its own appearance type with error_text and description
+cb = w_checkbox(label="Flag", default=False, appearance={"error_text": "Required", "description": "Check to enable"})
+
+from lplots.widgets.slider import w_number_slider_input
+# Additional params: marks, tooltip_formatter, scale_type
+slider = w_number_slider_input(
+    label="Threshold",
+    default=0.5,
+    min=0.0,
+    max=1.0,
+    step=0.1,
+    scale_type="linear",  # or "logarithmic"
+    tooltip_formatter="percentage"  # "number", "percentage", "currency", "decimal", "integer", "scientific", "bytes"
+)
+
+from lplots.widgets.slider import w_range_slider_input
+range_slider = w_range_slider_input(label="Range", default=(0.2, 0.8), min=0.0, max=1.0, step=0.1)
 ```
 
 **Appearance (available on most inputs)**
@@ -86,8 +139,8 @@ with w_grid(columns=12) as g:
     g.add(item=..., col_span=4, row_span=1)
 ```
 
-* Layouts can be **nested** (rows inside grid cells, etc.).
-* Layouts are reactive to child updates.
+- Layouts can be **nested** (rows inside grid cells, etc.).
+- Layouts are reactive to child updates.
 
 ---
 
@@ -125,13 +178,23 @@ viewer = w_h5(
 )
 v = viewer.value
 # v["lasso_points"]: list[list[(x,y)]], v["lasso_points_obsm"]: str | None
+# v["image_alignment_step"]: current step in image alignment workflow
+```
+
+### **AnnData widget**
+
+```python
+from lplots.widgets.ann_data import w_ann_data
+# Display or interact with AnnData object
+ann_widget = w_ann_data(ann_data=adata, readonly=False)
+# ann_widget.value returns the AnnData object
 ```
 
 ### **IGV Viewer (BAM, VCF, BED, BigWig, etc.)**
 
 ```python
 from lplots.widgets.igv import w_igv, IGVOptions
-from latch.account import Account 
+from latch.account import Account
 
 workspace_id = Account.current().id
 
@@ -160,28 +223,31 @@ w_igv(options=options)
 Dictionary following [IGV.js Browser Creation](https://igv.org/doc/igvjs/#Browser-Creation) and [Tracks](https://igv.org/doc/igvjs/#tracks/Tracks) schemas.
 
 _Common Browser Options_
-- `genome` — Reference genome ID (e.g. "hg38", "mm10").  
-- `locus` — Initial genomic locus (e.g. "chr1:100000-200000").  
-- `tracks` — List of track configurations.  
-- `showNavigation` — Toggle navigation bar (default: True).  
-- `showIdeogram` — Toggle ideogram display (default: True).  
-- `showRuler` — Show base-pair ruler (default: True).  
-- `readOnly` — Disable editing (default: False).  
+
+- `genome` — Reference genome ID (e.g. "hg38", "mm10").
+- `locus` — Initial genomic locus (e.g. "chr1:100000-200000").
+- `tracks` — List of track configurations.
+- `showNavigation` — Toggle navigation bar (default: True).
+- `showIdeogram` — Toggle ideogram display (default: True).
+- `showRuler` — Show base-pair ruler (default: True).
+- `readOnly` — Disable editing (default: False).
 
 _Common Track Options_
-- `name` — Display name of the track.  
-- `type` — Track type (`alignment`, `variant`, `annotation`, `wig`).  
-- `url` — Path or URL to data file (`latch://` or public).  
-- `indexURL` — Path or URL to index file (`.bai`, `.tbi`, etc.).  
-- `color` — Track color (name, hex, or rgb).  
-- `height` — Track height in pixels.  
-- `displayMode` — "EXPANDED" (default) or "SQUISHED".  
-- `autoscale` — Automatically adjust y-axis (for coverage tracks).  
-- `visibilityWindow` — Max visible region in base pairs before hiding (default: 100000).  
+
+- `name` — Display name of the track.
+- `type` — Track type (`alignment`, `variant`, `annotation`, `wig`).
+- `url` — Path or URL to data file (`latch://` or public).
+- `indexURL` — Path or URL to index file (`.bai`, `.tbi`, etc.).
+- `color` — Track color (name, hex, or rgb).
+- `height` — Track height in pixels.
+- `displayMode` — "EXPANDED" (default) or "SQUISHED".
+- `autoscale` — Automatically adjust y-axis (for coverage tracks).
+- `visibilityWindow` — Max visible region in base pairs before hiding (default: 100000).
 
 _Usage Notes_
-- Accepts both **Latch paths (`latch://...`)** and public URLs.  
-- Automatically generates index files if missing.  
+
+- Accepts both **Latch paths (`latch://...`)** and public URLs.
+- Automatically generates index files if missing.
 
 ### **Workflow Output Widget (`w_workflow`)**
 
@@ -208,39 +274,42 @@ if execution is not None:
 ```
 
 **Retrieve workflow outputs and results**
-- Must start with `next(execution.poll())` to poll for the latest results. 
+
+- Must start with `next(execution.poll())` to poll for the latest results.
 
 ```python
 next(execution.poll())
-if execution.status in {"SUCCEEDED", "FAILED", "ABORTED"}: 
+if execution.status in {"SUCCEEDED", "FAILED", "ABORTED"}:
     result = await execution.wait()
     workflow_outputs = list(result.output.values()) #  List[LatchDir | LatchFile]
-else: 
+else:
     print(f"Execution {execution.status}")
 ```
 
 #### **Widget Parameters**
 
-- **label** (`str`, required): Button label.  
-- **wf_name** (`str`, required): Name of the workflow to execute.  
-- **params** (`dict`, required): Dictionary of input parameters.  
-- **version** (`str | None`, optional): Workflow version; defaults to latest.  
-- **readonly** (`bool`, optional): Disable button if `True`. Defaults to `False`.  
-- **key** (`str`, optional): Unique widget identifier.  
+- **label** (`str`, required): Button label.
+- **wf_name** (`str`, required): Name of the workflow to execute.
+- **params** (`dict`, required): Dictionary of input parameters.
+- **version** (`str | None`, optional): Workflow version; defaults to latest.
+- **readonly** (`bool`, optional): Disable button if `True`. Defaults to `False`.
+- **key** (`str`, optional): Unique widget identifier.
 
 #### **Class: `Execution`**
 
 Represents a running or completed workflow execution.
 
 **Attributes**
-- `id` (`str`): Unique execution ID.  
-- `python_outputs` (`dict[str, type]`): Output names mapped to expected Python types.  
-- `status` (`ExecutionStatus`): Current status (`RUNNING`, `FAILED`, `SUCCEEDED`, etc.).  
-- `outputs_url` (`str | None`): URL to outputs, if available.  
-- `flytedb_id` (`str | None`): FlyteDB ID (updated during polling).  
+
+- `id` (`str`): Unique execution ID.
+- `python_outputs` (`dict[str, type]`): Output names mapped to expected Python types.
+- `status` (`ExecutionStatus`): Current status (`RUNNING`, `FAILED`, `SUCCEEDED`, etc.).
+- `outputs_url` (`str | None`): URL to outputs, if available.
+- `flytedb_id` (`str | None`): FlyteDB ID (updated during polling).
 
 **Methods**
-- `poll()`: Generator that continuously polls execution status.  
+
+- `poll()`: Generator that continuously polls execution status.
 - `wait() -> CompletedExecution | None`:  
   Asynchronously waits for execution to complete and returns a `CompletedExecution` object.  
   Returns empty output if status is `FAILED` or `ABORTED`.
@@ -250,15 +319,16 @@ Represents a running or completed workflow execution.
 Represents the final state of an execution.
 
 **Attributes**
-- `id` (`str`): Unique execution ID.  
-- `output` (`dict[str, Any]`): Processed workflow outputs (populated if succeeded).  
-- `ingress_data` (`list[LPath]`): Data written to LData during execution.  
-- `status` (`ExecutionStatus`): Final execution status.  
+
+- `id` (`str`): Unique execution ID.
+- `output` (`dict[str, Any]`): Processed workflow outputs (populated if succeeded).
+- `ingress_data` (`list[LPath]`): Data written to LData during execution.
+- `status` (`ExecutionStatus`): Final execution status.
 
 #### **Usage Notes**
 
-- The widget creates a **button** that runs the specified workflow when clicked.  
-- `workflow.value` returns an `Execution` object or `None` if not launched.  
+- The widget creates a **button** that runs the specified workflow when clicked.
+- `workflow.value` returns an `Execution` object or `None` if not launched.
 - Use `await execution.wait()` to get the final outputs as a `CompletedExecution` object.
 
 ### **Logs**
@@ -286,4 +356,4 @@ if button.value:
 
 ## Reactivity tip
 
-* Put the **data load widget** in one cell, and **consume `.value`** in a downstream cell to get automatic re-runs when the upstream selection changes. Use `._signal.sample()` in long-running cells to avoid auto re-runs.
+- Put the **data load widget** in one cell, and **consume `.value`** in a downstream cell to get automatic re-runs when the upstream selection changes. Use `._signal.sample()` in long-running cells to avoid auto re-runs.

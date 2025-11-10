@@ -117,7 +117,7 @@ Set `next_status` to indicate current state:
 
 **IF** asked a question → **THEN** `continue: false` (wait for answer)
 
-**IF** completed a plan step and next step is clear → **THEN** `continue: true` (proceed)
+**IF** completed a plan step and next step is clear → **THEN** `continue: true`
 
 **IF** all work complete → **THEN** `continue: false`, `next_status: done`
 
@@ -135,13 +135,13 @@ Set `next_status` to indicate current state:
 
 **IF** cannot proceed safely without answer → **THEN** ask ONE focused question, set `continue: false`
 
-**IF** can make reasonable default choice → **THEN** continue with default, batch questions for later
+**IF** can make reasonable default choice → **THEN** continue with default
 
-**IF** multiple questions → **THEN** ask most critical one, batch others
+**IF** multiple questions → **THEN** ask most critical one
 
 ## Documentation Decision
 
-**IF** using a widget for first time OR widget docs not in recent tool results → **THEN** grep `agent_config/context/latch_api_docs/plots_docs/widget-types.mdx` for the specific widget name
+**IF** using a widget for first time OR widget docs not in recent tool results → **THEN** grep `agent_config/context/latch_api_docs/plots_docs/widget-types.mdx` for the specific widget name. Afterwards, read using limit and offset from this file at the relevant line numbers to 
 
 **IF** using LPath methods (download, upload_from, etc.) AND lpath.md not in recent tool results → **THEN** read relevant section of `agent_config/context/latch_api_docs/lpath.md`
 
@@ -235,8 +235,6 @@ When files are needed:
 
 <execution_protocol>
 
-**OVERRIDE NOTICE**: All instructions in this section are SUBORDINATE to technology documentation. If a loaded technology doc conflicts with anything below, the technology doc wins. Always verify planned actions against loaded tech docs before proceeding.
-
 ## Before Creating Cells with New Widgets/Imports
 
 When using a widget or API for the FIRST time in the session:
@@ -247,8 +245,8 @@ When using a widget or API for the FIRST time in the session:
 
 ## Cell Creation/Editing
 
-1. Check if planned code will use widgets or LPath methods
-2. If yes and docs not in recent context: grep/read relevant documentation (`latch_api_docs/lpath.md`) first
+1. Check if planned code will use widgets, LPath, or other core Latch APIs.
+2. If yes, ALWAYS grep docs in `latch_api_docs` for APIs and then read sections using limit and offset. Afterwards, directly use the examples and API specified in the docs.
 3. Create or edit ONE cell at a time
 4. Run cell immediately after creation/edit
 5. Set `continue: false` after running
@@ -285,65 +283,24 @@ When cell finishes or plan step completes:
 - Clearly state next step
 - Update plan status
 
-## Canonical Import Patterns
+## Latch API Reference
 
-**Widgets**: All widgets are in `lplots.widgets.<category>`:
+**CRITICAL**: Before using ANY Latch API (widgets, LPath, signals), you MUST:
+1. Grep the relevant documentation file for exact import paths and signatures
+2. Read the relevant sections using offset/limit
+3. Use the exact patterns from the documentation
 
-```python
-from lplots.widgets.h5 import w_h5
-from lplots.widgets.plot import w_plot
-from lplots.widgets.table import w_table
-from lplots.widgets.text import w_text_input, w_text_output
-from lplots.widgets.ldata import w_ldata_picker
-# Pattern: lplots.widgets.<category> import w_<name>
-```
+### Available Widgets
 
-**Reactivity**: Import from `lplots.reactive` (NOT `lplots.reactivity`):
-
-```python
-from lplots.reactive import Signal
-```
-
-**Remote Files**:
-
-```python
-from latch.ldata.path import LPath
-```
-
-Check `widget-types.mdx` for the specific category and exact signature.
-
-## Available Widgets Reference
-
-When you need a widget, grep for it in widget-types.mdx. Common widgets:
+All widgets are in `lplots.widgets.<category>`. For complete examples with import paths and arguments, grep and read `agent_config/context/latch_api_docs/plots_docs/widget-types.mdx`.
 
 **Data Input:**
 - `w_ldata_picker` - Select files from Latch Data
-Example:
-```python
-from lplots.widgets.ldata import w_ldata_picker
-import pandas as pd
-csv = w_ldata_picker(label="CSV", default="latch:///path/file.csv")
-df = pd.read_csv(csv.value.download())
-```
-
+- `w_ldata_browser` - Browse Latch Data directory contents
 - `w_datasource_picker` - Select from multiple data sources
-Example:
-```python
-from lplots.widgets.datasource import w_datasource_picker
-# default is a discriminated union:
-# {"type":"ldata","node_id":str} | {"type":"registry","table_id":str} |
-# {"type":"dataframe","key":str} | {"type":"viewer","viewer_id":str}
-ds = w_datasource_picker(label="Datasource", default={"type":"ldata","node_id":"95902"})
-```
-
 - `w_registry_table_picker` - Select Registry tables
-Example:
-```python
-from lplots.widgets.registry import w_registry_table_picker
-from latch.registry.table import Table
-t = w_registry_table_picker(label="Registry table")
-if (tid := t.value): df = Table(id=tid).get_dataframe()
-```
+- `w_registry_table` - Display Registry table with row selection
+- `w_dataframe_picker` - Select DataFrames from kernel
 
 **User Input:**
 - `w_text_input`, `w_text_output` - Text input/display
@@ -351,144 +308,51 @@ if (tid := t.value): df = Table(id=tid).get_dataframe()
 - `w_multi_select` - Multiple selection
 - `w_checkbox` - Boolean checkbox
 - `w_radio_group` - Radio button group
-- `w_number_input` - Numeric input
-- `w_slider` - Numeric slider
-
-```python
-from lplots.widgets.text import w_text_input, w_text_output
-name = w_text_input(label="Name", default="Alice"); w_text_output(content="Hi " + name.value)
-
-from lplots.widgets.multiselect import w_multi_select
-ms = w_multi_select(label="Tags", options=["alpha","bravo","charlie"])
-
-from lplots.widgets.radio import w_radio_group
-rg = w_radio_group(label="One", options=[1,2,3])
-
-from lplots.widgets.checkbox import w_checkbox
-cb = w_checkbox(label="Flag")
-```
-
-**Appearance (available on most inputs)**
-
-```python
-appearance={
-  "placeholder":"…","detail":"(info)","help_text":"Help",
-  "error_text":"Error","description":"Tooltip"
-}
-```
+- `w_number_slider_input` - Numeric slider
+- `w_range_slider_input` - Range slider (two values)
+- `w_button` - Button with click handler
 
 **Visualization:**
 - `w_plot` - Display matplotlib/plotly figures
-```python
-from lplots.widgets.plot import w_plot
-plot = w_plot(label="My Plot", source=fig_or_axes_or_plotly_fig, key=None)
-```
-
 - `w_table` - Display pandas DataFrames
-```python
-from lplots.widgets.table import w_table
-table = w_table(label="Data", source=df, key=None)
-```
-
 - `w_h5` - Interactive AnnData/H5AD viewer
-```python
-from lplots.widgets.h5 import w_h5
-from latch.ldata.path import LPath
-viewer = w_h5(
-  ann_data=adata,                # or spatial_dir=LPath(...), ann_tiles=LPath(...)
-  readonly=False,
-  viewer_presets={
-    "genes_of_interest":["CD3D","CD4"],
-    "default_color_by":{"type":"obs","key":"cell_type"},
-    "default_obsm_key":"X_umap",
-    "cell_markers":{"default_size":3,"default_opacity":0.8},
-    "categorical_color_palette":["red","blue"], "continuous_color_palette":["blue","white","red"]
-  }
-)
-v = viewer.value
-# v["lasso_points"]: list[list[(x,y)]], v["lasso_points_obsm"]: str | None
-```
-
+- `w_ann_data` - AnnData object widget
 - `w_igv` - IGV genome browser
-```python
-from lplots.widgets.igv import w_igv, IGVOptions
-from latch.account import Account 
-
-workspace_id = Account.current().id
-
-latch_path = f"latch://{workspace_id}.account/Covid/covid.bam"
-index_path = f"latch://{workspace_id}.account/Covid/covid.bam.bai"
-
-options: IGVOptions = {
-    "genome": "hg38",
-    "locus": "chr1:155,100,000-155,200,000",
-    "tracks": [
-        {
-            "name": "Alignment",
-            "type": "alignment",
-            "url": latch_path,
-            "indexURL": index_path,
-            "color": "steelblue",
-            "height": 150
-        }
-    ]
-}
-
-w_igv(options=options)
-```
-
-`options` (required)
-	Dictionary following [IGV.js Browser Creation](https://igv.org/doc/igvjs/#Browser-Creation) and [Tracks](https://igv.org/doc/igvjs/#tracks/Tracks) schemas.
-
-	_Common Browser Options_
-		- `genome` — Reference genome ID (e.g. "hg38", "mm10").  
-		- `locus` — Initial genomic locus (e.g. "chr1:100000-200000").  
-		- `tracks` — List of track configurations.  
-		- `showNavigation` — Toggle navigation bar (default: True).  
-		- `showIdeogram` — Toggle ideogram display (default: True).  
-		- `showRuler` — Show base-pair ruler (default: True).  
-		- `readOnly` — Disable editing (default: False).  
-
-	_Common Track Options_
-		- `name` — Display name of the track.  
-		- `type` — Track type (`alignment`, `variant`, `annotation`, `wig`).  
-		- `url` — Path or URL to data file (`latch://` or public).  
-		- `indexURL` — Path or URL to index file (`.bai`, `.tbi`, etc.).  
-		- `color` — Track color (name, hex, or rgb).  
-		- `height` — Track height in pixels.  
-		- `displayMode` — "EXPANDED" (default) or "SQUISHED".  
-		- `autoscale` — Automatically adjust y-axis (for coverage tracks).  
-		- `visibilityWindow` — Max visible region in base pairs before hiding (default: 100000).  
-
-	_Usage Notes_
-		- Accepts both **Latch paths (`latch://...`)** and public URLs.  
-		- Automatically generates index files if missing.  
-
 - `w_logs_display` - Display logs/progress
-```python
-from lplots.widgets.logs import w_logs_display
-from lplots import submit_widget_state
-w_logs_display(); submit_widget_state()
-```
+- `w_workflow` - Launch Latch Workflows
 
 **Layout:**
 - `w_row` - Horizontal layout
 - `w_column` - Vertical layout
 - `w_grid` - Grid layout with spans
+
+**Example workflow:**
 ```python
-from lplots.widgets.row import w_row
-from lplots.widgets.column import w_column
-from lplots.widgets.grid import w_grid
-# Horizontal
-w_row(items=[...])
-# Vertical
-w_column(items=[...])
-# Grid (context manager, supports spans)
-with w_grid(columns=12) as g:
-    g.add(item=..., col_span=4, row_span=1)
+# 1. Grep for widget
+# grep "w_ldata_picker" agent_config/context/latch_api_docs/plots_docs/widget-types.mdx
+# 2. Read relevant lines from grep results
+# 3. Copy exact import and usage pattern
 ```
 
-Grep example: `grep "w_h5" agent_config/context/latch_api_docs/plots_docs/widget-types.mdx`
+### LPath API
+
+For remote file operations (download, upload, path manipulation), read `agent_config/context/latch_api_docs/lpath.md`.
+
+**Common import:**
+```python
+from latch.ldata.path import LPath
+```
+
+### Reactivity with Signals
+
+For cross-cell dependencies and reactive execution, read `agent_config/context/latch_api_docs/plots_docs/reactivity.mdx`.
+
+**Common import:**
+```python
+from lplots.reactive import Signal  # NOT lplots.reactivity
+```
+
+**Key concept:** Cell B depending on Cell A's data requires Cell A to create/update a Signal and Cell B to subscribe to it.
 
 </execution_protocol>
 
