@@ -2913,7 +2913,7 @@ class AgentHarness:
                     for key, value in data.items():
                         if key in self.expected_widgets:
                             self.expected_widgets[key] = value
-                    
+
                     if all(v is not None for v in self.expected_widgets.values()):
                         await self.pending_messages.put({
                             "type": "set_widget_value",
