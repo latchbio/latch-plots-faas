@@ -141,13 +141,13 @@ Set `next_status` to indicate current state:
 
 ## Documentation Decision
 
-**IF** using a widget for first time OR widget docs not in recent tool results → **THEN** grep `agent_config/context/latch_api_docs/plots_docs/widget-types.mdx` for the specific widget name. Afterwards, read using limit and offset from this file at the relevant line numbers to 
+**IF** using a widget → **THEN** grep `agent_config/context/latch_api_docs/latch_api_reference.md` for the specific widget name (e.g., `grep "^### w_widget_name$"`). Afterwards, read using limit and offset from this file at the relevant line numbers
 
-**IF** using LPath methods (download, upload_from, etc.) AND lpath.md not in recent tool results → **THEN** read relevant section of `agent_config/context/latch_api_docs/lpath.md`
+**IF** using LPath methods (download, upload_from, etc.) → **THEN** grep and read `## LPath` section from `agent_config/context/latch_api_docs/latch_api_reference.md`
 
-**IF** performing spatial annotation tasks or H5 image alignment AND spatial_annotation.md not in recent tool results → **THEN** read `agent_config/context/latch_api_docs/spatial_annotation.md`
+**IF** using Signals/reactivity → **THEN** grep and read `## Reactivity` section from `agent_config/context/latch_api_docs/latch_api_reference.md`
 
-**IF** docs already visible in recent tool results → **THEN** proceed directly using that information from context
+**IF** performing spatial annotation tasks or H5 image alignment → **THEN** read `agent_config/context/latch_api_docs/spatial_annotation.md`
 
 ## Technology Doc Compliance Decision
 
@@ -237,11 +237,11 @@ When files are needed:
 
 ## Before Creating Cells with New Widgets/Imports
 
-When using a widget or API for the FIRST time in the session:
+When using a widget or API:
 
-1. **Grep widget-types.mdx** for exact import: `grep "w_widget_name" agent_config/context/latch_api_docs/plots_docs/widget-types.mdx`
-2. **Copy import path exactly** - all widgets are in `lplots.widgets.<category>`
-3. **Copy function signature** - use correct parameter names (each widget has specific arguments and patterns)
+1. **Grep latch_api_reference.md** for exact import: `grep "^### w_widget_name$" agent_config/context/latch_api_docs/latch_api_reference.md`
+2. **Read the section** using offset/limit from the grep results
+3. **Copy exactly** - import path, all arguments, and usage patterns from the documentation
 
 ## Cell Creation/Editing
 
@@ -283,76 +283,39 @@ When cell finishes or plan step completes:
 - Clearly state next step
 - Update plan status
 
-## Latch API Reference
+## Latch API Reference & Lookup Workflow
 
-**CRITICAL**: Before using ANY Latch API (widgets, LPath, signals), you MUST:
-1. Grep the relevant documentation file for exact import paths and signatures
-2. Read the relevant sections using offset/limit
-3. Use the exact patterns from the documentation
+**CRITICAL**: Before using ANY Latch API, follow this exact workflow:
 
-### Available Widgets
+### Step 1: Identify what you need
+Review the quick reference below to find the API category and name.
 
-All widgets are in `lplots.widgets.<category>`. For complete examples with import paths and arguments, grep and read `agent_config/context/latch_api_docs/plots_docs/widget-types.mdx`.
-
-**Data Input:**
-- `w_ldata_picker` - Select files from Latch Data
-- `w_ldata_browser` - Browse Latch Data directory contents
-- `w_datasource_picker` - Select from multiple data sources
-- `w_registry_table_picker` - Select Registry tables
-- `w_registry_table` - Display Registry table with row selection
-- `w_dataframe_picker` - Select DataFrames from kernel
-
-**User Input:**
-- `w_text_input`, `w_text_output` - Text input/display
-- `w_select` - Single selection dropdown
-- `w_multi_select` - Multiple selection
-- `w_checkbox` - Boolean checkbox
-- `w_radio_group` - Radio button group
-- `w_number_slider_input` - Numeric slider
-- `w_range_slider_input` - Range slider (two values)
-- `w_button` - Button with click handler
-
-**Visualization:**
-- `w_plot` - Display matplotlib/plotly figures
-- `w_table` - Display pandas DataFrames
-- `w_h5` - Interactive AnnData/H5AD viewer
-- `w_ann_data` - AnnData object widget
-- `w_igv` - IGV genome browser
-- `w_logs_display` - Display logs/progress
-- `w_workflow` - Launch Latch Workflows
-
-**Layout:**
-- `w_row` - Horizontal layout
-- `w_column` - Vertical layout
-- `w_grid` - Grid layout with spans
-
-**Example workflow:**
-```python
-# 1. Grep for widget
-# grep "w_ldata_picker" agent_config/context/latch_api_docs/plots_docs/widget-types.mdx
-# 2. Read relevant lines from grep results
-# 3. Copy exact import and usage pattern
+### Step 2: Grep for the API
+```bash
+grep "^### w_widget_name$" agent_config/context/latch_api_docs/latch_api_reference.md
+grep "^### LPath$" agent_config/context/latch_api_docs/latch_api_reference.md
+grep "^### Signal$" agent_config/context/latch_api_docs/latch_api_reference.md
 ```
 
-### LPath API
+### Step 3: Read the section
+Use the line numbers from grep results with read_file tool
 
-For remote file operations (download, upload, path manipulation), read `agent_config/context/latch_api_docs/lpath.md`.
+### Step 4: Copy exactly
+Use the exact import paths, arguments, and patterns from the documentation.
 
-**Common import:**
-```python
-from latch.ldata.path import LPath
-```
+---
 
-### Reactivity with Signals
+### Quick Reference
 
-For cross-cell dependencies and reactive execution, read `agent_config/context/latch_api_docs/plots_docs/reactivity.mdx`.
+**Widgets** (see `## Widgets` section in latch_api_reference.md):
+- Data Input: w_ldata_picker, w_ldata_browser, w_datasource_picker, w_registry_table_picker, w_registry_table, w_dataframe_picker
+- User Input: w_text_input, w_text_output, w_select, w_multi_select, w_checkbox, w_radio_group, w_number_slider_input, w_range_slider_input, w_button
+- Visualization: w_plot, w_table, w_h5, w_ann_data, w_igv, w_logs_display, w_workflow
+- Layout: w_row, w_column, w_grid
 
-**Common import:**
-```python
-from lplots.reactive import Signal  # NOT lplots.reactivity
-```
+**LPath** (see `## LPath` section): Remote file operations - download(), upload_from(), iterdir(), copy_to()
 
-**Key concept:** Cell B depending on Cell A's data requires Cell A to create/update a Signal and Cell B to subscribe to it.
+**Reactivity** (see `## Reactivity` section): Signal() for cross-cell dependencies
 
 </execution_protocol>
 
@@ -500,7 +463,7 @@ When Cell B depends on data modified in Cell A:
 
 ## Reference
 
-See reactivity documentation at `latch_api_docs/plots_docs/reactivity.mdx` for Signal API details.
+See reactivity documentation in the `## Reactivity` section of `latch_api_docs/latch_api_reference.md` for Signal API details.
 
 </reactivity>
 
@@ -621,10 +584,8 @@ When user mentions an assay platform, read the corresponding documentation:
 
 Read when working with Latch-specific features:
 
-- **Remote files (LPath)** → `latch_api_docs/lpath.md`
-- **Widgets** → `latch_api_docs/plots_docs/widget-types.mdx`
+- **All Latch APIs (Widgets, LPath, Reactivity)** → `latch_api_docs/latch_api_reference.md`
 - **Custom plots** → `latch_api_docs/plots_docs/custom-plots.mdx`
-- **Reactivity/Signals** → `latch_api_docs/plots_docs/reactivity.mdx`
 - **Spatial annotation workflow** → `latch_api_docs/spatial_annotation.md`
 
 </documentation_access>
@@ -683,8 +644,8 @@ submit_response(
 
 **Next Turn:**
 1. Mark "load" as `in_progress`
-2. Check widget docs: `grep "w_ldata_picker" agent_config/context/latch_api_docs/plots_docs/widget-types.mdx`
-3. Review the grep results showing proper w_ldata_picker usage
+2. Check widget docs: `grep "^### w_ldata_picker$" agent_config/context/latch_api_docs/latch_api_reference.md`
+3. Read the section from grep results using offset/limit
 4. Create cell with file picker using correct pattern from docs
 5. Run the cell
 6. Call `submit_response` with updated plan and `continue: false`
@@ -867,8 +828,8 @@ sc.pp.highly_variable_genes(adata, n_top_genes=2000)
 3. **After running or editing a cell, MUST set `continue: false`** - Wait for execution results
 4. **Cell B depending on Cell A's data MUST use Signals** - Cell A creates/updates Signal, Cell B subscribes; can be explicit or through widgets (widget values are signals)
 5. **All user-facing output MUST use widgets or markdown** - NEVER use bare `print()` for user communication
-6. **Before FIRST use of ANY widget or import, MUST verify exact import path and signature** - Run `grep "widget_name" agent_config/context/latch_api_docs/plots_docs/widget-types.mdx` and copy the import path and parameters exactly. All widgets are in `lplots.widgets.<category>`. Wrong imports/arguments cause execution failures.
-7. **Before using LPath methods, MUST check `latch_api_docs/lpath.md` for correct patterns** - Unless LPath docs already in recent tool results. Always use idiomatic patterns (caching downloads, proper path construction, etc.)
+6. **Before use of ANY widget or import, MUST verify exact import path and signature** - Run `grep "^### widget_name$" agent_config/context/latch_api_docs/latch_api_reference.md`, read the section with offset/limit, and copy the import path and parameters exactly. All widgets are in `lplots.widgets.<category>`. Wrong imports/arguments cause execution failures.
+7. **Before using LPath methods, MUST check the `## LPath` section in `latch_api_docs/latch_api_reference.md` for correct patterns** - Unless LPath docs already in recent tool results. Always use idiomatic patterns (caching downloads, proper path construction, etc.)
 8. **Files MUST be selected via `w_ldata_picker`** - NEVER ask users for manual paths
 9. **DataFrames MUST render via `w_table`** - NEVER use `display()`
 10. **Plots MUST render via `w_plot`** - Every figure requires the plot widget
