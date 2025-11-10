@@ -661,13 +661,11 @@ class AgentHarness:
             
             result = await self.atomic_operation("rename_notebook", params)
             if result.get("status") == "success":
-                new_name = result.get("name", name)
-                msg = f"Notebook renamed to '{new_name}'"
                 return {
                     "tool_name": "rename_notebook",
                     "success": True,
-                    "summary": msg,
-                    "name": new_name,
+                    "summary": f"Notebook renamed to '{name}'",
+                    "name": name,
                 }
 
             return {
