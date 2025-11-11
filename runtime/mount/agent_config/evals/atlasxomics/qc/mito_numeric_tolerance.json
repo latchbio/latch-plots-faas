@@ -1,19 +1,18 @@
 {
-  "id": "spatial_atac_qc_mito_fraction_numeric_tolerance_v1",
-  "task": "Attached is a spatial single-cell ATAC AnnData project. Perform QC filtering, then compute mitochondrial fraction on the remaining high-quality cells. Return the mean mitochondrial fraction value.",
-  "data_node": ["latch://38438.account/AtlasxOmics/Kosta/Kostallari_SOW313_ATAC/combined_Healthy.h5ad"],
+  "id": "spatial_atac_frac_mito_p95_v2",
+  "task": "Attached is a spatial single-cell ATAC-seq H5AD from AtlasXomics. Report the 95th percentile of frac_mito after QC filtering.",
+  "data_node": "latch://38438.account/AtlasxOmics/Kosta/Kostallari_SOW313_ATAC/combined_Healthy.h5ad",
   "grader": {
     "type": "numeric_tolerance",
     "config": {
       "ground_truth": {
-        "mean_mito_fraction": 0.2
+        "p95_frac_mito": 0.3083
       },
-      "tolerances": {
-        "mean_mito_fraction": {
-          "type": "max"
-        }
-      },
-      "description": "Mean mitochondrial fraction must be <= 0.10 (10%). The maximum threshold is 0.10."
+      "tolerance": {
+        "type": "max",
+        "threshold": 0.35,
+        "description": "p95 mitochondrial fraction should be <35% after QC. Higher suggests poor-quality cells retained."
+      }
     }
   }
 }
