@@ -1,3 +1,4 @@
+<!-- markdownlint-disable -->
 ## Analysis Guideline
 
 This is the **authoritative step-by-step pipeline** for AtlasxOmics experiment. Follow steps in order. 
@@ -5,9 +6,10 @@ This is the **authoritative step-by-step pipeline** for AtlasxOmics experiment. 
 1. **Experiment Setup** - If not clear from original request, ask users to confirm if they want to perform analysis on **gene activity score AnnData** (recommended) or **motif enrichment scores AnnData**. 
 2. **Data Loading** - load data using **Scanpy** and display it with `w_h5`.
 3. **Quality Control** 
-4. **Clustering (workflow only)** - Launch the AtlasXOmics clustering workflow using `w_workflow(wf_name="wf.__init__.opt_workflow", ...)`. Fallback to `scanpy` only if this fails.
-5. **Differential Gene Activity or Motif Enrichment Comparison** - Use `w_workflow(wf_name="wf.__init__.compare_workflow", ...)`
-6. **Cell Type Annotation** — Use CellGuide marker database (see file `technology_docs/marker_cell_typing.md`)
+4. **Batch Correction (for multi-sample datasets)**
+5. **Clustering (workflow only)** - Launch the AtlasXOmics clustering workflow using `w_workflow(wf_name="wf.__init__.opt_workflow", ...)`. Fallback to `scanpy` only if this fails.
+6. **Differential Gene Activity or Motif Enrichment Comparison** - Use `w_workflow(wf_name="wf.__init__.compare_workflow", ...)`
+7. **Cell Type Annotation** — Use CellGuide marker database (see file `technology_docs/marker_cell_typing.md`)
 
 The section below defines detailed guidelines for each of the above steps.
 
@@ -34,6 +36,7 @@ The section below defines detailed guidelines for each of the above steps.
 ### **Quality Control**:
 
 - Use the `snapatac2` library for computing and visualizing ATAC-seq quality metrics.
+- **MANDATORY**: Before running any QC or filtering steps, **verify whether the AnnData object has already been pre-processed or quality-controlled.**
 
 ```python
 import snapatac2 as snap
@@ -55,6 +58,14 @@ import snapatac2 as snap
     frip: ≥ min(q10, 0.2)
     nucleosome_signal: ≤ max(q90, 4)
     mitochondrial_fraction: ≤ max(q90, 0.10)
+
+### **Batch Correction (SnapATAC2)**
+
+If `adata.obs['sample']` contains more than one sample, run a batch-correction pass before clustering:
+
+1. After QC, call `snap.pp.mnc_correct(adatas, batch='sample')` to apply the modified mutual-nearest-neighbour correction.
+2. Optionally refine with `snap.pp.harmony(adatas, batch='sample', max_iter_harmony=20)` to harmonise global structure.
+3. Recompute embeddings (e.g., `snap.tl.spectral`, `snap.tl.umap`) using the corrected representation, and proceed with clustering.
 
 #### 1. Fragment Size Distribution
 
@@ -116,6 +127,16 @@ snap.metrics.frip(adata, regions, inplace=True, n_jobs=8)
 - **High (> 10 %):** Possible cell stress or broken nuclei
 
 ---
+
+### **Batch Correction (for multi-sample datasets)**
+
+When `adata.obs['sample']` (or another batch key) contains multiple samples, run a batch correction step before clustering or pseudobulk analyses:
+
+1. Confirm the sample/batch column being used (e.g., `batch_key = 'sample'`).
+2. Normalize/log-transform the dataset (consistent with the rest of the workflow).
+3. Select highly variable features per sample (e.g., `sc.pp.highly_variable_genes(adata, batch_key='sample', n_top_genes=8000)`) 
+4. Apply a batch correction method such as `sc.external.pp.harmony_integrate(adata, key='sample')`, `sc.external.pp.bbknn(adata, batch_key='sample')`, or `scanorama.integrate_scanpy()`.
+5. Use the corrected embedding/PCA for neighbor graph construction, clustering, and downstream comparisons.
 
 ### **Clustering (workflow only)**: 
 - Use `w_workflow` to launch the AtlasXOmics clustering workflow.
