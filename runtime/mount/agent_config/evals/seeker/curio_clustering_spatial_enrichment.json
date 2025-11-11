@@ -1,0 +1,34 @@
+{
+    "id": "spatial_enrichment_celltypes_gt",
+    "task": "Perform clustering on this spatial transcriptomics dataset. Calculate spatial coherence with k=30 neighbors (average fraction of k nearest spatial neighbors sharing the same cluster label). Calculate the random baseline as sum of (p_i)^2 where p_i is proportion of cells in cluster i. Calculate spatial enrichment as coherence divided by random baseline. Return a JSON object with fields: spatial_enrichment_vs_random (float), spatial_coherence (float between 0-1), random_baseline (float between 0-1), n_clusters (integer).",
+    "data_node": "latch://38438.account/curio_ovary/adata_after_pca.h5ad",
+    "grader": {
+      "type": "numeric_tolerance",
+      "config": {
+        "ground_truth": {
+          "spatial_enrichment_vs_random": 1.59,
+          "spatial_coherence": 0.435,
+          "random_baseline": 0.274,
+          "n_clusters": 14
+        },
+        "tolerances": {
+          "spatial_enrichment_vs_random": {
+            "type": "absolute",
+            "value": 0.3
+          },
+          "spatial_coherence": {
+            "type": "absolute",
+            "value": 0.1
+          },
+          "random_baseline": {
+            "type": "absolute",
+            "value": 0.05
+          },
+          "n_clusters": {
+            "type": "absolute",
+            "value": 3
+          }
+        }
+      }
+    }
+  }
