@@ -1139,19 +1139,20 @@ class Kernel:
         error_msg = None
 
         try:
-            with redirect_stdout(stdout_capture), redirect_stderr(stderr_capture):
-                result_value = eval(  # noqa: S307
-                    compile(
-                        code,
-                        filename=filename,
-                        mode="exec",
-                        flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT,
-                    ),
-                    self.k_globals
-                )
+            async with ctx.transaction:
+                with redirect_stdout(stdout_capture), redirect_stderr(stderr_capture):
+                    result_value = eval(  # noqa: S307
+                        compile(
+                            code,
+                            filename=filename,
+                            mode="exec",
+                            flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT,
+                        ),
+                        self.k_globals
+                    )
 
-                if asyncio.iscoroutine(result_value):
-                    result_value = await result_value
+                    if asyncio.iscoroutine(result_value):
+                        result_value = await result_value
         except Exception as e:
             exception_msg = traceback.format_exc()
             error_msg = str(e)

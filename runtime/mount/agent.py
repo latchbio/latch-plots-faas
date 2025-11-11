@@ -2118,24 +2118,14 @@ class AgentHarness:
 
             result = await self.atomic_operation("execute_code", {"code": code})
 
-            if result.get("status") == "success":
-                return {
-                    "tool_name": "execute_code",
-                    "success": True,
-                    "summary": "Code executed successfully",
-                    "code": code,
-                    "stdout": result.get("stdout"),
-                    "stderr": result.get("stderr"),
-                }
-
             return {
                 "tool_name": "execute_code",
-                "success": False,
-                "summary": f"Execution failed: {result.get('error', 'Unknown error')}",
+                "success": True,
+                "summary": "Code executed",
                 "code": code,
-                "exception": result.get("exception"),
                 "stdout": result.get("stdout"),
                 "stderr": result.get("stderr"),
+                "exception": result.get("exception"),
             }
 
         self.tools.append({
