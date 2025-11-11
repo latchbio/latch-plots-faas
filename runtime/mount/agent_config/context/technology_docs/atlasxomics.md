@@ -1,12 +1,13 @@
 ## Analysis Guideline
 
-This is the **authoritative step-by-step pipeline** for AtlasxOmics experiment. Follow steps in order.
+This is the **authoritative step-by-step pipeline** for AtlasxOmics experiment. Follow steps in order. 
 
-1. **Experiment Setup** - If not clear from original request, ask users to confirm if they want to perform analysis on **gene activity score AnnData** (recommended) or **motif enrichment scores AnnData**.
+1. **Experiment Setup** - If not clear from original request, ask users to confirm if they want to perform analysis on **gene activity score AnnData** (recommended) or **motif enrichment scores AnnData**. 
 2. **Data Loading** - load data using **Scanpy** and display it with `w_h5`.
-3. **Clustering (workflow only)** - Launch the AtlasXOmics clustering workflow using `w_workflow(wf_name="wf.__init__.opt_workflow", ...)`. Fallback to `scanpy` only if this fails.
-4. **Differential Gene Activity or Motif Enrichment Comparison** - Use `w_workflow(wf_name="wf.__init__.compare_workflow", ...)`
-5. **Cell Type Annotation** — Use CellGuide marker database (see file `technology_docs/marker_cell_typing.md`)
+3. **Quality Control** 
+4. **Clustering (workflow only)** - Launch the AtlasXOmics clustering workflow using `w_workflow(wf_name="wf.__init__.opt_workflow", ...)`. Fallback to `scanpy` only if this fails.
+5. **Differential Gene Activity or Motif Enrichment Comparison** - Use `w_workflow(wf_name="wf.__init__.compare_workflow", ...)`
+6. **Cell Type Annotation** — Use CellGuide marker database (see file `technology_docs/marker_cell_typing.md`)
 
 The section below defines detailed guidelines for each of the above steps.
 
@@ -28,8 +29,96 @@ The section below defines detailed guidelines for each of the above steps.
 - Use `LPath` to load the file. **Always** prefer **full, human-readable latch:// paths** (not node IDs).
 - Once loaded, visualize the AnnData object using the w_h5 widget for inspection.
 
+---
+
+### **Quality Control**:
+
+- Use the `snapatac2` library for computing and visualizing ATAC-seq quality metrics.
+
+```python
+import snapatac2 as snap
+```
+- **Key QC metrics**: Check which metrics already exist in `adata.obs`, run adaptive filtering with those first, and only compute any missing metrics afterward if needed. 
+  - Fragment Size Distribution
+  - TSS Enrichment (TSSE)
+  - FRiP — Fraction of Reads in Peaks
+  - Nucleosome Signal
+  - Number of Fragments per Cell
+  - Mitochondrial Read Fraction
+
+- **Adaptive, per-sample QC filtering**:
+  Inputs (adata.obs): n_fragments, tsse, frip, nucleosome_signal, mitochondrial_fraction
+  Batch key: sample
+  Heuristic (per-batch quantiles):
+    n_fragments: keep [max(q5, 1k), min(q99.5, 50k)]
+    tsse: ≥ min(q10, 2)
+    frip: ≥ min(q10, 0.2)
+    nucleosome_signal: ≤ max(q90, 4)
+    mitochondrial_fraction: ≤ max(q90, 0.10)
+
+#### 1. Fragment Size Distribution
+
+**Purpose:** Assess nucleosome periodicity and library quality.  
+**Expected pattern:**
+- **80–300 bp:** Nucleosome-free (open chromatin)
+- **~150–200 bp:** Mono-nucleosome peak
+- **~300–400 bp:** Di-nucleosome peak
+- **>500 bp:** Multi-nucleosome or artifacts
+
+**Example:**
+```python
+fig = snap.pl.frag_size_distr(data, show=False)
+fig.update_yaxes(type="log")
+```
+
+#### 2. TSS Enrichment (TSSE)
+
+**Purpose:** Quantify enrichment of accessible fragments near transcription start sites.  
+- **High TSSE (≥ 5–10):** Strong promoter accessibility, good quality  
+- **Low TSSE (< 4):** Poor signal, low complexity, or over-digestion
+
+**Example:**
+```python
+snap.metrics.tsse(data)
+```
+
+#### 3. FRiP — Fraction of Reads in Peaks
+
+**Purpose:** Quantify the share of fragments falling inside called peaks; higher FRiP means cleaner regulatory signal (≈0.2 good, <0.1 noisy).
+
+**Example:**
+```python
+snap.metrics.frip(adata, regions, inplace=True, n_jobs=8)
+```
+
+**Inputs:**  
+- `adata`: AnnData or list of AnnData objects to annotate; writes scores to `adata.obs` when `inplace=True`.  
+- `regions`: dict mapping peak-set names to BED paths or genomic interval lists.  
+- `n_jobs`: parallel workers (use `-1` for all cores).
+
+**Note:** Run `snap.pp.import_data(...)` beforehand to load fragment data.
+
+#### 4. Nucleosome Signal
+
+**Purpose:** Ratio of mono/di-nucleosomal to short fragments.  
+- **Low (< 2):** Good chromatin accessibility  
+- **High (> 4):** Over-digested or low-quality libraries
+
+#### 5. Number of Fragments per Cell (`adata.obs["n_fragment"]`)
+
+**Purpose:** Assess sequencing depth and data sparsity per cell/barcode.  
+- **Low fragments (< 1 k):** Dropouts or ambient noise  
+- **Extremely high:** Doublets or multiplets
+
+#### 6. Mitochondrial Read Fraction (`adata.obs["frac_dup"]`)
+
+**Purpose:** Detect low-quality or dying cells with excessive mitochondrial reads.  
+- **High (> 10 %):** Possible cell stress or broken nuclei
+
+---
+
 ### **Clustering (workflow only)**: 
-- Use `w_workflow` to launch the AtlasXomics clustering workflow.
+- Use `w_workflow` to launch the AtlasXOmics clustering workflow.
 - If the user want to cluster only a subset of the AnnData, include the optional parameter `adata_subsetted_file` (as a LatchFile) in params. Otherwise, omit it entirely.
 
 ### Clustering Workflow Parameters
@@ -199,7 +288,7 @@ if value['lasso_points']:
 ```
 
 ### **Differential Gene Activity or Motif Enrichment Comparison (workflow only)**
-- Use `w_workflow` to launch the AtlasXomics comparison workflow.  
+- Use `w_workflow` to launch the AtlasXOmics comparison workflow.  
 - Automatically infer the correct grouping column from `adata.obs` (`condition`, `sample`, or `cluster`).  
 - Programmatically generate and upload a `compare_config.json` file as a `LatchFile` for workflow input.
 - Strictly follow <workflow_rules>.
@@ -228,17 +317,10 @@ if value['lasso_points']:
 from latch.types import LatchFile, LatchDir
 from lplots.widgets.workflow import w_workflow
 
-groupings_remote_path = LatchFile("latch:///compare_config.json")
-archrproject_remote_path = LatchDir("latch:///<path_to_ArchRProject>")
-
-# Verify that paths exist by calling `.node_id()`
-print(LPath(groupings_remote_path.remote_path).node_id())
-print(LPath(archrproject_remote_path.remote_path).node_id())
-
 params = {
     "project_name": "my_comparison",
-    "groupings": groupings_remote_path,
-    "archrproject": archrproject_remote_path, 
+    "groupings": LatchFile("latch:///compare_config.json"),
+    "archrproject": LatchDir("latch:///Kostallari_SOW313_ATAC_ArchRProject"),
     "genome": "hg38",
 }
 
@@ -270,7 +352,7 @@ import json
 from pathlib import Path
 
 group_column = "condition"  # inferred from context or user input
-group_a_value = "Cirrhosis"
+group_a_value = "Cirrhotic"
 group_b_value = "Healthy"
 
 group_a_bcs = adata.obs[adata.obs[group_column] == group_a_value].index.tolist()
@@ -294,32 +376,21 @@ latch_path = LPath.upload(Path(local_path), remote_path)
 groupings_file = LatchFile(remote_path)
 ```
 
-### **Cell Type Annotation**
-
-- If the dataset context is unclear, first ask the user to confirm the **organism** and **tissue type**. **Do NOT proceed** until the user has answered the question. 
-- **Always render a form with sensible defaults** to avoid tedious manual input. The form should support **multiple candidate cell types**, e.g. one row per cell type:
-  - `cell_type`: **text input**, pre-filled with a common or inferred cell type.
-  - `marker_genes`: **multiselect widget**, pre-populated with default marker genes for that cell type.
-- You **must auto-populate all fields with reasonable defaults using domain knowledge**. Users should only adjust values if needed, not enter them from scratch.
-- Add a **button** after the form to trigger gene set scoring. 
-- For **spatial ATAC-seq** only, infer cell identity by computing **gene activity or gene set scores** (e.g., `scanpy.tl.score_genes`) and ranking cell types based on marker enrichment.
-- Add a new observation to store cell types in `adata.obs`
-
 ## Data Assumptions
 
-AtlasXomics datasets have the following data conventions. Assume this structure exists without asking the user to confirm.
+AtlasXOmics datasets have the following data conventions. Assume this structure exists without asking the user to confirm.
 
 ### Raw Data
 Raw data consists of fragment files (fragments.tsv.gz) and 'spatial/' folders which contain images, image metadata, and barcode-image mappings stored as csv files. Every experiment (designated with the unique 'Run ID' Dxxxxx where x is a digit), is associated with distinct raw data. Fragment files and spatial folders are stored on different files paths in Latch Data.
 
-In the default AtlasXomics Workspace (13502), fragment files are stored in the path `latch:///chromap_outs/[Run_ID]/chromap_output/fragments.tsv.gz`.  Spatial folders are stored in the path `latch:///Images_spatial/[Run_ID]/spatial`. 
+In the default AtlasXomics Workspace (13502), fragment files are stored in the path `/chromap_outs/[Run_ID]/chromap_output/fragments.tsv.gz`.  Spatial folders are stored in the path `/Images_spatial/[Run_ID]/spatial`. 
 
-In collaborator Workspaces (not 13502), fragment files and spatial folders are stored together in the parent directory corresponding to Run ID.  Frament files are store in the path `latch:///Raw_Data/[Run_ID]/fragments.tsv.gz`, spatial folders at `latch:///Raw_Data/[Run_ID]]/spatial`.
+In collaborator Workspaces (not 13502), fragment files and spatial folders are stored together in the parent directory corresponding to Run ID.  Frament files are store in the path `.../Raw_Data/[Run_ID]/chromap_output/fragments.tsv.gz`, BED file at `.../Raw_Data/[Run_ID]/chromap_output/aln.bed`, spatial folders at `.../Raw_Data/[Run_ID]]/spatial`
 
 ### Workflow Outputs
 
 #### Clustering Workflow (optimize_snap)
-The clustering workflow (optimize_snap, wf.__init__.opt_workflow) stores outputs on the path `latch:///snap_opts/[project name]/` where "project name" is designated by the user in the Workflow input parameters. The output directory has the following structure:
+The clustering workflow (optimize_snap, wf.__init__.opt_workflow) stores outputs on the path `/snap_opts/[project name]/` where "project name" is designated by the user in the Workflow input parameters. The output directory has the following structure:
 [project name]/
 ├── figures/
 ├── medians.csv
@@ -334,7 +405,7 @@ The figures/ directory contains plots saved as .pdf files for QC and to guide se
 
 These two Workflows create files to be analyzed in Plots.  A Workflow takes as input one or multiple Run IDs and corresponding raw data.  It creates the outputs detailed below.  The `combined_sm_ge.h5ad` and `combined_sm_motifs.h5ad` files are AnnData objects with .X as gene accessibility data and motif enrichment data, respectively.  Each object contains data for all Run IDs specified in the inputs. Runs are designated by the column 'sample' in AnnData .obs.
 
-In the default AtlasXomics Workspace (13502), results are stored in `latch:///snap_outs/[project name]` where project name is specified in the Execution inputs.  In customer Workspaces, data is stored in `latch:///Processed_Data/[project name]`.
+In the default AtlasXomics Workspace (13502), results are stored in `/snap_outs/[project name]` where project name is specified in the Execution inputs.  In customer Workspaces, data is stored in `.../Processed_Data/[project name]`.
 
 project_name/
 ├── cluster_coverages/
@@ -363,12 +434,11 @@ project_name/
 ├── D02310_NG07345_SeuratObj.rds
 
 **Important files to pay attention to**
-- `combined_sm_ge.h5ad`: Stores gene activity score for every spot
-- `combined_sm_motifs.h5ad`: Stores motif enrichment score for every spot
+- `combined_sm_ge.h5ad`: Stores gene activity score for every spot for all Run IDs
+- `combined_sm_motifs.h5ad`: Stores motif enrichment score for every spot for all Run IDs
 - Both files follow the standard AnnData structure with `obs`, `uns`, `obsm`, and `obsp` components as detailed below. 
-- Folder ending with `_ArchRProject`: An `ArchR` project
-- Folder ending with `_coverages`: Contains `.bw` files which can be visualized in the IGV browser.
-  
+- Folder ending with `_ArchRProject`: An `ArchR` project 
+
 **Standard Fields inside an AnnData Object**
 Example structure of `combined_sm_ge.h5ad`
 AnnData object with n_obs × n_vars = 48453 × 24919

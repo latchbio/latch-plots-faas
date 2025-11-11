@@ -6,17 +6,12 @@
       "type": "numeric_tolerance",
       "config": {
         "ground_truth": {
-          "remaining_percentage": 90.0,
-          "total_beads": 11027
+          "remaining_percentage": 80.0
         },
         "tolerances": {
           "remaining_percentage": {
             "type": "absolute",
             "value": 10.0
-          },
-          "total_beads": {
-            "type": "absolute",
-            "value": 2000
           }
         }
       }

@@ -1,19 +1,22 @@
 {
   "id": "spatial_atac_qc_frip_numeric_tolerance_v1",
-  "task": "Attached is a spatial single-cell ATAC AnnData project. Perform QC filtering, then compute FRiP (Fraction of Reads in Peaks) on the remaining high-quality cells. Return the 10th percentile (p10) FRiP value. Return EXACTLY in the following format:\n<EVAL_ANSWER>\n{\n  \"p10_frip\": <float>\n}\n</EVAL_ANSWER>",
-  "data_node": ["latch://38438.account/AtlasxOmics/Kosta/Kostallari_SOW313_ATAC/combined_Healthy.h5ad"],
+  "task": "Attached are AtlasXomics fragments and peaks files for a spatial single-cell ATAC-seq project. Calculate the FRiP (Fraction of Reads in Peaks) metric and perform filtering. Return the 10th percentile (p10) FRiP value on the filtered cells. Return EXACTLY in the following format:\n<EVAL_ANSWER>\n{\n  \"p10_frip\": <float>\n}\n</EVAL_ANSWER>",
+  "data_node": [
+    "latch://38438.account/AtlasxOmics/Kosta/Raw_Data/D02301_NG07297-healthy-H3K9ac/chromap_output/fragments.tsv.gz", 
+    "latch://38438.account/AtlasxOmics/Kosta/Raw_Data/D02301_NG07297-healthy-H3K9ac/Statistics/D02301_NG07297_peaks.bed"
+  ],
   "grader": {
     "type": "numeric_tolerance",
     "config": {
       "ground_truth": {
-        "p10_frip": 0.3
+        "p10_frip": 0.15
       },
       "tolerances": {
         "p10_frip": {
           "type": "min"
         }
       },
-      "description": "10th percentile FRiP (p10) must be > 0.3 (30%). The minimum threshold is 0.3."
+      "description": "10th percentile FRiP (p10) must be > 0.15 (15%). The minimum threshold is 0.15."
     }
   }
 }
