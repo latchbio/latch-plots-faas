@@ -11,7 +11,7 @@
           "Nucleosome-free": 65.0,
           "Mono-nucleosome": 20.0,
           "Di-nucleosome": 10.0,
-          "Tri-nucleosome": 5.0,
+          "Tri-nucleosome": 5.0
         }
       },
       "tolerances": {
