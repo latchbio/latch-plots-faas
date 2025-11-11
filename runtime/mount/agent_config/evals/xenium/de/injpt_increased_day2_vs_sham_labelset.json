@@ -1,0 +1,23 @@
+{
+  "id": "injpt_increased_day2_vs_sham_labelset",
+  "task": "Using Xenium, test whether **Inj_PT** increases at **day 2** vs **sham** based on cell-type fractions.",
+  "data_node": "latch://38438.account/Scratch/xenium/evals/multimodal_spatial_xenium_mouse_kidney.h5ad",
+  "grader": {
+    "type": "label_set_jaccard",
+    "config": {
+      "ground_truth_marker_sets": {
+        "Day2_vs_Sham_up": ["Inj_PT"]
+      },
+      "scoring": {
+        "method": "jaccard_index",
+        "k_top_agent_markers": 5,
+        "per_label_thresholds": {
+          "Day2_vs_Sham_up": 1.0
+        },
+        "penalize_extra_labels": true,
+        "set_definition": "Compare the SET of predicted labels for the contrast to the ground-truth set.",
+        "description": "Pass only if Inj_PT is predicted (no extras)."
+      }
+    }
+  }
+}

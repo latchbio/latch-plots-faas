@@ -1,0 +1,23 @@
+{
+  "id": "injpt_de_genes_day2_vs_sham_wilcoxon_labelset",
+  "task": "Using Xenium, subset **Inj_PT** cells and perform DE between **day 2** vs **sham** (Inj_PT@day2 vs Inj_PT@sham). Use Wilcoxon with BH correction; retain genes with positive logFC in day 2 and adj p ≤ 0.01. Rank by logFC then −log10(adj p). Return EXACTLY:\n<EVAL_ANSWER>\n{\n  \"markers_predicted\": {\n    \"Inj_PT_day2_vs_sham_up\": [\"Havcr1\", \"Krt20\", \"Cdkn1a\", \"Srxn1\", \"Plin2\", \"Plk3\", \"Tnfrsf12a\"]\n  }\n}\n</EVAL_ANSWER>",
+  "data_node": "latch://38438.account/Scratch/xenium/evals/multimodal_spatial_xenium_mouse_kidney.h5ad",
+  "grader": {
+    "type": "label_set_jaccard",
+    "config": {
+      "ground_truth_marker_sets": {
+        "Inj_PT_day2_vs_sham_up": ["Havcr1", "Krt20", "Cdkn1a", "Srxn1", "Plin2", "Plk3", "Tnfrsf12a"]
+      },
+      "scoring": {
+        "method": "jaccard_index",
+        "k_top_agent_markers": 15,
+        "per_label_thresholds": {
+          "Inj_PT_day2_vs_sham_up": 0.5
+        },
+        "penalize_extra_labels": false,
+        "set_definition": "Compare the SET of predicted DE genes to ground truth.",
+        "description": "Pass if Jaccard ≥ 0.5 for the Inj_PT Day2↑ set (top-15)."
+      }
+    }
+  }
+}

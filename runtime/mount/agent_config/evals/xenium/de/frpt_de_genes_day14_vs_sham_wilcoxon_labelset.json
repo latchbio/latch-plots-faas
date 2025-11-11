@@ -1,0 +1,23 @@
+{
+  "id": "frpt_de_genes_day14_vs_sham_wilcoxon_labelset",
+  "task": "Using the Xenium mouse kidney dataset , focus on cells annotated as **FR_PT** and perform differential expression between **day 14** post-IRI vs **sham** (FR_PT@day14 vs FR_PT@sham). Use a Wilcoxon rank-sum test with Benjamini–Hochberg correction. Keep genes with positive log fold-change in **day 14** and adjusted p ≤ 0.01. Rank by log fold-change (desc), then by −log10(adjusted p). Return EXACTLY:\n<EVAL_ANSWER>\n{\n  \"markers_predicted\": {\n    \"FR_PT_day14_vs_sham_up\": [\"Vcam1\", \"Ccl2\", \"Il34\", \"Icam1\", \"Serpine1\", \"Cd44\", \"Klf5\"]\n  }\n}\n</EVAL_ANSWER>",
+  "data_node": "latch://38438.account/Scratch/xenium/evals/multimodal_spatial_xenium_mouse_kidney.h5ad",
+  "grader": {
+    "type": "label_set_jaccard",
+    "config": {
+      "ground_truth_marker_sets": {
+        "FR_PT_day14_vs_sham_up": ["Vcam1", "Ccl2", "Il34", "Icam1", "Serpine1", "Cd44", "Klf5"]
+      },
+      "scoring": {
+        "method": "jaccard_index",
+        "k_top_agent_markers": 15,
+        "per_label_thresholds": {
+          "FR_PT_day14_vs_sham_up": 0.5
+        },
+        "penalize_extra_labels": false,
+        "set_definition": "Compare the SET of the agent’s top-k predicted DE genes to the ground-truth set; duplicates and order ignored; strings must match exactly.",
+        "description": "Pass if Jaccard ≥ 0.5 for the FR_PT Day14↑ gene set (top-15)."
+      }
+    }
+  }
+}

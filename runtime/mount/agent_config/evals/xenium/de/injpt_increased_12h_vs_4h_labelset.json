@@ -1,0 +1,23 @@
+{
+  "id": "injpt_increased_12h_vs_4h_labelset",
+  "task": "Using Xenium, test whether **Inj_PT** (injured proximal tubule) increases from **4h** to **12h** post-IRI. Define increase as a significantly higher fraction at 12h than 4h (aggregate per sample if available; otherwise robust per-cell test with BH). Return EXACTLY:\n<EVAL_ANSWER>\n{\n  \"labels_predicted\": {\n    \"Hour12_vs_Hour4_up\": [\"Inj_PT\"]\n  }\n}\n</EVAL_ANSWER>",
+  "data_node": "latch://38438.account/Scratch/xenium/evals/multimodal_spatial_xenium_mouse_kidney.h5ad",
+  "grader": {
+    "type": "label_set_jaccard",
+    "config": {
+      "ground_truth_marker_sets": {
+        "Hour12_vs_Hour4_up": ["Inj_PT"]
+      },
+      "scoring": {
+        "method": "jaccard_index",
+        "k_top_agent_markers": 5,
+        "per_label_thresholds": {
+          "Hour12_vs_Hour4_up": 1.0
+        },
+        "penalize_extra_labels": true,
+        "set_definition": "Compare the SET of predicted labels for the contrast to the ground-truth set.",
+        "description": "Pass only if Inj_PT is predicted (no extras)."
+      }
+    }
+  }
+}
