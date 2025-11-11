@@ -2,19 +2,9 @@ from .base import BinaryGrader, GraderResult
 from eval_types import TestResult
 
 class NumericToleranceGrader(BinaryGrader):
-    def evaluate(self, test_result: TestResult, config: dict) -> GraderResult:
+    def evaluate_answer(self, agent_answer: dict, config: dict) -> GraderResult:
         ground_truth = config.get("ground_truth", {})
         tolerances = config.get("tolerances", {})
-
-        agent_answer = self.extract_answer_from_tags(test_result.conversation_history)
-
-        if agent_answer is None:
-            return GraderResult(
-                passed=False,
-                metrics={},
-                reasoning="Agent did not provide answer in <EVAL_ANSWER> tags",
-                agent_answer=None
-            )
 
         metrics = {}
         all_pass = True

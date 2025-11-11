@@ -1,6 +1,5 @@
 {
-    "id": "clustering_1",
-    "task": "Help me find more clusters on the dataset",
-    "data_node": "latch://38438.account/AtlasxOmics/Kosta/Kostallari_SOW313_ATAC",
-    "judge_prompt": "Evaluate whether the agent launches the correct workflow for clustering.\n\n    Check:\n    1. The `genome` parameter must be one of `\"hg38\"`, `\"mm10\"`, or `\"rnor6\"`.\n    2. The length of the `runs` list must match the number of samples in the `adata` object (typically under `adata.obs[\"sample\"]`), where sample IDs follow the format `DXXXXX_NGYYYYY`.\n    3. The `resolution` value should reflect the desired clustering granularity: higher values yield more clusters, lower values fewer.\n    4. All parameters above should be exposed in the workflow form.\n    5. If the user requests clustering on a subset of the dataset, the agent must create a subsetted `adata` object, upload it to Latch using the correct APIs.\n    6. The adata subset created must contain >0 cells. \n    7. Must use the exact workflow name and version in the `w_workflow` widget and include `w.value` in the code block to render the workflow launch button.\n    8. Once workflow finishes, retrieve workflow outputs and make visualization. \n    ```\n    w = w_workflow(\n        wf_name=\"wf.__init__.opt_workflow\",\n        version=\"0.3.5-9e16e4\",\n            ....\n    )\n    w.value\n    ```"
+  "id": "clustering_1",
+  "task": "Help me find more clusters on the dataset",
+  "data_node": "latch://38438.account/AtlasxOmics/Kosta/Kostallari_SOW313_ATAC"
 }

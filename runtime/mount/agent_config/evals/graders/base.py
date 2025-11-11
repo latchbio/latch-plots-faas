@@ -13,6 +13,17 @@ class GraderResult:
 
 class BinaryGrader:
     def evaluate(self, test_result: TestResult, config: dict) -> GraderResult:
+        agent_answer = self.extract_answer_from_tags(test_result.conversation_history)
+        if agent_answer is None:
+            return GraderResult(
+                passed=False,
+                metrics={},
+                reasoning="Failed to extract answer from conversation history",
+                agent_answer=None
+            )
+        return self.evaluate_answer(agent_answer, config)
+
+    def evaluate_answer(self, agent_answer: dict, config: dict) -> GraderResult:
         raise NotImplementedError
 
     def extract_answer_from_tags(self, conversation: list[dict]) -> dict | None:

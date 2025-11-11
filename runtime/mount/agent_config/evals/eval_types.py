@@ -13,7 +13,6 @@ class TestCase(BaseModel):
     id: str
     task: str
     data_node: str | list[str] | None = None
-    judge_prompt: str | None = None
     grader: dict | None = None
 
 
