@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import argparse
 import json
 import os
 import re
@@ -18,12 +19,16 @@ from minisweagent.environments.local import LocalEnvironment
 from minisweagent.models import get_model
 
 
-def run_bioinformatics_eval():
+def run_bioinformatics_eval(eval_file: str, keep_workspace: bool = False):
     print("=" * 80)
     print("Running mini-swe-agent on bioinformatics eval")
     print("=" * 80)
 
-    eval_path = Path(__file__).parent / "curio_seeker_ovary" / "curio_mt_percentage.json"
+    eval_path = Path(__file__).parent / eval_file
+    if not eval_path.exists():
+        print(f"Error: Eval file not found: {eval_path}")
+        sys.exit(1)
+
     eval_data = json.loads(eval_path.read_text())
     test_case = TestCase(**eval_data)
 
@@ -33,9 +38,10 @@ def run_bioinformatics_eval():
     print(test_case.task)
     print("-" * 80)
 
-    tmpdir = Path(tempfile.gettempdir()) / "mini_swe_bio_eval"
-    tmpdir.mkdir(exist_ok=True)
+    cache_dir = Path(tempfile.gettempdir()) / "mini_swe_bio_eval" / "cache"
+    cache_dir.mkdir(parents=True, exist_ok=True)
 
+    tmpdir = Path(tempfile.gettempdir()) / "mini_swe_bio_eval"
     work_dir = tmpdir / test_case.id
     if work_dir.exists():
         import shutil
@@ -43,7 +49,10 @@ def run_bioinformatics_eval():
     work_dir.mkdir()
 
     print(f"\nWorking directory: {work_dir}")
-    print("   (This directory will NOT be deleted after the run)")
+    if keep_workspace:
+        print("   (Workspace will be preserved after run)")
+    else:
+        print("   (Workspace will be deleted after run)")
 
     print("\n" + "=" * 80)
     print("Staging data files...")
@@ -60,13 +69,22 @@ def run_bioinformatics_eval():
         contextual_data = []
         for node in data_nodes:
             data_filename = Path(node).name
-            print(f"\nDownloading data: {node}")
-            subprocess.run(
-                ["latch", "cp", node, data_filename],
-                check=True,
-                capture_output=True
-            )
-            print(f"Data staged: {data_filename}")
+            cached_file = cache_dir / data_filename
+
+            if cached_file.exists():
+                print(f"\nUsing cached data: {data_filename}")
+                os.symlink(cached_file, data_filename)
+            else:
+                print(f"\nDownloading data: {node}")
+                subprocess.run(
+                    ["latch", "cp", node, str(cached_file)],
+                    check=True,
+                    capture_output=True
+                )
+                print(f"Data cached: {cached_file}")
+                os.symlink(cached_file, data_filename)
+
+            print(f"Linked: {data_filename} -> {cached_file}")
 
             contextual_data.append({
                 "type": "File",
@@ -254,12 +272,32 @@ def run_bioinformatics_eval():
         else:
             print(f"\nWarning: Unknown grader type '{grader_type}'")
 
-    print("\nExploration complete!")
-    print(f"All files preserved at: {work_dir}")
-    print(f"Agent logs at: {work_dir}/agent_output.log")
-    print("\nTo inspect results:")
-    print(f"  cd {work_dir}")
+    print("\n" + "=" * 80)
+    print("Cleanup...")
+    print("=" * 80)
+
+    if keep_workspace:
+        print(f"\nWorkspace preserved at: {work_dir}")
+        print(f"Agent logs: {work_dir}/agent_output.log")
+        print(f"Agent trajectory: {work_dir}/trajectory.json")
+        print(f"Agent answer: {work_dir}/eval_answer.json")
+        print(f"\nTo inspect results:")
+        print(f"  cd {work_dir}")
+    else:
+        import shutil
+        shutil.rmtree(work_dir)
+        print(f"\nWorkspace deleted: {work_dir}")
+        print(f"Data cache preserved at: {cache_dir}")
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Run mini-swe-agent on bioinformatics eval")
+    parser.add_argument("--eval", required=True, help="Eval file to run (e.g., curio_seeker_ovary/curio_mt_percentage.json)")
+    parser.add_argument("--keep-workspace", action="store_true", help="Keep the workspace directory after completion")
+    args = parser.parse_args()
+
+    run_bioinformatics_eval(args.eval, args.keep_workspace)
 
 
 if __name__ == "__main__":
-    run_bioinformatics_eval()
+    main()
