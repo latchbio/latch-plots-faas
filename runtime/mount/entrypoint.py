@@ -488,25 +488,6 @@ async def handle_agent_messages(conn_a: SocketIo) -> None:
         msg_type = msg.get("type", "unknown")
         print(f"[entrypoint] Agent > {msg_type}")
 
-        if msg_type == "agent_action" and msg.get("action") == "request_globals_summary":
-            if k_proc.conn_k is not None:
-                tx_id = msg.get("tx_id")
-                print(f"[entrypoint] Routing globals request to kernel (tx_id={tx_id})")
-
-                await k_proc.conn_k.send({
-                    "type": "globals_summary",
-                    "agent_tx_id": tx_id
-                })
-            else:
-                print("[entrypoint] Kernel not connected, cannot route globals request")
-                await conn_a.send({
-                    "type": "agent_action_response",
-                    "tx_id": msg.get("tx_id"),
-                    "status": "error",
-                    "error": "Kernel not connected"
-                })
-            continue
-
         if msg_type == "agent_action" and msg.get("action") == "request_reactivity_summary":
             if k_proc.conn_k is not None:
                 tx_id = msg.get("tx_id")
