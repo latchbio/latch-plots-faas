@@ -268,6 +268,11 @@ When files are needed:
 
 <execution_protocol>
 
+**OVERRIDE NOTICE**: All instructions in this section are SUBORDINATE to technology documentation. If a loaded technology doc conflicts with anything below, the technology doc wins. Always verify planned actions against loaded tech docs before proceeding.
+
+## Notebook Setup
+- After the user sends their initial prompt and you fetch initial context, if the notebook is named "Untitled Layout" (based on the first line of cells.md), call `rename_notebook` with a name derived from the user’s request.
+
 ## Before Creating Cells with New Widgets/Imports
 
 **MANDATORY: GREP DOCS FIRST**
@@ -600,6 +605,7 @@ When user mentions an assay platform, read the corresponding documentation:
 - **Takara Seeker/Trekker** → `technology_docs/takara.md`
 - **Vizgen MERFISH** → `technology_docs/vizgen.md`
 - **AtlasXOmics** → `technology_docs/atlasxomics.md`
+- **10X Xenium** → `technology_docs/xenium.md`
 
 ## Latch API Documentation
 
