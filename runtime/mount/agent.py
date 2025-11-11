@@ -2138,6 +2138,84 @@ class AgentHarness:
         })
         self.tool_map["bash"] = bash
 
+        async def execute_code(args: dict) -> dict:
+            code = args.get("code")
+            if code is None:
+                return {
+                    "tool_name": "execute_code",
+                    "success": False,
+                    "summary": "No code provided"
+                }
+
+            print(f"[tool] execute_code: {code[:50]}...")
+
+            result = await self.atomic_operation("execute_code", {"code": code})
+
+            return {
+                "tool_name": "execute_code",
+                "success": True,
+                "summary": "Code executed",
+                "code": code,
+                "stdout": result.get("stdout"),
+                "stderr": result.get("stderr"),
+                "exception": result.get("exception"),
+            }
+
+        self.tools.append({
+            "name": "execute_code",
+            "description": "Execute arbitrary Python code in the notebook kernel and return the result, stdout, stderr, and any exceptions. Use this to test imports, print values, or run simple inspection code.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "code": {"type": "string", "description": "Python code to execute"}
+                },
+                "required": ["code"]
+            }
+        })
+        self.tool_map["execute_code"] = execute_code
+
+        async def get_global_info(args: dict) -> dict:
+            key = args.get("key")
+            if key is None:
+                return {
+                    "tool_name": "get_global_info",
+                    "success": False,
+                    "summary": "No key provided"
+                }
+
+            print(f"[tool] get_global_info: {key}")
+
+            result = await self.atomic_operation("get_global_info", {"key": key})
+
+            if result.get("status") == "success":
+                info = result.get("info", {})
+                return {
+                    "tool_name": "get_global_info",
+                    "success": True,
+                    "summary": f"Retrieved info for global '{key}'",
+                    "key": key,
+                    "info": info
+                }
+
+            return {
+                "tool_name": "get_global_info",
+                "success": False,
+                "summary": f"Failed to get global info: {result.get('error', 'Unknown error')}"
+            }
+
+        self.tools.append({
+            "name": "get_global_info",
+            "description": "Get rich information about a specific global variable including its type, shape, columns, dtypes, etc. Especially useful for DataFrames and AnnData objects.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "key": {"type": "string", "description": "Name of the global variable to inspect"}
+                },
+                "required": ["key"]
+            }
+        })
+        self.tool_map["get_global_info"] = get_global_info
+
         async def refresh_cells_context(args: dict) -> dict:
             context_result = await self.atomic_operation("get_context")
 
@@ -2199,48 +2277,6 @@ class AgentHarness:
                 "context_path": str(context_dir / "cells.md")
             }
 
-        async def refresh_globals_context(args: dict) -> dict:
-            globals_result = await self.atomic_operation("request_globals_summary")
-
-            if globals_result.get("status") != "success":
-                return {
-                    "tool_name": "refresh_globals_context",
-                    "success": False,
-                    "summary": f"Failed to refresh globals: {globals_result.get('error', 'Unknown error')}"
-                }
-
-            globals_data = globals_result.get("summary", {})
-
-            context_dir = context_root / "notebook_context"
-            context_dir.mkdir(parents=True, exist_ok=True)
-
-            if len(globals_data) > 0:
-                global_lines = ["# Global Variables", f"\nTotal: {len(globals_data)} variables\n"]
-
-                for var_name in sorted(globals_data.keys()):
-                    var_info = globals_data[var_name]
-
-                    global_lines.append(f"\n## Variable: {var_name}")
-
-                    if not isinstance(var_info, dict):
-                        global_lines.append(f"VALUE: {var_info}")
-                        continue
-
-                    for key, value in var_info.items():
-                        global_lines.append(f"{key.upper()}: {value}")
-
-                (context_dir / "globals.md").write_text("\n".join(global_lines))
-            else:
-                (context_dir / "globals.md").write_text("# Global Variables\n\nNo global variables defined.\n")
-
-            return {
-                "tool_name": "refresh_globals_context",
-                "success": True,
-                "summary": f"Refreshed globals context for {len(globals_data)} variables and stored result in {context_dir / 'globals.md'}",
-                "variable_count": len(globals_data),
-                "context_path": str(context_dir / "globals.md"),
-            }
-
         async def refresh_reactivity_context(args: dict) -> dict:
             reactivity_result = await self.atomic_operation("request_reactivity_summary")
 
@@ -2277,16 +2313,6 @@ class AgentHarness:
             },
         })
         self.tool_map["refresh_cells_context"] = refresh_cells_context
-
-        self.tools.append({
-            "name": "refresh_globals_context",
-            "description": "Refresh the globals.md context file with current global variables and their metadata.",
-            "input_schema": {
-                "type": "object",
-                "properties": {},
-            },
-        })
-        self.tool_map["refresh_globals_context"] = refresh_globals_context
 
         self.tools.append({
             "name": "refresh_reactivity_context",
@@ -2830,7 +2856,6 @@ class AgentHarness:
             return f"# {filename}\n\nFile not yet generated."
 
         cells_content = read_context_file("cells.md")
-        globals_content = read_context_file("globals.md")
         signals_content = read_context_file("signals.md")
 
         def build_tree(path: Path, prefix: str = "") -> list[str]:
@@ -2854,7 +2879,6 @@ class AgentHarness:
             "messages": messages,
             "model": self.mode_config.get(self.mode, ("claude-sonnet-4-5-20250929", 1024))[0],
             "cells": cells_content,
-            "globals": globals_content,
             "signals": signals_content,
             "tree": tree_content,
         }
@@ -2947,7 +2971,7 @@ class AgentHarness:
                     for key, value in data.items():
                         if key in self.expected_widgets:
                             self.expected_widgets[key] = value
-                    
+
                     if all(v is not None for v in self.expected_widgets.values()):
                         await self.pending_messages.put({
                             "type": "set_widget_value",
