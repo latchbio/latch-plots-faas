@@ -2277,48 +2277,6 @@ class AgentHarness:
                 "context_path": str(context_dir / "cells.md")
             }
 
-        async def refresh_globals_context(args: dict) -> dict:
-            globals_result = await self.atomic_operation("request_globals_summary")
-
-            if globals_result.get("status") != "success":
-                return {
-                    "tool_name": "refresh_globals_context",
-                    "success": False,
-                    "summary": f"Failed to refresh globals: {globals_result.get('error', 'Unknown error')}"
-                }
-
-            globals_data = globals_result.get("summary", {})
-
-            context_dir = context_root / "notebook_context"
-            context_dir.mkdir(parents=True, exist_ok=True)
-
-            if len(globals_data) > 0:
-                global_lines = ["# Global Variables", f"\nTotal: {len(globals_data)} variables\n"]
-
-                for var_name in sorted(globals_data.keys()):
-                    var_info = globals_data[var_name]
-
-                    global_lines.append(f"\n## Variable: {var_name}")
-
-                    if not isinstance(var_info, dict):
-                        global_lines.append(f"VALUE: {var_info}")
-                        continue
-
-                    for key, value in var_info.items():
-                        global_lines.append(f"{key.upper()}: {value}")
-
-                (context_dir / "globals.md").write_text("\n".join(global_lines))
-            else:
-                (context_dir / "globals.md").write_text("# Global Variables\n\nNo global variables defined.\n")
-
-            return {
-                "tool_name": "refresh_globals_context",
-                "success": True,
-                "summary": f"Refreshed globals context for {len(globals_data)} variables and stored result in {context_dir / 'globals.md'}",
-                "variable_count": len(globals_data),
-                "context_path": str(context_dir / "globals.md"),
-            }
-
         async def refresh_reactivity_context(args: dict) -> dict:
             reactivity_result = await self.atomic_operation("request_reactivity_summary")
 
@@ -2355,16 +2313,6 @@ class AgentHarness:
             },
         })
         self.tool_map["refresh_cells_context"] = refresh_cells_context
-
-        self.tools.append({
-            "name": "refresh_globals_context",
-            "description": "Refresh the globals.md context file with current global variables and their metadata.",
-            "input_schema": {
-                "type": "object",
-                "properties": {},
-            },
-        })
-        self.tool_map["refresh_globals_context"] = refresh_globals_context
 
         self.tools.append({
             "name": "refresh_reactivity_context",
@@ -2908,7 +2856,6 @@ class AgentHarness:
             return f"# {filename}\n\nFile not yet generated."
 
         cells_content = read_context_file("cells.md")
-        globals_content = read_context_file("globals.md")
         signals_content = read_context_file("signals.md")
 
         def build_tree(path: Path, prefix: str = "") -> list[str]:
@@ -2932,7 +2879,6 @@ class AgentHarness:
             "messages": messages,
             "model": self.mode_config.get(self.mode, ("claude-sonnet-4-5-20250929", 1024))[0],
             "cells": cells_content,
-            "globals": globals_content,
             "signals": signals_content,
             "tree": tree_content,
         }
