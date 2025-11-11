@@ -1,5 +1,5 @@
 {
   "id": "merge_obs_1",
   "task": "Merge cluster 1 and 4",
-  "data_node": "latch://38438.account/AtlasxOmics/Stomach_Case_Study_Plots/combined_sm_ge.h5ad"
+  "data_node": "latch://38438.account/Stomach_Case_Study_Plots/combined_sm_ge.h5ad"
 }
