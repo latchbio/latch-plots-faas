@@ -15,7 +15,7 @@ T = TypeVar("T")
 class SocketIoThread(Thread):
     loop: asyncio.AbstractEventLoop | None = None
     conn: SocketIo | None = None
-    send_queue: asyncio.Queue[tuple[object, cf.Future[None]]] | None = None
+    send_queue: asyncio.Queue[tuple[object, asyncio.Future[None]]] | None = None
     sender_task: asyncio.Task[None] | None = None
 
     def __init__(self, *, socket: socket) -> None:
@@ -33,9 +33,9 @@ class SocketIoThread(Thread):
             data, future = await self.send_queue.get()
             try:
                 await self.conn.send(data)
-                future.set_result(None)
+                self.loop.call_soon_threadsafe(future.set_result, None)
             except Exception as e:
-                future.set_exception(e)
+                self.loop.call_soon_threadsafe(future.set_exception, e)
             finally:
                 self.send_queue.task_done()
 
@@ -64,11 +64,11 @@ class SocketIoThread(Thread):
     def send_fut(self, data: object) -> cf.Future[None]:
         assert self.loop is not None
         assert self.send_queue is not None
-        future: cf.Future[None] = cf.Future()
+        future: asyncio.Future[None] = asyncio.Future(loop=self.loop)
 
         self.send_queue.put_nowait((data, future))
 
-        return future
+        return asyncio.wrap_future(future)
 
     async def send(self, data: object) -> None:
         await asyncio.wrap_future(self.send_fut(data))
