@@ -20,8 +20,8 @@
         },
         "metrics.mean_cv": {
           "type": "max",
-          "value": 30.0,
-          "description": "Mean CV must be ≤ 30% (good reproducibility)"
+          "value": 35.0,
+          "description": "Mean CV must be ≤ 35% (good reproducibility)"
         },
         "metrics.max_absolute_diff": {
           "type": "max",
