@@ -1,0 +1,19 @@
+{
+  "id": "xenium_hvg_variance_share_numeric",
+  "task": "Compute 200 highly variable genes (HVGs) on the Xenium AnnData using an appropriate normalization consistent with your HVG method. Report the fraction of total (transformed) gene-expression variance captured by the HVG set. Return EXACTLY:\n<EVAL_ANSWER>\n{\n  \"variance_captured_hvg\": 0.000\n}\n</EVAL_ANSWER>",
+  "data_node": [
+    "latch://38438.account/Scratch/xenium/evals/xenium_kidney_filtered_norm.h5ad"
+  ],
+  "grader": {
+    "type": "numeric_tolerance",
+    "config": {
+      "ground_truth": {
+        "variance_captured_hvg": 0.729
+      },
+      "tolerances": {
+        "variance_captured_hvg": { "type": "absolute", "value": 0.1 }
+      }
+    }
+  }
+}
+
