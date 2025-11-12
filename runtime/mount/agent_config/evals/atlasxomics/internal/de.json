@@ -1,5 +1,0 @@
-{
-  "id": "de_1",
-  "task": "Perform differential gene activity comparison between cluster 1 and 2.",
-  "data_node": "latch://38438.account/AtlasxOmics/atlasx_demo_002205/combined_sm_ge.h5ad"
-}

@@ -2,6 +2,7 @@ import argparse
 import asyncio
 import json
 import os
+import signal
 import socket
 import sys
 import textwrap
@@ -503,7 +504,26 @@ async def run_eval(test_case: TestCase, port: int, latch_dir: Path) -> TestResul
     return test_result
 
 
+shutdown_requested = False
+eval_server_instance = None
+
+def signal_handler(signum, frame):
+    global shutdown_requested
+    if not shutdown_requested:
+        shutdown_requested = True
+        print("\n\n[eval] Shutdown requested (Ctrl-C). Cleaning up agent and kernel processes...")
+        print("[eval] Press Ctrl-C again to force quit.\n")
+        if eval_server_instance and eval_server_instance.agent_proc:
+            asyncio.create_task(eval_server_instance.stop_agent())
+    else:
+        print("\n[eval] Force quit!")
+        sys.exit(1)
+
 async def main():
+    global eval_server_instance
+
+    signal.signal(signal.SIGINT, signal_handler)
+
     parser = argparse.ArgumentParser(description="Run agent eval server")
     parser.add_argument("--eval", required=True, help="Eval file to run")
     parser.add_argument("--port", type=int, default=8765, help="WebSocket server port")
@@ -538,13 +558,18 @@ async def main():
     (latch_dir / "session-id").write_text(f"eval-{test_case.id}")
     (latch_dir / "nucleus-url").write_text("https://nucleus.latch.bio")
 
-    result = await run_eval(test_case, args.port, latch_dir)
+    try:
+        result = await run_eval(test_case, args.port, latch_dir)
 
-    results_dir.mkdir(exist_ok=True)
-    output_file = results_dir / f"result_{test_case.id}.json"
-    with open(output_file, "w") as f:
-        json.dump(result.model_dump(), f, indent=2)
-    print(f"\n[eval] Result saved to {output_file}")
+        results_dir.mkdir(exist_ok=True)
+        output_file = results_dir / f"result_{test_case.id}.json"
+        with open(output_file, "w") as f:
+            json.dump(result.model_dump(), f, indent=2)
+        print(f"\n[eval] Result saved to {output_file}")
+    finally:
+        if eval_server_instance:
+            print("[eval] Final cleanup: stopping agent and kernel processes...")
+            await eval_server_instance.stop_agent()
 
 
 if __name__ == "__main__":
