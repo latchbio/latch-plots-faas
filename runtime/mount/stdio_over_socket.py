@@ -1,11 +1,6 @@
 import asyncio
-import concurrent.futures as cf
-import threading
-import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from io import BufferedWriter, RawIOBase, TextIOWrapper, UnsupportedOperation
-from itertools import groupby
-from operator import itemgetter
 from typing import TYPE_CHECKING
 
 from socketio_thread import SocketIoThread
@@ -26,56 +21,13 @@ warning_msgs = [
         ]
 
 
-flush_interval = 0.5
-
-
-def file_log(message: str) -> None:
-    timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
-    with open("/var/log/stdio_over_socket.log", "a") as f:
-        f.write(f"{timestamp} {message}\n")
-        f.flush()
-
-
 @dataclass(kw_only=True)
 class SocketWriter(RawIOBase):
     conn: SocketIoThread
     kernel: "Kernel"
     name: str
     loop: asyncio.AbstractEventLoop
-    _buffer: list[tuple[str, str | None]] = field(default_factory=list, init=False)
-    _buffer_lock: threading.Lock = field(default_factory=threading.Lock, init=False)
-    _flusher_task: cf.Future[None] | None = field(default=None, init=False)
-
-    def _start_flusher(self) -> None:
-        if self._flusher_task is None:
-            flusher_thread = threading.Thread(target=self._flush_loop_thread, daemon=True)
-            flusher_thread.start()
-            self._flusher_task = cf.Future()
-
-    def _flush_loop_thread(self) -> None:
-        while True:
-            time.sleep(flush_interval)
-            asyncio.run_coroutine_threadsafe(self._flush(), self.loop)
-
-    async def _flush(self) -> None:
-        file_log("[stdio_over_socket] flushing")
-        with self._buffer_lock:
-            if len(self._buffer) == 0:
-                return
-
-            items = list(self._buffer)
-            self._buffer.clear()
-
-        for cell_id, group in groupby(items, key=itemgetter(1)):
-            combined_data = "".join(data for data, _ in group)
-            file_log(f"[stdio_over_socket] sending {combined_data} for cell {cell_id}")
-            await self.conn.send({
-                "type": "kernel_stdio",
-                "active_cell": cell_id,
-                "stream": self.name,
-                "data": combined_data,
-            })
-        file_log("[stdio_over_socket] flushed")
+    seq: int = 0
 
     @override
     def fileno(self) -> int:
@@ -100,14 +52,17 @@ class SocketWriter(RawIOBase):
         for x in warning_msgs:
             if x in data:
                 return len(b)
-
-        if self._flusher_task is None:
-            self._start_flusher()
-
-        with self._buffer_lock:
-            self._buffer.append((data, self.kernel.active_cell))
-
-        file_log(f"[stdio_over_socket] buffered {len(b)} bytes")
+        seq = self.seq
+        self.seq += 1
+        self.conn.send_fut({
+            "type": "kernel_stdio",
+            "active_cell": self.kernel.active_cell,
+            "stream": self.name,
+            "seq": seq,
+            # todo(maximsmol): this is a bit silly because we are going to have
+            # a TextIOWrapper above that just encoded this for us
+            "data": data,
+        }).result()
         return len(b)
 
 
