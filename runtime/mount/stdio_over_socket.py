@@ -1,7 +1,10 @@
 import asyncio
+import concurrent.futures as cf
 import threading
 from dataclasses import dataclass, field
 from io import BufferedWriter, RawIOBase, TextIOWrapper, UnsupportedOperation
+from itertools import groupby
+from operator import itemgetter
 from typing import TYPE_CHECKING
 
 from socketio_thread import SocketIoThread
@@ -22,24 +25,46 @@ warning_msgs = [
         ]
 
 
+flush_interval = 0.5
+
+
 @dataclass(kw_only=True)
 class SocketWriter(RawIOBase):
     conn: SocketIoThread
     kernel: "Kernel"
     name: str
     loop: asyncio.AbstractEventLoop
-    buffer: list[tuple[int | None, str, str]] = field(default_factory=list, init=False)
-    buffer_lock: threading.Lock = field(default_factory=threading.Lock, init=False)
-    flush_task: asyncio.Task | None = field(default=None, init=False)
+    _buffer: list[tuple[str, str | None]] = field(default_factory=list, init=False)
+    _buffer_lock: threading.Lock = field(default_factory=threading.Lock, init=False)
+    _flusher_task: cf.Future[None] | None = field(default=None, init=False)
 
-    def __post_init__(self) -> None:
-        self.buffer = []
-        self.buffer_lock = threading.Lock()
-        # Use the SocketIoThread's event loop so flushing continues during cell execution
-        assert self.conn.loop is not None
-        self.flush_task = asyncio.run_coroutine_threadsafe(
-            self._periodic_flush(), self.conn.loop
-        )
+    def _start_flusher(self) -> None:
+        if self._flusher_task is None:
+            self._flusher_task = asyncio.run_coroutine_threadsafe(
+                self._flush_loop(), self.conn.loop
+            )
+
+    async def _flush_loop(self) -> None:
+        while True:
+            await asyncio.sleep(flush_interval)
+            await self._flush()
+
+    async def _flush(self) -> None:
+        with self._buffer_lock:
+            if len(self._buffer) == 0:
+                return
+
+            items = list(self._buffer)
+            self._buffer.clear()
+
+        for cell_id, group in groupby(items, key=itemgetter(1)):
+            combined_data = "".join(data for data, _ in group)
+            await self.conn.send({
+                "type": "kernel_stdio",
+                "active_cell": cell_id,
+                "stream": self.name,
+                "data": combined_data,
+            })
 
     @override
     def fileno(self) -> int:
@@ -65,49 +90,13 @@ class SocketWriter(RawIOBase):
             if x in data:
                 return len(b)
 
-        with self.buffer_lock:
-            self.buffer.append((self.kernel.active_cell, self.name, data))
+        if self._flusher_task is None:
+            self._start_flusher()
+
+        with self._buffer_lock:
+            self._buffer.append((data, self.kernel.active_cell))
 
         return len(b)
-
-    def _flush_buffer(self) -> None:
-        """Flush all buffered messages to the socket."""
-        with self.buffer_lock:
-            messages = self.buffer.copy()
-            self.buffer.clear()
-
-        for active_cell, stream, data in messages:
-            self.conn.send_fut({
-                "type": "kernel_stdio",
-                "active_cell": active_cell,
-                "stream": stream,
-                "data": data,
-            }).result()
-
-    async def _periodic_flush(self) -> None:
-        """Periodically flush the buffer every 0.5 seconds."""
-        try:
-            while True:
-                await asyncio.sleep(0.5)
-                self._flush_buffer()
-        except asyncio.CancelledError:
-            # Task was cancelled, exit gracefully
-            pass
-
-    @override
-    def close(self) -> None:
-        """Close the writer and flush any remaining buffered data."""
-        if self.flush_task is not None:
-            self.flush_task.cancel()
-            try:
-                self.flush_task.result(timeout=1.0)
-            except Exception:
-                pass
-
-        # Final flush to ensure no data is lost
-        self._flush_buffer()
-
-        super().close()
 
 
 def text_socket_writer(x: SocketWriter) -> TextIOWrapper:
