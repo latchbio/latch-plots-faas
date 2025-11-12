@@ -1,6 +1,7 @@
 import asyncio
 import concurrent.futures as cf
 import threading
+import time
 from dataclasses import dataclass, field
 from io import BufferedWriter, RawIOBase, TextIOWrapper, UnsupportedOperation
 from itertools import groupby
@@ -29,8 +30,9 @@ flush_interval = 0.5
 
 
 def file_log(message: str) -> None:
+    timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
     with open("/var/log/stdio_over_socket.log", "a") as f:
-        f.write(message + "\n")
+        f.write(f"{timestamp} {message}\n")
         f.flush()
 
 
