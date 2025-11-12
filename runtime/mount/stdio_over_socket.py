@@ -50,6 +50,7 @@ class SocketWriter(RawIOBase):
             await self._flush()
 
     async def _flush(self) -> None:
+        print("[stdio_over_socket] flushing", flush=True)
         with self._buffer_lock:
             if len(self._buffer) == 0:
                 return
@@ -59,12 +60,14 @@ class SocketWriter(RawIOBase):
 
         for cell_id, group in groupby(items, key=itemgetter(1)):
             combined_data = "".join(data for data, _ in group)
+            print(f"[stdio_over_socket] sending {combined_data} for cell {cell_id}", flush=True)
             await self.conn.send({
                 "type": "kernel_stdio",
                 "active_cell": cell_id,
                 "stream": self.name,
                 "data": combined_data,
             })
+        print("[stdio_over_socket] flushed", flush=True)
 
     @override
     def fileno(self) -> int:
@@ -96,6 +99,7 @@ class SocketWriter(RawIOBase):
         with self._buffer_lock:
             self._buffer.append((data, self.kernel.active_cell))
 
+        print(f"[stdio_over_socket] buffered {len(b)} bytes", flush=True)
         return len(b)
 
 
