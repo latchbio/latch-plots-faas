@@ -1,5 +1,6 @@
 import asyncio
-from dataclasses import dataclass
+import threading
+from dataclasses import dataclass, field
 from io import BufferedWriter, RawIOBase, TextIOWrapper, UnsupportedOperation
 from typing import TYPE_CHECKING
 
@@ -27,7 +28,16 @@ class SocketWriter(RawIOBase):
     kernel: "Kernel"
     name: str
     loop: asyncio.AbstractEventLoop
-    seq: int = 0
+    buffer: list[tuple[int | None, str, str]] = field(default_factory=list, init=False)
+    buffer_lock: threading.Lock = field(default_factory=threading.Lock, init=False)
+    flush_task: asyncio.Task | None = field(default=None, init=False)
+
+    def __post_init__(self) -> None:
+        self.buffer = []
+        self.buffer_lock = threading.Lock()
+        self.flush_task = asyncio.run_coroutine_threadsafe(
+            self._periodic_flush(), self.loop
+        )
 
     @override
     def fileno(self) -> int:
@@ -52,18 +62,50 @@ class SocketWriter(RawIOBase):
         for x in warning_msgs:
             if x in data:
                 return len(b)
-        seq = self.seq
-        self.seq += 1
-        self.conn.send_fut({
-            "type": "kernel_stdio",
-            "active_cell": self.kernel.active_cell,
-            "stream": self.name,
-            "seq": seq,
-            # todo(maximsmol): this is a bit silly because we are going to have
-            # a TextIOWrapper above that just encoded this for us
-            "data": data,
-        }).result()
+
+        with self.buffer_lock:
+            self.buffer.append((self.kernel.active_cell, self.name, data))
+
         return len(b)
+
+    def _flush_buffer(self) -> None:
+        """Flush all buffered messages to the socket."""
+        with self.buffer_lock:
+            messages = self.buffer.copy()
+            self.buffer.clear()
+
+        for active_cell, stream, data in messages:
+            self.conn.send_fut({
+                "type": "kernel_stdio",
+                "active_cell": active_cell,
+                "stream": stream,
+                "data": data,
+            }).result()
+
+    async def _periodic_flush(self) -> None:
+        """Periodically flush the buffer every 0.5 seconds."""
+        try:
+            while True:
+                await asyncio.sleep(0.5)
+                self._flush_buffer()
+        except asyncio.CancelledError:
+            # Task was cancelled, exit gracefully
+            pass
+
+    @override
+    def close(self) -> None:
+        """Close the writer and flush any remaining buffered data."""
+        if self.flush_task is not None:
+            self.flush_task.cancel()
+            try:
+                self.flush_task.result(timeout=1.0)
+            except Exception:
+                pass
+
+        # Final flush to ensure no data is lost
+        self._flush_buffer()
+
+        super().close()
 
 
 def text_socket_writer(x: SocketWriter) -> TextIOWrapper:
