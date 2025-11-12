@@ -1,24 +1,33 @@
 {
-  "id": "celltype_proportion_consistency_tbi_24hr_v1",
-  "task": "Attached is an annotated AnnData object. Subset to `adata.obs['condition'] == 'TBI_24hr'`. For this condition, compute the per-sample *proportion* of each predicted cell type (proportion = count of that cell type in the sample / total cells in that sample). Cell type labels are in `adata.obs['predicted_cell_type']`, and sample identifiers are in `adata.obs['sample']`.\n\nReturn EXACTLY in the following format:\n<EVAL_ANSWER>\n{\n  \"cell_types\": [\"cell_type_A\", \"cell_type_B\", \"cell_type_C\", ...],\n  \"samples\": [\n    {\n      \"sample\": \"sample_1\",\n      \"proportions\": {\"cell_type_A\": <proportion_1A>, \"cell_type_B\": <proportion_1B>, \"cell_type_C\": <proportion_1C>, ...}\n    },\n    {\n      \"sample\": \"sample_2\",\n      \"proportions\": {\"cell_type_A\": <proportion_2A>, \"cell_type_B\": <proportion_2B>, \"cell_type_C\": <proportion_2C>, ...}\n    }\n  ]\n}\n</EVAL_ANSWER>",
+  "id": "celltype_proportion_consistency_tbi_24hr_v2",
+  "task": "Attached is an annotated AnnData object. Compute the per-sample *proportion* of each predicted cell type (proportion = count of that cell type in the sample / total cells in that sample). Cell type labels are in `adata.obs['predicted_cell_type']`, and sample identifiers are in `adata.obs['sample']`.\n\nThen compute these reproducibility metrics across samples:\n1. **cramers_v**: Cramér's V statistic from chi-square test on the sample × cell-type contingency table\n2. **mean_cv**: Mean coefficient of variation (CV) across all cell types (CV = std/mean * 100 for each cell type's proportions across samples)\n3. **max_absolute_diff**: The maximum absolute difference in proportions across samples for ANY cell type (e.g., if a cell type has proportions [0.20, 0.25, 0.30] across 3 samples, the max diff is 0.30 - 0.20 = 0.10)\n\nReturn EXACTLY in the following format:\n<EVAL_ANSWER>\n{\n  \"cell_types\": [\"cell_type_A\", \"cell_type_B\", \"cell_type_C\", ...],\n  \"samples\": [\n    {\n      \"sample\": \"sample_1\",\n      \"proportions\": {\"cell_type_A\": <proportion_1A>, \"cell_type_B\": <proportion_1B>, ...}\n    },\n    {\n      \"sample\": \"sample_2\",\n      \"proportions\": {\"cell_type_A\": <proportion_2A>, \"cell_type_B\": <proportion_2B>, ...}\n    }\n  ],\n  \"metrics\": {\n    \"cramers_v\": <float>,\n    \"mean_cv\": <float>,\n    \"max_absolute_diff\": <float>\n  }\n}\n</EVAL_ANSWER>",
   "data_node": [
     "latch://38438.account/AtlasxOmics/Pieper_154_brain_ArchRFull_10Core/annotated/TBI_24hr.annotated.h5ad"
   ],
   "grader": {
-    "type": "proportion_consistency",
+    "type": "numeric_tolerance",
     "config": {
-      "test": {
-        "name": "chi_square_with_cramers_v",
-        "description": "Performs a chi-square test of independence on the per-sample × cell-type proportion table to detect significant heterogeneity across replicates within the TBI_24hr condition, and computes Cramér's V as an effect size."
+      "ground_truth": {
+        "metrics.cramers_v": 0.147,
+        "metrics.mean_cv": 26.73,
+        "metrics.max_absolute_diff": 0.134
       },
-      "scoring": {
-        "method": "chi_square_and_effect_size",
-        "stat_definition": "The chi-square test evaluates whether cell type proportions vary significantly between TBI_24hr samples; Cramér's V quantifies the strength of that variation.",
-        "pass_thresholds": {
-          "chi2_q_min": 0.05,
-          "cramers_v_max": 0.15
+      "tolerances": {
+        "metrics.cramers_v": {
+          "type": "max",
+          "value": 0.15,
+          "description": "Cramér's V must be ≤ 0.15 (small effect size)"
         },
-        "description": "Pass if heterogeneity in cell type proportions across TBI_24hr replicates is non-significant after Benjamini–Hochberg correction (q ≥ 0.05) and the effect size is small (Cramér's V ≤ 0.15)."
+        "metrics.mean_cv": {
+          "type": "max",
+          "value": 30.0,
+          "description": "Mean CV must be ≤ 30% (good reproducibility)"
+        },
+        "metrics.max_absolute_diff": {
+          "type": "max",
+          "value": 0.15,
+          "description": "No cell type should vary by more than 15 percentage points (0.15) across samples"
+        }
       }
     }
   }
