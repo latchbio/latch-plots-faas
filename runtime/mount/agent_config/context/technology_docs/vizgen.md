@@ -1,49 +1,203 @@
-## Vizgen Merfish Analysis Workflow
+# Vizgen Merfish Analysis Workflow
+This is the **authoritative step-by-step pipeline** for **Vizgen Merfish** experiments.  
+Always follow steps **in order**. ALWAYS use **lplots widgets such as `w_text_input`,`w_text_output`, `w_checkbox`, `w_select`, `w_multi_select`, `w_radio_button_group` to configure parameters for various analysis steps. 
 
-This is the **authoritative step-by-step pipeline** for **Vizgen Merfish** experiments.  Always follow steps **in order**. 
-
-1. **Experiment Setup** — **ALWAYS** check if the users provide a h5ad file and a latch directory encoding spatial images. 
-    - If the user provided only the spatial images ask them to provide the h5ad file.
-    - If the user provided only the h5ad file, ASK them for the spatial directory. 
-    - Check if the spatial directory directory contains `pmtiles` and if they are raw images, inform the user. Spatial coordinates are typically found in **spatial** or **X_spatial**
-2. **Data Loading** — load the `h5ad data` using **Scanpy**.  Ensure the input is a valid **AnnData (H5AD)** object. - Always use `w_h5` that uses anndata and **spatial directory** as inputs
-3. **Quality Control & Filtering** — use **Scanpy** to compute QC metrics.  
-   - **ALWAYS** make histograms of the QC metrics.  
-   - **ALWAYS** expose filtering parameters using widgets.  
-   - **ALWAYS** confirm with the user before applying filters.  
-   - **ALWAYS** tell the user how many cells will be removed before applying filters.  
-   - If the user declines, **revert to the original AnnData**.
-### **PREPROCESSING**
-4. **Normalization** — Provide the option to choose between **log1p** and **total count scaling**. Apply **log1p transformation** by default on the QC-filtered dataset.  
-5. **Feature Selection** — identify **highly variable genes (HVGs)**.  
-   Allow the user to choose the number of HVGs to keep (default: **3,000 genes**). Make plots with scanpy for this step.
-6. **Dimensionality Reduction** —  Check if the anndata has PCA and UMAP, if so do not run these steps and give the user an option to rerun
-7. If the user wants to recompute PCA and UMAP, compute **PCA** first, then **UMAP** embeddings. 
-   Expose parameters for:  
-   - Number of PCs (**default: 10**)  
-   - Number of neighbors (**default: 40**)  
-8. Always visualize both PCA and UMAP.
-9. **Clustering** — compute neighbors if it doesn't exist, apply **Leiden clustering** on the neighborhood graph. Use a default resolution of 0.3. Display clusters on the UMAP and spatial embedding.
-### **SECONDARY ANALYSIS**
-10. **Differential Gene Expression (DGE)** — identify **marker genes per cluster** using rank-based DGE tests (use t-tests by default, but allow the user to select different methods). Report top marker genes for each cluster and Make dot plots with scanpy.
-11. **Cell Type Annotation** — Prompt the user to input tissue and organism. Then Assign **biological meaning** to clusters using marker-gene dictionaries to identify cell types. Make a dot plot of cell-types to identify top markers using scanpy.
 ---
 
-✅ **General Rules**  
-- Always produce **visual outputs** at every stage. 
-- Use `w_plot()` and `w_table()` to display plots and tables on the UI
-- Use `w_text_output()` to display progress and information to users
-- Make plots with plotly unless explicitly specified
+## **1. Experiment Setup**
+- **ALWAYS** check if users provide both an **H5AD file** and a **Latch directory** containing spatial images.  
+  - If the user provided **only spatial images**, **ask** them to provide the H5AD file.  
+  - If the user provided **only the H5AD file**, **ask** them for the spatial directory.  
+- Check if the spatial directory contains **pmtiles**; if the images are raw, inform the user.  
+- Spatial coordinates are typically found in `spatial` or `X_spatial`.
+
+---
+
+## **2. Data Loading**
+- Load the H5AD data using **Scanpy**.  
+- Ensure the input is a valid **AnnData (H5AD)** object.  
+- Always use **`w_h5`** that takes both **AnnData** and **spatial directory** as inputs.
+
+---
+
+## **3. Quality Control & Filtering**
+
+- Use **Scanpy** to compute QC metrics.  
+- **ALWAYS** include standard metrics such as:
+  - Total counts per cell  
+  - Number of detected genes per cell  
+  - Mitochondrial gene percentage  
+  - **Cell volume distribution** (derived from polygon area or segmentation mask; visualize histogram). You can never ignore this plot. 
+- **ALWAYS** make **histograms** of QC metrics.  
+- **ALWAYS** expose filtering parameters using `w_text_input`.  
+- **ALWAYS** confirm with the user before applying filters using **lplots widgets**.  
+- **ALWAYS** report how many cells will be removed before filtering.  
+- If the user declines, **revert to the original AnnData**.
+
+---
+
+## **PREPROCESSING**
+
+### **4. Normalization**
+- Provide an option between **log1p** and **total count scaling** using **lplots widgets**.  
+- Apply **log1p transformation** by default on the QC-filtered dataset.
+
+### **5. Feature Selection**
+- Identify **highly variable genes (HVGs)**.  
+- Allow the user to choose the number of HVGs using **lplots widgets** (default: **3,000 genes**).  
+- Visualize this step with **Scanpy plots**.
+
+### **6–8. Dimensionality Reduction**
+- Check if the AnnData object already has **PCA** and **UMAP**.  
+- If they exist, **do not recompute** unless the user explicitly chooses to.  
+- If recomputation is needed:
+  - Run **PCA** first, then **UMAP**.  
+  - Expose parameters using **lplots widgets** for:
+    - Number of PCs (**default: 10**)  
+    - Number of neighbors (**default: 40**)  
+- Always visualize both **PCA** and **UMAP** embeddings.
+
+### **9. Clustering**
+- Compute neighbors if they don’t exist.  
+- Apply **Leiden clustering** on the neighborhood graph.  
+- Use **default resolution = 0.3**.  
+- Display clusters on both **UMAP** and **spatial embedding**.
+
+---
+
+## **SPATIAL ANALYSIS (using Squidpy)**
+
+All spatial analyses must use **Squidpy** functions (`sq.gr`, `sq.pl`) and rely on spatial coordinates within the AnnData object.
+
+### **10. Centrality Analysis**
+- Compute **spatial centrality metrics** (e.g., degree, betweenness, closeness) using `sq.gr.centrality_scores`. If these centrality scores do not exist, compute these sentrality scores and plot them.
+- Plot **centrality plots** overlayed on spatial coordinates.  
+- Allow the user to select which metric(s) to visualize. 
+```python
+sq.gr.centrality_scores(adata, cluster_key="leiden")
+```
+
+### **11. Co-occurrence Analysis**
+- Compute **pairwise co-occurrence scores** between clusters using `sq.gr.co_occurrence`.  
+- **Allow users to specify** which clusters or cell types to compare using **lplots widgets**.  
+- Display **heatmaps** or **bar plots** of co-occurrence frequencies using `sq.pl.co_occurrence`.
+- Compute the cooccurrence similar to the snippet below and use it generate a new figure. 
+```
+sq.gr.co_occurrence(adata, cluster_key="leiden", n_jobs = 4)
+
+# Extract co-occurrence results
+# The result is 3D: (n_clusters, n_clusters, n_intervals)
+# We'll average across intervals to get a single 2D matrix
+cooc_data = adata.uns['leiden_co_occurrence']['occ']
+cooc_mean = np.mean(cooc_data, axis=2)  # Average across spatial intervals
+
+# Create heatmap manually using seaborn
+fig_cooc, ax = plt.subplots(figsize=(10, 8))
+sns.heatmap(
+    cooc_mean,
+    cmap='RdBu_r',
+    center=0,
+    annot=False,
+    square=True,
+    cbar_kws={'label': 'Mean Co-occurrence Score'},
+    ax=ax
+)
+```
+### **12. Neighborhood Enrichment**
+- Compute **neighborhood enrichment** between clusters using `sq.gr.nhood_enrichment`.  
+- Visualize using **heatmaps** and **spatial overlays** (`sq.pl.nhood_enrichment`).  
+- Optionally display **z-score–normalized enrichment**.
+
+### **13. Ripley’s Statistics**
+- Compute **Ripley’s L** statistics using `sq.gr.ripley`.  
+- Plot **observed vs. expected K(r)** curves for major clusters.  
+- Highlight clusters showing **significant spatial aggregation**.
+- Plot the Ripley's L statistic for **EVERY** cluster using plotly. 
+```
+fig, ax = plt.subplots(1, 2, figsize=(15, 7))
+mode = "L"
+
+sq.gr.ripley(adata, cluster_key="leiden", mode=mode)
+sq.pl.ripley(adata, cluster_key="leiden", mode=mode, ax=ax[0])
+
+sq.pl.spatial_scatter(
+    adata,
+    color="leiden",
+    groups=["0", "1", "3"],
+    shape=None,
+    size=2,
+    ax=ax[1],
+)
+```
+
+### **14. Spatial Autocorrelation (Moran’s I)**
+- Compute **Moran’s I** for gene expression spatial autocorrelation using `sq.gr.spatial_autocorr`.  
+- Rank genes by Moran’s I score.  
+- Display a **table of top 10 spatially autocorrelated genes**.  
+- Optionally, show **spatial expression plots** for these genes with `sq.pl.spatial_scatter`.
+
+---
+
+## **SECONDARY ANALYSIS**
+
+### **15. Differential Gene Expression (DGE)**
+- Identify **marker genes per cluster** using rank-based DGE tests.  
+- Use **t-test** by default; allow user to select other methods using **lplots widgets**.  
+- Report **top marker genes per cluster**.  
+- Visualize using **Scanpy dot plots**.
+
+### **16. Cell Type Annotation**
+- Prompt the user for **tissue** and **organism**.  
+- Assign biological meaning to clusters using **marker-gene dictionaries**.  
+- Display **dot plots** of cell types and top markers.
+
+## **17. Spatial Domain Detection and Niche Identification
+
+- Rename `adata.obsm["Spatial"]` to `adata.obsm["X_spatial"]`, then save the processed object to `.h5ad`.
+    ```python
+    if 'Spatial' in adata.obsm.keys():
+        adata.obsm['X_spatial'] = adata.obsm['Spatial']
+
+    # Save the processed H5AD file
+    output_h5ad_path = "/tmp/merfish_processed_for_domain_detection.h5ad"
+    adata.write_h5ad(output_h5ad_path)
+    output_lpath = LPath("latch:///xenium/analysis_output/merfish_processed_for_domain_detection.h5ad")
+    output_lpath.upload_from(output_h5ad_path)
+    local_path = Path(output_h5ad_path)
+    output_lpath.upload_from(local_path)
+    ```
+- Allow the user to a filename and a location to save the input file for the workflow
+- Use this file as input for the domain-detection workflow.
+- Allow the user to select lambda, runname and output_dir using a form created with **lplots widgets**
+```python
+params = {
+    "input_file": LatchFile("latch:///xenium_processed_for_domain_detection.h5ad"),
+    "run_name": "my_run",
+    "output_dir": LatchDir("latch:///Domain_detection_output"),
+    "lambda_list": "0.5",
+}
+w = w_workflow(
+    wf_name="wf.__init__.domain_detection_wf",
+    version=None,
+    label="Launch Domain Detection Workflow",
+    params=params,
+)
+execution = w.value
+```
+---
+
+✅ **General Rules**
+- **NEVER** use `w_number_slider_input` widget at any cost
+- **DO NOT** delete cells unless explicitly prompted by the user.
+- **DO NOT** create duplicated cells.
+- **ALWAYS** store each plot in its own variable. For example the qc plots should be in `fig_qc`. Avoid generic names like `fig` to avoid overwriting figures across cells.
+- Always use markdown to summarize text output ```w_text_output``` after each analysis step. **DO NOT** use ```print()```.
+- Always produce **visual outputs** at every stage. Use ```w_plot()``` and ```w_table()``` to display plots and tables on the UI
+- Always use ```w_h5``` for spatial embedding and UMAP. For all other plots, use Plotly instead. Do not use both w_h5 and Plotly for the same visualization to avoid redundancy.
+- Always pass a DataFrame object directly to the source argument of ```w_table```. Do not pass a method call or expression (e.g., df.head(), df.round(3), df.sort_values(...)) directly into ```w_table```.
 - Apply sensible defaults
 - Add well formatted markdown
 - Prioritize **transparency**, **reproducibility**, and **interactivity** throughout the analysis.
-
-Some pointers on steps.
-
-### Experiment Setup
-
-- You must ask users to confirm whether their experiment is vizgen Merfish
-- If the user provides an `h5ad` file, prompt the user to input a directory containining spatial files
 
 ## Launch Cell segmentation Workflow
 
