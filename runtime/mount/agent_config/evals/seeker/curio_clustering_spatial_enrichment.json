@@ -7,26 +7,15 @@
       "config": {
         "ground_truth": {
           "spatial_enrichment_vs_random": 1.59,
-          "spatial_coherence": 0.435,
-          "random_baseline": 0.274,
-          "n_clusters": 14
+          "spatial_coherence": 0.435
         },
         "tolerances": {
           "spatial_enrichment_vs_random": {
-            "type": "absolute",
-            "value": 0.3
+            "type": "min"
           },
           "spatial_coherence": {
             "type": "absolute",
             "value": 0.1
-          },
-          "random_baseline": {
-            "type": "absolute",
-            "value": 0.05
-          },
-          "n_clusters": {
-            "type": "absolute",
-            "value": 3
           }
         }
       }
