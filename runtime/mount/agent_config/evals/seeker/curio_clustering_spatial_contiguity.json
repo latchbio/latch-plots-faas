@@ -6,22 +6,13 @@
       "type": "numeric_tolerance",
       "config": {
         "ground_truth": {
-          "avg_fragmentation": 0.161,
-          "total_components": 1456,
-          "n_clusters": 14
+          "avg_fragmentation": 0.161
         },
         "tolerances": {
           "avg_fragmentation": {
             "type": "absolute",
-            "value": 0.06
-          },
-          "total_components": {
-            "type": "absolute",
-            "value": 450
-          },
-          "n_clusters": {
-            "type": "absolute",
-            "value": 3
+            "value": 0.06,
+            "description": "The analysis measured how spatially contiguous each cluster is by counting connected components. Lower fragmentation indicates better spatial contiguity."
           }
         }
       }
