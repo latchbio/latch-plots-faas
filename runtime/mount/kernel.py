@@ -2033,10 +2033,10 @@ async def main() -> None:
         _inject.kernel = k
 
         sys.stdout = text_socket_writer(
-            SocketWriter(conn=k.conn, kernel=k, name="stdout", loop=loop)
+            SocketWriter(conn=k.conn, kernel=k, name="stdout")
         )
         sys.stderr = text_socket_writer(
-            SocketWriter(conn=k.conn, kernel=k, name="stderr", loop=loop)
+            SocketWriter(conn=k.conn, kernel=k, name="stderr")
         )
 
         await k.send({"type": "ready"})

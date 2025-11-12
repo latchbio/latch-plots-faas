@@ -33,16 +33,9 @@ class SocketWriter(RawIOBase):
     conn: SocketIoThread
     kernel: "Kernel"
     name: str
-    loop: asyncio.AbstractEventLoop
     _buffer: list[tuple[str, str | None]] = field(default_factory=list, init=False)
     _buffer_lock: threading.Lock = field(default_factory=threading.Lock, init=False)
     _flusher_task: cf.Future[None] | None = field(default=None, init=False)
-
-    def _start_flusher(self) -> None:
-        if self._flusher_task is None:
-            self._flusher_task = asyncio.run_coroutine_threadsafe(
-                self._flush_loop(), self.conn.loop
-            )
 
     async def _flush_loop(self) -> None:
         while True:
@@ -91,7 +84,9 @@ class SocketWriter(RawIOBase):
                 return len(b)
 
         if self._flusher_task is None:
-            self._start_flusher()
+            self._flusher_task = asyncio.run_coroutine_threadsafe(
+                self._flush_loop(), self.conn.loop
+            )
 
         with self._buffer_lock:
             self._buffer.append((data, self.kernel.active_cell))
