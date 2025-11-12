@@ -3,6 +3,8 @@ import concurrent.futures as cf
 import threading
 from dataclasses import dataclass, field
 from io import BufferedWriter, RawIOBase, TextIOWrapper, UnsupportedOperation
+from itertools import groupby
+from operator import itemgetter
 from typing import TYPE_CHECKING
 
 from socketio_thread import SocketIoThread
@@ -23,16 +25,18 @@ warning_msgs = [
         ]
 
 
+flush_interval = 0.5
+
+
 @dataclass(kw_only=True)
 class SocketWriter(RawIOBase):
     conn: SocketIoThread
     kernel: "Kernel"
     name: str
     loop: asyncio.AbstractEventLoop
-    _buffer: list[str] = field(default_factory=list, init=False)
+    _buffer: list[tuple[str, str | None]] = field(default_factory=list, init=False)
     _buffer_lock: threading.Lock = field(default_factory=threading.Lock, init=False)
     _flusher_task: cf.Future[None] | None = field(default=None, init=False)
-    _flush_interval: float = field(default=0.5, init=False)
 
     def _start_flusher(self) -> None:
         if self._flusher_task is None:
@@ -42,7 +46,7 @@ class SocketWriter(RawIOBase):
 
     async def _flush_loop(self) -> None:
         while True:
-            await asyncio.sleep(self._flush_interval)
+            await asyncio.sleep(flush_interval)
             await self._flush()
 
     async def _flush(self) -> None:
@@ -50,15 +54,17 @@ class SocketWriter(RawIOBase):
             if len(self._buffer) == 0:
                 return
 
-            combined_data = "".join(self._buffer)
+            items = list(self._buffer)
             self._buffer.clear()
 
-        await self.conn.send({
-            "type": "kernel_stdio",
-            "active_cell": self.kernel.active_cell,
-            "stream": self.name,
-            "data": combined_data,
-        })
+        for cell_id, group in groupby(items, key=itemgetter(1)):
+            combined_data = "".join(data for data, _ in group)
+            await self.conn.send({
+                "type": "kernel_stdio",
+                "active_cell": cell_id,
+                "stream": self.name,
+                "data": combined_data,
+            })
 
     @override
     def fileno(self) -> int:
@@ -88,7 +94,7 @@ class SocketWriter(RawIOBase):
             self._start_flusher()
 
         with self._buffer_lock:
-            self._buffer.append(data)
+            self._buffer.append((data, self.kernel.active_cell))
 
         return len(b)
 
