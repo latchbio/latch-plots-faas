@@ -35,8 +35,10 @@ class SocketWriter(RawIOBase):
     def __post_init__(self) -> None:
         self.buffer = []
         self.buffer_lock = threading.Lock()
+        # Use the SocketIoThread's event loop so flushing continues during cell execution
+        assert self.conn.loop is not None
         self.flush_task = asyncio.run_coroutine_threadsafe(
-            self._periodic_flush(), self.loop
+            self._periodic_flush(), self.conn.loop
         )
 
     @override
