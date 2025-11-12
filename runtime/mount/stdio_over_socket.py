@@ -50,14 +50,15 @@ class SocketWriter(RawIOBase):
             items = list(self._buffer)
             self._buffer.clear()
 
-        for cell_id, group in groupby(items, key=itemgetter(1)):
-            combined_data = "".join(data for data, _ in group)
-            await self.conn.send({
-                "type": "kernel_stdio",
-                "active_cell": cell_id,
-                "stream": self.name,
-                "data": combined_data,
-            })
+        with asyncio.task_group() as tg:
+            for cell_id, group in groupby(items, key=itemgetter(1)):
+                combined_data = "".join(data for data, _ in group)
+                tg.create_task(self.conn.send({
+                    "type": "kernel_stdio",
+                    "active_cell": cell_id,
+                    "stream": self.name,
+                    "data": combined_data,
+                }))
 
     @override
     def fileno(self) -> int:
