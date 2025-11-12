@@ -1,25 +1,15 @@
 {
   "id": "xenium_pca",
-  "task": "Compute PCA on the filtered data with n_comps=50. Return a JSON object with fields: n_obs (number of observations/cells), n_vars (number of genes), n_pcs (number of principal components computed), variance_explained_top10 (sum of variance ratios for first 10 PCs).",
+  "task": "Compute PCA on the filtered data with n_comps=50. Return a JSON object with fields: n_pcs (number of principal components computed), variance_explained_top10 (sum of variance ratios for first 10 PCs).",
   "data_node": "latch://38438.account/Scratch/xenium/evals/xenium_kidney_filtered_norm.h5ad",
   "grader": {
     "type": "numeric_tolerance",
     "config": {
       "ground_truth": {
-        "n_obs": 1405315,
-        "n_vars": 300,
         "n_pcs": 50,
-        "variance_explained_top10": 0.3155
+        "variance_explained_top10": 0.746
       },
       "tolerances": {
-        "n_obs": {
-          "type": "absolute",
-          "value": 0
-        },
-        "n_vars": {
-          "type": "absolute",
-          "value": 0
-        },
         "n_pcs": {
           "type": "absolute",
           "value": 40

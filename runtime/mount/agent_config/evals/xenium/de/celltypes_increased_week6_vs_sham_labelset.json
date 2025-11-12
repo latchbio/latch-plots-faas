@@ -1,13 +1,11 @@
 {
   "id": "celltypes_increased_week6_vs_sham_labelset",
-  "task": "Using the Xenium dataset, identify which **cell types are still elevated** at **6 weeks** vs **sham** based on fractions. Restrict predictions to {\"Fib\", \"Immune\"}. Return EXACTLY:\n<EVAL_ANSWER>\n{\n  \"labels_predicted\": {\n    \"Week6_vs_Sham_up\": [\"Fib\", \"Immune\"]\n  }\n}\n</EVAL_ANSWER>",
+  "task": "Using the Xenium dataset, identify which cell types are still elevated at 6 weeks vs sham based on fractions. Restrict predictions to {\"Fib\", \"Immune\"}. Return EXACTLY:\n<EVAL_ANSWER>\n{\n  \"cell_types_predicted\": [\"Fib\", \"Immune\"],\n  \"labels_predicted\": {\n    \"Week6_vs_Sham_up\": [\"Fib\", \"Immune\"]\n  }\n}\n</EVAL_ANSWER>",
   "data_node": "latch://38438.account/Scratch/xenium/evals/multimodal_spatial_xenium_mouse_kidney.h5ad",
   "grader": {
     "type": "label_set_jaccard",
     "config": {
-      "ground_truth_marker_sets": {
-        "Week6_vs_Sham_up": ["Fib", "Immune"]
-      },
+      "ground_truth_labels": ["Fib", "Immune"],
       "scoring": {
         "method": "jaccard_index",
         "k_top_agent_markers": 10,
@@ -15,7 +13,7 @@
           "Week6_vs_Sham_up": 0.67
         },
         "penalize_extra_labels": false,
-        "set_definition": "Compare the SET of predicted labels for the contrast to the ground-truth set.",
+        "set_definition": "Compare the SET of predicted labels for the contrast to the ground-truth set; duplicates and order are ignored; strings must match exactly. The grader reads cell_types_predicted from the parsed EVAL_ANSWER object and scores labels_predicted.Week6_vs_Sham_up.",
         "description": "Pass if the predicted increased cell-type set for Week6 vs Sham achieves Jaccard ≥ 0.67."
       }
     }

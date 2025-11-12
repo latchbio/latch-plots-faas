@@ -1,23 +1,20 @@
 {
   "id": "immune_de_genes_day14_vs_sham_wilcoxon_labelset",
-  "task": "Using Xenium, subset **Immune** cells (e.g., macrophage-enriched compartment) and perform DE between **day 14** vs **sham** (Immune@day14 vs Immune@sham). Use Wilcoxon with BH correction; keep genes with positive logFC in day 14 and adj p ≤ 0.01. Rank by logFC then −log10(adj p). Return EXACTLY:\n<EVAL_ANSWER>\n{\n  \"markers_predicted\": {\n    \"Immune_day14_vs_sham_up\": [\"Itgb2\", \"Mrc1\", \"Apoe\", \"Cd83\", \"Ccl8\", \"Mrc2\"]\n  }\n}\n</EVAL_ANSWER>",
-  "data_node": "latch://38438.account/Scratch/xenium/evals/multimodal_spatial_xenium_mouse_kidney.h5ad",
+  "task": "Input: processed Xenium AnnData (mouse kidney) with per-cell labels including Immune. Using expression-only data, subset cells labeled Immune. Perform a two-group differential expression comparing day14 (post-IRI) vs sham within Immune using a Wilcoxon rank-sum test with Benjamini–Hochberg correction (logFC > 0 for day14; adjusted p ≤ 0.01). Rank genes by logFC then -log10(p_adj); deduplicate and remove Ensembl IDs (keep original gene symbol casing). Return EXACTLY:\n<EVAL_ANSWER>\n{\n  \"cell_types_predicted\": [\"Itgb2\", \"Mrc1\", \"Apoe\", \"Cd83\", \"Ccl8\", \"Mrc2\"]\n}\n</EVAL_ANSWER>",
+  "data_node": [
+    "latch://38438.account/Scratch/xenium/evals/multimodal_spatial_xenium_mouse_kidney.h5ad"
+  ],
   "grader": {
     "type": "label_set_jaccard",
     "config": {
-      "ground_truth_marker_sets": {
-        "Immune_day14_vs_sham_up": ["Itgb2", "Mrc1", "Apoe", "Cd83", "Ccl8", "Mrc2"]
-      },
+      "ground_truth_labels": ["Itgb2", "Mrc1", "Apoe", "Cd83", "Ccl8", "Mrc2"],
       "scoring": {
         "method": "jaccard_index",
-        "k_top_agent_markers": 15,
-        "per_label_thresholds": {
-          "Immune_day14_vs_sham_up": 0.5
-        },
+        "pass_threshold": 0.5,
         "penalize_extra_labels": false,
-        "set_definition": "Compare the SET of predicted DE genes to ground truth.",
-        "description": "Pass if Jaccard ≥ 0.5 for the Immune Day14↑ set (top-15)."
+        "set_definition": "Score Jaccard between EVAL_ANSWER.cell_types_predicted and ground_truth_labels."
       }
     }
   }
 }
+
