@@ -1,5 +1,7 @@
 import asyncio
-from dataclasses import dataclass
+import concurrent.futures as cf
+import threading
+from dataclasses import dataclass, field
 from io import BufferedWriter, RawIOBase, TextIOWrapper, UnsupportedOperation
 from typing import TYPE_CHECKING
 
@@ -27,6 +29,36 @@ class SocketWriter(RawIOBase):
     kernel: "Kernel"
     name: str
     loop: asyncio.AbstractEventLoop
+    _buffer: list[str] = field(default_factory=list, init=False)
+    _buffer_lock: threading.Lock = field(default_factory=threading.Lock, init=False)
+    _flusher_task: cf.Future[None] | None = field(default=None, init=False)
+    _flush_interval: float = field(default=0.5, init=False)
+
+    def _start_flusher(self) -> None:
+        if self._flusher_task is None:
+            self._flusher_task = asyncio.run_coroutine_threadsafe(
+                self._flush_loop(), self.loop
+            )
+
+    async def _flush_loop(self) -> None:
+        while True:
+            await asyncio.sleep(self._flush_interval)
+            await self._flush()
+
+    async def _flush(self) -> None:
+        with self._buffer_lock:
+            if len(self._buffer) == 0:
+                return
+
+            combined_data = "".join(self._buffer)
+            self._buffer.clear()
+
+        await self.conn.send({
+            "type": "kernel_stdio",
+            "active_cell": self.kernel.active_cell,
+            "stream": self.name,
+            "data": combined_data,
+        })
 
     @override
     def fileno(self) -> int:
@@ -51,14 +83,13 @@ class SocketWriter(RawIOBase):
         for x in warning_msgs:
             if x in data:
                 return len(b)
-        self.conn.send_fut({
-            "type": "kernel_stdio",
-            "active_cell": self.kernel.active_cell,
-            "stream": self.name,
-            # todo(maximsmol): this is a bit silly because we are going to have
-            # a TextIOWrapper above that just encoded this for us
-            "data": data,
-        }).result()
+
+        if self._flusher_task is None:
+            self._start_flusher()
+
+        with self._buffer_lock:
+            self._buffer.append(data)
+
         return len(b)
 
 
