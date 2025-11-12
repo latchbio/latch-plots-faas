@@ -50,7 +50,7 @@ class SocketWriter(RawIOBase):
             items = list(self._buffer)
             self._buffer.clear()
 
-        with asyncio.task_group() as tg:
+        async with asyncio.TaskGroup() as tg:
             for cell_id, group in groupby(items, key=itemgetter(1)):
                 combined_data = "".join(data for data, _ in group)
                 tg.create_task(self.conn.send({
