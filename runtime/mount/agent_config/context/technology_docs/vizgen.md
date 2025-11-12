@@ -113,20 +113,58 @@ sns.heatmap(
 - Plot **observed vs. expected K(r)** curves for major clusters.  
 - Highlight clusters showing **significant spatial aggregation**.
 - Plot the Ripley's L statistic for **EVERY** cluster using plotly. 
-```
-fig, ax = plt.subplots(1, 2, figsize=(15, 7))
+```python
 mode = "L"
-
 sq.gr.ripley(adata, cluster_key="leiden", mode=mode)
-sq.pl.ripley(adata, cluster_key="leiden", mode=mode, ax=ax[0])
 
-sq.pl.spatial_scatter(
-    adata,
-    color="leiden",
-    groups=["0", "1", "3"],
-    shape=None,
-    size=2,
-    ax=ax[1],
+# Access the ripley results - key format is 'leiden_ripley_L'
+ripley_key = f"leiden_ripley_{mode}"
+if ripley_key not in adata.uns:
+    # Try alternative key format
+    ripley_key = "leiden_ripley"
+
+ripley_results = adata.uns[ripley_key]
+n_clusters = adata.obs['leiden'].nunique()
+
+# Create line plot for all clusters
+df = ripley_results["L_stat"]   # tidy dataframe with: bins, leiden, stats
+
+# Create Plotly figure
+fig_ripley = go.Figure()
+
+# Iterate over clusters present in the DF
+for cluster_id in sorted(df["leiden"].unique()):
+    sub = df[df["leiden"] == cluster_id]
+    
+    fig_ripley.add_trace(go.Scatter(
+        x=sub["bins"],
+        y=sub["stats"],
+        mode='lines',
+        name=f'Cluster {cluster_id}',
+        line=dict(width=2)
+    ))
+
+# Add reference 0-line (CSR expectation for L-statistic)
+fig_ripley.add_hline(
+    y=0,
+    line_dash="dash",
+    line_color="black",
+    annotation_text="Random Distribution"
+)
+
+fig_ripley.update_layout(
+    title="Ripley's L Statistic for All Clusters",
+    xaxis_title="Spatial Distance (r)",
+    yaxis_title="Ripley's L(r)",
+    height=600,
+    showlegend=True,
+    legend=dict(
+        orientation="v",
+        yanchor="top",
+        y=1,
+        xanchor="left",
+        x=1.02
+    )
 )
 ```
 
