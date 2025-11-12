@@ -48,14 +48,14 @@ class SocketWriter(RawIOBase):
 
     def _start_flusher(self) -> None:
         if self._flusher_task is None:
-            self._flusher_task = asyncio.run_coroutine_threadsafe(
-                self._flush_loop(), self.loop
-            )
+            flusher_thread = threading.Thread(target=self._flush_loop_thread, daemon=True)
+            flusher_thread.start()
+            self._flusher_task = cf.Future()
 
-    async def _flush_loop(self) -> None:
+    def _flush_loop_thread(self) -> None:
         while True:
-            await asyncio.sleep(flush_interval)
-            await self._flush()
+            time.sleep(flush_interval)
+            asyncio.run_coroutine_threadsafe(self._flush(), self.loop)
 
     async def _flush(self) -> None:
         file_log("[stdio_over_socket] flushing")
