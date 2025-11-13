@@ -14,7 +14,7 @@ T = TypeVar("T")
 class SocketIoThread(Thread):
     loop: asyncio.AbstractEventLoop | None = None
     conn: SocketIo | None = None
-    lock: asyncio.Lock | None = None
+    lock: threading.Lock = threading.Lock()
 
     def __init__(self, *, socket: socket) -> None:
         super().__init__(name="socket_io")
@@ -22,7 +22,6 @@ class SocketIoThread(Thread):
         self.socket = socket
         self.shutdown = asyncio.Event()
         self.initialized = threading.Event()
-        self.lock = asyncio.Lock()
 
     def run(self) -> None:
         async def f():
@@ -37,7 +36,8 @@ class SocketIoThread(Thread):
     def call_fut(self, coro: Coroutine[None, None, T]) -> cf.Future[T]:
         assert self.loop is not None
 
-        return asyncio.run_coroutine_threadsafe(coro, self.loop)
+        with self.lock:
+            return asyncio.run_coroutine_threadsafe(coro, self.loop)
 
     def send_fut(self, data: object) -> cf.Future[None]:
         assert self.conn is not None
@@ -45,8 +45,7 @@ class SocketIoThread(Thread):
         return self.call_fut(self.conn.send(data))
 
     async def send(self, data: object) -> None:
-        async with self.lock:
-            await asyncio.wrap_future(self.send_fut(data))
+        await asyncio.wrap_future(self.send_fut(data))
 
     def recv_fut(self) -> cf.Future[Any]:
         assert self.conn is not None
