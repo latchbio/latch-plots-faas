@@ -1,31 +1,29 @@
 {
   "id": "mouse_brain_merfish_microglia_age_up_ttest_jaccard_v14_labels_de_only",
-  "task": "Input: processed MERFISH AnnData (mouse brain) with cell-type labels in adata.obs. Using expression-only data, subset cells labeled MICROGLIAL. Within MICROGLIAL, run a two-group t-test differential expression comparing 90wk (OLD) vs 4wk (JUVENILE), requiring logFC > 0 for OLD and adjusted p ≤ 0.05. Rank genes by logFC then −log₁₀(p_adj). Use gene symbols from adata.var['feature_name'] when available (otherwise from adata.var_names); convert to UPPERCASE, deduplicate, and drop Ensembl-style IDs. Return the top-k OLD-upregulated microglial genes as markers_predicted (k=16).",
+  "task": "Input: processed MERFISH AnnData (mouse brain) with cell-type labels in adata.obs. Using expression-only data, subset cells labeled MICROGLIA. Within MICROGLIA, run a two-group t-test differential expression comparing 90wk (OLD) vs 4wk (JUVENILE), requiring logFC > 0 for OLD and adjusted p ≤ 0.05. Rank genes by logFC then −log₁₀(p_adj). Use gene symbols from adata.var['feature_name'] when available (otherwise from adata.var_names); convert to UPPERCASE, deduplicate, and drop Ensembl-style IDs. Return the top-k OLD-upregulated microglia genes as cell_types_predicted (k=16).",
   "data_node": [
     "latch://38438.account/Mouse_Aging_subsetted_celltype_labelled.h5ad"
   ],
   "grader": {
     "type": "label_set_jaccard",
     "config": {
-      "ground_truth_marker_sets": {
-        "Microglial cell (aging/activated)": [
-          "B2M",
-          "TREM2",
-          "CCL2",
-          "APOE",
-          "AXL",
-          "ITGAX",
-          "CD9",
-          "C1QA",
-          "C1QC",
-          "LYZ2",
-          "CTSS"
-        ]
-      },
+      "ground_truth_labels": [
+        "B2M",
+        "TREM2",
+        "CCL2",
+        "APOE",
+        "AXL",
+        "ITGAX",
+        "CD9",
+        "C1QA",
+        "C1QC",
+        "LYZ2",
+        "CTSS"
+      ],
       "scoring": {
         "method": "jaccard_index",
         "k_top_agent_markers": 16,
-        "per_label_thresholds": { "Microglial cell (aging/activated)": 0.5 },
+        "pass_threshold": 0.65,
         "penalize_extra_labels": false,
         "description": "Pass if Jaccard ≥ 0.50 (~≥80% GT overlap using top-16)."
       }

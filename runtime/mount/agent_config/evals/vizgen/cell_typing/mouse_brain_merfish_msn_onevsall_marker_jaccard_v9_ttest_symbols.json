@@ -1,15 +1,15 @@
 {
   "id": "mouse_brain_merfish_msn_onevsall_marker_jaccard_v9_ttest_symbols",
-  "task": "Input: processed MERFISH AnnData (mouse brain). Using expression-only data from the processed MERFISH mouse brain AnnData, perform one-vs-all t-test differential expression per cluster (logFC > 0, adj p ≤ 0.05), rank genes by logFC then −log₁₀(p_adj), convert to uppercase gene symbols (deduplicate, remove Ensembl IDs), identify clusters expressing medium spiny neuron markers, and return the combined medium spiny neuron marker genes in top genes from those medium spiny neuron clusters as markers_predicted.",
+  "task": "Input: processed MERFISH AnnData (mouse brain). Using expression-only data from the processed MERFISH mouse brain AnnData, perform one-vs-all t-test differential expression per cluster (logFC > 0, adj p ≤ 0.05), rank genes by logFC then −log₁₀(p_adj), convert to uppercase gene symbols (deduplicate, remove Ensembl IDs), identify clusters expressing medium spiny neuron markers, and return the combined medium spiny neuron marker genes in top genes from those medium spiny neuron clusters as cell_types_predicted.",
   "data_node": ["latch://38438.account/Mouse_Aging_subsetted.h5ad"],
   "grader": {
     "type": "label_set_jaccard",
     "config": {
-      "ground_truth_marker_sets": { "Medium spiny neuron": ["DRD1", "DRD2"] },
+      "ground_truth_labels": ["DRD1", "DRD2"],
       "scoring": {
         "method": "jaccard_index",
         "k_top_agent_markers": 7,
-        "per_label_thresholds": { "Medium spiny neuron": 0.29 },
+        "pass_threshold": 0.29,
         "penalize_extra_labels": false,
         "description": "Pass if Jaccard ≥ 0.29 (≥80% overlap with 2 GT markers using top-7)."
       }

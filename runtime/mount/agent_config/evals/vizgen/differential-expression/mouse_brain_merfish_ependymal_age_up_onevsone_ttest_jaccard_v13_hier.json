@@ -1,17 +1,15 @@
 {
   "id": "mouse_brain_merfish_ependymal_age_up_onevsone_ttest_jaccard_v13_hier",
-  "task": "Input: processed MERFISH AnnData (mouse brain). Age categories present: ['4wk','24wk','90wk']. Use expression-only data (ignore spatial). Cell-type discovery must follow a hierarchical procedure: (1) split Neuron vs Non-neuronal; (2) within Neurons, separate Inhibitory vs Excitatory, and identify MSN vs non-MSN if present; (3) within Non-neuronal, distinguish Astrocyte, Oligodendrocyte, Oligodendrocyte precursor cell, Microglial cell, Macrophage, Endothelial cell, Vascular leptomeningeal cell, Pericyte, Ependymal cell, and T cell. For cell-typing, use only the following publication-derived marker sets:\n• Neuron (inhibitory families): SST, PVALB, VIP, LAMP5\n• Interneuron (CALB2+): CALB2\n• Striatal medium spiny neurons (MSN): DRD1, DRD2\n• Interneuron (LHX6+): LHX6\n• Interneuron (cholinergic): CHAT\n• Astrocyte (aging/activated): GFAP, VIM, C4B, C3, SERPINA3N, CXCL10, IL18, HIF3A\n• Microglial cell (aging/activated): B2M, TREM2, CCL2, APOE, AXL, ITGAX, CD9, C1QA, C1QC, LYZ2, CTSS\n• Oligodendrocyte (aging/inflam.): C4B, IL33, IL18\n• Endothelial (aging): XDH\n• Pericyte (IFN-state): IFIT3, IFITM3\n• Ependymal (IFN-state): IFIT3, IFITM3\nIdentify clusters matching EPENDYMAL by one-vs-all marker enrichment using the marker set above. Within those ependymal clusters, perform a two-group t-test differential expression comparing 90wk (OLD) vs 4wk (JUVENILE) with logFC > 0 for OLD and adjusted p ≤ 0.05. Rank genes by logFC then −log₁₀(p_adj). Convert to uppercase gene symbols, deduplicate, and remove Ensembl IDs. Return the combined OLD-upregulated ependymal genes from the ependymal clusters as markers_predicted.",
+  "task": "Input: processed MERFISH AnnData (mouse brain); ages = ['4wk','24wk','90wk']. Use expression-only data (ignore spatial). Perform hierarchical cell-type typing: (1) split Neuron vs Non-neuronal; (2) within Neurons, separate Inhibitory vs Excitatory and identify MSN vs non-MSN if present; (3) within Non-neuronal, distinguish Astrocyte, Oligodendrocyte, Oligodendrocyte precursor cell, Microglial cell, Macrophage, Endothelial cell, Vascular leptomeningeal cell, Pericyte, Ependymal cell, and T cell. For typing, use only these publication-derived marker sets:\n• Neuron (inhibitory families): SST, PVALB, VIP, LAMP5\n• Interneuron (CALB2+): CALB2\n• Striatal medium spiny neurons (MSN): DRD1, DRD2\n• Interneuron (LHX6+): LHX6\n• Interneuron (cholinergic): CHAT\n• Astrocyte (aging/activated): GFAP, VIM, C4B, C3, SERPINA3N, CXCL10, IL18, HIF3A\n• Microglial cell (aging/activated): B2M, TREM2, CCL2, APOE, AXL, ITGAX, CD9, C1QA, C1QC, LYZ2, CTSS\n• Oligodendrocyte (aging/inflam.): C4B, IL33, IL18\n• Endothelial (aging): XDH\n• Pericyte (IFN-state): IFIT3, IFITM3\n• Ependymal (IFN-state): IFIT3, IFITM3\nIdentify EPENDYMAL clusters via one-vs-all marker enrichment using the set above. Within the EPENDYMAL clusters, run a two-group t-test differential expression comparing 90wk (OLD) vs 4wk (JUVENILE), requiring logFC > 0 for OLD and adjusted p ≤ 0.05. Rank genes by logFC then −log₁₀(p_adj). Use gene symbols from adata.var['feature_name'] when available (otherwise from adata.var_names); convert to UPPERCASE, deduplicate, and drop Ensembl-style IDs. Return the combined OLD-upregulated ependymal genes from the ependymal clusters as cell_types_predicted.",
   "data_node": ["latch://38438.account/Mouse_Aging_subsetted.h5ad"],
   "grader": {
     "type": "label_set_jaccard",
     "config": {
-      "ground_truth_marker_sets": {
-        "Ependymal cell (aging/IFN)": ["IFIT3", "IFITM3"]
-      },
+      "ground_truth_labels": ["IFIT3", "IFITM3"],
       "scoring": {
         "method": "jaccard_index",
         "k_top_agent_markers": 7,
-        "per_label_thresholds": { "Ependymal cell (aging/IFN)": 0.29 },
+        "pass_threshold": 0.29,
         "penalize_extra_labels": false,
         "description": "Pass if Jaccard ≥ 0.29 (≈ ≥80% overlap with 2 GT markers using top-7)."
       }

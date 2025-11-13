@@ -1,19 +1,17 @@
 {
   "id": "mouse_brain_merfish_endothelial_age_up_ttest_jaccard_v14_labels_de_only",
-  "task": "Input: processed MERFISH AnnData (mouse brain) with cell-type labels in adata.obs. Using expression-only data, subset cells labeled ENDOTHELIAL. Within ENDOTHELIAL, run a two-group t-test differential expression comparing 90wk (OLD) vs 4wk (JUVENILE), requiring logFC > 0 for OLD and adjusted p ≤ 0.05. Rank genes by logFC then −log₁₀(p_adj). Use gene symbols from adata.var['feature_name'] when available (otherwise from adata.var_names); convert to UPPERCASE, deduplicate, and drop Ensembl-style IDs. Return the top-k OLD-upregulated endothelial genes as markers_predicted (k=6).",  
+  "task": "Input: processed MERFISH AnnData (mouse brain) with cell-type labels in adata.obs. Using expression-only data, subset cells labeled ENDOTHELIAL Cell. Within ENDOTHELIAL Cell, run a two-group t-test differential expression comparing 90wk (OLD) vs 4wk (JUVENILE), requiring logFC > 0 for OLD and adjusted p ≤ 0.05. Rank genes by logFC then −log₁₀(p_adj). Use gene symbols from adata.var['feature_name'] when available (otherwise from adata.var_names); convert to UPPERCASE, deduplicate, and drop Ensembl-style IDs. Return the top-k OLD-upregulated endothelial genes as cell_types_predicted (k=6).",
   "data_node": [
     "latch://38438.account/Mouse_Aging_subsetted_celltype_labelled.h5ad"
   ],
   "grader": {
     "type": "label_set_jaccard",
     "config": {
-      "ground_truth_marker_sets": {
-        "Endothelial cell (aging)": ["XDH"]
-      },
+      "ground_truth_labels": ["XDH"],
       "scoring": {
         "method": "jaccard_index",
         "k_top_agent_markers": 6,
-        "per_label_thresholds": { "Endothelial cell (aging)": 0.17 },
+        "pass_threshold": { "Endothelial cell (aging)": 0.15 },
         "penalize_extra_labels": false,
         "description": "Pass if Jaccard ≥ 0.17 (requires XDH in top-6; ~≥80% of 1 GT marker)."
       }

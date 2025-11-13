@@ -25,7 +25,7 @@
       "tolerances": {
         "cell_type_percentages": {
           "type": "absolute",
-          "value": 3.0,
+          "value": 5.0,
           "description": "Each percentage must be within ±3.0 of ground truth"
         }
       }

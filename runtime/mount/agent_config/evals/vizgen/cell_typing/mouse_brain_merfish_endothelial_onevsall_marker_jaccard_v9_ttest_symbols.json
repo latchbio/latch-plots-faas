@@ -1,15 +1,15 @@
 {
   "id": "mouse_brain_merfish_endothelial_onevsall_marker_jaccard_v9_ttest_symbols",
-  "task": "Input: processed MERFISH AnnData (mouse brain). Using expression-only data from the processed MERFISH mouse brain AnnData, perform one-vs-all t-test differential expression per cluster (logFC > 0, adj p ≤ 0.05), rank genes by logFC then −log₁₀(p_adj), convert to uppercase gene symbols (deduplicate, remove Ensembl IDs), identify clusters expressing endothelial cell markers, and return the combined endothelial cell marker genes in top genes from those endothelial cell clusters as markers_predicted.",
+  "task": "Input: processed MERFISH AnnData (mouse brain). Using expression-only data from the processed MERFISH mouse brain AnnData, perform one-vs-all t-test differential expression per cluster (logFC > 0, adj p ≤ 0.05), rank genes by logFC then −log₁₀(p_adj), convert to uppercase gene symbols (deduplicate, remove Ensembl IDs), identify clusters expressing endothelial cell markers, and return all the combined endothelial cell marker genes in top genes from those endothelial cell clusters as cell_types_predicted.",
   "data_node": ["latch://38438.account/Mouse_Aging_subsetted.h5ad"],
   "grader": {
     "type": "label_set_jaccard",
     "config": {
-      "ground_truth_marker_sets": { "Endothelial cell": ["XDH"] },
+      "ground_truth_labels": ["XDH"],
       "scoring": {
         "method": "jaccard_index",
         "k_top_agent_markers": 6,
-        "per_label_thresholds": { "Endothelial cell": 0.17 },
+        "pass_threshold": 0.17,
         "penalize_extra_labels": false,
         "description": "Pass if Jaccard ≥ 0.17 (≥80% overlap with 1 GT marker using top-6)."
       }

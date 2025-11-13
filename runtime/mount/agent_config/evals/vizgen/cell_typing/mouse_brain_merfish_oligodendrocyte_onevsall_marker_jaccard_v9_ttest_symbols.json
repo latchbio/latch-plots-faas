@@ -1,17 +1,15 @@
 {
   "id": "mouse_brain_merfish_oligodendrocyte_onevsall_marker_jaccard_v9_ttest_symbols",
-  "task": "Input: processed MERFISH AnnData (mouse brain). Using expression-only data from the processed MERFISH mouse brain AnnData, perform one-vs-all t-test differential expression per cluster (logFC > 0, adj p ≤ 0.05), rank genes by logFC then −log₁₀(p_adj), convert to uppercase gene symbols (deduplicate, remove Ensembl IDs), identify clusters expressing oligodendrocyte markers, and return the combined oligodendrocyte marker genes in top genes from those oligodendrocyte clusters as markers_predicted.",
+  "task": "Input: processed MERFISH AnnData (mouse brain). Using expression-only data from the processed MERFISH mouse brain AnnData, perform one-vs-all t-test differential expression per cluster (logFC > 0, adj p ≤ 0.05), rank genes by logFC then −log₁₀(p_adj), convert to uppercase gene symbols (deduplicate, remove Ensembl IDs), identify clusters expressing oligodendrocyte markers, and return the combined oligodendrocyte marker genes in top genes from those oligodendrocyte clusters as cell_types_predicted.",
   "data_node": ["latch://38438.account/Mouse_Aging_subsetted.h5ad"],
   "grader": {
     "type": "label_set_jaccard",
     "config": {
-      "ground_truth_marker_sets": {
-        "Oligodendrocyte": ["C4B", "IL33", "IL18"]
-      },
+      "ground_truth_labels": ["C4B", "IL33", "IL18"],
       "scoring": {
         "method": "jaccard_index",
         "k_top_agent_markers": 8,
-        "per_label_thresholds": { "Oligodendrocyte": 0.38 },
+        "pass_threshold": 0.38,
         "penalize_extra_labels": false,
         "description": "Pass if Jaccard ≥ 0.38 (≥80% overlap with 3 GT markers using top-8)."
       }
