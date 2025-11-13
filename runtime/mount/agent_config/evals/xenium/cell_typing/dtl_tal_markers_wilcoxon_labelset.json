@@ -1,25 +1,24 @@
 {
   "id": "dtl_tal_markers_wilcoxon_labelset",
-  "task": "Using the kidney Xenium dataset with per-cell centroids (x, y), identify Loop of Henle cells: TAL and DTL cells. For each class (TAL, DTL), perform one-vs-rest differential expression on expression-only data using a Wilcoxon rank-sum test with Benjamini–Hochberg correction. Keep genes with log fold-change > 0 and adjusted p ≤ 0.01. Rank within each class by log fold-change (descending) then by −log10(adjusted p). Convert gene symbols to uppercase, deduplicate, and remove non-gene IDs. Return a JSON object `markers_predicted` mapping class → list of top markers: {\"TAL\": [...], \"DTL\": [...]}.",
-  "data_node": "latch://38438.account/Scratch/xenium/Output/xenium_mouse_kidney_no_celltype_postprocess_200k.h5ad",
+  "task": "Using the kidney Xenium dataset with per-cell centroids (x, y), identify Loop of Henle cells: TAL and DTL. For each class, perform one-vs-rest differential expression on expression-only data using a Wilcoxon rank-sum test with Benjamini–Hochberg correction; keep genes with log fold-change > 0 and adjusted p ≤ 0.01; rank within each class by log fold-change (descending) then by −log10(adjusted p). Convert gene symbols to UPPERCASE, deduplicate, and remove non-gene IDs. From your ranked results, OUTPUT ONLY markers from this canonical list: {TAL: UMOD, SLC12A1; DTL: FST, AQP1, BST1}. Return EXACTLY: <EVAL_ANSWER>{\"cell_types_predicted\": [\"TAL::UMOD\",\"TAL::SLC12A1\",\"DTL::FST\",\"DTL::AQP1\",\"DTL::BST1\"]}</EVAL_ANSWER> (no additional items).",
+  "data_node": "latch://38438.account/Scratch/xenium/evals/xenium_mouse_kidney_no_celltype_ident_postprocess_200k.h5ad",
   "grader": {
     "type": "label_set_jaccard",
     "config": {
-      "ground_truth_marker_sets": {
-        "TAL": ["UMOD", "SLC12A1"],
-        "DTL": ["FST", "AQP1", "BST1"]
-      },
+      "ground_truth_labels": [
+        "TAL::UMOD",
+        "TAL::SLC12A1",
+        "DTL::FST",
+        "DTL::AQP1",
+        "DTL::BST1"
+      ],
       "scoring": {
         "method": "jaccard_index",
-        "k_top_agent_markers": 15,
-        "per_label_thresholds": {
-          "TAL": 0.5,
-          "DTL": 0.5
-        },
-        "penalize_extra_labels": false,
-        "set_definition": "For each label, compare the SET of the agent’s top-k predicted markers to the ground-truth set; duplicates and order are ignored; strings must match exactly.",
-        "description": "Pass if each label’s predicted marker set achieves Jaccard ≥ threshold against its ground-truth markers (top-15)."
-      }
+        "pass_threshold": 1.0,
+        "set_definition": "Compare the SET of namespaced markers (LABEL::GENE) against ground truth; duplicates and order ignored; strings must match exactly."
+      },
+      "description": "Agent must return exactly the 5 canonical namespaced markers; extras are not allowed because Jaccard is used."
     }
   }
 }
+

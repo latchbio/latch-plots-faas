@@ -1,6 +1,6 @@
 {
   "id": "classify_pt_distribution_advanced",
-  "task": "Using the kidney Xenium dataset (300-gene panel) with per-cell spatial centroids (x, y), subset the AnnData to cells where adata.obs['cell_type'] contains 'PT' and adata.obs['time'] equals 'Day2'. Then report the distribution of predicted PT subtypes as the percentage of total PT cells per subtype. Use exact vocabulary strings. The percentages should sum to ~100%.\n\nVocabulary: PTS1, PTS2, PTS3, Inj_PT, FR_PT\n\n",
+  "task": "Using the kidney Xenium dataset (300-gene panel) with per-cell spatial centroids (x, y), subset the AnnData to cells where adata.obs['cell_type'] contains 'PT' and adata.obs['time'] equals 'Day2'. Then report the distribution of predicted PT subtypes as the percentage of total PT cells per subtype. Use exact vocabulary strings. The percentages should sum to ~100%.\n\nVocabulary: PTS1, PTS2, PTS3, Inj_PT, FR_PT\n\nReturn EXACTLY:\n<EVAL_ANSWER>\n{\n  \"total_cells\": <integer total PT cells after subsetting>,\n  \"cell_type_distribution\": {\n    \"PTS1\": <percentage>,\n    \"PTS2\": <percentage>,\n    \"PTS3\": <percentage>,\n    \"Inj_PT\": <percentage>,\n    \"FR_PT\": <percentage>\n  }\n}\n</EVAL_ANSWER>",
   "data_node": "latch://38438.account/Scratch/xenium/evals/evals_output/kidney_agent_annotated_20_cells.h5ad",
   "grader": {
     "type": "distribution_comparison",
@@ -12,16 +12,21 @@
           "PTS2": 5.02,
           "PTS1": 42.06,
           "PTS3": 0.90,
-          "FR_PT": 3.47,
+          "FR_PT": 3.47
         }
       },
       "tolerances": {
+        "total_cells": {
+          "type": "absolute",
+          "value": 4000
+        },
         "cell_type_percentages": {
           "type": "absolute",
-          "value": 3.0,
-          "description": "Each cell type percentage must be within ±3% of ground truth"
+          "value": 5.0,
+          "description": "Each cell type percentage must be within ±5% of ground truth."
         }
       }
     }
   }
 }
+

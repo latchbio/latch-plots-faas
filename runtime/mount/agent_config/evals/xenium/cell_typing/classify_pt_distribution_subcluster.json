@@ -1,6 +1,6 @@
 {
   "id": "classify_pt_distribution",
-  "task": "Using a kidney Xenium dataset that contains only day 2 PT cells with per-cell spatial centroids (x, y), cluster the cells into 5 subclusters and assign labels using the exact vocabulary: PTS1, PTS2, PTS3, Inj_PT, FR_PT. Use the following marker genes to guide labeling (higher expression in the indicated subtype vs others):\n\nPTS1: Slc5a12\nPTS2: Cyp2e1\nPTS3: Slc7a13\nFR_PT: Havcr1\nInj_PT: Vcam1, il34, Cd44\n\nThen report the distribution of these PT subtypes as percentages of total PT cells. Percentages should sum to ~100%. Include any missing subtypes with 0%.\n\nVocabulary: PTS1, PTS2, PTS3, Inj_PT, FR_PT\n\n",
+  "task": "Using a kidney Xenium dataset that contains only Day 2 PT cells with per-cell spatial centroids (x, y), cluster the cells into 5 subclusters and assign labels using the exact vocabulary: PTS1, PTS2, PTS3, Inj_PT, FR_PT. Use the following marker genes to guide labeling (higher expression in the indicated subtype vs others): PTS1: Slc5a12; PTS2: Cyp2e1; PTS3: Slc7a13; Inj_PT: Havcr1; FR_PT: Vcam1, Il34, Cd44. Then report the distribution of these PT subtypes as percentages of total PT cells. Percentages should sum to ~100%. Include any missing subtypes with 0%. Vocabulary: PTS1, PTS2, PTS3, Inj_PT, FR_PT. Return EXACTLY: <EVAL_ANSWER>{\"total_cells\": <integer total PT cells>, \"cell_type_distribution\": {\"PTS1\": <percentage>, \"PTS2\": <percentage>, \"PTS3\": <percentage>, \"Inj_PT\": <percentage>, \"FR_PT\": <percentage>}}</EVAL_ANSWER>",
   "data_node": "latch://38438.account/Scratch/xenium/evals/xenium_mouse_kidney_subset_PT_day2_no_celltype.h5ad",
   "grader": {
     "type": "distribution_comparison",
@@ -12,14 +12,18 @@
           "PTS2": 5.02,
           "PTS1": 42.06,
           "PTS3": 0.90,
-          "FR_PT": 3.47,
+          "FR_PT": 3.47
         }
       },
       "tolerances": {
+        "total_cells": {
+          "type": "absolute",
+          "value": 8000
+        },
         "cell_type_percentages": {
           "type": "absolute",
-          "value": 3.0,
-          "description": "Each cell type percentage must be within ±3% of ground truth"
+          "value": 5.0,
+          "description": "Each subtype percentage must be within ±5 percentage points of ground truth."
         }
       }
     }

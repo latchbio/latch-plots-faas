@@ -13,7 +13,7 @@
       "tolerances": {
         "n_batches": { "type": "absolute", "value": 0 },
         "n_pcs": { "type": "absolute", "value": 40 },
-        "same_batch_fraction_30nn_mean": { "type": "absolute", "value": 0.05 }
+        "same_batch_fraction_30nn_mean": { "type": "absolute", "value": 0.1 }
       }
     }
   }

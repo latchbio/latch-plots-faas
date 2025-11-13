@@ -1,6 +1,6 @@
 {
   "id": "kidney_fibroblasts_canonical_expression_separation",
-  "task": "Attached is an annotated kidney AnnData object with cell type annotations stored in `adata.obs['cell_type']`. For canonical marker gene (Col1a1) compute its expression separation statistic (e.g., AUROC of expression in fibroblasts labeled as 'Fib' vs all other cell types).",
+  "task": "Attached is an annotated kidney AnnData object with cell type annotations stored in adata.obs['cell_type']. Using expression-only data, compute the AUROC for the canonical fibroblast marker COL1A1: positive class = cells with adata.obs['cell_type'] == 'Fib', negative class = all other cells. Return EXACTLY: <EVAL_ANSWER>{\"per_gene_stats\": [{\"gene\": \"COL1A1\", \"auroc\": <float>}], \"mean_auroc\": <float>}</EVAL_ANSWER> (with mean_auroc equal to the AUROC of COL1A1).",
   "data_node": [
     "latch://38438.account/Scratch/xenium/evals/evals_output/kidney_agent_annotated_20_cells.h5ad"
   ],
@@ -14,8 +14,9 @@
           "fraction_high": 0.70,
           "per_gene_cutoff": 0.80
         },
-        "description": "Pass if ≥70 % of canonical markers have AUROC ≥ 0.8 and the mean AUROC ≥ 0.85, reflecting visually distinct violin-plot separation."
+        "description": "Pass if ≥70% of markers have AUROC ≥ 0.8 and mean AUROC ≥ 0.85 (with one marker, both conditions reduce to COL1A1 meeting the cutoffs)."
       }
     }
   }
 }
+

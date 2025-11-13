@@ -1,0 +1,16 @@
+{
+  "id": "tal_celltyping_geneset_auroc_v1",
+  "task": "Cluster the kidney Xenium dataset into ≥2 clusters using expression-only data. Identify the cluster corresponding to TAL by scoring clusters with the TAL marker set (UMOD, SLC12A1, CLDN16). Return EXACTLY: <EVAL_ANSWER>{\"chosen_cluster\": \"<cluster_id_you_believe_is_TAL>\", \"samples_chosen\": [ {\"UMOD\": <float>, \"SLC12A1\": <float>, \"CLDN16\": <float> }, {\"UMOD\": <float>, \"SLC12A1\": <float>, \"CLDN16\": <float> } ], \"samples_other\": [ {\"UMOD\": <float>, \"SLC12A1\": <float>, \"CLDN16\": <float> } ], \"cluster_medians\": { \"<cluster_id_you_believe_is_TAL>\": {\"UMOD\": <float>, \"SLC12A1\": <float>, \"CLDN16\": <float> }, \"<another_cluster_id>\": {\"UMOD\": <float>, \"SLC12A1\": <float>, \"CLDN16\": <float> } } }</EVAL_ANSWER>",
+  "data_node": "latch://38438.account/Scratch/xenium/Output/xenium_mouse_kidney_no_celltype_postprocess_200k.h5ad",
+  "grader": {
+    "type": "cell_typing",
+    "config": {
+      "markers": ["UMOD", "SLC12A1", "CLDN16"],
+      "thresholds": {
+        "auroc": 0.75,
+        "gap_ratio": 1.15
+      }
+    }
+  }
+}
+
