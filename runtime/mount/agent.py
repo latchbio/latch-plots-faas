@@ -659,7 +659,7 @@ class AgentHarness:
             name = args["name"]
             print(f"[tool] rename_notebook name={name}")
             params = {"name": name}
-            
+
             result = await self.atomic_operation("rename_notebook", params)
             if result.get("status") == "success":
                 return {
@@ -672,6 +672,43 @@ class AgentHarness:
             return {
                 "tool_name": "rename_notebook",
                 "summary": f"Failed to rename notebook: {result.get('error', 'Unknown error')}",
+                "success": False,
+            }
+
+        async def create_tab(args: dict) -> dict:
+            position = args["position"]
+            display_name = args["display_name"]
+
+            if position < 0:
+                return {
+                    "tool_name": "create_tab",
+                    "summary": "Error: Position must be non-negative",
+                    "success": False,
+                }
+
+            print(f'[tool] create_tab pos={position} name="{display_name}"')
+
+            params = {
+                "position": position,
+                "display_name": display_name,
+            }
+
+            result = await self.atomic_operation("create_tab", params)
+            if result.get("status") == "success":
+                tab_id = result.get("tab_id", "unknown")
+                msg = f"Created tab at position {position} (ID: {tab_id}, Name: {display_name})"
+                print(f"[tool] create_tab -> {msg}")
+                return {
+                    "tool_name": "create_tab",
+                    "summary": msg,
+                    "tab_id": tab_id,
+                    "display_name": display_name,
+                    "position": position,
+                    "success": True,
+                }
+            return {
+                "tool_name": "create_tab",
+                "summary": f"Failed to create tab: {result.get('error', 'Unknown error')}",
                 "success": False,
             }
 
@@ -1283,6 +1320,20 @@ class AgentHarness:
             },
         })
         self.tool_map["rename_notebook"] = rename_notebook
+
+        self.tools.append({
+            "name": "create_tab",
+            "description": "Create a new tab at specified position to organize cells.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "position": {"type": "integer", "description": "Position to insert the tab marker"},
+                    "display_name": {"type": "string", "description": "Name for the tab"},
+                },
+                "required": ["position", "display_name"],
+            },
+        })
+        self.tool_map["create_tab"] = create_tab
 
         self.tools.append({
             "name": "submit_response",
@@ -2236,6 +2287,8 @@ class AgentHarness:
 
             cell_lines = [f"# Notebook Cells for {notebook_name}, Total cells: {cell_count}\n"]
 
+            current_tab_name = "Default Tab"
+
             for cell in cells:
                 index = cell.get("index", "?")
                 cell_id = cell.get("cell_id", "?")
@@ -2244,7 +2297,21 @@ class AgentHarness:
                 status = cell.get("status", "idle")
                 tf_id = cell.get("tf_id", None)
 
-                cell_lines.append(f"\n## Cell [{index}]")  # noqa: FURB113
+                if cell_type == "tabMarker":
+                    if source:
+                        current_tab_name = source.strip() or f"Tab {index}"
+                    else:
+                        current_tab_name = f"Tab {index}"
+
+                    cell_lines.append(f"\n## Tab Marker [{index}]")  # noqa: FURB113
+                    cell_lines.append(f"TAB_NAME: {current_tab_name}")
+                    cell_lines.append(f"CELL_ID: {cell_id}")
+                    cell_lines.append(f"CELL_INDEX: {index}")
+                    cell_lines.append("---")
+                    continue
+
+                cell_lines.append(f"\n## Cell [{index}] (in {current_tab_name})")  # noqa: FURB113
+                cell_lines.append(f"BELONGS_TO_TAB: {current_tab_name}")
                 cell_lines.append(f"CELL_ID: {cell_id}")
                 cell_lines.append(f"CELL_INDEX: {index}")
                 cell_lines.append(f"TYPE: {cell_type}")

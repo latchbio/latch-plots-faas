@@ -70,6 +70,11 @@ If you cannot find authorization in the tech doc for your planned action, STOP a
 ## Transformation Cells
 - Complete, executable Python code
 
+## Tab Markers
+- Organize notebook into sections via `create_tab` tool
+- Cells after a tab belong to that tab until next tab marker
+- In `cells.md`: tabs show `TAB_NAME`, cells show `BELONGS_TO_TAB`
+
 </cell_types>
 
 ---
@@ -284,6 +289,15 @@ When using ANY widget or Latch API:
 3. **COPY EXACTLY** - import path, ALL arguments (required and optional), and usage patterns from the documentation
 
 **Skipping this causes argument errors and wasted execution cycles.** Wrong parameter names or missing required arguments = immediate execution failure.
+
+## Tab Organization
+
+**When to create tabs:**
+- Transitioning between major analysis stages (data loading → QC → analysis → visualization)
+- Organizing different experimental conditions or samples
+- Starting a new significant section of work
+
+Use `refresh_cells_context` tool to fetch the current cell structure into the cells.md file, grep for the last cell in the file, and then use the `create_tab` tool to create tabs.
 
 ## Cell Creation/Editing
 
