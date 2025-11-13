@@ -1,15 +1,12 @@
 <!-- markdownlint-disable -->
 ## Analysis Guideline
 
-This is the **authoritative step-by-step pipeline** for AtlasxOmics experiment. Follow steps in order. 
-
-1. **Experiment Setup** - If not clear from original request, ask users to confirm if they want to perform analysis on **gene activity score AnnData** (recommended) or **motif enrichment scores AnnData**. 
-2. **Data Loading** - load data using **Scanpy** and display it with `w_h5`.
-3. **Quality Control** 
-4. **Batch Correction (for multi-sample datasets)**
-5. **Clustering (workflow only)** - Launch the AtlasXOmics clustering workflow using `w_workflow(wf_name="wf.__init__.opt_workflow", ...)`. Fallback to `scanpy` only if this fails.
-6. **Differential Gene Activity or Motif Enrichment Comparison** - Use `w_workflow(wf_name="wf.__init__.compare_workflow", ...)`
-7. **Cell Type Annotation** — Use CellGuide marker database (see file `technology_docs/marker_cell_typing.md`)
+1. **Data Loading**
+2. **Quality Control** 
+3. **Batch Correction (for multi-sample datasets)**
+4. **Clustering (workflow only)** - Launch the AtlasXOmics clustering workflow using `w_workflow(wf_name="wf.__init__.opt_workflow", ...)`. Fallback to `scanpy` only if this fails.
+5. **Differential Gene Activity or Motif Enrichment Comparison** - Use `w_workflow(wf_name="wf.__init__.compare_workflow", ...)`
+6. **Cell Type Annotation** — Use CellGuide marker database (see file `technology_docs/marker_cell_typing.md`)
 
 The section below defines detailed guidelines for each of the above steps.
 
@@ -23,15 +20,6 @@ The section below defines detailed guidelines for each of the above steps.
 4. **Exact workflow version**. Use the exact string provided in examples; do not change or omit it.
 5. Must end with `execution = w.value` so a button is displayed to run the workflow.
 </workflow_rules>
-
-### **Data Loading**: 
-- Locate the appropriate Latch path for either:
-  - `combined_sm_ge.h5ad` — gene activity scores
-  - `combined_sm_motifs.h5ad` — motif enrichment results
-- Use `LPath` to load the file. **Always** prefer **full, human-readable latch:// paths** (not node IDs).
-- Once loaded, visualize the AnnData object using the w_h5 widget for inspection.
-
----
 
 ### **Quality Control**:
 
@@ -58,14 +46,6 @@ import snapatac2 as snap
     frip: ≥ min(q10, 0.2)
     nucleosome_signal: ≤ max(q90, 4)
     mitochondrial_fraction: ≤ max(q90, 0.10)
-
-### **Batch Correction (SnapATAC2)**
-
-If `adata.obs['sample']` contains more than one sample, run a batch-correction pass before clustering:
-
-1. After QC, call `snap.pp.mnc_correct(adatas, batch='sample')` to apply the modified mutual-nearest-neighbour correction.
-2. Optionally refine with `snap.pp.harmony(adatas, batch='sample', max_iter_harmony=20)` to harmonise global structure.
-3. Recompute embeddings (e.g., `snap.tl.spectral`, `snap.tl.umap`) using the corrected representation, and proceed with clustering.
 
 #### 1. Fragment Size Distribution
 
@@ -128,15 +108,15 @@ snap.metrics.frip(adata, regions, inplace=True, n_jobs=8)
 
 ---
 
-### **Batch Correction (for multi-sample datasets)**
+### **Batch Correction (SnapATAC2)**
 
-When `adata.obs['sample']` (or another batch key) contains multiple samples, run a batch correction step before clustering or pseudobulk analyses:
+If `adata.obs['sample']` contains more than one sample, run a batch-correction pass before clustering:
 
-1. Confirm the sample/batch column being used (e.g., `batch_key = 'sample'`).
-2. Normalize/log-transform the dataset (consistent with the rest of the workflow).
-3. Select highly variable features per sample (e.g., `sc.pp.highly_variable_genes(adata, batch_key='sample', n_top_genes=8000)`) 
-4. Apply a batch correction method such as `sc.external.pp.harmony_integrate(adata, key='sample')`, `sc.external.pp.bbknn(adata, batch_key='sample')`, or `scanorama.integrate_scanpy()`.
-5. Use the corrected embedding/PCA for neighbor graph construction, clustering, and downstream comparisons.
+1. After QC, call `snap.pp.mnc_correct(adatas, batch='sample')` to apply the modified mutual-nearest-neighbour correction.
+2. Optionally refine with `snap.pp.harmony(adatas, batch='sample', max_iter_harmony=20)` to harmonise global structure.
+3. Recompute embeddings (e.g., `snap.tl.spectral`, `snap.tl.umap`) using the corrected representation, and proceed with clustering.
+
+---
 
 ### **Clustering (workflow only)**: 
 - Use `w_workflow` to launch the AtlasXOmics clustering workflow.
@@ -145,6 +125,7 @@ When `adata.obs['sample']` (or another batch key) contains multiple samples, run
 ### Clustering Workflow Parameters
 
 - Strictly follow <workflow_rules>.
+- Because clustering outcomes are sensitive to input settings, always set default `n_features`, `resolution`, and `n_comps` to multiple values so users can compare results and select the most meaningful clustering after the workflow finishes running. 
 
 #### **Required**
 - `project_name` *(str)*  
@@ -168,16 +149,16 @@ When `adata.obs['sample']` (or another batch key) contains multiple samples, run
   Genomic bin size (default: `5000`)
 
 - `n_features` *(List[int])*  
-  Top accessible tiles to use, e.g., `[25000]`
+  Top accessible tiles to use, e.g., `[25000, 50000, 100000]`
 
 - `resolution` *(List[float])*  
-  Clustering resolution, e.g., `[1.0]`
+  Clustering resolution, e.g., `[0.5, 1.0, 1.25, 1.5]`
 
 - `varfeat_iters` *(List[int])*  
   Iterations for variable feature selection, e.g., `[1]`
 
 - `n_comps` *(List[int])*  
-  Dimensionality reduction components, e.g., `[30]`
+  Dimensionality reduction components, e.g., `[30, 50]`
 
 - `min_cluster_size` *(int)*  
   Minimum cells per cluster
@@ -293,21 +274,6 @@ w = w_workflow(
 execution = w.value
 ```
 
-#### Example Implementation
-```python
-viewer = w_h5(ann_data=adata)
-value = viewer.value
-
-# Get the current selections
-if value['lasso_points']:
-    print(f"User selected {len(value['lasso_points'])} regions")
-    print(f"The embedding used for the lasso selection is {value['lasso_points_obsm']}")
-    for i, region in enu merate(value['lasso_points']):
-        print(f"Region {i}: {len(region)} points")
-
-# Proceed to create an `adata_subset` based on lasso-selected points
-```
-
 ### **Differential Gene Activity or Motif Enrichment Comparison (workflow only)**
 - Use `w_workflow` to launch the AtlasXOmics comparison workflow.  
 - Automatically infer the correct grouping column from `adata.obs` (`condition`, `sample`, or `cluster`).  
@@ -358,13 +324,7 @@ execution = w.value
 #### How to construct `compare_config.json`
 To run a comparison workflow, you must generate a `compare_config.json` file that defines which cells belong to each group.
 
-What to Ask the User:
-- Comparison Target: Ask the user what biological groups or conditions they want to compare. For example:
-    - "Diseased vs Healthy"
-    - "Sample A vs Sample B"
-    - "Cluster 5 vs Cluster 7"
-
-How to Identify Groups:
+- Comparison Target: Ask the user what biological groups or conditions they want to compare.
 - You must infer which column in adata.obs encodes this grouping (e.g. "condition", "sample", or "cluster").
 - Then, for each group (A and B), filter all cell barcodes in `adata.obs.index` that match the selected value.
 

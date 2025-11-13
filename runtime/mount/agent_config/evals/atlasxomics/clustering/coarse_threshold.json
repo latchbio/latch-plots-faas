@@ -1,6 +1,6 @@
 {
   "id": "atlasxomics_coarse_clustering_threshold_v1",
-  "task": "Perform a coarse, high-level clustering on the following raw AtlasXomics dataset folder. Do NOT try to find processed data. Return the number of clusters.",
+  "task": "Perform clustering on the attached AtlasXomics dataset. Return the set of parameters that produces exactly three clusters as a JSON object: {'n_resolution': <float>, 'n_features': <int>, 'n_pcs': <int>, 'n_clusters': <int>, 'spatial_coherence_of_best_cluster': <float>, 'fold_spatial_enrichment_of_best_cluster_versus_random': <float>}.",
   "data_node": [
     "latch://38438.account/AtlasxOmics/Kosta/Raw_Data/D02301_NG07297-healthy-H3K9ac"
   ],
@@ -8,15 +8,39 @@
     "type": "numeric_tolerance",
     "config": {
       "ground_truth": {
-        "num_clusters": 6 
+        "num_clusters": 3,
+        "n_resolution": 0.5,
+        "n_features": 25000,
+        "n_pcs": 50,
+        "spatial_coherence_of_best_cluster": 0.679,
+        "fold_spatial_enrichment_of_best_cluster_versus_random": 2.04
       },
       "tolerances": {
         "num_clusters": {
           "type": "absolute",
-          "value": 4
+          "value": 0
+        },
+        "n_resolution": {
+          "type": "absolute",
+          "value": 0.2
+        },
+        "n_features": {
+          "type": "absolute",
+          "value": 10000
+        },
+        "n_pcs": {
+          "type": "max"
+        },
+        "spatial_coherence_of_best_cluster": {
+          "type": "absolute",
+          "value": 0.1
+        },
+        "fold_spatial_enrichment_of_best_cluster_versus_random": {
+          "type": "absolute",
+          "value": 0.1
         }
       },
-      "description": "Evaluate agent's ability to pick reasonable coarse thresholds. Coarse clustering should identify approximately 2-10 broad groups in this dataset."
+      "description": "Evaluate agent's ability to perform parameter tuning for clustering."
     }
   }
 }

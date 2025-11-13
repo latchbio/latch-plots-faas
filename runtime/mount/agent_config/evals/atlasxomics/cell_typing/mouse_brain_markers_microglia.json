@@ -8,10 +8,11 @@
     "type": "marker_gene_precision_recall",
     "config": {
       "canonical_markers": [
-        "C1qa", "C1qb", "C1qc", "Trem2", "Tmem119",
-        "P2ry12", "Cx3cr1", "Itgam", "Itgax", "Cd68",
-        "Cd9", "Axl", "Ly86", "Ctsb", "Ctsd",
-        "Apoe", "Ccl2", "Ccl3", "Ccl4", "Fcgr3"
+        "Tmem119", "P2ry12", "Cx3cr1", "Hexb", "Sall1",
+        "Fcrls", "Apoe", "Axl", "Trem2", "Lpl",
+        "C1qa", "C1qb", "C1qc", "Csf1r", "P2ry13",
+        "Mpeg1", "Il10ra", "Vsir", "Cd300c2", "Pilra",
+        "Ccr1", "Selplg"
       ],
       "scoring": {
         "method": "precision_and_recall",
