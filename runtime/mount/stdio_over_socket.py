@@ -25,7 +25,7 @@ warning_msgs = [
         ]
 
 
-flush_interval = 0.5
+flush_interval = 0.25
 
 
 @dataclass(kw_only=True)
