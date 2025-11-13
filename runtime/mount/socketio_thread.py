@@ -36,13 +36,13 @@ class SocketIoThread(Thread):
     def call_fut(self, coro: Coroutine[None, None, T]) -> cf.Future[T]:
         assert self.loop is not None
 
-        with self.lock:
-            return asyncio.run_coroutine_threadsafe(coro, self.loop)
+        return asyncio.run_coroutine_threadsafe(coro, self.loop)
 
     def send_fut(self, data: object) -> cf.Future[None]:
         assert self.conn is not None
 
-        return self.call_fut(self.conn.send(data))
+        with self.lock:
+            return self.call_fut(self.conn.send(data))
 
     async def send(self, data: object) -> None:
         await asyncio.wrap_future(self.send_fut(data))
