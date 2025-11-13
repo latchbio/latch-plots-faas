@@ -1,6 +1,6 @@
 import asyncio
-import concurrent.futures as cf
 import threading
+from concurrent.futures import Future
 from dataclasses import dataclass, field
 from io import BufferedWriter, RawIOBase, TextIOWrapper, UnsupportedOperation
 from itertools import groupby
@@ -35,7 +35,7 @@ class SocketWriter(RawIOBase):
     name: str
     _buffer: list[tuple[str, str | None]] = field(default_factory=list, init=False)
     _buffer_lock: threading.Lock = field(default_factory=threading.Lock, init=False)
-    _flusher_task: cf.Future[None] | None = field(default=None, init=False)
+    _flusher_task: Future[None] | None = field(default=None, init=False)
 
     async def _flush_loop(self) -> None:
         while True:
