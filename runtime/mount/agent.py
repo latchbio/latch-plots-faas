@@ -60,6 +60,7 @@ class AgentHarness:
     current_request_id: str | None = None
     should_auto_continue: bool = False
     pending_auto_continue: bool = False
+    pending_tool_calls: set[str] = field(default_factory=set)
 
     pending_messages: asyncio.Queue = field(default_factory=asyncio.Queue)
     conversation_task: asyncio.Task | None = None
@@ -380,9 +381,9 @@ class AgentHarness:
 
         elif msg_type == "set_widget_value":
             data = msg.get("data", {})
-            widget_info = ', '.join(f"{k}={v}" for k, v in data.items())
+            widget_info = ", ".join(f"{k}={v}" for k, v in data.items())
             content = f"User provided input via widget(s): {widget_info}"
-            
+
             await self._insert_history(
                 payload={
                     "content": content,
@@ -2615,7 +2616,9 @@ class AgentHarness:
                         print(f"[agent] Executing tool: {tool_name} (id={tool_id})")
 
                         handler = self.tool_map.get(tool_name)
-                        if handler:
+
+                        self.pending_tool_calls.add(tool_id)
+                        if handler is not None:
                             try:
                                 result = handler(tool_input)
                                 if asyncio.iscoroutine(result):
@@ -2650,9 +2653,11 @@ class AgentHarness:
                             })
 
                 if len(tool_results) > 0:
+                    uncancelled_tool_results = [result for result in tool_results if result.get("tool_use_id") in self.pending_tool_calls]
+                    self.pending_tool_calls.difference_update({result.get("tool_use_id") for result in tool_results})
                     await self._insert_history(
                         payload={
-                            "content": tool_results,
+                            "content": uncancelled_tool_results,
                         },
                     )
                 else:
@@ -2741,10 +2746,11 @@ class AgentHarness:
             system_prompt_path = context_root.parent / "system_prompt.md"
             self.system_prompt = system_prompt_path.read_text()
 
+            self.pending_tool_calls.clear()
             messages = await self._build_messages_from_db()
             await self._close_pending_tool_calls(
                 error_message="Tool call cancelled - session was ended before completion",
-                messages=await self._build_messages_from_db(),
+                messages=messages,
             )
 
             self.initialized = True
@@ -2826,6 +2832,7 @@ class AgentHarness:
         self.pending_auto_continue = False
         self.executing_cells.clear()
 
+        self.pending_tool_calls.clear()
         await self._close_pending_tool_calls(
             error_message="Request cancelled by user",
             messages=await self._build_messages_from_db(),

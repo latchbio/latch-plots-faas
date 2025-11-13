@@ -2032,11 +2032,14 @@ async def main() -> None:
         k = Kernel(conn=socket_io_thread)
         _inject.kernel = k
 
+        stdout_writer = SocketWriter(conn=k.conn, kernel=k, name="stdout")
         sys.stdout = text_socket_writer(
-            SocketWriter(conn=k.conn, kernel=k, name="stdout", loop=loop)
+            stdout_writer
         )
+
+        stderr_writer = SocketWriter(conn=k.conn, kernel=k, name="stderr")
         sys.stderr = text_socket_writer(
-            SocketWriter(conn=k.conn, kernel=k, name="stderr", loop=loop)
+            stderr_writer
         )
 
         await k.send({"type": "ready"})
@@ -2055,6 +2058,9 @@ async def main() -> None:
 
         sys.stdout = old_stdout
         sys.stderr = old_stderr
+
+        stdout_writer.close()
+        stderr_writer.close()
 
 
 if __name__ == "__main__":

@@ -1,6 +1,10 @@
 import asyncio
-from dataclasses import dataclass
+import threading
+from concurrent.futures import Future
+from dataclasses import dataclass, field
 from io import BufferedWriter, RawIOBase, TextIOWrapper, UnsupportedOperation
+from itertools import groupby
+from operator import itemgetter
 from typing import TYPE_CHECKING
 
 from socketio_thread import SocketIoThread
@@ -21,12 +25,40 @@ warning_msgs = [
         ]
 
 
+flush_interval = 0.25
+
+
 @dataclass(kw_only=True)
 class SocketWriter(RawIOBase):
     conn: SocketIoThread
     kernel: "Kernel"
     name: str
-    loop: asyncio.AbstractEventLoop
+    _buffer: list[tuple[str, str | None]] = field(default_factory=list, init=False)
+    _buffer_lock: threading.Lock = field(default_factory=threading.Lock, init=False)
+    _flusher_task: Future[None] | None = field(default=None, init=False)
+
+    async def _flush_loop(self) -> None:
+        while True:
+            await asyncio.sleep(flush_interval)
+            await self._flush()
+
+    async def _flush(self) -> None:
+        with self._buffer_lock:
+            if len(self._buffer) == 0:
+                return
+
+            items = list(self._buffer)
+            self._buffer.clear()
+
+        async with asyncio.TaskGroup() as tg:
+            for cell_id, group in groupby(items, key=itemgetter(1)):
+                combined_data = "".join(data for data, _ in group)
+                tg.create_task(self.conn.send({
+                    "type": "kernel_stdio",
+                    "active_cell": cell_id,
+                    "stream": self.name,
+                    "data": combined_data,
+                }))
 
     @override
     def fileno(self) -> int:
@@ -51,15 +83,23 @@ class SocketWriter(RawIOBase):
         for x in warning_msgs:
             if x in data:
                 return len(b)
-        self.conn.send_fut({
-            "type": "kernel_stdio",
-            "active_cell": self.kernel.active_cell,
-            "stream": self.name,
-            # todo(maximsmol): this is a bit silly because we are going to have
-            # a TextIOWrapper above that just encoded this for us
-            "data": data,
-        }).result()
+
+        if self._flusher_task is None:
+            self._flusher_task = asyncio.run_coroutine_threadsafe(
+                self._flush_loop(), self.conn.loop
+            )
+
+        with self._buffer_lock:
+            self._buffer.append((data, self.kernel.active_cell))
+
         return len(b)
+
+    def close(self) -> None:
+        if self._flusher_task is not None:
+            self._flusher_task.cancel()
+            self._flusher_task = None
+
+        super().close()
 
 
 def text_socket_writer(x: SocketWriter) -> TextIOWrapper:
