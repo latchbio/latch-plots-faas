@@ -1,19 +1,17 @@
 {
   "id": "mouse_brain_merfish_oligodendrocyte_age_up_ttest_jaccard_v14_labels_de_only",
-  "task": "Input: processed MERFISH AnnData (mouse brain) with cell-type labels in adata.obs. Using expression-only data, subset cells labeled OLIGODENDROCYTE. Within OLIGODENDROCYTE, run a two-group t-test differential expression comparing 90wk (OLD) vs 4wk (JUVENILE), requiring logFC > 0 for OLD and adjusted p ≤ 0.05. Rank genes by logFC then −log₁₀(p_adj). Use gene symbols from adata.var['feature_name'] when available (otherwise from adata.var_names); convert to UPPERCASE, deduplicate, and drop Ensembl-style IDs. Return the top-k OLD-upregulated oligodendrocyte genes as markers_predicted (k=8).",
+  "task": "Input: processed MERFISH AnnData (mouse brain) with cell-type labels in adata.obs. Using expression-only data, subset cells labeled OLIGODENDROCYTE. Within OLIGODENDROCYTE, run a two-group t-test differential expression comparing 90wk (OLD) vs 4wk (JUVENILE), requiring logFC > 0 for OLD and adjusted p ≤ 0.05. Rank genes by logFC then −log₁₀(p_adj). Use gene symbols from adata.var['feature_name'] when available (otherwise from adata.var_names); convert to UPPERCASE, deduplicate, and drop Ensembl-style IDs. Return the top-k OLD-upregulated oligodendrocyte genes as cell_types_predicted (k=8).",
   "data_node": [
     "latch://38438.account/Mouse_Aging_subsetted_celltype_labelled.h5ad"
   ],
   "grader": {
     "type": "label_set_jaccard",
     "config": {
-      "ground_truth_marker_sets": {
-        "Oligodendrocyte (aging/inflam.)": ["C4B", "IL33", "IL18"]
-      },
+      "ground_truth_labels": ["C4B", "IL33", "IL18"],
       "scoring": {
         "method": "jaccard_index",
         "k_top_agent_markers": 8,
-        "per_label_thresholds": { "Oligodendrocyte (aging/inflam.)": 0.38 },
+        "pass_threshold": 0.38,
         "penalize_extra_labels": false,
         "description": "Pass if Jaccard ≥ 0.38 (~≥80% GT overlap using top-8)."
       }
