@@ -779,7 +779,7 @@ sc.pp.calculate_qc_metrics(adata, inplace=True)
 
 # Show metrics table
 qc_df = adata.obs[['n_genes_by_counts', 'total_counts', 'pct_counts_mt']].describe()
-w_table(qc_df, title="QC Metrics Summary")
+w_table(source=qc_df, label="QC Metrics Summary")
 
 # Create violin plot
 fig = px.violin(adata.obs, y='n_genes_by_counts', box=True, points='outliers')

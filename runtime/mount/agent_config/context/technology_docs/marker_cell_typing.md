@@ -15,25 +15,36 @@ Two complementary strategies are supported depending on the dataset quality and 
 
 ---
 
-## Critical Decision Point
-Before starting, explicitly confirm with the user **which approach to use**.  
-Do **not** assume cluster-based annotation just because `"cluster"` exists in `adata.obs`.
+## Critical Decision Point (Agent MUST Ask Before Continuing)
 
-- Choose **Approach 1 (Gene set scoring)** when:
-  - Clustering quality is uncertain
-  - The goal is a quick check or exploratory annotation
+Before any analysis, the agent **MUST ask the user two questions:**
 
-- Choose **Approach 2 (Cluster-based)** when:
-  - Clusters are well-defined and correspond to biological populations
-  - The goal is detailed, reproducible cell type labeling
+1. “Are you confident in your current clustering quality?”  
+2. “Do you prefer a fast, exploratory annotation (gene set scoring) or a slower, more detailed annotation (differential expression + marker matching)?  
+   – Fast approach: compute gene-set scores using user-provided markers or CellGuide markers.  
+   – Slow approach: run 1-vs-all Wilcoxon differential expression, rank markers, and match them to reference databases.”
 
-This choice determines downstream logic. Confirm with the user before proceeding.
+Use the user’s answers to select the approach:
+
+- **IF** the user is **not confident** in clustering quality **AND/OR** wants **fast, exploratory annotation**  
+  → **THEN run Approach 1 (Gene set scoring)**. Follow the guide in <gene_set_scoring> section.
+  - Fast (seconds to minutes), works even with weak clusters, provides coarse preliminary labels.
+
+- **IF** the user is **confident** in clustering quality **AND** is willing to wait **15–30+ minutes**  
+  → **THEN run Approach 2 (Cluster-based annotation)**. Follow the guide in <cluster_based_annotation> section.
+  - Slow, requires strong clusters. 
+
+The agent MUST NOT proceed until both questions are answered and an approach is explicitly chosen.
+
+---
+## Input Data
+In AtlasXomics’ processed datasets, the file ending with `_sm_he.h5ad` typically contains gene-activity scores and is the recommended input for cell-type annotation.
 
 ---
 
 ## CellGuide Databases
 
-CellGuide provides structured databases mapping **genes ↔ cell types** across organisms and tissues.
+CellGuide is a structured reference database developed by CELLxGENE that **links cell types to their canonical marker genes** across tissues, organs, and species. It aggregates curated annotations from thousands of high-quality single-cell studies, providing standardized marker sets that can be used for gene-set scoring, cluster interpretation, and validation of cell-type identities.
 
 ### 1. Per-Gene Database (`cellguide_marker_gene_database_per_gene.json`)
 Answers: *Which cell types is this gene a marker for?*
@@ -94,17 +105,26 @@ db_path = Path("cellguide_marker_gene_database_per_gene.json")
 
 ---
 
-# Approach 1 — Gene Set Scoring
+<gene_set_scoring>
 
-This approach evaluates how strongly each cell (or spot) expresses known marker sets for different cell types.  
-It is **fast**, **robust**, and works even when clusters are not well-defined.
 
-- Run scoring separately per condition if multiple samples exist.  
-- Ideal for early-stage data exploration or noisy embeddings.
+# **Approach 1 — Gene Set Scoring**
+
+This method scores each cell or spot based on the expression of canonical marker sets for a selected set of cell types. It is **fast**, does **not** require high-quality clustering, and is ideal for quick, exploratory annotation.
+
+The main limitation is that results depend heavily on **which** cell types and **which** markers are included, often requiring iterative refinement.
+
+- Run scoring **per condition** when multiple samples are present.  
+- Restrict the scoring panel to **major expected cell types** for the tissue; **never** score against the full CellGuide ontology for that tissue, which can include hundreds of fine-grained types.  
+- Use the **top 5–10 canonical markers** from CellGuide for each selected cell type.
+
+</gene_set_scoring>
 
 ---
 
-# Approach 2 — Cluster-based Annotation
+<cluster_based_annotation>
+
+# **Approach 2 — Cluster-based Annotation**
 
 This approach infers cell types by identifying **marker genes per cluster**, comparing them to known CellGuide markers, and assigning the most likely identity.
 
@@ -303,3 +323,5 @@ def annotate_adata(adata, cluster_summary, cluster_col="cluster", cell_col="cell
 | Many “Unknown” clusters | Weak markers | Relax p-value or fold-change thresholds |
 | Multiple top cell types | Shared marker profiles | Keep both; could represent mixed lineage |
 | Missing cluster column | Dataset not clustered | Run UMAP + Leiden/Louvain before annotation |
+
+</cluster_based_annotation>
