@@ -94,6 +94,13 @@ class SocketWriter(RawIOBase):
 
         return len(b)
 
+    def close(self) -> None:
+        if self._flusher_task is not None:
+            self._flusher_task.cancel()
+            self._flusher_task = None
+
+        super().close()
+
 
 def text_socket_writer(x: SocketWriter) -> TextIOWrapper:
     return TextIOWrapper(
