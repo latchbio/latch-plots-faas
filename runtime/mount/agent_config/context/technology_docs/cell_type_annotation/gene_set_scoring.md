@@ -218,6 +218,7 @@ Higher confidence (>0.3) indicates clear cell type identity. Lower confidence (<
 **Red flag:** Wild variation between technical replicates suggests technical artifacts or insufficient normalization.
 
 ### 7. Reasonable Cell Type Proportion Changes Between Conditions
+
 **For dataset with multiple conditions**: Check if cell type proportion changes _between_ conditions are biologically plausible. 
 
 ---
