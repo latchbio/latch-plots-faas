@@ -772,7 +772,8 @@ submit_response(
 ```python
 import scanpy as sc
 import plotly.express as px
-from lplots import w_plot, w_table
+from lplots.widgets.plot import w_plot
+from lplots.widgets.table import w_table
 
 # Calculate QC metrics
 sc.pp.calculate_qc_metrics(adata, inplace=True)
