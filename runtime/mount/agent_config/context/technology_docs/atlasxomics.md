@@ -4,7 +4,7 @@
 2. **Quality Control**
 3. **Clustering (workflow only)** - Launch the AtlasXomics workflow for quality control and clustering using `w_workflow(wf_name="wf.__init__.opt_workflow", ...)`. This contains **gold-standard, well-tested code** that uses SnapATAC2 internally, and should _always_ be used over writing code from scratch. 
 4. **Differential Gene Activity or Motif Enrichment Comparison** - Use `w_workflow(wf_name="wf.__init__.compare_workflow", ...)`
-5. **Cell Type Annotation** — Use CellGuide marker database (see file `technology_docs/marker_cell_typing.md`)
+5. **Cell Type Annotation** — Use CellGuide marker database (see file `technology_docs/cell_type_annotation/overview.md`)
 
 The section below defines detailed guidelines for each of the above steps.
 
