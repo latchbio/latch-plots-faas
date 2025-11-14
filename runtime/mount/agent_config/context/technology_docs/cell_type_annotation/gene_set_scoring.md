@@ -130,9 +130,9 @@ Higher confidence (>0.3) indicates clear cell type identity. Lower confidence (<
 
 ---
 
-## Step 8: Comprehensive Validation
+## Step 8: Comprehensive Evaluation
 
-- Create plots, compute metrics and create summary table for each of the validation criteria below. 
+- **IMPORTANT**: **Compute metrics and visualization to self-evaluate the quality of cell type annotation.**
 
 ### 1. Cell Type Balance & Biological Plausibility
 
