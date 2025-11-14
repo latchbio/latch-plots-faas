@@ -725,7 +725,7 @@ class AgentHarness:
 
             result = await self.atomic_operation("rename_tab", params)
             if result.get("status") == "success":
-                target = "default tab" if tab_id == "-1" else f"tab {tab_id}"
+                target = "default tab" if tab_id == "DEFAULT" else f"tab {tab_id}"
                 msg = f"Renamed {target} to '{new_name}'"
                 print(f"[tool] rename_tab -> {msg}")
                 return {
@@ -1366,11 +1366,11 @@ class AgentHarness:
 
         self.tools.append({
             "name": "rename_tab",
-            "description": 'Rename a tab. Use tab_id="-1" to rename the default tab.',
+            "description": 'Rename a tab. Use tab_id="DEFAULT" to rename the default tab.',
             "input_schema": {
                 "type": "object",
                 "properties": {
-                    "tab_id": {"type": "string", "description": 'ID of the tab to rename. Use "-1" for the default tab, or the CELL_ID from a Tab Marker.'},
+                    "tab_id": {"type": "string", "description": 'ID of the tab to rename. Use "DEFAULT" for the default tab, or the TAB_ID from a Tab Marker.'},
                     "new_name": {"type": "string", "description": "New name for the tab"},
                 },
                 "required": ["tab_id", "new_name"],
@@ -2332,9 +2332,9 @@ class AgentHarness:
 
             default_tab_name = context.get("default_tab_name", "Tab 1")
 
-            cell_lines.append("\n## Tab Marker [-1]")  # noqa: FURB113
+            cell_lines.append("\n## Tab Marker [DEFAULT]")  # noqa: FURB113
             cell_lines.append(f"TAB_NAME: {default_tab_name}")
-            cell_lines.append("TAB_ID: -1")
+            cell_lines.append("TAB_ID: DEFAULT")
             cell_lines.append("TYPE: Default Tab")
             cell_lines.append("---")
 

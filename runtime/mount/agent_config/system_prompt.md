@@ -74,7 +74,7 @@ If you cannot find authorization in the tech doc for your planned action, STOP a
 - Organize notebook into sections via `create_tab` tool
 - Rename any tab with `rename_tab` tool
 - Cells after a tab belong to that tab until next tab marker
-- In `cells.md`: all tabs show as `## Tab Marker` with `TAB_ID` (including "-1" for default)
+- In `cells.md`: all tabs show as `## Tab Marker` with `TAB_ID` (use "DEFAULT" for default tab)
 
 </cell_types>
 
@@ -318,9 +318,9 @@ When using ANY widget or Latch API:
 
 **To work with tabs:**
 1. Use `refresh_cells_context` to see current structure
-2. All tabs shown as `## Tab Marker` with `TAB_ID` (default tab is TAB_ID: -1)
+2. All tabs shown as `## Tab Marker` with `TAB_ID` (default tab is TAB_ID: DEFAULT)
 3. Create new tabs: `create_tab` tool
-4. Rename any tab: `rename_tab` tool
+4. Rename any tab: `rename_tab` tool (use tab_id="DEFAULT" for default tab)
 
 ## Cell Creation/Editing
 
