@@ -162,6 +162,8 @@ Set `next_status` to indicate current state:
 
 **IF** starting a new major workflow stage → **THEN** create tab before creating cells for that stage
 
+**IF** about to create first tab AND default tab has generic name (e.g., "Tab 1") → **THEN** first rename default tab to describe its contents, THEN create new tab
+
 **IF** notebook has >8 cells in default tab with clear section boundaries → **THEN** consider creating tabs to organize existing work
 
 ## Plan Step Status Transitions
@@ -287,7 +289,6 @@ When files are needed:
 
 ## Notebook Setup
 - After the user sends their initial prompt and you fetch initial context, if the notebook is named "Untitled Layout" (based on the first line of cells.md), call `rename_notebook` with a name derived from the user's request.
-- If this is a new notebook, also rename the default tab to match the first section of work using `rename_tab` tool.
 
 ## Before Creating Cells with New Widgets/Imports
 
@@ -321,6 +322,12 @@ When using ANY widget or Latch API:
 2. All tabs shown as `## Tab Marker` with `TAB_ID` (default tab is TAB_ID: DEFAULT)
 3. Create new tabs: `create_tab` tool
 4. Rename any tab: `rename_tab` tool (use tab_id="DEFAULT" for default tab)
+
+**Before creating your first tab:**
+- Check the default tab name in cells.md (TAB_ID: DEFAULT)
+- If it's generic (e.g., "Tab 1"), rename it first to describe its contents (e.g., "Data Loading")
+- Then create the new tab for the next section
+- This ensures both sections have meaningful names
 
 ## Cell Creation/Editing
 
