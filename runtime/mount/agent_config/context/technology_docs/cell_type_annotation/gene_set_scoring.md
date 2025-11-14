@@ -15,8 +15,8 @@ Gene set scoring is a **fast exploratory approach** for cell type annotation tha
 4. **Balance marker counts** across cell types
 5. **⚠️ CRITICAL: Normalize scores** (z-score or min-max)
 6. **Assign cell types** by highest normalized score
-7. **⚠️ CRITICAL: Run the full evaluation suite to validate your own cell type assignments**: You must compute **every evaluation metric and visualization** defined in the evaluation section (proportions, cluster purity, spatial coherence, marker enrichment, confidence scores, sample consistency, and condition-wise proportion changes). **Do not skip or short-circuit any evaluation step.**
-8. **Self-evaluate** based on metrics, reflect, and modify your work as needed. Be honest and objective.
+7. ⚠️ **CRITICAL — You must compute and return all seven validation outputs** (proportions, cluster purity, spatial coherence, marker enrichment, confidence scores, sample consistency, condition-wise changes). **Do not skip, omit, or summarize any step; missing even one makes the workflow invalid.**
+8. **Self-evaluate** based on computed metrics, reflect, and modify your work as needed. Be honest and objective.
 
 ---
 
@@ -176,24 +176,45 @@ Higher confidence (>0.3) indicates clear cell type identity. Lower confidence (<
 - Unexpected mixing of incompatible cell types
 - Predicted types in anatomically impossible locations
 
-### 4. Marker Gene Specificity
 
-**Concept:** Markers should be enriched in their predicted cell types vs all others.
+### 4. Validation of Discriminatory Marker per Cell Type
 
-**Validation:** For each cell type and its top markers:
-1. Calculate mean expression in predicted cells of that type
-2. Calculate mean expression in all other cells
-3. Compute fold change
-4. Produce violin plots for users to visually inspect
+**Concept:** A valid discriminatory marker must be enriched in its target cell type compared to **EVERY other cell type individually**, not just show high average fold change.
 
-**Benchmarks:**
-- **>1.5×:** Excellent marker specificity
-- **1.2-1.5×:** Good (expected for ATAC-seq)
-- **<1.2×:** Poor — marker not truly discriminatory
+**Why critical:** A marker can have high mean fold change while being **lower** in the target compared to one or more other cell types. Such markers fail to distinguish those specific pairs and are unsuitable for validation.
 
-**Check all cell types:** At least 60% of markers should show >1.2× enrichment
+**Method:**
 
-**Red flag:** If markers show similar or higher expression in other cell types, predictions are unreliable.
+1. Calculate median expression per cell type for each marker
+2. Compute fold change: target vs. each other cell type individually  
+3. Identify **minimum fold change** (worst-case scenario)
+4. Valid marker: minimum FC ≥1.0 (ideally ≥1.05)
+
+**Benchmarks for ATAC-seq:**
+
+| Min FC Range | Assessment | Action |
+|--------------|------------|--------|
+| **>1.20×** | Excellent | Use confidently |
+| **1.10-1.20×** | Good | Acceptable for ATAC-seq |
+| **1.05-1.10×** | Moderate | Usable with caveats |
+| **1.00-1.05×** | Poor | Note low confidence |
+| **<1.00×** | Failed | Do not use; higher in other cell type(s) |
+
+**Expected outcomes:**
+
+- 70-80% of cell types: min FC >1.10×
+- 10-20% of cell types: min FC 1.05-1.10× (marginal)
+- 0-10% of cell types: no valid marker (annotation challenge)
+
+**Red flags:**
+
+- Immune cells often have lower min FC (1.03-1.15×) due to shared chromatin patterns
+- Cell type with no valid marker indicates low annotation confidence
+- Should flag for alternative methods (cluster-based DE, RNA integration)
+
+**Rationale:**
+
+Traditional validation using mean/median FC can mask critical failures where markers don't distinguish specific cell type pairs. Minimum FC ensures markers work in the **worst case**, essential for publication-quality validation and honest quality assessment.
 
 ### 5. Prediction Confidence Distribution
 

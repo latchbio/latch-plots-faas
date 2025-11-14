@@ -456,15 +456,21 @@ if button.value:
 - `appearance` (OutputAppearance, optional): Styling options
 - `key` (str, optional): Unique widget identifier
 
-**Note:** The source must be a named **unique** global variable for tracking. Never overwrite other `fig` variables in the same notebook.
+**Note:** 
+- The plot source must be a named **global variable** for tracking.
+- **CRITICAL**: Each `w_plot` must reference **its own unique variable** — reusing a variable will cause all plots to render the same content and create a negative user experience. 
 
 **Example:**
 ```python
 from lplots.widgets.plot import w_plot
 import plotly.express as px
 
-fig = px.scatter(df, x='x', y='y')
-w_plot(label="My Plot", source=fig)
+fig_scatter = px.scatter(df, x='x', y='y')
+w_plot(label="First Plot", source=fig_scatter)
+
+# Use unique variable for another visualization
+fig_bar = px.bar(df, x='x', y='y')
+w_plot(label="Second Plot", source=fig_bar)
 ```
 
 ---
