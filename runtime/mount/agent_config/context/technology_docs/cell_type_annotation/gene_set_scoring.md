@@ -60,7 +60,7 @@ Evaluate each marker's ability to distinguish cell types by computing **median f
 
 ---
 
-## Step 4: Balance Marker Counts
+## Step 4: Balance Marker Counts (Target: 5 markers per cell type)
 
 ### ⚠️ CRITICAL: Prevent Scoring Bias
 
@@ -138,7 +138,7 @@ Higher confidence (>0.3) indicates clear cell type identity. Lower confidence (<
 
 **Check:** 
 - Do predicted proportions align with biological expectations of the dataset's **tissue**?
-- Do differences in proportions **between conditions** look plausible biologically? 
+- Do **changes in proportions between conditions** look plausible biologically? 
 
 ### 2. Cluster-Celltype Alignment (Purity)
 
@@ -206,20 +206,7 @@ Higher confidence (>0.3) indicates clear cell type identity. Lower confidence (<
 
 **Action:** Flag cell types with mean confidence <0.15 as "low confidence" in downstream analyses.
 
-### 6. Clustering Quality Metrics
-
-**Internal validation:** If clustering was performed, assess its quality:
-
-**Silhouette score:** Measures how well cells fit their assigned cluster
-- **>0.5:** Well-defined clusters
-- **0.25-0.5:** Acceptable structure
-- **<0.25:** Weak clustering — predictions may not align
-
-**Cluster coherence:** Within-cluster homogeneity of cell type predictions
-- High coherence: Good alignment between clustering and predictions
-- Low coherence: Clusters may capture different biology than cell types
-
-### 7. Sample-Level Consistency
+### 6. Sample-Level Consistency
 
 **For multi-sample datasets:** Check if cell type proportions are consistent or vary by condition.
 
@@ -229,6 +216,9 @@ Higher confidence (>0.3) indicates clear cell type identity. Lower confidence (<
 - Technical replicates should be highly similar
 
 **Red flag:** Wild variation between technical replicates suggests technical artifacts or insufficient normalization.
+
+### 7. Reasonable Cell Type Proportion Changes Between Conditions
+**For dataset with multiple conditions**: Check if cell type proportion changes _between_ conditions are biologically plausible. 
 
 ---
 
