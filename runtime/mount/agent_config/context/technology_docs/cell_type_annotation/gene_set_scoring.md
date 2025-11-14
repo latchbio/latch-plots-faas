@@ -132,14 +132,11 @@ Higher confidence (>0.3) indicates clear cell type identity. Lower confidence (<
 
 ## Step 8: Comprehensive Validation
 
+- Create plots, compute metrics and create summary table for each of the validation criteria below. 
+
 ### 1. Cell Type Balance & Biological Plausibility
 
 **Check:** Do predicted proportions align with biological expectations for your tissue?
-
-**Interpretation:**
-- ATAC-seq may have different distribution vs RNA-seq (technical bias)
-- Disease states alter proportions.
-- Consider both technical and biological factors when assessing
 
 ### 2. Cluster-Celltype Alignment (Purity)
 
@@ -157,20 +154,17 @@ Higher confidence (>0.3) indicates clear cell type identity. Lower confidence (<
 
 ### 3. Spatial Coherence
 
-**Concept:** Similar cell types should be spatially co-localized in tissue sections.
+**Concept:** Similar cell types should be spatially co-localized in tissue sections. 
 
 **Checks:**
 - **Local homogeneity:** Do neighboring spots tend to have the same cell type?
-- **Anatomical zones:** Do cell types localize to expected tissue regions? (e.g., hepatocytes in liver lobules, immune cells in portal triads)
-- **Sharp boundaries:** Transitions between cell types should be gradual or follow anatomical structures
+- **Anatomical zones:** Do cell types localize to expected tissue regions? (e.g., hepatocytes in liver lobules, immune cells in portal triads) (if anatomical annotation is available in the AnnData object)
 
 **Methods:**
-- Visual inspection of spatial plots colored by cell type
 - Calculate local neighborhood agreement (% of neighbors with same type)
-- Overlay on histology images if available
+- Check % anatomical zone overlap (if anatomical annotation is available)
 
 **Red flags:**
-- "Salt-and-pepper" pattern with no spatial structure
 - Unexpected mixing of incompatible cell types
 - Predicted types in anatomically impossible locations
 
@@ -182,6 +176,7 @@ Higher confidence (>0.3) indicates clear cell type identity. Lower confidence (<
 1. Calculate mean expression in predicted cells of that type
 2. Calculate mean expression in all other cells
 3. Compute fold change
+4. Produce violin plots for users to visually inspect
 
 **Benchmarks:**
 - **>1.5×:** Excellent marker specificity
