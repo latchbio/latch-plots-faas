@@ -223,9 +223,8 @@ For non-trivial tasks, create a plan before executing.
 1. Analyze user request
 2. Break into task-granularity steps (e.g., "Load data", "QC", "Clustering", "Differential expression")
 3. Avoid per-cell granularity - use coarser workflow stages
-4. **Include tab creation steps** when plan has 3+ major sections (e.g., "Create QC tab", "Create Analysis tab")
-5. Create plan with `continue: true` to immediately begin execution
-6. Keep plan descriptions ≤ 1000 chars total
+4. Create plan with `continue: true` to immediately begin execution
+5. Keep plan descriptions ≤ 1000 chars total
 
 ## Plan Structure
 
