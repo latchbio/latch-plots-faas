@@ -725,7 +725,7 @@ class AgentHarness:
 
             result = await self.atomic_operation("rename_tab", params)
             if result.get("status") == "success":
-                target = "default tab" if tab_id == "DEFAULT" else f"tab {tab_id}"
+                target = "Tab 1" if tab_id == "DEFAULT" else f"tab {tab_id}"
                 msg = f"Renamed {target} to '{new_name}'"
                 print(f"[tool] rename_tab -> {msg}")
                 return {
