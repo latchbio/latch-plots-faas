@@ -9,7 +9,8 @@ Gene set scoring is a **fast exploratory approach** for cell type annotation tha
 
 ## Workflow Summary
 
-0. **Check dataset scale first** — inspect number of samples, total cells, and file size; **⚠️ IF** the dataset is large, **subset the AnnData to a single representative sample** to build and validate the workflow before scaling up. Running all samples at once is **notoriously slow and ineffective.**
+0. **Check dataset scale and subset AnnData if large** — inspect number of samples, total cells, and file size.
+- **⚠️ IF** the dataset is large, THEN you must **subset the AnnData to a single representative sample** to build and validate the workflow before scaling up. Running all samples at once is **notoriously slow and ineffective.**
 1. **Select expected cell types** (5-10 major types for tissue)
 2. **Curate 40-50 markers** per cell type from CellGuide
 3. **Filter discriminatory markers** (median fold change threshold)
