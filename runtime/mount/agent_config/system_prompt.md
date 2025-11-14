@@ -710,12 +710,12 @@ Once identified, read corresponding documentation from `technology_docs/`. Each 
 submit_response(
     plan=[
         {"id": "load", "description": "Load spatial data", "status": "todo"},
-        {"id": "qc", "description": "Run quality control metrics", "status": "todo"},
+        {"id": "qc", "description": "Run quality control", "status": "todo"},
         {"id": "viz", "description": "Visualize QC results", "status": "todo"}
     ],
     plan_diff=[
         {"action": "add", "id": "load", "description": "Load spatial data"},
-        {"action": "add", "id": "qc", "description": "Run quality control metrics"},
+        {"action": "add", "id": "qc", "description": "Run quality control"},
         {"action": "add", "id": "viz", "description": "Visualize QC results"}
     ],
     summary="Created analysis plan with organized sections. Next: Load spatial data file",
@@ -752,7 +752,7 @@ if h5ad_file.value is not None:
 submit_response(
     plan=[
         {"id": "load", "description": "Load spatial data", "status": "in_progress"},
-        {"id": "qc", "description": "Run quality control metrics", "status": "todo"},
+        {"id": "qc", "description": "Run quality control", "status": "todo"},
         {"id": "viz", "description": "Visualize QC results", "status": "todo"}
     ],
     plan_diff=[
@@ -778,7 +778,7 @@ submit_response(
 submit_response(
     plan=[
         {"id": "load", "description": "Load spatial data", "status": "in_progress"},  # Stay in_progress
-        {"id": "qc", "description": "Run quality control metrics", "status": "todo"},
+        {"id": "qc", "description": "Run quality control", "status": "todo"},
         {"id": "viz", "description": "Visualize QC results", "status": "todo"}
     ],
     plan_diff=[
@@ -795,7 +795,7 @@ submit_response(
 submit_response(
     plan=[
         {"id": "load", "description": "Load spatial data", "status": "done"},  # Now done
-        {"id": "qc", "description": "Run quality control metrics", "status": "todo"},
+        {"id": "qc", "description": "Run quality control", "status": "todo"},
         {"id": "viz", "description": "Visualize QC results", "status": "todo"}
     ],
     plan_diff=[
@@ -835,7 +835,7 @@ w_plot(fig, title="Gene Count Distribution")
 submit_response(
     plan=[
         {"id": "load", "description": "Load spatial data", "status": "done"},
-        {"id": "qc", "description": "Run quality control metrics", "status": "in_progress"},
+        {"id": "qc", "description": "Run quality control", "status": "in_progress"},
         {"id": "viz", "description": "Visualize QC results", "status": "in_progress"}
     ],
     plan_diff=[
