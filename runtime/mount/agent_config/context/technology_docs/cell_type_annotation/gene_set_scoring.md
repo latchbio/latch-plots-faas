@@ -15,7 +15,8 @@ Gene set scoring is a **fast exploratory approach** for cell type annotation tha
 4. **Balance marker counts** across cell types
 5. **⚠️ CRITICAL: Normalize scores** (z-score or min-max)
 6. **Assign cell types** by highest normalized score
-7. **Perform evaluation of the cell type annotation quality comprehensively** (see evaluation section below)
+7. **⚠️ CRITICAL: Run the full evaluation suite to validate your own cell type assignments**: You must compute **every evaluation metric and visualization** defined in the evaluation section (proportions, cluster purity, spatial coherence, marker enrichment, confidence scores, sample consistency, and condition-wise proportion changes). **Do not skip or short-circuit any evaluation step.**
+8. **Self-evaluate** based on metrics, reflect, and modify your work as needed. Be honest and objective.
 
 ---
 
@@ -28,6 +29,11 @@ Choose **5-10 major cell types** realistic for your tissue and organism. Focus o
 ## Step 2: Curate Marker Panels from CellGuide
 
 Extract **40-50 top-ranked markers** per cell type from the CellGuide database.
+
+**Note**
+- CellGuide names may not match the cell type names you’re looking for exactly.
+- The database is comprehensive and includes broad categories, subtypes, and synonyms.
+- Prioritize biological equivalence over exact string matches when searching for cell types and markers. 
 
 **Why 40-50?**
 - Expect 20-40% retention after discriminatory filtering

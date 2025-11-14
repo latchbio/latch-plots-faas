@@ -39,8 +39,12 @@ csv = w_ldata_picker(
 
 if csv.value is not None:
     lp: LPath = csv.value
-    local_path = lp.download(cache=True)
-    df = pd.read_csv(local_path)
+    fname = lp.name()
+    suffix = Path(fname).suffix if fname else ""
+    local_p = Path(f"{lp.node_id()}{suffix}")
+    lp.download(local_p, cache=True)
+    df = pd.read_csv(local_p)
+
 ```
 
 ---
@@ -452,7 +456,7 @@ if button.value:
 - `appearance` (OutputAppearance, optional): Styling options
 - `key` (str, optional): Unique widget identifier
 
-**Note:** The source must be a named global variable for tracking.
+**Note:** The source must be a named **unique** global variable for tracking. Never overwrite other `fig` variables in the same notebook.
 
 **Example:**
 ```python
@@ -767,7 +771,7 @@ with w_grid(columns=12) as g:
 - Remote (`latch://`) paths → **LPath** only. Local paths → **pathlib.Path** only
 - If a widget already returns an **LPath**, use it directly (don't wrap again)
 - **Always check for `None`** before using widget values
-- **Always cache file downloads**
+- **Always explicitly define local destination and cache file downloads**
 - **Never** pass LPath directly to libraries expecting local paths; download first
 
 **Valid Path Forms:**
@@ -813,9 +817,12 @@ child = LPath("latch://XXXXX.account/Data/project") / "file.csv"
 
 # Get basename (method, not attribute!)
 fname = lp.name()
+suffix = Path(fname).suffix if fname else ""
+local_p = Path(f"{lp.node_id()}{suffix}")
 
 # Download before using with local libraries
-local_p: Path = lp.download(cache=True)
+# Always cache downloads
+lp.download(local_p, cache=True)
 df = pd.read_csv(local_p)
 
 # Check if directory
