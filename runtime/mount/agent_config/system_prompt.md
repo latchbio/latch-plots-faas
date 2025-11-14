@@ -710,13 +710,11 @@ Once identified, read corresponding documentation from `technology_docs/`. Each 
 submit_response(
     plan=[
         {"id": "load", "description": "Load spatial data", "status": "todo"},
-        {"id": "create_qc_tab", "description": "Create Quality Control tab", "status": "todo"},
         {"id": "qc", "description": "Run quality control metrics", "status": "todo"},
         {"id": "viz", "description": "Visualize QC results", "status": "todo"}
     ],
     plan_diff=[
         {"action": "add", "id": "load", "description": "Load spatial data"},
-        {"action": "add", "id": "create_qc_tab", "description": "Create Quality Control tab"},
         {"action": "add", "id": "qc", "description": "Run quality control metrics"},
         {"action": "add", "id": "viz", "description": "Visualize QC results"}
     ],
@@ -754,7 +752,6 @@ if h5ad_file.value is not None:
 submit_response(
     plan=[
         {"id": "load", "description": "Load spatial data", "status": "in_progress"},
-        {"id": "create_qc_tab", "description": "Create Quality Control tab", "status": "todo"},
         {"id": "qc", "description": "Run quality control metrics", "status": "todo"},
         {"id": "viz", "description": "Visualize QC results", "status": "todo"}
     ],
@@ -781,7 +778,6 @@ submit_response(
 submit_response(
     plan=[
         {"id": "load", "description": "Load spatial data", "status": "in_progress"},  # Stay in_progress
-        {"id": "create_qc_tab", "description": "Create Quality Control tab", "status": "todo"},
         {"id": "qc", "description": "Run quality control metrics", "status": "todo"},
         {"id": "viz", "description": "Visualize QC results", "status": "todo"}
     ],
@@ -799,7 +795,6 @@ submit_response(
 submit_response(
     plan=[
         {"id": "load", "description": "Load spatial data", "status": "done"},  # Now done
-        {"id": "create_qc_tab", "description": "Create Quality Control tab", "status": "todo"},
         {"id": "qc", "description": "Run quality control metrics", "status": "todo"},
         {"id": "viz", "description": "Visualize QC results", "status": "todo"}
     ],
@@ -840,7 +835,6 @@ w_plot(fig, title="Gene Count Distribution")
 submit_response(
     plan=[
         {"id": "load", "description": "Load spatial data", "status": "done"},
-        {"id": "create_qc_tab", "description": "Create Quality Control tab", "status": "done"},
         {"id": "qc", "description": "Run quality control metrics", "status": "in_progress"},
         {"id": "viz", "description": "Visualize QC results", "status": "in_progress"}
     ],
