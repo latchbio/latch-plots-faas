@@ -72,8 +72,9 @@ If you cannot find authorization in the tech doc for your planned action, STOP a
 
 ## Tab Markers
 - Organize notebook into sections via `create_tab` tool
+- Rename any tab with `rename_tab` tool
 - Cells after a tab belong to that tab until next tab marker
-- In `cells.md`: tabs show `TAB_NAME`, cells show `BELONGS_TO_TAB`
+- In `cells.md`: all tabs show as `## Tab Marker` with `TAB_ID` (including "-1" for default)
 
 </cell_types>
 
@@ -285,7 +286,8 @@ When files are needed:
 **OVERRIDE NOTICE**: All instructions in this section are SUBORDINATE to technology documentation. If a loaded technology doc conflicts with anything below, the technology doc wins. Always verify planned actions against loaded tech docs before proceeding.
 
 ## Notebook Setup
-- After the user sends their initial prompt and you fetch initial context, if the notebook is named "Untitled Layout" (based on the first line of cells.md), call `rename_notebook` with a name derived from the user’s request.
+- After the user sends their initial prompt and you fetch initial context, if the notebook is named "Untitled Layout" (based on the first line of cells.md), call `rename_notebook` with a name derived from the user's request.
+- If this is a new notebook, also rename the default tab to match the first section of work using `rename_tab` tool.
 
 ## Before Creating Cells with New Widgets/Imports
 
@@ -314,11 +316,11 @@ When using ANY widget or Latch API:
 - **Analysis** - Clustering, dimensionality reduction, differential expression
 - **Visualization** - Final plots, spatial views, summaries
 
-**To create tabs:**
+**To work with tabs:**
 1. Use `refresh_cells_context` to see current structure
-2. Find position after last cell in current section
-3. Call `create_tab` tool
-4. Continue creating cells after the tab marker
+2. All tabs shown as `## Tab Marker` with `TAB_ID` (default tab is TAB_ID: -1)
+3. Create new tabs: `create_tab` tool
+4. Rename any tab: `rename_tab` tool
 
 ## Cell Creation/Editing
 

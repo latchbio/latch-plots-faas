@@ -712,6 +712,35 @@ class AgentHarness:
                 "success": False,
             }
 
+        async def rename_tab(args: dict) -> dict:
+            tab_id = args["tab_id"]
+            new_name = args["new_name"]
+
+            print(f'[tool] rename_tab tab_id={tab_id} new_name="{new_name}"')
+
+            params = {
+                "tab_id": tab_id,
+                "new_name": new_name,
+            }
+
+            result = await self.atomic_operation("rename_tab", params)
+            if result.get("status") == "success":
+                target = "default tab" if tab_id == "-1" else f"tab {tab_id}"
+                msg = f"Renamed {target} to '{new_name}'"
+                print(f"[tool] rename_tab -> {msg}")
+                return {
+                    "tool_name": "rename_tab",
+                    "summary": msg,
+                    "tab_id": tab_id,
+                    "new_name": new_name,
+                    "success": True,
+                }
+            return {
+                "tool_name": "rename_tab",
+                "summary": f"Failed to rename tab: {result.get('error', 'Unknown error')}",
+                "success": False,
+            }
+
         async def set_widget(args: dict) -> dict:
             key = args.get("key")
             action_summary = args.get("action_summary")
@@ -1334,6 +1363,20 @@ class AgentHarness:
             },
         })
         self.tool_map["create_tab"] = create_tab
+
+        self.tools.append({
+            "name": "rename_tab",
+            "description": 'Rename a tab. Use tab_id="-1" to rename the default tab.',
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "tab_id": {"type": "string", "description": 'ID of the tab to rename. Use "-1" for the default tab, or the CELL_ID from a Tab Marker.'},
+                    "new_name": {"type": "string", "description": "New name for the tab"},
+                },
+                "required": ["tab_id", "new_name"],
+            },
+        })
+        self.tool_map["rename_tab"] = rename_tab
 
         self.tools.append({
             "name": "submit_response",
@@ -2287,7 +2330,15 @@ class AgentHarness:
 
             cell_lines = [f"# Notebook Cells for {notebook_name}, Total cells: {cell_count}\n"]
 
-            current_tab_name = "Tab 1"
+            default_tab_name = context.get("default_tab_name", "Tab 1")
+
+            cell_lines.append("\n## Tab Marker [-1]")  # noqa: FURB113
+            cell_lines.append(f"TAB_NAME: {default_tab_name}")
+            cell_lines.append("TAB_ID: -1")
+            cell_lines.append("TYPE: Default Tab")
+            cell_lines.append("---")
+
+            current_tab_name = default_tab_name
 
             for cell in cells:
                 index = cell.get("index", "?")
@@ -2305,7 +2356,7 @@ class AgentHarness:
 
                     cell_lines.append(f"\n## Tab Marker [{index}]")  # noqa: FURB113
                     cell_lines.append(f"TAB_NAME: {current_tab_name}")
-                    cell_lines.append(f"CELL_ID: {cell_id}")
+                    cell_lines.append(f"TAB_ID: {cell_id}")
                     cell_lines.append(f"CELL_INDEX: {index}")
                     cell_lines.append("---")
                     continue
