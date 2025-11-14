@@ -2335,7 +2335,7 @@ class AgentHarness:
             cell_lines.append("\n## Tab Marker [DEFAULT]")  # noqa: FURB113
             cell_lines.append(f"TAB_NAME: {default_tab_name}")
             cell_lines.append("TAB_ID: DEFAULT")
-            cell_lines.append("TYPE: Default Tab")
+            cell_lines.append("TYPE: Default Tab Marker")
             cell_lines.append("---")
 
             current_tab_name = default_tab_name
@@ -2358,6 +2358,7 @@ class AgentHarness:
                     cell_lines.append(f"TAB_NAME: {current_tab_name}")
                     cell_lines.append(f"TAB_ID: {cell_id}")
                     cell_lines.append(f"CELL_INDEX: {index}")
+                    cell_lines.append("TYPE: Tab Marker")
                     cell_lines.append("---")
                     continue
 
