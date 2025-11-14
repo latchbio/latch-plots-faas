@@ -132,7 +132,7 @@ Higher confidence (>0.3) indicates clear cell type identity. Lower confidence (<
 
 ## Step 8: Comprehensive Evaluation
 
-- **IMPORTANT**: **Compute metrics and visualization to self-evaluate the quality of cell type annotation.**
+- **IMPORTANT**: **Compute ALL metrics and visualization to self-evaluate the quality of cell type annotation.**
 
 ### 1. Cell Type Balance & Biological Plausibility
 
@@ -237,13 +237,14 @@ Higher confidence (>0.3) indicates clear cell type identity. Lower confidence (<
 Before accepting predictions, verify:
 
 - [ ] Cell type proportions are biologically plausible
-- [ ] Mean cluster purity >50% (for ATAC-seq)
+- [ ] Mean cluster-celltype purity >50% (for ATAC-seq)
 - [ ] Spatial patterns show coherent localization
 - [ ] Markers show >1.2× enrichment in predicted types
 - [ ] Mean confidence >0.20 overall
 - [ ] No single cell type >80% unless expected
 - [ ] Rare expected types are detected
 - [ ] Sample-level consistency (for multi-sample data)
+- [ ] Biologically reasonable cell type proportions across conditions
 
 **If ≥4 of 8 criteria pass: Accept predictions**  
 **If <4 criteria pass: Consider cluster-based annotation or threshold adjustment**
