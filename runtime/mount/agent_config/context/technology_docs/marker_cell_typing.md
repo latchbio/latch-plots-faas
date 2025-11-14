@@ -107,16 +107,65 @@ db_path = Path("cellguide_marker_gene_database_per_gene.json")
 
 <gene_set_scoring>
 
+# **Approach 1 — Gene Set Scoring (Fast, Exploratory Annotation)**
 
-# **Approach 1 — Gene Set Scoring**
+Gene set scoring evaluates how strongly each cell or spot expresses a curated panel of **canonical marker genes** for a small, well-defined set of candidate cell types. It is **fast**, does **not** require high-quality clustering, and is ideal for **early-stage annotation** before running more detailed workflows.
 
-This method scores each cell or spot based on the expression of canonical marker sets for a selected set of cell types. It is **fast**, does **not** require high-quality clustering, and is ideal for quick, exploratory annotation.
+However, accuracy depends strongly on **which cell types** you include and **which markers** you choose, so careful selection and iterative refinement are essential.
 
-The main limitation is that results depend heavily on **which** cell types and **which** markers are included, often requiring iterative refinement.
+## **Best Practices and Required Steps**
 
-- Run scoring **per condition** when multiple samples are present.  
-- Restrict the scoring panel to **major expected cell types** for the tissue; **never** score against the full CellGuide ontology for that tissue, which can include hundreds of fine-grained types.  
-- Use the **top 5–10 canonical markers** from CellGuide for each selected cell type.
+### **1. Select a small set of expected cell types**
+Identify **5–10 major cell types** that are realistic for the dataset’s *organism* and *tissue type*.  
+Avoid including hundreds of fine-grained subtypes — this will weaken scoring accuracy.
+
+### **2. Build marker panels using CellGuide**
+For each chosen cell type:
+
+- Select **10–20 canonical marker genes** from CellGuide (CELLxGENE).  
+- Prefer **tissue-specific, consistently expressed** markers.  
+- Avoid markers that appear frequently across unrelated cell types.
+
+Each cell type must have **approximately the same number of markers** to avoid bias during scoring.
+
+### **3. Evaluate marker discriminatory power**
+For each candidate marker gene:
+
+- Compute the **median expression** (or gene-activity signal) in:
+  - **Cluster A** (candidate cluster)
+  - **Each other cluster** (**B₁**, **B₂**, …)
+
+- Compute per-pair fold change:  
+  **fold_change = median(A) / median(Bᵢ)**
+
+- A marker is considered **discriminatory** if:  
+  **fold change > 1.5** across most pairwise comparisons  
+  (empirically validated for AtlasXomics single-cell ATAC data).
+
+Retain only markers that consistently distinguish the target cell type.
+
+### **4. Score each cell or spot**
+Generate a score per cell using the refined marker set:
+
+- Use the **mean**, **sum**, or a **rank-based** scoring method.  
+- Stronger discrimination across marker genes results in clearer cell-type assignments.  
+- Large sets of weak markers reduce accuracy — marker quality matters more than quantity.
+
+### **5. Interpret scores**
+For each cell or cluster:
+
+- Identify the cell type with the **highest score**.  
+- Ensure the top score is **meaningfully higher** than the second-highest.  
+- If two cell types score similarly, refine marker sets or remove weak markers.
+
+## **Summary of Key Rules**
+
+- Choose **5–10** major expected cell types.  
+- Use **10–20 high-quality CellGuide markers** per cell type.  
+- Evaluate **pairwise median fold change** for each marker.  
+- Keep markers with **>1.5× fold change** for ATAC gene-activity data.  
+- Maintain **balanced marker counts** across cell types.  
+- Rescore after refining marker sets.
 
 </gene_set_scoring>
 
