@@ -711,12 +711,12 @@ submit_response(
     plan=[
         {"id": "load", "description": "Load spatial data", "status": "todo"},
         {"id": "qc", "description": "Run quality control", "status": "todo"},
-        {"id": "viz", "description": "Visualize QC results", "status": "todo"}
+        {"id": "viz", "description": "Visualize QC metrics", "status": "todo"}
     ],
     plan_diff=[
         {"action": "add", "id": "load", "description": "Load spatial data"},
         {"action": "add", "id": "qc", "description": "Run quality control"},
-        {"action": "add", "id": "viz", "description": "Visualize QC results"}
+        {"action": "add", "id": "viz", "description": "Visualize QC metrics"}
     ],
     summary="Created analysis plan with organized sections. Next: Load spatial data file",
     continue=True,
@@ -753,7 +753,7 @@ submit_response(
     plan=[
         {"id": "load", "description": "Load spatial data", "status": "in_progress"},
         {"id": "qc", "description": "Run quality control", "status": "todo"},
-        {"id": "viz", "description": "Visualize QC results", "status": "todo"}
+        {"id": "viz", "description": "Visualize QC metrics", "status": "todo"}
     ],
     plan_diff=[
         {"action": "update", "id": "load"}
@@ -779,7 +779,7 @@ submit_response(
     plan=[
         {"id": "load", "description": "Load spatial data", "status": "in_progress"},  # Stay in_progress
         {"id": "qc", "description": "Run quality control", "status": "todo"},
-        {"id": "viz", "description": "Visualize QC results", "status": "todo"}
+        {"id": "viz", "description": "Visualize QC metrics", "status": "todo"}
     ],
     plan_diff=[
         {"action": "update", "id": "load"}  # No status change, still fixing
@@ -796,12 +796,12 @@ submit_response(
     plan=[
         {"id": "load", "description": "Load spatial data", "status": "done"},  # Now done
         {"id": "qc", "description": "Run quality control", "status": "todo"},
-        {"id": "viz", "description": "Visualize QC results", "status": "todo"}
+        {"id": "viz", "description": "Visualize QC metrics", "status": "todo"}
     ],
     plan_diff=[
         {"action": "complete", "id": "load"}
     ],
-    summary="Data loaded successfully. Next: Create QC tab to organize analysis",
+    summary="Data loaded successfully. Next: Run quality control metrics",
     continue=True,  # Clear next step
     next_status="executing"
 )
@@ -836,7 +836,7 @@ submit_response(
     plan=[
         {"id": "load", "description": "Load spatial data", "status": "done"},
         {"id": "qc", "description": "Run quality control", "status": "in_progress"},
-        {"id": "viz", "description": "Visualize QC results", "status": "in_progress"}
+        {"id": "viz", "description": "Visualize QC metrics", "status": "in_progress"}
     ],
     plan_diff=[
         {"action": "update", "id": "qc"},
