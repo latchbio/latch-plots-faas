@@ -15,7 +15,7 @@ Gene set scoring is a **fast exploratory approach** for cell type annotation tha
 4. **Balance marker counts** across cell types
 5. **⚠️ CRITICAL: Normalize scores** (z-score or min-max)
 6. **Assign cell types** by highest normalized score
-7. **Validate comprehensively** (see validation section below)
+7. **Perform evaluation of the cell type annotation quality comprehensively** (see evaluation section below)
 
 ---
 
@@ -70,8 +70,8 @@ Evaluate each marker's ability to distinguish cell types by computing **median f
 
 **Method:**
 1. Calculate target count (median or minimum of filtered marker counts)
-2. Enforce minimum of 5 markers per cell type
-3. Take top N markers by fold change for each cell type
+2. Enforce minimum of 3 markers per cell type
+3. Take top 5 markers by fold change for each cell type
 4. Only include cell types with ≥3 final markers
 
 **Result:** All cell types have equal "voting power" during scoring.
@@ -136,7 +136,9 @@ Higher confidence (>0.3) indicates clear cell type identity. Lower confidence (<
 
 ### 1. Cell Type Balance & Biological Plausibility
 
-**Check:** Do predicted proportions align with biological expectations for your tissue?
+**Check:** 
+- Do predicted proportions align with biological expectations of the dataset's **tissue**?
+- Do differences in proportions **between conditions** look plausible biologically? 
 
 ### 2. Cluster-Celltype Alignment (Purity)
 
