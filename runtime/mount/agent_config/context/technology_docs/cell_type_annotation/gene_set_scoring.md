@@ -56,7 +56,7 @@ Evaluate each marker's ability to distinguish cell types by computing **median f
 
 **Method:** For each marker, compute median expression per cluster, then calculate pairwise fold changes. Keep markers where median fold change across all pairs exceeds threshold.
 
-**Quality check:** After filtering, verify each cell type retains ≥3 markers. If not, lower threshold to 1.2× or increase initial marker count to 50-60.
+**Quality check:** After filtering, verify **each cell type retains ≥3 markers AND there are ≥3 cell types**. If not, lower threshold to 1.2× or increase initial marker count to 50-60.
 
 ---
 
