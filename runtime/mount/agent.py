@@ -2287,7 +2287,7 @@ class AgentHarness:
 
             cell_lines = [f"# Notebook Cells for {notebook_name}, Total cells: {cell_count}\n"]
 
-            current_tab_name = "Default Tab"
+            current_tab_name = "Tab 1"
 
             for cell in cells:
                 index = cell.get("index", "?")

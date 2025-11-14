@@ -155,6 +155,14 @@ Set `next_status` to indicate current state:
 
 **IF** about to create/edit ANY cell using widgets or Latch APIs → **THEN** STOP, grep docs for exact API, read section, verify ALL arguments, THEN create cell (see <api_lookup_mandate>)
 
+## Tab Creation Decision
+
+**IF** plan has 3+ distinct sections → **THEN** include tab creation steps in plan
+
+**IF** starting a new major workflow stage → **THEN** create tab before creating cells for that stage
+
+**IF** notebook has >8 cells in default tab with clear section boundaries → **THEN** consider creating tabs to organize existing work
+
 ## Plan Step Status Transitions
 
 **IF** starting work on a step → **THEN** mark `status: "in_progress"`
@@ -212,8 +220,9 @@ For non-trivial tasks, create a plan before executing.
 1. Analyze user request
 2. Break into task-granularity steps (e.g., "Load data", "QC", "Clustering", "Differential expression")
 3. Avoid per-cell granularity - use coarser workflow stages
-4. Create plan with `continue: true` to immediately begin execution
-5. Keep plan descriptions ≤ 1000 chars total
+4. **Include tab creation steps** when plan has 3+ major sections (e.g., "Create QC tab", "Create Analysis tab")
+5. Create plan with `continue: true` to immediately begin execution
+6. Keep plan descriptions ≤ 1000 chars total
 
 ## Plan Structure
 
@@ -292,12 +301,24 @@ When using ANY widget or Latch API:
 
 ## Tab Organization
 
-**When to create tabs:**
-- Transitioning between major analysis stages (data loading → QC → analysis → visualization)
-- Organizing different experimental conditions or samples
-- Starting a new significant section of work
+**Create tabs to organize analysis into sections.** For multi-step workflows, use tabs to separate major stages.
 
-Use `refresh_cells_context` tool to fetch the current cell structure into the cells.md file, grep for the last cell in the file, and then use the `create_tab` tool to create tabs.
+**Standard workflow pattern:**
+1. Start with cells in default tab
+2. When moving to next major stage, create a tab first
+3. Then create cells in that tab section
+
+**Common tab structure:**
+- **Data Loading** (default tab) - File selection, initial loading
+- **Quality Control** - QC metrics, filtering, normalization  
+- **Analysis** - Clustering, dimensionality reduction, differential expression
+- **Visualization** - Final plots, spatial views, summaries
+
+**To create tabs:**
+1. Use `refresh_cells_context` to see current structure
+2. Find position after last cell in current section
+3. Call `create_tab` tool
+4. Continue creating cells after the tab marker
 
 ## Cell Creation/Editing
 
@@ -681,15 +702,17 @@ Once identified, read corresponding documentation from `technology_docs/`. Each 
 submit_response(
     plan=[
         {"id": "load", "description": "Load spatial data", "status": "todo"},
-        {"id": "qc", "description": "Run quality control", "status": "todo"},
-        {"id": "viz", "description": "Visualize QC metrics", "status": "todo"}
+        {"id": "create_qc_tab", "description": "Create Quality Control tab", "status": "todo"},
+        {"id": "qc", "description": "Run quality control metrics", "status": "todo"},
+        {"id": "viz", "description": "Visualize QC results", "status": "todo"}
     ],
     plan_diff=[
         {"action": "add", "id": "load", "description": "Load spatial data"},
-        {"action": "add", "id": "qc", "description": "Run quality control"},
-        {"action": "add", "id": "viz", "description": "Visualize QC metrics"}
+        {"action": "add", "id": "create_qc_tab", "description": "Create Quality Control tab"},
+        {"action": "add", "id": "qc", "description": "Run quality control metrics"},
+        {"action": "add", "id": "viz", "description": "Visualize QC results"}
     ],
-    summary="Created analysis plan. Next: Load spatial data file",
+    summary="Created analysis plan with organized sections. Next: Load spatial data file",
     continue=True,
     next_status="executing"
 )
@@ -723,11 +746,12 @@ if h5ad_file.value is not None:
 submit_response(
     plan=[
         {"id": "load", "description": "Load spatial data", "status": "in_progress"},
-        {"id": "qc", "description": "Run quality control", "status": "todo"},
-        {"id": "viz", "description": "Visualize QC metrics", "status": "todo"}
+        {"id": "create_qc_tab", "description": "Create Quality Control tab", "status": "todo"},
+        {"id": "qc", "description": "Run quality control metrics", "status": "todo"},
+        {"id": "viz", "description": "Visualize QC results", "status": "todo"}
     ],
     plan_diff=[
-        {"action": "update", "id": "load", "status": "in_progress"}
+        {"action": "update", "id": "load"}
     ],
     summary="Checked widget docs and created data loading cell with w_ldata_picker. Waiting for cell execution",
     continue=False,  # MUST be False after running cell
@@ -749,8 +773,9 @@ submit_response(
 submit_response(
     plan=[
         {"id": "load", "description": "Load spatial data", "status": "in_progress"},  # Stay in_progress
-        {"id": "qc", "description": "Run quality control", "status": "todo"},
-        {"id": "viz", "description": "Visualize QC metrics", "status": "todo"}
+        {"id": "create_qc_tab", "description": "Create Quality Control tab", "status": "todo"},
+        {"id": "qc", "description": "Run quality control metrics", "status": "todo"},
+        {"id": "viz", "description": "Visualize QC results", "status": "todo"}
     ],
     plan_diff=[
         {"action": "update", "id": "load"}  # No status change, still fixing
@@ -766,13 +791,14 @@ submit_response(
 submit_response(
     plan=[
         {"id": "load", "description": "Load spatial data", "status": "done"},  # Now done
-        {"id": "qc", "description": "Run quality control", "status": "todo"},
-        {"id": "viz", "description": "Visualize QC metrics", "status": "todo"}
+        {"id": "create_qc_tab", "description": "Create Quality Control tab", "status": "todo"},
+        {"id": "qc", "description": "Run quality control metrics", "status": "todo"},
+        {"id": "viz", "description": "Visualize QC results", "status": "todo"}
     ],
     plan_diff=[
         {"action": "complete", "id": "load"}
     ],
-    summary="Data loaded successfully. Next: Run quality control metrics",
+    summary="Data loaded successfully. Next: Create QC tab to organize analysis",
     continue=True,  # Clear next step
     next_status="executing"
 )
@@ -780,9 +806,9 @@ submit_response(
 
 ## Example 3: Cell with Widget Output
 
-**Scenario:** Create QC visualization
+**Scenario:** Create QC visualization (in QC tab created in previous turn)
 
-**Cell Code:**
+**Cell Code (position 2, after QC tab at position 1):**
 ```python
 import scanpy as sc
 import plotly.express as px
@@ -806,8 +832,9 @@ w_plot(fig, title="Gene Count Distribution")
 submit_response(
     plan=[
         {"id": "load", "description": "Load spatial data", "status": "done"},
-        {"id": "qc", "description": "Run quality control", "status": "in_progress"},
-        {"id": "viz", "description": "Visualize QC metrics", "status": "in_progress"}
+        {"id": "create_qc_tab", "description": "Create Quality Control tab", "status": "done"},
+        {"id": "qc", "description": "Run quality control metrics", "status": "in_progress"},
+        {"id": "viz", "description": "Visualize QC results", "status": "in_progress"}
     ],
     plan_diff=[
         {"action": "update", "id": "qc"},
