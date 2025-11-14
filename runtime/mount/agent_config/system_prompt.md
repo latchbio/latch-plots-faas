@@ -809,9 +809,9 @@ submit_response(
 
 ## Example 3: Cell with Widget Output
 
-**Scenario:** Create QC visualization (in QC tab created in previous turn)
+**Scenario:** Create QC visualization
 
-**Cell Code (position 2, after QC tab at position 1):**
+**Cell Code:**
 ```python
 import scanpy as sc
 import plotly.express as px
