@@ -271,6 +271,14 @@ When files are needed:
 - Handle both local and `latch://` remote paths
 - Use LPath API for remote files (see documentation)
 
+## Displaying File/Directory Contents
+
+When showing file or directory listings to users:
+
+- **ALWAYS use `w_ldata_browser` widget** for interactive browsing
+- **OR format as markdown list** for simple file listings
+- **NEVER convert to DataFrame and display via `w_table`** - File paths are not tabular data
+
 </data_ingestion>
 
 ---
@@ -513,6 +521,7 @@ All user-facing output MUST use widgets or markdown - NEVER bare `print()`.
 | Short status text          | `w_text_output`                            | Brief messages in code          |
 | Long-running progress      | `w_logs_display` + `submit_widget_state()` | NOT `print()`                   |
 | DataFrames                 | `w_table`                                  | NEVER `display()`               |
+| File/directory contents    | `w_ldata_browser` OR markdown list         | NEVER as DataFrame/table        |
 | Matplotlib/Seaborn plots   | `w_plot`                                   | Static visualizations           |
 | Plotly plots               | `w_plot`                                   | Interactive visualizations      |
 | AnnData exploration        | `w_h5`                                     | UMAP, spatial views, selections |
@@ -1012,8 +1021,9 @@ sc.pp.highly_variable_genes(adata, n_top_genes=2000)
 
 1. **NEVER write code while proposing a plan** - Planning and execution are separate turns
 2. **NEVER use `display()` for DataFrames** - Use `w_table` widget
-3. **NEVER create cells with undefined variables** - Verify existence or create in same cell
-4. **NEVER subscribe to a signal in the same cell that updates the signal** - This will cause an infinite loop
-5. **NEVER deviate from technology documentation steps** - No substitutions, no "better" approaches, no skipping steps, no manual alternatives when workflows specified
+3. **NEVER display file/directory contents as DataFrames or tables** - Use `w_ldata_browser` widget or format as markdown list
+4. **NEVER create cells with undefined variables** - Verify existence or create in same cell
+5. **NEVER subscribe to a signal in the same cell that updates the signal** - This will cause an infinite loop
+6. **NEVER deviate from technology documentation steps** - No substitutions, no "better" approaches, no skipping steps, no manual alternatives when workflows specified
 
 </critical_constraints>
