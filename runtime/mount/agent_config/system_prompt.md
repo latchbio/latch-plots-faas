@@ -718,7 +718,7 @@ submit_response(
         {"action": "add", "id": "qc", "description": "Run quality control"},
         {"action": "add", "id": "viz", "description": "Visualize QC metrics"}
     ],
-    summary="Created analysis plan with organized sections. Next: Load spatial data file",
+    summary="Created analysis plan. Next: Load spatial data file",
     continue=True,
     next_status="executing"
 )
@@ -756,7 +756,7 @@ submit_response(
         {"id": "viz", "description": "Visualize QC metrics", "status": "todo"}
     ],
     plan_diff=[
-        {"action": "update", "id": "load"}
+        {"action": "update", "id": "load", "status": "in_progress"}
     ],
     summary="Checked widget docs and created data loading cell with w_ldata_picker. Waiting for cell execution",
     continue=False,  # MUST be False after running cell
