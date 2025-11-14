@@ -9,7 +9,7 @@ Gene set scoring is a **fast exploratory approach** for cell type annotation tha
 
 ## Workflow Summary
 
-0. **Check dataset scale first** — inspect number of samples, total cells, and file size; if the dataset is large, **start with a single representative sample** to build and validate the workflow before scaling up, because running all samples at once is **notoriously slow and ineffective.**
+0. **Check dataset scale first** — inspect number of samples, total cells, and file size; **⚠️ IF** the dataset is large, **subset the AnnData to a single representative sample** to build and validate the workflow before scaling up. Running all samples at once is **notoriously slow and ineffective.**
 1. **Select expected cell types** (5-10 major types for tissue)
 2. **Curate 40-50 markers** per cell type from CellGuide
 3. **Filter discriminatory markers** (median fold change threshold)
@@ -55,15 +55,15 @@ Evaluate each marker's ability to distinguish cell types by computing **median f
 
 | Assay Type | Threshold | Expected Retention | Rationale |
 |------------|-----------|-------------------|-----------|
-| **ATAC-seq gene activity** | **1.5×** | 20-40% | Lower dynamic range, sparser signal |
+| **ATAC-seq gene activity** | **1.2×** | 20-40% | Lower dynamic range, sparser signal |
 | RNA-seq (scRNA/spatial) | 1.5-2.0× | 30-50% | Higher sensitivity and dynamic range |
 | Protein (CITE-seq) | 2.0-3.0× | 40-60% | High specificity required |
 
-**Key insight:** ATAC-seq gene activity scores are inherently sparser than RNA expression. The commonly used **1.5× threshold** is recommended but can be too stringent for some datasets. If that is the case, decrease the reshold **1.2× for ATAC-seq data.**
+**Key insight:** ATAC-seq gene activity scores are inherently sparser than RNA expression. **1.2× threshold** is recommended for ATAC-seq data.
 
 **Method:** For each marker, compute median expression per cluster, then calculate pairwise fold changes. Keep markers where median fold change across all pairs exceeds threshold.
 
-**Quality check:** After filtering, verify **each cell type retains ≥3 markers AND there are ≥3 cell types**. If not, lower threshold to 1.2× or increase initial marker count to 50-60.
+**Quality check:** After filtering, verify **each cell type retains ≥3 markers AND there are ≥3 cell types**. If not, lower threshold to 1.05-1.1× or increase initial marker count to 50-60.
 
 ---
 

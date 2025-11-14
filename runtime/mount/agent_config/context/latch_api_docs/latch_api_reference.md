@@ -456,11 +456,16 @@ if button.value:
 - `appearance` (OutputAppearance, optional): Styling options
 - `key` (str, optional): Unique widget identifier
 
-**Note:** 
+**Note:**
 - The plot source must be a named **global variable** for tracking.
-- **CRITICAL**: Each `w_plot` must reference **its own unique variable** — reusing a variable will cause all plots to render the same content and create a negative user experience. 
+- **CRITICAL**: Each `w_plot` must reference **its own unique variable** — reusing a variable will cause all plots to render the same content and create a negative user experience.
+- **DO NOT** use `globals()` or dynamic variable naming in loops (e.g., `globals()[f'fig_{i}']`). This does NOT create proper unique variables.
+- **CORRECT APPROACH**: Explicitly declare each variable with a unique name (e.g., `fig_plot1`, `fig_plot2`, `fig_plot3`) outside of any loop structure.
+- When creating multiple plots, write out each plot creation separately with its own explicit variable name, or build all plots into a list/dict and then create separate variables from that collection.
 
-**Example:**
+#### Examples
+
+**Basic Usage:**
 ```python
 from lplots.widgets.plot import w_plot
 import plotly.express as px
@@ -471,6 +476,28 @@ w_plot(label="First Plot", source=fig_scatter)
 # Use unique variable for another visualization
 fig_bar = px.bar(df, x='x', y='y')
 w_plot(label="Second Plot", source=fig_bar)
+```
+
+#### ❌ WRONG - Do not do this:
+```python
+# Using globals() in a loop - plots will NOT render correctly
+for i, data in enumerate(datasets):
+    fig = px.scatter(data, x='x', y='y')
+    globals()[f'fig_{i}'] = fig  # This does NOT work!
+    w_plot(label=f"Plot {i}", source=globals()[f'fig_{i}'])
+```
+
+#### ✅ RIGHT - Do this instead:
+```python
+# Explicitly declare each variable
+fig_dataset1 = px.scatter(datasets[0], x='x', y='y')
+w_plot(label="Dataset 1", source=fig_dataset1)
+
+fig_dataset2 = px.scatter(datasets[1], x='x', y='y')
+w_plot(label="Dataset 2", source=fig_dataset2)
+
+fig_dataset3 = px.scatter(datasets[2], x='x', y='y')
+w_plot(label="Dataset 3", source=fig_dataset3)
 ```
 
 ---
