@@ -441,7 +441,7 @@ Task is complete when:
 
 **Example of appropriate balance:**
 
-```
+````
 ✅ GOOD:
 Markdown: ## Quality Control
 Markdown: We'll filter cells based on gene counts and mitochondrial content to remove low-quality cells.
@@ -449,17 +449,6 @@ Code: Calculate QC metrics
 Code: Create QC plots
 Code: Filter cells
 Markdown: After filtering, X% of cells remain. The distribution shows...
-
-❌ TOO MUCH:
-Markdown: ## Quality Control
-Markdown: Now we will calculate quality control metrics for our dataset.
-Code: Calculate QC metrics
-Markdown: The metrics have been calculated. Next we'll visualize them.
-Code: Create QC plots
-Markdown: We have created the plots. Now we'll filter the cells.
-Code: Filter cells
-Markdown: The filtering is complete. We filtered out low quality cells based on the thresholds we set.
-```
 
 ## Output Requirements
 
@@ -761,7 +750,7 @@ submit_response(
     continue=True,
     next_status="executing"
 )
-```
+````
 
 **Next Turn:**
 
