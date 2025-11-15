@@ -148,8 +148,14 @@ class AgentHarness:
                 if block_type == "tool_result":
                     result_str = block.get("content", "{}")
                     result = json.loads(result_str)
+
+                    tool_name = result.get("tool_name")
+                    if tool_name in {"read_file", "grep"}:
+                        truncated_blocks.append(block)
+                        continue
+
                     truncated_result = {
-                        "tool_name": result.get("tool_name"),
+                        "tool_name": tool_name,
                         "success": result.get("success"),
                         "summary": result.get("summary"),
                     }
