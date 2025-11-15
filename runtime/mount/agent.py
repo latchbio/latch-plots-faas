@@ -255,6 +255,7 @@ class AgentHarness:
         payload: dict,
         request_id: str | None = None,
         tx_id: str | None = None,
+        template_version_id: str | None = None,
     ) -> None:
         assert self.agent_session_id is not None
 
@@ -271,13 +272,14 @@ class AgentHarness:
             "payload": payload,
             "requestId": request_id,
             "txId": tx_id,
+            "templateVersionId": str(template_version_id) if template_version_id is not None else None,
         }
 
         await gql_query(
             auth=auth_token_sdk,
             query="""
-                mutation CreateAgentHistory($sessionId: BigInt!, $eventType: String!, $payload: JSON!, $requestId: String, $txId: String) {
-                    createAgentHistory(input: {agentHistory: {sessionId: $sessionId, eventType: $eventType, payload: $payload, requestId: $requestId, txId: $txId}}) {
+                mutation CreateAgentHistory($sessionId: BigInt!, $eventType: String!, $payload: JSON!, $requestId: String, $txId: String, $templateVersionId: BigInt) {
+                    createAgentHistory(input: {agentHistory: {sessionId: $sessionId, eventType: $eventType, payload: $payload, requestId: $requestId, txId: $txId, templateVersionId: $templateVersionId}}) {
                         clientMutationId
                     }
                 }
@@ -413,9 +415,12 @@ class AgentHarness:
             if msg.get("hidden") is not None:
                 payload["hidden"] = msg["hidden"]
 
+            template_version_id = msg.get("version_checkpoint_id")
+
             await self._insert_history(
                 payload=payload,
                 request_id=self.current_request_id,
+                template_version_id=template_version_id,
             )
 
         elif msg_type == "cell_result":
@@ -3017,6 +3022,7 @@ class AgentHarness:
         query = msg.get("query", "")
         request_id = msg.get("request_id")
         contextual_node_data = msg.get("contextual_node_data")
+        version_checkpoint_id = msg.get("version_checkpoint_id")
 
         full_query = query
         if contextual_node_data:
@@ -3028,6 +3034,7 @@ class AgentHarness:
             "request_id": request_id,
             "display_query": query,
             "display_nodes": contextual_node_data,
+            "version_checkpoint_id": version_checkpoint_id,
         })
 
         print(f"[agent] Message queued successfully (request_id={request_id})")
