@@ -104,7 +104,7 @@ class AgentHarness:
         nodes = resp.get("data", {}).get("agentHistories", {}).get("nodes", [])
         return [{"payload": n.get("payload"), "request_id": n.get("requestId")} for n in nodes]
 
-    def _truncate_old_messages(self, messages: list[MessageParam], keep_recent_turns: int = 3) -> list[MessageParam]:
+    def _truncate_old_messages(self, messages: list[MessageParam], keep_recent_turns: int = 8) -> list[MessageParam]:
         turn_boundaries = []
         for i, msg in enumerate(messages):
             if msg.get("role") == "user":
