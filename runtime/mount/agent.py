@@ -2472,9 +2472,9 @@ class AgentHarness:
             return {
                 "tool_name": "refresh_cells_context",
                 "success": True,
-                "summary": f"Refreshed cells context for {cell_count} cells and stored result in {context_dir / 'cells.md'}",
+                "summary": f"Refreshed cells context for {cell_count} cells and stored result in notebook_context/cells.md",
                 "cell_count": cell_count,
-                "context_path": str(context_dir / "cells.md")
+                "context_path": "notebook_context/cells.md"
             }
 
         async def refresh_reactivity_context(args: dict) -> dict:
@@ -2500,8 +2500,8 @@ class AgentHarness:
             return {
                 "tool_name": "refresh_reactivity_context",
                 "success": True,
-                "summary": f"Refreshed reactivity context and stored result in {context_dir / 'signals.md'}",
-                "context_path": str(context_dir / "signals.md"),
+                "summary": "Refreshed reactivity context and stored result in notebook_context/signals.md",
+                "context_path": "notebook_context/signals.md",
             }
 
         self.tools.append({
