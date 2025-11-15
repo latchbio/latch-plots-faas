@@ -161,6 +161,7 @@ class AgentHarness:
                         "tool_use_id": block.get("tool_use_id"),
                         "content": json.dumps(truncated_result)
                     })
+                    continue
 
                 if block_type == "tool_use":
                     truncated_block = block.copy()
@@ -178,6 +179,7 @@ class AgentHarness:
                         truncated_blocks.append({"type": "text", "text": text[:1000] + "...[truncated]"})
                     else:
                         truncated_blocks.append(block)
+                    continue
 
                 truncated_blocks.append(block)
 
