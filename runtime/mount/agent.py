@@ -104,6 +104,87 @@ class AgentHarness:
         nodes = resp.get("data", {}).get("agentHistories", {}).get("nodes", [])
         return [{"payload": n.get("payload"), "request_id": n.get("requestId")} for n in nodes]
 
+    def _truncate_old_messages(self, messages: list[MessageParam], keep_recent_turns: int = 2) -> list[MessageParam]:
+        if len(messages) <= keep_recent_turns * 2:
+            return messages
+
+        turn_boundaries = []
+        for i, msg in enumerate(messages):
+            if msg.get("role") == "user":
+                turn_boundaries.append(i)
+
+        if len(turn_boundaries) <= keep_recent_turns:
+            return messages
+
+        keep_from_index = turn_boundaries[-(keep_recent_turns)]
+
+        truncated = []
+        for i, msg in enumerate(messages):
+            if i == 0 or i >= keep_from_index:
+                truncated.append(msg)
+            else:
+                truncated.append(self._truncate_message_content(msg))
+
+        return truncated
+
+    @staticmethod
+    def _truncate_message_content(msg: MessageParam) -> MessageParam:
+        content = msg.get("content")
+
+        if isinstance(content, str):
+            if len(content) > 500:
+                return {"role": msg["role"], "content": content[:500] + "...[truncated]"}
+            return msg
+
+        if isinstance(content, list):
+            truncated_blocks = []
+            for block in content:
+                if not isinstance(block, dict):
+                    truncated_blocks.append(block)
+                    continue
+
+                block_type = block.get("type")
+
+                if block_type in {"thinking", "redacted_thinking"}:
+                    continue
+
+                if block_type == "tool_result":
+                    result_str = block.get("content", "{}")
+                    result = json.loads(result_str)
+                    truncated_result = {
+                        "tool_name": result.get("tool_name"),
+                        "success": result.get("success"),
+                        "summary": result.get("summary"),
+                    }
+                    truncated_blocks.append({
+                        "type": "tool_result",
+                        "tool_use_id": block.get("tool_use_id"),
+                        "content": json.dumps(truncated_result)
+                    })
+
+                if block_type == "tool_use":
+                    truncated_block = block.copy()
+                    if "input" in truncated_block:
+                        inp = truncated_block["input"]
+                        if isinstance(inp, dict) and "code" in inp and isinstance(inp["code"], str) and len(inp["code"]) > 1000:
+                            truncated_block["input"] = {**inp, "code": inp["code"][:200] + "...[truncated]"}
+
+                    truncated_blocks.append(truncated_block)
+                    continue
+
+                if block_type == "text":
+                    text = block.get("text", "")
+                    if len(text) > 1000:
+                        truncated_blocks.append({"type": "text", "text": text[:1000] + "...[truncated]"})
+                    else:
+                        truncated_blocks.append(block)
+
+                truncated_blocks.append(block)
+
+            return {"role": msg["role"], "content": truncated_blocks}
+
+        return msg
+
     async def _build_messages_from_db(self) -> list[MessageParam]:
         history = await self._fetch_history_from_db()
         anthropic_messages: list[MessageParam] = []
@@ -144,7 +225,11 @@ class AgentHarness:
 
         print(f"[agent] Built {len(anthropic_messages)} messages from DB")
 
-        return anthropic_messages
+        truncated_messages = self._truncate_old_messages(anthropic_messages)
+        if len(truncated_messages) < len(anthropic_messages):
+            print(f"[agent] Truncated to {len(truncated_messages)} messages (kept recent 8 turns)")
+
+        return truncated_messages
 
     async def _extract_last_request_id(self) -> str | None:
         history = await self._fetch_history_from_db()
