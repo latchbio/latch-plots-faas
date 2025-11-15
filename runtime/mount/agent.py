@@ -2062,7 +2062,7 @@ class AgentHarness:
 
             try:
                 if not Path(path).is_absolute():
-                    file_path = Path(__file__).parent / path
+                    file_path = Path(__file__).parent / "agent_config/context" / path
                 else:
                     file_path = Path(path)
 
@@ -2129,7 +2129,7 @@ class AgentHarness:
 
             try:
                 if not Path(path).is_absolute():
-                    file_path = Path(__file__).parent / path
+                    file_path = Path(__file__).parent / "agent_config/context" / path
                 else:
                     file_path = Path(path)
 
@@ -2264,7 +2264,7 @@ class AgentHarness:
                 "properties": {
                     "path": {
                         "type": "string",
-                        "description": "Path to the file to read (relative to agent directory or absolute)"
+                        "description": "Path to the file to read (relative to agent_config/context/)"
                     },
                     "offset": {
                         "type": "integer",
@@ -2282,13 +2282,13 @@ class AgentHarness:
 
         self.tools.append({
             "name": "search_replace",
-            "description": "Replace the first occurrence of a string in a file with another string. Useful for editing files or maintaining state.",
+            "description": "Replace the first occurrence of a string in a file with another string. Useful for editing files or maintaining state. Paths are relative to 'agent_config/context/' by default.",
             "input_schema": {
                 "type": "object",
                 "properties": {
                     "path": {
                         "type": "string",
-                        "description": "Path to the file to edit"
+                        "description": "Path to the file to edit. Paths are resolved from 'agent_config/context/'."
                     },
                     "old_string": {
                         "type": "string",
