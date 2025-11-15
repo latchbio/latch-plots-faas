@@ -1941,11 +1941,11 @@ class AgentHarness:
 
         def glob_file_search(args: dict) -> dict:
             pattern = args.get("pattern", "")
-            base_path = args.get("base_path", "agent_config/context")
+            base_path = args.get("base_path", ".")
 
             try:
                 if not Path(base_path).is_absolute():
-                    base_path = Path(__file__).parent / base_path
+                    base_path = Path(__file__).parent / "agent_config/context" / base_path
                 else:
                     base_path = Path(base_path)
 
@@ -1990,12 +1990,12 @@ class AgentHarness:
                     "summary": "Pattern is required"
                 }
 
-            path = args.get("path", "agent_config/context")
+            path = args.get("path", ".")
             case_insensitive = args.get("case_insensitive", False)
 
             try:
                 if not Path(path).is_absolute():
-                    search_path = Path(__file__).parent / path
+                    search_path = Path(__file__).parent / "agent_config/context" / path
                 else:
                     search_path = Path(path)
 
@@ -2224,7 +2224,7 @@ class AgentHarness:
                     },
                     "base_path": {
                         "type": "string",
-                        "description": "Base path to search in. Defaults to 'agent_config/context'. Use relative paths from agent directory."
+                        "description": "Base path to search in (relative to agent_config/context/). Defaults to '.' to search entire context directory."
                     }
                 },
                 "required": ["pattern"]
@@ -2244,7 +2244,7 @@ class AgentHarness:
                     },
                     "path": {
                         "type": "string",
-                        "description": "File or directory path to search in. Defaults to 'agent_config/context'."
+                        "description": "File or directory path to search in (relative to agent_config/context/). Defaults to current directory '.' to search all context files."
                     },
                     "case_insensitive": {
                         "type": "boolean",
