@@ -707,6 +707,7 @@ class AgentHarness:
                     "cell_id": cell_id,
                     "cell_name": title,
                     "message": action_summary,
+                    "success": True,
                 }
             return {
                 "tool_name": "stop_cell",
@@ -1275,16 +1276,16 @@ class AgentHarness:
                         "operation": operation,
                         "obs_type": obs_type,
                     }
-                else:
-                    return {
-                        "tool_name": "h5_manage_obs",
-                        "success": True,
-                        "label": args.get("label"),
-                        "summary": f"Deleted observation column '{obs_key}'",
-                        "widget_key": widget_key,
-                        "obs_key": obs_key,
-                        "operation": operation,
-                    }
+
+                return {
+                    "tool_name": "h5_manage_obs",
+                    "success": True,
+                    "label": args.get("label"),
+                    "summary": f"Deleted observation column '{obs_key}'",
+                    "widget_key": widget_key,
+                    "obs_key": obs_key,
+                    "operation": operation,
+                }
 
             return {
                 "tool_name": "h5_manage_obs",
@@ -2854,6 +2855,7 @@ class AgentHarness:
                                 "content": json.dumps({
                                     "summary": None,
                                     "error": f"Unknown tool: {tool_name}",
+                                    "success": False,
                                 }),
                             })
 
@@ -2915,6 +2917,7 @@ class AgentHarness:
                             "content": json.dumps({
                                 "summary": None,
                                 "error": error_message,
+                                "success": False,
                             }),
                         }
                         for tool_id in pending_tool_ids
