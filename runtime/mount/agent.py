@@ -104,7 +104,7 @@ class AgentHarness:
         nodes = resp.get("data", {}).get("agentHistories", {}).get("nodes", [])
         return [{"payload": n.get("payload"), "request_id": n.get("requestId")} for n in nodes]
 
-    def _truncate_old_messages(self, messages: list[MessageParam], keep_recent_turns: int = 2) -> list[MessageParam]:
+    def _truncate_old_messages(self, messages: list[MessageParam], keep_recent_turns: int = 3) -> list[MessageParam]:
         if len(messages) <= keep_recent_turns * 2:
             return messages
 
@@ -3087,9 +3087,12 @@ class AgentHarness:
         tree_lines.extend(build_tree(context_root, "  "))
         tree_content = "\n".join(tree_lines)
 
+        truncated_messages = self._truncate_old_messages(messages)
+
         return {
             "system_prompt": self.system_prompt,
             "messages": messages,
+            "truncated_messages": truncated_messages,
             "model": self.mode_config.get(self.mode, ("claude-sonnet-4-5-20250929", 1024))[0],
             "cells": cells_content,
             "signals": signals_content,
