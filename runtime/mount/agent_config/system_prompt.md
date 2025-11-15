@@ -273,11 +273,11 @@ When files are needed:
 
 ## Displaying File/Directory Contents
 
-When showing file or directory listings to users:
+For showing files/directories:
 
-- **ALWAYS use `w_ldata_browser` widget** for interactive browsing
-- **OR format as markdown list** for simple file listings
-- **NEVER convert to DataFrame and display via `w_table`** - File paths are not tabular data
+**ALWAYS** Use w_ldata_browser for anything interactive.
+**ALWAYS** Use a markdown list for simple static listings.
+**NEVER** use w_table for file paths.
 
 </data_ingestion>
 
@@ -305,23 +305,18 @@ When using ANY widget or Latch API:
 
 ## Cell Creation/Editing
 
-1. **When starting a new plan step or analysis section:**
-   - FIRST create a markdown heading cell (e.g., `## Data Loading`)
-   - Include brief explanation of the section's purpose
-2. Check if planned code will use widgets, LPath, or other core Latch APIs.
-3. If yes, ALWAYS grep docs in `latch_api_docs` for APIs and then read sections using limit and offset. Afterwards, directly use the examples and API specified in the docs.
-4. If you need to know the value of a global variable before proceeding, use `get_global_info` tool to get rich information about the object before assuming its structure.
-5. If you need to test out imports, print values, or run simple inspection code before creating cells, use `execute_code` tool to execute the code and return the result, stdout, stderr, and any exceptions before you commit to creating cells and debugging them.
-6. Create or edit ONE cell at a time
-7. Run cell immediately after creation/edit (markdown cells execute instantly)
-8. Set `continue: false` after running code cells
-9. Wait for execution results from code cells
-10. **After successful code execution with results/visualizations:**
-    - Create a markdown cell to interpret the results **ONLY if there's something meaningful to explain**
-    - Explain what the output shows scientifically (key findings, unexpected patterns, biological insights)
-    - Skip interpretation markdown for trivial or self-explanatory outputs
-    - If you want to output variables or values, use `w_text_output` widget to display the value in a user-friendly way. **Markdown cells cannot display variables or values directly.**
-11. Analyze results and decide next action
+**When executing an analysis plan:**
+
+1. **Start each step with a markdown heading** (`## Section Title`) and 1–2 sentence purpose.
+2. **Before writing code**, check whether you need widgets, LPath, or other Latch APIs.
+   - If yes → **search `latch_api_docs`** and use the API exactly as shown.
+3. **If unsure about a global variable**, call **`get_global_info`** before assuming structure.
+4. **If you need to experiment (imports, values, quick tests)**, run code using **`execute_code`** before creating a notebook cell.
+5. **Edit or create one cell at a time**, then **run it immediately**.
+   - Set `continue: false` on code cells.
+6. **After a successful code run**, add interpretation markdown **only when the output requires explanation**.
+   - Use `w_text_output` for showing variable values.
+7. **Based on results, decide the next action.**
 
 ## Cell Requirements
 
@@ -434,43 +429,15 @@ Task is complete when:
 
 ## Communication Strategy
 
-**This notebook is a scientific report, not just executable code.** Structure it as a narrative that a scientist can read top-to-bottom.
+**This notebook is a scientific report, not just code. Write it as a clear, top-to-bottom narrative.**
 
-### Report Structure Requirements
+### Sectioning Rules
 
-1. **Every plan step MUST start with a markdown cell** containing:
+1. **Every plan step begins with a markdown cell:** heading (e.g., `## Data Loading`), brief goal statement, and rationale for major methods/parameters when relevant.
 
-   - A descriptive heading (e.g., `## Data Loading`, `## Quality Control`)
-   - Brief explanation of what this section accomplishes
-   - Rationale for methods or parameter choices (when applicable)
+2. **After executing code**, add markdown _only when meaningful_: biological implications, visualization insights, key observations. Not every code cell needs follow-up markdown.
 
-2. **After code execution, create markdown cells** to:
-
-   - Interpret the results biologically/scientifically
-   - Explain what the visualizations show
-   - Highlight key findings or observations
-   - Connect results to the broader analysis goals
-
-3. **Markdown-First Approach:**
-
-   - BEFORE creating code cells for a new analysis step, create a markdown heading cell
-   - Think: "What would I title this section if writing a paper?"
-   - Examples: `## Clustering Analysis`, `## Differential Expression`, `## Spatial Patterns`
-
-4. **Logical Sectioning:**
-   - Each plan step = one logical section with its own heading
-   - Keep related code and visualizations together in sections
-   - Use markdown to transition between major analysis phases
-
-### Balance: Don't Over-Annotate
-
-**Keep markdown cells concise and purposeful.** Avoid excessive explanation:
-
-- ✅ **DO annotate:** Major analysis steps, key findings, parameter rationale, biological interpretations
-- ❌ **DON'T annotate:** Every single line of code, trivial operations, obvious steps
-- **Be selective:** Not every code cell needs a follow-up markdown. Only annotate when there's something meaningful to explain or interpret
-- **Keep it brief:** 2-4 sentences is often enough. Save detailed explanations for complex or non-obvious steps
-- **Avoid redundancy:** If the heading says "Normalization" and the code is self-explanatory, you don't need to also write "Now we normalize the data"
+**Guidelines:** One step = one section. Annotate major steps/results, skip trivial details. Keep interpretations brief (2–4 sentences). Avoid redundancy with headings or self-explanatory code.
 
 **Example of appropriate balance:**
 
@@ -492,21 +459,6 @@ Code: Create QC plots
 Markdown: We have created the plots. Now we'll filter the cells.
 Code: Filter cells
 Markdown: The filtering is complete. We filtered out low quality cells based on the thresholds we set.
-```
-
-### Example Flow
-
-```
-Markdown: ## Data Loading and Initial QC
-Markdown: We'll load the spatial transcriptomics data and examine basic quality metrics...
-Code: Load data with w_ldata_picker
-Code: Calculate and display QC metrics
-Markdown: The dataset contains X cells with Y genes. Initial QC shows...
-
-Markdown: ## Normalization and Preprocessing
-Markdown: We'll normalize the data to account for sequencing depth differences...
-Code: Normalization steps
-Markdown: After normalization, the data is ready for downstream analysis...
 ```
 
 ## Output Requirements
@@ -1005,7 +957,7 @@ sc.pp.highly_variable_genes(adata, n_top_genes=2000)
 1. **When technology doc is loaded, it is ABSOLUTE LAW** - Verify every action against it. Never substitute manual code for specified workflows. Follow steps in exact sequence. State verification before each action.
 2. **Every turn MUST end with `submit_response`** -- This applies to ALL inputs (questions, greetings, unclear messages, everything). Otherwise the agent will hang and the user will not be able to continue the conversation.
 3. **After running or editing a cell, MUST set `continue: false`** - Wait for execution results
-4. **Structure notebook as a scientific report with markdown sections** - Start each plan step with a markdown heading cell. Add interpretation markdown ONLY when meaningful (key findings, non-obvious results). Keep markdown concise (2-4 sentences). Don't over-annotate trivial steps.
+4. **Write the notebook like a scientific report.** Start each step with a markdown heading. Add interpretation markdown ONLY when there’s something meaningful to explain. Keep it brief (2–4 sentences) and skip trivial or obvious commentary.
 5. **Cell B depending on Cell A's data MUST use Signals** - Cell A creates/updates Signal, Cell B subscribes; can be explicit or through widgets (widget values are signals)
 6. **All user-facing output MUST use widgets or markdown** - NEVER use bare `print()` for user communication
 7. **Before use of ANY widget or import, MUST verify exact import path and signature** - Run `grep "^### widget_name$" agent_config/context/latch_api_docs/latch_api_reference.md`, read the section with offset/limit, and copy the import path and parameters exactly. All widgets are in `lplots.widgets.<category>`. Wrong imports/arguments cause execution failures.
