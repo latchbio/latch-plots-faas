@@ -105,9 +105,6 @@ class AgentHarness:
         return [{"payload": n.get("payload"), "request_id": n.get("requestId")} for n in nodes]
 
     def _truncate_old_messages(self, messages: list[MessageParam], keep_recent_turns: int = 3) -> list[MessageParam]:
-        if len(messages) <= keep_recent_turns * 2:
-            return messages
-
         turn_boundaries = []
         for i, msg in enumerate(messages):
             if msg.get("role") == "user":
@@ -227,11 +224,7 @@ class AgentHarness:
 
         print(f"[agent] Built {len(anthropic_messages)} messages from DB")
 
-        truncated_messages = self._truncate_old_messages(anthropic_messages)
-        if len(truncated_messages) < len(anthropic_messages):
-            print(f"[agent] Truncated to {len(truncated_messages)} messages (kept recent 8 turns)")
-
-        return truncated_messages
+        return anthropic_messages
 
     async def _extract_last_request_id(self) -> str | None:
         history = await self._fetch_history_from_db()
@@ -2680,7 +2673,7 @@ class AgentHarness:
 
             print("[agent] run_agent_loop: building messages from DB...")
             build_start = time.time()
-            api_messages = await self._build_messages_from_db()
+            api_messages = self._truncate_old_messages(await self._build_messages_from_db())
             build_elapsed = time.time() - build_start
             print(f"[agent] run_agent_loop: built {len(api_messages) if api_messages else 0} messages in {build_elapsed:.3f}s")
 
