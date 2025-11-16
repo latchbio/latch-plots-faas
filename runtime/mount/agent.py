@@ -97,14 +97,18 @@ class AgentHarness:
             query="""
                 query AgentHistory($sessionId: BigInt!) {
                     agentHistories(condition: {sessionId: $sessionId, removed: false}, orderBy: ID_ASC) {
-                        nodes { id payload requestId }
+                        nodes { id payload requestId templateVersionId }
                     }
                 }
             """,
             variables={"sessionId": str(self.agent_session_id)},
         )
         nodes = resp.get("data", {}).get("agentHistories", {}).get("nodes", [])
-        return [{"payload": n.get("payload"), "request_id": n.get("requestId")} for n in nodes]
+        return [{
+            "payload": n.get("payload"),
+            "request_id": n.get("requestId"),
+            "template_version_id": n.get("templateVersionId"),
+        } for n in nodes]
 
     def _truncate_old_messages(self, messages: list[MessageParam], keep_recent_turns: int = 8) -> list[MessageParam]:
         turn_boundaries = []
@@ -230,6 +234,14 @@ class AgentHarness:
 
                 if role in {"user", "assistant"} and (isinstance(content, (str, list))):
                     anthropic_messages.append({"role": role, "content": content})
+                    template_version_id = item.get("template_version_id")
+                    if role == "user" and template_version_id is not None:
+                        metadata_block = [{
+                            "type": "text",
+                            "text": f"[metadata] template_version_id={template_version_id}",
+                            "cache_control": {"type": "ephemeral"},
+                        }]
+                        anthropic_messages.append({"role": "assistant", "content": metadata_block, "hidden": True})
 
         print(f"[agent] Built {len(anthropic_messages)} messages from DB")
 
@@ -833,6 +845,27 @@ class AgentHarness:
             return {
                 "tool_name": "rename_tab",
                 "summary": f"Failed to rename tab: {result.get('error', 'Unknown error')}",
+                "success": False,
+            }
+
+        async def restore_checkpoint(args: dict) -> dict:
+
+            template_version_id = args.get("template_version_id")
+            print(f"[tool] restore_checkpoint template_version_id={template_version_id}")
+            params = {"template_version_id": template_version_id}
+            
+            result = await self.atomic_operation("restore_checkpoint", params)
+            if result.get("status") == "success":
+                return {
+                    "tool_name": "restore_checkpoint",
+                    "success": True,
+                    "summary": f"Restored checkpoint to template version {template_version_id}",
+                    "template_version_id": template_version_id,
+                }
+
+            return {
+                "tool_name": "restore_checkpoint",
+                "summary": f"Failed to restore checkpoint: {result.get('error', 'Unknown error')}",
                 "success": False,
             }
 
@@ -1472,6 +1505,22 @@ class AgentHarness:
             },
         })
         self.tool_map["rename_tab"] = rename_tab
+
+        self.tools.append({
+            "name": "restore_checkpoint",
+            "description": "Request the UI to restore the notebook to a specific template version checkpoint. Require confirmation from the user before restoring.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "template_version_id": {
+                        "type": "string",
+                        "description": "Template version ID to restore",
+                    },
+                },
+                "required": ["template_version_id"],
+            },
+        })
+        self.tool_map["restore_checkpoint"] = restore_checkpoint
 
         self.tools.append({
             "name": "submit_response",
