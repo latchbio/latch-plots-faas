@@ -143,6 +143,7 @@ class AgentHarness:
                 block_type = block.get("type")
 
                 if block_type in {"thinking", "redacted_thinking"}:
+                    truncated_blocks.append(block)
                     continue
 
                 if block_type == "tool_result":
