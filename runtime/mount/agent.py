@@ -78,7 +78,9 @@ class AgentHarness:
 
     async def send(self, msg: dict[str, object]) -> None:
         msg_type = msg.get("type", "unknown")
-        print(f"[agent] Sending message: {msg_type}")
+        if msg_type != "agent_stream_delta":
+            print(f"[agent] Sending message: {msg_type}")
+
         await self.conn.send(msg)
 
     async def _notify_history_updated(self, *, request_id: str | None = None) -> None:
@@ -3034,12 +3036,12 @@ class AgentHarness:
         request_id = msg.get("request_id", "unknown")
         print(f"[agent] Cancelling request {request_id}")
 
-        await self._clear_running_state()
-
         self.current_request_id = None
         self.should_auto_continue = False
         self.pending_auto_continue = False
         self.executing_cells.clear()
+
+        await self._clear_running_state()
 
         self.pending_tool_calls.clear()
         await self._close_pending_tool_calls(
