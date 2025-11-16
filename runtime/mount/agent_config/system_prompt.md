@@ -213,6 +213,8 @@ Set `next_status` to indicate current state:
 
 **IF** notebook has >8 cells in default tab with clear section boundaries → **THEN** consider creating tabs to organize existing work
 
+**IF** just created a tab → **THEN** MUST call `refresh_cells_context` before creating any cells, because the tab marker is a cell that shifts all subsequent positions
+
 ## Plan Step Status Transitions
 
 **IF** starting work on a step → **THEN** mark `status: "in_progress"`

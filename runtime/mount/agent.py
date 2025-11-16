@@ -1440,7 +1440,7 @@ class AgentHarness:
 
         self.tools.append({
             "name": "create_tab",
-            "description": "Create a new tab at specified position to organize cells.",
+            "description": "Create a new tab marker cell at specified position to organize cells. IMPORTANT: This inserts a new cell, shifting all subsequent cell positions down by 1. Always call refresh_cells_context after creating a tab to get updated positions before creating cells in that tab.",
             "input_schema": {
                 "type": "object",
                 "properties": {
