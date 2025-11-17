@@ -127,6 +127,22 @@ class AgentHarness:
         return truncated
 
     @staticmethod
+    def _add_cache_control_key(messages: list[MessageParam]) -> list[MessageParam]:
+        nrof_messages = len(messages)
+
+        cache_position = nrof_messages - (nrof_messages % 20)
+
+        if cache_position == 0:
+            return messages
+
+        messages[cache_position] = {
+            "cache_control": {"type": "ephemeral"},
+            **messages[cache_position]
+        }
+
+        return messages
+
+    @staticmethod
     def _truncate_message_content(msg: MessageParam) -> MessageParam:
         content = msg.get("content")
 
@@ -2683,7 +2699,11 @@ class AgentHarness:
 
             print("[agent] run_agent_loop: building messages from DB...")
             build_start = time.time()
-            api_messages = self._truncate_old_messages(await self._build_messages_from_db())
+            api_messages = self._add_cache_control_key(
+                self._truncate_old_messages(
+                    await self._build_messages_from_db()
+                )
+            )
             build_elapsed = time.time() - build_start
             print(f"[agent] run_agent_loop: built {len(api_messages) if api_messages else 0} messages in {build_elapsed:.3f}s")
 
