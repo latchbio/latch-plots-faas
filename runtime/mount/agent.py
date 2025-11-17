@@ -194,7 +194,22 @@ class AgentHarness:
             return messages
 
         user_cache_index = greatest_cache_index
-        while user_cache_index >= 0 and messages[user_cache_index].get("role") != "user":
+        while user_cache_index >= 0:
+            # caching tool results leads to repeated cache writes without reads? Maybe anthropic bug?
+            msg = messages[user_cache_index]
+            if msg.get("role") != "user":
+                user_cache_index -= 1
+                continue
+
+            content = msg.get("content")
+            if isinstance(content, str):
+                break
+
+            if isinstance(content, list) and len(content) > 0:
+                last_block = content[-1]
+                if isinstance(last_block, dict) and last_block.get("type") == "text":
+                    break
+
             user_cache_index -= 1
 
         if user_cache_index < 0:
