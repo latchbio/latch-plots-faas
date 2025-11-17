@@ -232,13 +232,10 @@ class AgentHarness:
                         cleaned_content.append(block)
                     content = cleaned_content
 
-                template_version_id = payload.get("template_version_id") or item.get("template_version_id")
+                template_version_id = item.get("template_version_id")
                 if role == "user" and template_version_id is not None:
-                    metadata_block = [{
-                        "type": "text",
-                        "text": f"[metadata] template_version_id={template_version_id}",
-                    }]
-                    anthropic_messages.append({"role": "assistant", "content": metadata_block})
+                    checkpoint_content = "Checkpoint created with template_version_id={template_version_id}"
+                    anthropic_messages.append({"role": "user", "content": checkpoint_content})
 
                 if role in {"user", "assistant"} and (isinstance(content, (str, list))):
                     anthropic_messages.append({"role": role, "content": content})
