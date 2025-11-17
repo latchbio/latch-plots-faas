@@ -75,3 +75,8 @@ w = w_workflow(
 
 execution = w.value
 ```
+
+---
+
+### Next Steps
+- Refer to <atlasx_analysis_overview> to see the guide for other types of analyses. 

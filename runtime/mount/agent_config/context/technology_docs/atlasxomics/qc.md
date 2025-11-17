@@ -55,3 +55,8 @@ snap.metrics.frip(adata, regions, inplace=True, n_jobs=8)
 #### 6. Mitochondrial Read Fraction
 **Field:** `adata.obs["frac_dup"]`
 **Thresholds:** >10% = stressed cells, can be relaxed based on adaptive filters for ATAC-seq data.
+
+---
+
+### Next Steps
+- Refer to <atlasx_analysis_overview> to see the guide for other types of analyses. 

@@ -1,11 +1,19 @@
 # AtlasXomics Analysis Guide
 
+<atlasx_analysis_overview>
+
 ## Analysis Pipeline Overview
 1. **Data Loading**
 2. **Quality Control** → `technology_docs/atlasxomics/qc.md`
 3. **Clustering** - Use workflow `wf.__init__.opt_workflow` → `technology_docs/atlasxomics/clustering.md`
 4. **Differential Analysis** - Use workflow `wf.__init__.compare_workflow` → `technology_docs/atlasxomics/de.md` 
 5. **Cell Type Annotation** - Use CellGuide marker database → `technology_docs/atlasxomics/cell_type_annotation/overview.md`
+
+</atlasx_analysis_overview>
+
+---
+
+</atlasx_data_structure>
 
 ## Data Structure
 
@@ -68,3 +76,5 @@ Example: `combined_sm_ge.h5ad` with n_obs × n_vars = 48453 × 24919
 **obsp** (graphs):
 - `spatial_connectivities`: Spatial neighbor graph
 - `spatial_distances`: Distance matrix between neighbors
+
+</atlasx_data_structure>

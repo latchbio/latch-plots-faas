@@ -22,6 +22,8 @@ Gene set scoring is a **fast exploratory approach** for cell type annotation tha
 7. ⚠️ **CRITICAL — You must compute and return all seven validation outputs** (proportions, cluster purity, spatial coherence, marker enrichment, confidence scores, sample consistency, condition-wise changes). **Do not skip, omit, or summarize any step; missing even one makes the workflow invalid.**
 8. **Self-evaluate** based on computed metrics, reflect, and modify your work as needed. Be honest and objective.
 
+**Presentation Style**: At EVERY step, generate visuals using `w_table`, markdown, and/or `w_plot`. 
+
 ---
 
 ## Step 1: Select Expected Cell Types
@@ -287,3 +289,7 @@ Before accepting predictions, verify:
 | Low overall confidence | Weak marker signal | Increase markers or try cluster-based |
 
 ---
+
+### Next Steps
+- Refer to <atlasx_analysis_overview> to see the guide for other types of analyses. runtime/mount/agent_config/context/technology_docs/
+
