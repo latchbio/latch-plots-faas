@@ -241,7 +241,7 @@ class AgentHarness:
                             "text": f"[metadata] template_version_id={template_version_id}",
                             "cache_control": {"type": "ephemeral"},
                         }]
-                        anthropic_messages.append({"role": "assistant", "content": metadata_block, "hidden": True})
+                        anthropic_messages.append({"role": "assistant", "content": metadata_block, "hidden": True, "metadata": True})
 
         print(f"[agent] Built {len(anthropic_messages)} messages from DB")
 
@@ -2741,7 +2741,7 @@ class AgentHarness:
             build_elapsed = time.time() - build_start
             print(f"[agent] run_agent_loop: built {len(api_messages) if api_messages else 0} messages in {build_elapsed:.3f}s")
 
-            if not api_messages or api_messages[-1].get("role") != "user":
+            if not api_messages or (api_messages[-1].get("role") != "user" and not api_messages[-1].get("metadata")):
                 print("[agent] run_agent_loop: skipping (no messages or last message not user)")
                 continue
 
