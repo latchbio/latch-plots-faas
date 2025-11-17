@@ -180,20 +180,27 @@ class AgentHarness:
 
         cache_pos = nrof_messages - (nrof_messages % cache_modulo)
         trunc_pos = cache_pos - cache_modulo
-        cache_index = cache_pos - 1
+        greatest_cache_index = cache_pos - 1
 
-        print(f"[agent] _prepare_messages_for_inference: nrof_messages={nrof_messages}, cache_pos={cache_pos}, trunc_pos={trunc_pos}, cache_index={cache_index}")
+        print(f"[agent] _prepare_messages_for_inference: nrof_messages={nrof_messages}, cache_pos={cache_pos}, trunc_pos={trunc_pos}, cache_index={greatest_cache_index}")
 
-        # if trunc_pos > 0:
-        #    messages = [
-        #        self._truncate_message_content(msg) if i < trunc_pos else msg
-        #        for i, msg in enumerate(messages)
-        #    ]
+        if trunc_pos > 0:
+            messages = [
+                self._truncate_message_content(msg) if i < trunc_pos else msg
+                for i, msg in enumerate(messages)
+            ]
 
-        if cache_index <= 0:
+        if greatest_cache_index <= 0:
             return messages
 
-        message_to_cache = messages[cache_index]
+        user_cache_index = greatest_cache_index
+        while user_cache_index >= 0 and messages[user_cache_index].get("role") != "user":
+            user_cache_index -= 1
+
+        if user_cache_index < 0:
+            return messages
+
+        message_to_cache = messages[user_cache_index]
         content = message_to_cache.get("content")
 
         if isinstance(content, str):
@@ -218,7 +225,7 @@ class AgentHarness:
                 "content": new_content
             }
 
-        messages[cache_index] = message_to_cache
+        messages[user_cache_index] = message_to_cache
 
         return messages
 
