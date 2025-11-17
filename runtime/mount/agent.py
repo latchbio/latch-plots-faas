@@ -232,16 +232,17 @@ class AgentHarness:
                         cleaned_content.append(block)
                     content = cleaned_content
 
+                template_version_id = payload.get("template_version_id") or item.get("template_version_id")
+                if role == "user" and template_version_id is not None:
+                    metadata_block = [{
+                        "type": "text",
+                        "text": f"[metadata] template_version_id={template_version_id}",
+                        "cache_control": {"type": "ephemeral"},
+                    }]
+                    anthropic_messages.append({"role": "assistant", "content": metadata_block})
+
                 if role in {"user", "assistant"} and (isinstance(content, (str, list))):
                     anthropic_messages.append({"role": role, "content": content})
-                    template_version_id = item.get("template_version_id")
-                    if role == "user" and template_version_id is not None:
-                        metadata_block = [{
-                            "type": "text",
-                            "text": f"[metadata] template_version_id={template_version_id}",
-                            "cache_control": {"type": "ephemeral"},
-                        }]
-                        anthropic_messages.append({"role": "assistant", "content": metadata_block, "hidden": True, "metadata": True})
 
         print(f"[agent] Built {len(anthropic_messages)} messages from DB")
 
@@ -2741,7 +2742,7 @@ class AgentHarness:
             build_elapsed = time.time() - build_start
             print(f"[agent] run_agent_loop: built {len(api_messages) if api_messages else 0} messages in {build_elapsed:.3f}s")
 
-            if not api_messages or (api_messages[-1].get("role") != "user" and not api_messages[-1].get("metadata")):
+            if not api_messages or api_messages[-1].get("role") != "user":
                 print("[agent] run_agent_loop: skipping (no messages or last message not user)")
                 continue
 
