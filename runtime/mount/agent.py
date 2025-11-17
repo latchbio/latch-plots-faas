@@ -225,6 +225,7 @@ class AgentHarness:
                 "content": new_content
             }
 
+        print(f"[agent] Caching message: {message_to_cache}")
         messages[user_cache_index] = message_to_cache
 
         return messages
