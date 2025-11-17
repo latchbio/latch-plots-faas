@@ -846,7 +846,6 @@ class AgentHarness:
             }
 
         async def restore_checkpoint(args: dict) -> dict:
-
             template_version_id = args.get("template_version_id")
             print(f"[tool] restore_checkpoint template_version_id={template_version_id}")
             params = {"template_version_id": template_version_id}
