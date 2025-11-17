@@ -424,7 +424,7 @@ class AgentHarness:
             if msg.get("hidden") is not None:
                 payload["hidden"] = msg["hidden"]
 
-            template_version_id = msg.get("version_checkpoint_id")
+            template_version_id = msg.get("template_version_id")
 
             await self._insert_history(
                 payload=payload,
@@ -3067,7 +3067,7 @@ class AgentHarness:
         query = msg.get("query", "")
         request_id = msg.get("request_id")
         contextual_node_data = msg.get("contextual_node_data")
-        version_checkpoint_id = msg.get("version_checkpoint_id")
+        template_version_id = msg.get("template_version_id")
 
         full_query = query
         if contextual_node_data:
@@ -3079,7 +3079,7 @@ class AgentHarness:
             "request_id": request_id,
             "display_query": query,
             "display_nodes": contextual_node_data,
-            "version_checkpoint_id": version_checkpoint_id,
+            "template_version_id": template_version_id,
         })
 
         print(f"[agent] Message queued successfully (request_id={request_id})")
