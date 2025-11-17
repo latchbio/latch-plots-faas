@@ -23,6 +23,8 @@ from utils import auth_token_sdk, gql_query, nucleus_url, pod_id
 
 sys.stdout.reconfigure(line_buffering=True)
 
+cache_modulo = 20
+
 sandbox_root = os.environ.get("LATCH_SANDBOX_ROOT")
 if sandbox_root:
     import pathlib
@@ -106,42 +108,6 @@ class AgentHarness:
         nodes = resp.get("data", {}).get("agentHistories", {}).get("nodes", [])
         return [{"payload": n.get("payload"), "request_id": n.get("requestId")} for n in nodes]
 
-    def _truncate_old_messages(self, messages: list[MessageParam], keep_recent_turns: int = 8) -> list[MessageParam]:
-        turn_boundaries = []
-        for i, msg in enumerate(messages):
-            if msg.get("role") == "user":
-                turn_boundaries.append(i)
-
-        if len(turn_boundaries) <= keep_recent_turns:
-            return messages
-
-        keep_from_index = turn_boundaries[-(keep_recent_turns)]
-
-        truncated = []
-        for i, msg in enumerate(messages):
-            if i == 0 or i >= keep_from_index:
-                truncated.append(msg)
-            else:
-                truncated.append(self._truncate_message_content(msg))
-
-        return truncated
-
-    @staticmethod
-    def _add_cache_control_key(messages: list[MessageParam]) -> list[MessageParam]:
-        nrof_messages = len(messages)
-
-        cache_position = nrof_messages - (nrof_messages % 20)
-
-        if cache_position == 0:
-            return messages
-
-        messages[cache_position] = {
-            "cache_control": {"type": "ephemeral"},
-            **messages[cache_position]
-        }
-
-        return messages
-
     @staticmethod
     def _truncate_message_content(msg: MessageParam) -> MessageParam:
         content = msg.get("content")
@@ -208,6 +174,51 @@ class AgentHarness:
             return {"role": msg["role"], "content": truncated_blocks}
 
         return msg
+
+    def _prepare_messages_for_inference(self, messages: list[MessageParam]) -> list[MessageParam]:
+        nrof_messages = len(messages)
+
+        cache_pos = nrof_messages - (nrof_messages % cache_modulo)
+        trunc_pos = cache_pos - cache_modulo
+        cache_index = cache_pos - 1
+
+        if trunc_pos > 0:
+            messages = [
+                self._truncate_message_content(msg) if i < trunc_pos else msg
+                for i, msg in enumerate(messages)
+            ]
+
+        if cache_pos <= 0:
+            return messages
+
+        message_to_cache = messages[cache_index]
+        content = message_to_cache.get("content")
+
+        if isinstance(content, str):
+            message_to_cache = {
+                **message_to_cache,
+                "content": [
+                    {
+                        "type": "text",
+                        "text": content,
+                        "cache_control": {"type": "ephemeral"}
+                    }
+                ]
+            }
+        elif isinstance(content, list) and len(content) > 0:
+            new_content = [
+                *content[:-1],
+                {**content[-1], "cache_control": {"type": "ephemeral"}}
+            ]
+
+            message_to_cache = {
+                **message_to_cache,
+                "content": new_content
+            }
+
+        messages[cache_index] = message_to_cache
+
+        return messages
 
     async def _build_messages_from_db(self) -> list[MessageParam]:
         history = await self._fetch_history_from_db()
@@ -2699,10 +2710,8 @@ class AgentHarness:
 
             print("[agent] run_agent_loop: building messages from DB...")
             build_start = time.time()
-            api_messages = self._add_cache_control_key(
-                self._truncate_old_messages(
-                    await self._build_messages_from_db()
-                )
+            api_messages = self._prepare_messages_for_inference(
+                await self._build_messages_from_db()
             )
             build_elapsed = time.time() - build_start
             print(f"[agent] run_agent_loop: built {len(api_messages) if api_messages else 0} messages in {build_elapsed:.3f}s")
@@ -3112,7 +3121,7 @@ class AgentHarness:
         tree_lines.extend(build_tree(context_root, "  "))
         tree_content = "\n".join(tree_lines)
 
-        truncated_messages = self._truncate_old_messages(messages)
+        truncated_messages = self._prepare_messages_for_inference(messages)
 
         return {
             "system_prompt": self.system_prompt,
