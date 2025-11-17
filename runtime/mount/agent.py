@@ -237,7 +237,6 @@ class AgentHarness:
                     metadata_block = [{
                         "type": "text",
                         "text": f"[metadata] template_version_id={template_version_id}",
-                        "cache_control": {"type": "ephemeral"},
                     }]
                     anthropic_messages.append({"role": "assistant", "content": metadata_block})
 
