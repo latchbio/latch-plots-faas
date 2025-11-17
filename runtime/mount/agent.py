@@ -180,7 +180,7 @@ class AgentHarness:
 
         cache_pos = nrof_messages - (nrof_messages % cache_modulo)
         trunc_pos = cache_pos - cache_modulo
-        cache_index = cache_pos - 1
+        cache_index = cache_pos - 2
 
         print(f"[agent] _prepare_messages_for_inference: nrof_messages={nrof_messages}, cache_pos={cache_pos}, trunc_pos={trunc_pos}, cache_index={cache_index}")
 
@@ -190,7 +190,7 @@ class AgentHarness:
                 for i, msg in enumerate(messages)
             ]
 
-        if cache_pos <= 0:
+        if cache_index <= 0:
             return messages
 
         message_to_cache = messages[cache_index]
