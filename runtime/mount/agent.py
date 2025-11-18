@@ -99,14 +99,18 @@ class AgentHarness:
             query="""
                 query AgentHistory($sessionId: BigInt!) {
                     agentHistories(condition: {sessionId: $sessionId, removed: false}, orderBy: ID_ASC) {
-                        nodes { id payload requestId }
+                        nodes { id payload requestId templateVersionId }
                     }
                 }
             """,
             variables={"sessionId": str(self.agent_session_id)},
         )
         nodes = resp.get("data", {}).get("agentHistories", {}).get("nodes", [])
-        return [{"payload": n.get("payload"), "request_id": n.get("requestId")} for n in nodes]
+        return [{
+            "payload": n.get("payload"),
+            "request_id": n.get("requestId"),
+            "template_version_id": n.get("templateVersionId"),
+        } for n in nodes]
 
     @staticmethod
     def _truncate_message_content(msg: MessageParam) -> MessageParam:
@@ -273,6 +277,11 @@ class AgentHarness:
                         cleaned_content.append(block)
                     content = cleaned_content
 
+                template_version_id = item.get("template_version_id")
+                if role == "user" and template_version_id is not None:
+                    checkpoint_content = f"Checkpoint created with template_version_id={template_version_id}"
+                    anthropic_messages.append({"role": "user", "content": checkpoint_content})
+
                 if role in {"user", "assistant"} and (isinstance(content, (str, list))):
                     anthropic_messages.append({"role": role, "content": content})
 
@@ -300,6 +309,7 @@ class AgentHarness:
         payload: dict,
         request_id: str | None = None,
         tx_id: str | None = None,
+        template_version_id: str | None = None,
     ) -> None:
         assert self.agent_session_id is not None
 
@@ -316,13 +326,14 @@ class AgentHarness:
             "payload": payload,
             "requestId": request_id,
             "txId": tx_id,
+            "templateVersionId": str(template_version_id) if template_version_id is not None else None,
         }
 
         await gql_query(
             auth=auth_token_sdk,
             query="""
-                mutation CreateAgentHistory($sessionId: BigInt!, $eventType: String!, $payload: JSON!, $requestId: String, $txId: String) {
-                    createAgentHistory(input: {agentHistory: {sessionId: $sessionId, eventType: $eventType, payload: $payload, requestId: $requestId, txId: $txId}}) {
+                mutation CreateAgentHistory($sessionId: BigInt!, $eventType: String!, $payload: JSON!, $requestId: String, $txId: String, $templateVersionId: BigInt) {
+                    createAgentHistory(input: {agentHistory: {sessionId: $sessionId, eventType: $eventType, payload: $payload, requestId: $requestId, txId: $txId, templateVersionId: $templateVersionId}}) {
                         clientMutationId
                     }
                 }
@@ -458,9 +469,12 @@ class AgentHarness:
             if msg.get("hidden") is not None:
                 payload["hidden"] = msg["hidden"]
 
+            template_version_id = msg.get("template_version_id")
+
             await self._insert_history(
                 payload=payload,
                 request_id=self.current_request_id,
+                template_version_id=template_version_id,
             )
 
         elif msg_type == "cell_result":
@@ -873,6 +887,26 @@ class AgentHarness:
             return {
                 "tool_name": "rename_tab",
                 "summary": f"Failed to rename tab: {result.get('error', 'Unknown error')}",
+                "success": False,
+            }
+
+        async def restore_checkpoint(args: dict) -> dict:
+            template_version_id = args.get("template_version_id")
+            print(f"[tool] restore_checkpoint template_version_id={template_version_id}")
+            params = {"template_version_id": template_version_id}
+            
+            result = await self.atomic_operation("restore_checkpoint", params)
+            if result.get("status") == "success":
+                return {
+                    "tool_name": "restore_checkpoint",
+                    "success": True,
+                    "summary": f"Restored checkpoint to template version {template_version_id}",
+                    "template_version_id": template_version_id,
+                }
+
+            return {
+                "tool_name": "restore_checkpoint",
+                "summary": f"Failed to restore checkpoint: {result.get('error', 'Unknown error')}",
                 "success": False,
             }
 
@@ -1512,6 +1546,22 @@ class AgentHarness:
             },
         })
         self.tool_map["rename_tab"] = rename_tab
+
+        self.tools.append({
+            "name": "restore_checkpoint",
+            "description": "Request the UI to restore the notebook to a specific template version checkpoint. Require confirmation from the user before restoring.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "template_version_id": {
+                        "type": "string",
+                        "description": "Template version ID to restore",
+                    },
+                },
+                "required": ["template_version_id"],
+            },
+        })
+        self.tool_map["restore_checkpoint"] = restore_checkpoint
 
         self.tools.append({
             "name": "submit_response",
@@ -3064,6 +3114,7 @@ class AgentHarness:
         query = msg.get("query", "")
         request_id = msg.get("request_id")
         contextual_node_data = msg.get("contextual_node_data")
+        template_version_id = msg.get("template_version_id")
 
         full_query = query
         if contextual_node_data:
@@ -3075,6 +3126,7 @@ class AgentHarness:
             "request_id": request_id,
             "display_query": query,
             "display_nodes": contextual_node_data,
+            "template_version_id": template_version_id,
         })
 
         print(f"[agent] Message queued successfully (request_id={request_id})")
