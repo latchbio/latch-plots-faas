@@ -1,6 +1,5 @@
 import asyncio
 import contextlib
-import hashlib
 import json
 import os
 import socket
@@ -191,12 +190,6 @@ class AgentHarness:
                 for i, msg in enumerate(messages)
             ]
 
-        # Debug: compute hash of messages before cache point to detect changes (after truncation)
-        if greatest_cache_index > 0:
-            messages_before_cache = json.dumps([messages[i] for i in range(min(greatest_cache_index, len(messages)))], sort_keys=True)
-            msg_hash = hashlib.sha256(messages_before_cache.encode()).hexdigest()[:16]
-            print(f"[agent] Messages hash before cache point (0-{greatest_cache_index - 1}) after truncation: {msg_hash}")
-
         if greatest_cache_index <= 0:
             return messages
 
@@ -238,16 +231,21 @@ class AgentHarness:
             }
         elif isinstance(content, list) and len(content) > 0:
             new_content = [
-                *content[:-1],
-                {**content[-1], "cache_control": {"type": "ephemeral"}}
+                block.copy() if isinstance(block, dict) else block
+                for block in content[:-1]
             ]
+            last_block = content[-1]
+            if isinstance(last_block, dict):
+                new_content.append({**last_block, "cache_control": {"type": "ephemeral"}})
+            else:
+                new_content.append(last_block)
 
             message_to_cache = {
                 **message_to_cache,
                 "content": new_content
             }
 
-        print(f"[agent] Caching message: {message_to_cache}")
+        print(f"[agent] Caching message at index {user_cache_index}")
         messages[user_cache_index] = message_to_cache
 
         return messages
