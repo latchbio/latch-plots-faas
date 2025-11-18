@@ -84,7 +84,7 @@ Evaluate each marker's ability to distinguish cell types by computing **median f
 
 **Method:** For each marker, compute median expression per cluster, then calculate pairwise fold changes. Keep markers where median fold change across all pairs exceeds threshold.
 
-**Quality check:** After filtering, verify **each cell type retains ≥3 markers AND there are ≥3 cell types**. If not, lower threshold to 1.05-1.1× or increase initial marker count to 50-60.
+**Quality check:** After filtering, verify **each cell type retains ≥2 markers AND there are ≥3 cell types**. If not, lower threshold to 1.05-1.1× or increase initial marker count to 50-60.
 
 ---
 
@@ -98,7 +98,7 @@ Evaluate each marker's ability to distinguish cell types by computing **median f
 
 **Method:**
 1. Calculate target count (median or minimum of filtered marker counts)
-2. Enforce minimum of 3 markers per cell type
+2. Enforce minimum of 2 markers per cell type
 3. Take top 5 markers by fold change for each cell type
 4. Only include cell types with ≥3 final markers
 
@@ -212,6 +212,7 @@ Higher confidence (>0.3) indicates clear cell type identity. Lower confidence (<
 2. Compute fold change: target vs. each other cell type individually  
 3. Identify **minimum fold change** (worst-case scenario)
 4. Valid marker: minimum FC ≥1.0 (ideally ≥1.05)
+5. For each predicted cell type, select its most discriminatory marker. Create a violin plot comparing its expression distribution across all cell types. Use one `w_plot` per cell type.
 
 **Benchmarks for ATAC-seq:**
 
