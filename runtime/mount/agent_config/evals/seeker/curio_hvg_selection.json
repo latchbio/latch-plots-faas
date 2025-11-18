@@ -1,7 +1,7 @@
 {
   "id": "curio_hvg_selection",
   "task": "Identify highly variable genes using the Seurat method and subset the normalized data to only these genes. Use n_top_genes=2000. Return a JSON object with fields: n_vars_before (number of genes before HVG selection), n_vars_after (number of genes after subsetting to HVGs), hvg_retention_rate (fraction of genes retained: n_vars_after/n_vars_before), n_obs (number of observations/beads, should remain unchanged).",
-  "data_node": "latch://38438.account/curio_ovary/adata_after_normalization.h5ad",
+  "data_node": "latch://38438.account/curio_ovary/adata_after_normalization_CORRECTED.h5ad",
   "grader": {
     "type": "numeric_tolerance",
     "config": {

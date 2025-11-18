@@ -23,8 +23,8 @@ os.environ.setdefault("OTEL_SDK_DISABLED", "true")
 
 import websockets
 from eval_types import TestCase, TestResult
-from run_local_eval import get_eval_config
 from graders import GRADER_REGISTRY
+from run_local_eval import get_eval_config
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent.parent))
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
@@ -141,13 +141,11 @@ class EvalServer:
             if response.get("tx_id") == tx_id and response.get("type") == "agent_action_response":
                 if response.get("status") == "success":
                     return response
-                else:
-                    print(f"[eval] Failed {action}: status={response.get('status')}, error={response.get('error')}")
-                    return None
-            else:
-                print(f"[eval] Unexpected response type: {response.get('type')}")
+                print(f"[eval] Failed {action}: status={response.get('status')}, error={response.get('error')}")
                 return None
-        except asyncio.TimeoutError:
+            print(f"[eval] Unexpected response type: {response.get('type')}")
+            return None
+        except TimeoutError:
             print(f"[eval] Timeout waiting for {action}")
             return None
         except Exception as e:
@@ -202,7 +200,7 @@ class EvalServer:
             console_init = json.loads(init_msg)
             if console_init.get("type") == "init":
                 self.session_id = int(console_init.get("session_id"))
-    
+
                 # Clear history for this session
                 auth_token_sdk, _, _ = get_eval_config()
 
@@ -307,7 +305,7 @@ class EvalServer:
             receive_task.cancel()
             try:
                 await asyncio.wait_for(receive_task, timeout=0.1)
-            except (asyncio.CancelledError, asyncio.TimeoutError):
+            except (TimeoutError, asyncio.CancelledError):
                 pass
 
             print("[eval] Getting notebook context...")
@@ -320,7 +318,7 @@ class EvalServer:
             forward_task.cancel()
             try:
                 await asyncio.wait_for(forward_task, timeout=0.1)
-            except (asyncio.CancelledError, asyncio.TimeoutError):
+            except (TimeoutError, asyncio.CancelledError):
                 pass
 
             await self.stop_agent()
@@ -417,7 +415,7 @@ class EvalServer:
             print(f"[eval] Not done: {len(running_cells)} cells still running: {running_cells}")
             return False
 
-        print(f"[eval] Completion detected: [EVAL_COMPLETE] marker found, no questions, no running cells")
+        print("[eval] Completion detected: [EVAL_COMPLETE] marker found, no questions, no running cells")
         return True
 
 
@@ -507,6 +505,7 @@ async def run_eval(test_case: TestCase, port: int, latch_dir: Path) -> TestResul
 shutdown_requested = False
 eval_server_instance = None
 
+
 def signal_handler(signum, frame):
     global shutdown_requested
     if not shutdown_requested:
@@ -519,6 +518,7 @@ def signal_handler(signum, frame):
         print("\n[eval] Force quit!")
         sys.exit(1)
 
+
 async def main():
     global eval_server_instance
 
@@ -526,8 +526,8 @@ async def main():
 
     parser = argparse.ArgumentParser(description="Run agent eval server")
     parser.add_argument("--eval", required=True, help="Eval file to run")
-    parser.add_argument("--port", type=int, default=8765, help="WebSocket server port")
-    args = parser.parse_args()
+    args = arser.parse_args()
+    port = 8765
 
     eval_dir = Path(__file__).parent
     results_dir = eval_dir / "results"
@@ -559,7 +559,7 @@ async def main():
     (latch_dir / "nucleus-url").write_text("https://nucleus.latch.bio")
 
     try:
-        result = await run_eval(test_case, args.port, latch_dir)
+        result = await run_eval(test_case, port, latch_dir)
 
         results_dir.mkdir(exist_ok=True)
         output_file = results_dir / f"result_{test_case.id}.json"

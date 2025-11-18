@@ -28,6 +28,16 @@ class NumericToleranceGrader(BinaryGrader):
                 relative_error = abs(actual_value - expected_value) / abs(expected_value) if expected_value != 0 else float('inf')
                 within_tolerance = relative_error <= tolerance_value
                 error = relative_error
+            elif tolerance_type == "range":
+                min_value = tolerance_config.get("min")
+                max_value = tolerance_config.get("max")
+                within_tolerance = min_value <= actual_value <= max_value
+                if actual_value < min_value:
+                    error = min_value - actual_value
+                elif actual_value > max_value:
+                    error = actual_value - max_value
+                else:
+                    error = 0
             elif tolerance_type == "min":
                 # For min threshold, expected_value is the minimum threshold
                 within_tolerance = actual_value >= expected_value
@@ -51,6 +61,10 @@ class NumericToleranceGrader(BinaryGrader):
                     failures.append(f"{field}: {actual_value} (minimum required: {expected_value})")
                 elif tolerance_type == "max":
                     failures.append(f"{field}: {actual_value} (maximum allowed: {expected_value})")
+                elif tolerance_type == "range":
+                    min_val = tolerance_config.get("min")
+                    max_val = tolerance_config.get("max")
+                    failures.append(f"{field}: {actual_value} (required range: {min_val}-{max_val}, error: {error:.2f})")
                 else:
                     failures.append(f"{field}: {actual_value} vs {expected_value} (error: {error:.2f}, tolerance: {tolerance_value})")
 
@@ -81,6 +95,10 @@ class NumericToleranceGrader(BinaryGrader):
                     lines.append(f"- {field}: {actual} (minimum: {expected}) {check}")
                 elif tolerance_type == "max":
                     lines.append(f"- {field}: {actual} (maximum: {expected}) {check}")
+                elif tolerance_type == "range":
+                    min_val = tolerance_config.get("min")
+                    max_val = tolerance_config.get("max")
+                    lines.append(f"- {field}: {actual} (range: {min_val}-{max_val}, error: {error:.2f}) {check}")
                 else:
                     lines.append(f"- {field}: {actual} vs {expected} (error: {error:.2f}) {check}")
 

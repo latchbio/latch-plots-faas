@@ -1,0 +1,18 @@
+{
+  "id": "curio_normalization",
+  "task": "Normalize the spatial transcriptomics data to account for differences in sequencing depth across beads (target: 10,000 counts per bead), then apply a variance-stabilizing log-transformation. Return validation metrics: mean_sum_per_bead (after normalization, before log-transform) and max_value.",
+  "data_node": "latch://38438.account/curio_ovary/adata_after_qc_filtering.h5ad",
+  "grader": {
+    "type": "numeric_tolerance",
+    "config": {
+      "ground_truth": {
+        "mean_sum_per_bead": 10000.0,
+        "max_value": 9.21
+      },
+      "tolerances": {
+        "mean_sum_per_bead": { "type": "range", "min": 9500, "max": 10500 },
+        "max_value": { "type": "range", "min": 6.0, "max": 10.0 }
+      }
+    }
+  }
+}

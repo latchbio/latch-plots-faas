@@ -1,0 +1,13 @@
+{
+  "id": "curio_normalization_validation",
+  "task": "Validate whether a dataset has been properly normalized for sequencing depth differences. Return is_normalized if True.",
+  "data_node": "latch://38438.account/curio_ovary/adata_after_normalization.h5ad",
+  "grader": {
+    "type": "boolean_check",
+    "config": {
+      "ground_truth": {
+        "is_normalized": false
+      }
+    }
+  }
+}

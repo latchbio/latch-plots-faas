@@ -1,4 +1,5 @@
 from .base import BinaryGrader, GraderResult
+from .boolean_check import BooleanCheckGrader
 from .cell_typing import CellTypingGrader
 from .numeric_tolerance import NumericToleranceGrader
 from .label_set_jaccard import LabelSetJaccardGrader
@@ -10,6 +11,7 @@ from .spatial_adjacency_simple import SpatialAdjacencySimpleGrader
 from .adjusted_mutual_information import AdjustedMutualInformationGrader
 
 GRADER_REGISTRY = {
+    "boolean_check": BooleanCheckGrader,
     "cell_typing": CellTypingGrader,
     "numeric_tolerance": NumericToleranceGrader,
     "label_set_jaccard": LabelSetJaccardGrader,
@@ -24,6 +26,7 @@ GRADER_REGISTRY = {
 __all__ = [
     "BinaryGrader",
     "GraderResult",
+    "BooleanCheckGrader",
     "CellTypingGrader",
     "NumericToleranceGrader",
     "LabelSetJaccardGrader",
