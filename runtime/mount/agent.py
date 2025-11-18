@@ -78,7 +78,9 @@ class AgentHarness:
 
     async def send(self, msg: dict[str, object]) -> None:
         msg_type = msg.get("type", "unknown")
-        print(f"[agent] Sending message: {msg_type}")
+        if msg_type != "agent_stream_delta":
+            print(f"[agent] Sending message: {msg_type}")
+
         await self.conn.send(msg)
 
     async def _notify_history_updated(self, *, request_id: str | None = None) -> None:
@@ -103,6 +105,93 @@ class AgentHarness:
         )
         nodes = resp.get("data", {}).get("agentHistories", {}).get("nodes", [])
         return [{"payload": n.get("payload"), "request_id": n.get("requestId")} for n in nodes]
+
+    def _truncate_old_messages(self, messages: list[MessageParam], keep_recent_turns: int = 8) -> list[MessageParam]:
+        turn_boundaries = []
+        for i, msg in enumerate(messages):
+            if msg.get("role") == "user":
+                turn_boundaries.append(i)
+
+        if len(turn_boundaries) <= keep_recent_turns:
+            return messages
+
+        keep_from_index = turn_boundaries[-(keep_recent_turns)]
+
+        truncated = []
+        for i, msg in enumerate(messages):
+            if i == 0 or i >= keep_from_index:
+                truncated.append(msg)
+            else:
+                truncated.append(self._truncate_message_content(msg))
+
+        return truncated
+
+    @staticmethod
+    def _truncate_message_content(msg: MessageParam) -> MessageParam:
+        content = msg.get("content")
+
+        if isinstance(content, str):
+            if len(content) > 500:
+                return {"role": msg["role"], "content": content[:500] + "...[truncated]"}
+            return msg
+
+        if isinstance(content, list):
+            truncated_blocks = []
+            for block in content:
+                if not isinstance(block, dict):
+                    truncated_blocks.append(block)
+                    continue
+
+                block_type = block.get("type")
+
+                if block_type in {"thinking", "redacted_thinking"}:
+                    truncated_blocks.append(block)
+                    continue
+
+                if block_type == "tool_result":
+                    result_str = block.get("content", "{}")
+                    result = json.loads(result_str)
+
+                    tool_name = result.get("tool_name")
+                    if tool_name in {"read_file", "grep"}:
+                        truncated_blocks.append(block)
+                        continue
+
+                    truncated_result = {
+                        "tool_name": tool_name,
+                        "success": result.get("success"),
+                        "summary": result.get("summary"),
+                    }
+                    truncated_blocks.append({
+                        "type": "tool_result",
+                        "tool_use_id": block.get("tool_use_id"),
+                        "content": json.dumps(truncated_result)
+                    })
+                    continue
+
+                if block_type == "tool_use":
+                    truncated_block = block.copy()
+                    if "input" in truncated_block:
+                        inp = truncated_block["input"]
+                        if isinstance(inp, dict) and "code" in inp and isinstance(inp["code"], str) and len(inp["code"]) > 1000:
+                            truncated_block["input"] = {**inp, "code": inp["code"][:200] + "...[truncated]"}
+
+                    truncated_blocks.append(truncated_block)
+                    continue
+
+                if block_type == "text":
+                    text = block.get("text", "")
+                    if len(text) > 1000:
+                        truncated_blocks.append({"type": "text", "text": text[:1000] + "...[truncated]"})
+                    else:
+                        truncated_blocks.append(block)
+                    continue
+
+                truncated_blocks.append(block)
+
+            return {"role": msg["role"], "content": truncated_blocks}
+
+        return msg
 
     async def _build_messages_from_db(self) -> list[MessageParam]:
         history = await self._fetch_history_from_db()
@@ -621,6 +710,7 @@ class AgentHarness:
                     "cell_id": cell_id,
                     "cell_name": title,
                     "message": action_summary,
+                    "success": True,
                 }
             return {
                 "tool_name": "stop_cell",
@@ -659,7 +749,7 @@ class AgentHarness:
             name = args["name"]
             print(f"[tool] rename_notebook name={name}")
             params = {"name": name}
-            
+
             result = await self.atomic_operation("rename_notebook", params)
             if result.get("status") == "success":
                 return {
@@ -672,6 +762,72 @@ class AgentHarness:
             return {
                 "tool_name": "rename_notebook",
                 "summary": f"Failed to rename notebook: {result.get('error', 'Unknown error')}",
+                "success": False,
+            }
+
+        async def create_tab(args: dict) -> dict:
+            position = args["position"]
+            display_name = args["display_name"]
+
+            if position < 0:
+                return {
+                    "tool_name": "create_tab",
+                    "summary": "Error: Position must be non-negative",
+                    "success": False,
+                }
+
+            print(f'[tool] create_tab pos={position} name="{display_name}"')
+
+            params = {
+                "position": position,
+                "display_name": display_name,
+            }
+
+            result = await self.atomic_operation("create_tab", params)
+            if result.get("status") == "success":
+                tab_id = result.get("tab_id", "unknown")
+                msg = f"Created tab at position {position} (ID: {tab_id}, Name: {display_name})"
+                print(f"[tool] create_tab -> {msg}")
+                return {
+                    "tool_name": "create_tab",
+                    "summary": msg,
+                    "tab_id": tab_id,
+                    "display_name": display_name,
+                    "position": position,
+                    "success": True,
+                }
+            return {
+                "tool_name": "create_tab",
+                "summary": f"Failed to create tab: {result.get('error', 'Unknown error')}",
+                "success": False,
+            }
+
+        async def rename_tab(args: dict) -> dict:
+            tab_id = args["tab_id"]
+            new_name = args["new_name"]
+
+            print(f'[tool] rename_tab tab_id={tab_id} new_name="{new_name}"')
+
+            params = {
+                "tab_id": tab_id,
+                "new_name": new_name,
+            }
+
+            result = await self.atomic_operation("rename_tab", params)
+            if result.get("status") == "success":
+                target = "Tab 1" if tab_id == "DEFAULT" else f"tab {tab_id}"
+                msg = f"Renamed {target} to '{new_name}'"
+                print(f"[tool] rename_tab -> {msg}")
+                return {
+                    "tool_name": "rename_tab",
+                    "summary": msg,
+                    "tab_id": tab_id,
+                    "new_name": new_name,
+                    "success": True,
+                }
+            return {
+                "tool_name": "rename_tab",
+                "summary": f"Failed to rename tab: {result.get('error', 'Unknown error')}",
                 "success": False,
             }
 
@@ -1123,16 +1279,16 @@ class AgentHarness:
                         "operation": operation,
                         "obs_type": obs_type,
                     }
-                else:
-                    return {
-                        "tool_name": "h5_manage_obs",
-                        "success": True,
-                        "label": args.get("label"),
-                        "summary": f"Deleted observation column '{obs_key}'",
-                        "widget_key": widget_key,
-                        "obs_key": obs_key,
-                        "operation": operation,
-                    }
+
+                return {
+                    "tool_name": "h5_manage_obs",
+                    "success": True,
+                    "label": args.get("label"),
+                    "summary": f"Deleted observation column '{obs_key}'",
+                    "widget_key": widget_key,
+                    "obs_key": obs_key,
+                    "operation": operation,
+                }
 
             return {
                 "tool_name": "h5_manage_obs",
@@ -1283,6 +1439,34 @@ class AgentHarness:
             },
         })
         self.tool_map["rename_notebook"] = rename_notebook
+
+        self.tools.append({
+            "name": "create_tab",
+            "description": "Create a new tab marker cell at specified position to organize cells. IMPORTANT: This inserts a new cell, shifting all subsequent cell positions down by 1. Always call refresh_cells_context after creating a tab to get updated positions before creating cells in that tab.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "position": {"type": "integer", "description": "Position to insert the tab marker"},
+                    "display_name": {"type": "string", "description": "Name for the tab"},
+                },
+                "required": ["position", "display_name"],
+            },
+        })
+        self.tool_map["create_tab"] = create_tab
+
+        self.tools.append({
+            "name": "rename_tab",
+            "description": 'Rename a tab. Use tab_id="DEFAULT" to rename the default tab.',
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "tab_id": {"type": "string", "description": 'ID of the tab to rename. Use "DEFAULT" for the default tab, or the TAB_ID from a Tab Marker.'},
+                    "new_name": {"type": "string", "description": "New name for the tab"},
+                },
+                "required": ["tab_id", "new_name"],
+            },
+        })
+        self.tool_map["rename_tab"] = rename_tab
 
         self.tools.append({
             "name": "submit_response",
@@ -1760,11 +1944,11 @@ class AgentHarness:
 
         def glob_file_search(args: dict) -> dict:
             pattern = args.get("pattern", "")
-            base_path = args.get("base_path", "agent_config/context")
+            base_path = args.get("base_path", ".")
 
             try:
                 if not Path(base_path).is_absolute():
-                    base_path = Path(__file__).parent / base_path
+                    base_path = Path(__file__).parent / "agent_config/context" / base_path
                 else:
                     base_path = Path(base_path)
 
@@ -1809,12 +1993,12 @@ class AgentHarness:
                     "summary": "Pattern is required"
                 }
 
-            path = args.get("path", "agent_config/context")
+            path = args.get("path", ".")
             case_insensitive = args.get("case_insensitive", False)
 
             try:
                 if not Path(path).is_absolute():
-                    search_path = Path(__file__).parent / path
+                    search_path = Path(__file__).parent / "agent_config/context" / path
                 else:
                     search_path = Path(path)
 
@@ -1881,7 +2065,7 @@ class AgentHarness:
 
             try:
                 if not Path(path).is_absolute():
-                    file_path = Path(__file__).parent / path
+                    file_path = Path(__file__).parent / "agent_config/context" / path
                 else:
                     file_path = Path(path)
 
@@ -1948,7 +2132,7 @@ class AgentHarness:
 
             try:
                 if not Path(path).is_absolute():
-                    file_path = Path(__file__).parent / path
+                    file_path = Path(__file__).parent / "agent_config/context" / path
                 else:
                     file_path = Path(path)
 
@@ -2043,7 +2227,7 @@ class AgentHarness:
                     },
                     "base_path": {
                         "type": "string",
-                        "description": "Base path to search in. Defaults to 'agent_config/context'. Use relative paths from agent directory."
+                        "description": "Base path to search in (relative to agent_config/context/). Defaults to '.' to search entire context directory."
                     }
                 },
                 "required": ["pattern"]
@@ -2063,7 +2247,7 @@ class AgentHarness:
                     },
                     "path": {
                         "type": "string",
-                        "description": "File or directory path to search in. Defaults to 'agent_config/context'."
+                        "description": "File or directory path to search in (relative to agent_config/context/). Defaults to current directory '.' to search all context files."
                     },
                     "case_insensitive": {
                         "type": "boolean",
@@ -2083,7 +2267,7 @@ class AgentHarness:
                 "properties": {
                     "path": {
                         "type": "string",
-                        "description": "Path to the file to read (relative to agent directory or absolute)"
+                        "description": "Path to the file to read (relative to agent_config/context/)"
                     },
                     "offset": {
                         "type": "integer",
@@ -2101,13 +2285,13 @@ class AgentHarness:
 
         self.tools.append({
             "name": "search_replace",
-            "description": "Replace the first occurrence of a string in a file with another string. Useful for editing files or maintaining state.",
+            "description": "Replace the first occurrence of a string in a file with another string. Useful for editing files or maintaining state. Paths are relative to 'agent_config/context/' by default.",
             "input_schema": {
                 "type": "object",
                 "properties": {
                     "path": {
                         "type": "string",
-                        "description": "Path to the file to edit"
+                        "description": "Path to the file to edit. Paths are resolved from 'agent_config/context/'."
                     },
                     "old_string": {
                         "type": "string",
@@ -2236,6 +2420,16 @@ class AgentHarness:
 
             cell_lines = [f"# Notebook Cells for {notebook_name}, Total cells: {cell_count}\n"]
 
+            default_tab_name = context.get("default_tab_name", "Tab 1")
+
+            cell_lines.append("\n## Tab Marker [DEFAULT]")  # noqa: FURB113
+            cell_lines.append(f"TAB_NAME: {default_tab_name}")
+            cell_lines.append("TAB_ID: DEFAULT")
+            cell_lines.append("TYPE: Default Tab Marker")
+            cell_lines.append("---")
+
+            current_tab_name = default_tab_name
+
             for cell in cells:
                 index = cell.get("index", "?")
                 cell_id = cell.get("cell_id", "?")
@@ -2244,7 +2438,22 @@ class AgentHarness:
                 status = cell.get("status", "idle")
                 tf_id = cell.get("tf_id", None)
 
-                cell_lines.append(f"\n## Cell [{index}]")  # noqa: FURB113
+                if cell_type == "tabMarker":
+                    if source:
+                        current_tab_name = source.strip() or f"Tab {index}"
+                    else:
+                        current_tab_name = f"Tab {index}"
+
+                    cell_lines.append(f"\n## Tab Marker [{index}]")  # noqa: FURB113
+                    cell_lines.append(f"TAB_NAME: {current_tab_name}")
+                    cell_lines.append(f"TAB_ID: {cell_id}")
+                    cell_lines.append(f"CELL_INDEX: {index}")
+                    cell_lines.append("TYPE: Tab Marker")
+                    cell_lines.append("---")
+                    continue
+
+                cell_lines.append(f"\n## Cell [{index}] (in {current_tab_name})")  # noqa: FURB113
+                cell_lines.append(f"BELONGS_TO_TAB: {current_tab_name}")
                 cell_lines.append(f"CELL_ID: {cell_id}")
                 cell_lines.append(f"CELL_INDEX: {index}")
                 cell_lines.append(f"TYPE: {cell_type}")
@@ -2273,9 +2482,9 @@ class AgentHarness:
             return {
                 "tool_name": "refresh_cells_context",
                 "success": True,
-                "summary": f"Refreshed cells context for {cell_count} cells and stored result in {context_dir / 'cells.md'}",
+                "summary": f"Refreshed cells context for {cell_count} cells and stored result in notebook_context/cells.md",
                 "cell_count": cell_count,
-                "context_path": str(context_dir / "cells.md")
+                "context_path": "notebook_context/cells.md"
             }
 
         async def refresh_reactivity_context(args: dict) -> dict:
@@ -2301,8 +2510,8 @@ class AgentHarness:
             return {
                 "tool_name": "refresh_reactivity_context",
                 "success": True,
-                "summary": f"Refreshed reactivity context and stored result in {context_dir / 'signals.md'}",
-                "context_path": str(context_dir / "signals.md"),
+                "summary": "Refreshed reactivity context and stored result in notebook_context/signals.md",
+                "context_path": "notebook_context/signals.md",
             }
 
         self.tools.append({
@@ -2474,7 +2683,7 @@ class AgentHarness:
 
             print("[agent] run_agent_loop: building messages from DB...")
             build_start = time.time()
-            api_messages = await self._build_messages_from_db()
+            api_messages = self._truncate_old_messages(await self._build_messages_from_db())
             build_elapsed = time.time() - build_start
             print(f"[agent] run_agent_loop: built {len(api_messages) if api_messages else 0} messages in {build_elapsed:.3f}s")
 
@@ -2649,6 +2858,7 @@ class AgentHarness:
                                 "content": json.dumps({
                                     "summary": None,
                                     "error": f"Unknown tool: {tool_name}",
+                                    "success": False,
                                 }),
                             })
 
@@ -2710,6 +2920,7 @@ class AgentHarness:
                             "content": json.dumps({
                                 "summary": None,
                                 "error": error_message,
+                                "success": False,
                             }),
                         }
                         for tool_id in pending_tool_ids
@@ -2825,12 +3036,12 @@ class AgentHarness:
         request_id = msg.get("request_id", "unknown")
         print(f"[agent] Cancelling request {request_id}")
 
-        await self._clear_running_state()
-
         self.current_request_id = None
         self.should_auto_continue = False
         self.pending_auto_continue = False
         self.executing_cells.clear()
+
+        await self._clear_running_state()
 
         self.pending_tool_calls.clear()
         await self._close_pending_tool_calls(
@@ -2881,9 +3092,12 @@ class AgentHarness:
         tree_lines.extend(build_tree(context_root, "  "))
         tree_content = "\n".join(tree_lines)
 
+        truncated_messages = self._truncate_old_messages(messages)
+
         return {
             "system_prompt": self.system_prompt,
             "messages": messages,
+            "truncated_messages": truncated_messages,
             "model": self.mode_config.get(self.mode, ("claude-sonnet-4-5-20250929", 1024))[0],
             "cells": cells_content,
             "signals": signals_content,
