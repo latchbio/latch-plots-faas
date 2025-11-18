@@ -23,6 +23,8 @@ from utils import auth_token_sdk, gql_query, nucleus_url, pod_id
 
 sys.stdout.reconfigure(line_buffering=True)
 
+cache_chunk_size = 20
+
 sandbox_root = os.environ.get("LATCH_SANDBOX_ROOT")
 if sandbox_root:
     import pathlib
@@ -106,26 +108,6 @@ class AgentHarness:
         nodes = resp.get("data", {}).get("agentHistories", {}).get("nodes", [])
         return [{"payload": n.get("payload"), "request_id": n.get("requestId")} for n in nodes]
 
-    def _truncate_old_messages(self, messages: list[MessageParam], keep_recent_turns: int = 8) -> list[MessageParam]:
-        turn_boundaries = []
-        for i, msg in enumerate(messages):
-            if msg.get("role") == "user":
-                turn_boundaries.append(i)
-
-        if len(turn_boundaries) <= keep_recent_turns:
-            return messages
-
-        keep_from_index = turn_boundaries[-(keep_recent_turns)]
-
-        truncated = []
-        for i, msg in enumerate(messages):
-            if i == 0 or i >= keep_from_index:
-                truncated.append(msg)
-            else:
-                truncated.append(self._truncate_message_content(msg))
-
-        return truncated
-
     @staticmethod
     def _truncate_message_content(msg: MessageParam) -> MessageParam:
         content = msg.get("content")
@@ -193,6 +175,69 @@ class AgentHarness:
 
         return msg
 
+    def _prepare_messages_for_inference(self, messages: list[MessageParam]) -> list[MessageParam]:
+        nrof_messages = len(messages)
+
+        cache_pos = nrof_messages - (nrof_messages % cache_chunk_size)
+        trunc_pos = cache_pos - cache_chunk_size
+        greatest_cache_index = cache_pos - 1
+
+        print(f"[agent] _prepare_messages_for_inference: nrof_messages={nrof_messages}, cache_pos={cache_pos}, trunc_pos={trunc_pos}, cache_index={greatest_cache_index}")
+
+        if trunc_pos > 0:
+            messages = [
+                self._truncate_message_content(msg) if i < trunc_pos else msg
+                for i, msg in enumerate(messages)
+            ]
+
+        if greatest_cache_index <= 0:
+            return messages
+
+        user_cache_index = greatest_cache_index
+        message_to_cache = None
+
+        while user_cache_index >= 0:
+            msg = messages[user_cache_index]
+            if msg.get("role") != "user":
+                user_cache_index -= 1
+                continue
+
+            content = msg.get("content")
+
+            if isinstance(content, str):
+                message_to_cache = {
+                    **msg.copy(),
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": content,
+                            "cache_control": {"type": "ephemeral"}
+                        }
+                    ]
+                }
+                break
+
+            if isinstance(content, list) and len(content) > 0:
+                last_block = content[-1]
+                if isinstance(last_block, dict) and last_block.get("type") == "text":
+                    content_copy = content.copy()
+                    content_copy[-1]["cache_control"] = {"type": "ephemeral"}  # type: ignore
+                    message_to_cache = {
+                        **msg.copy(),
+                        "content": content_copy
+                    }
+                    break
+
+            user_cache_index -= 1
+
+        if message_to_cache is None:
+            return messages
+
+        print(f"[agent] Caching message at index {user_cache_index}")
+        messages[user_cache_index] = message_to_cache  # pyright: ignore[reportCallIssue, reportArgumentType]
+
+        return messages
+
     async def _build_messages_from_db(self) -> list[MessageParam]:
         history = await self._fetch_history_from_db()
         anthropic_messages: list[MessageParam] = []
@@ -224,7 +269,7 @@ class AgentHarness:
                             result = json.loads(block.get("content", "{}"))
                             if "original_code" in result:
                                 result.pop("original_code")
-                                block["content"] = json.dumps(result)
+                                block["content"] = json.dumps(result, sort_keys=True)
                         cleaned_content.append(block)
                     content = cleaned_content
 
@@ -2683,7 +2728,9 @@ class AgentHarness:
 
             print("[agent] run_agent_loop: building messages from DB...")
             build_start = time.time()
-            api_messages = self._truncate_old_messages(await self._build_messages_from_db())
+            api_messages = self._prepare_messages_for_inference(
+                await self._build_messages_from_db()
+            )
             build_elapsed = time.time() - build_start
             print(f"[agent] run_agent_loop: built {len(api_messages) if api_messages else 0} messages in {build_elapsed:.3f}s")
 
@@ -3092,7 +3139,7 @@ class AgentHarness:
         tree_lines.extend(build_tree(context_root, "  "))
         tree_content = "\n".join(tree_lines)
 
-        truncated_messages = self._truncate_old_messages(messages)
+        truncated_messages = self._prepare_messages_for_inference(messages)
 
         return {
             "system_prompt": self.system_prompt,
