@@ -9,9 +9,14 @@ Gene set scoring is a **fast exploratory approach** for cell type annotation tha
 
 ## Workflow Summary
 
-0. **Check dataset scale** — Inspect samples, cells, and file size
-   - **⚠️ CRITICAL**: Large datasets (>100k cells) MUST be subset to one sample first
-   - **DO NOT** run all samples at once - it's notoriously slow and ineffective
+0. **Check dataset scale** — Inspect samples, cells, and memory usage
+   - **⚠️ CRITICAL**: Large datasets (>2GiB) require sample-by-sample processing
+   - **NEVER** process all samples together - causes memory crashes and poor annotations
+   - **Required approach for multi-sample data:**
+     1. Subset to ONE sample
+     2. Complete ENTIRE workflow on subset
+     3. Validate results thoroughly
+     4. Only then repeat for remaining samples
 
 1. **Select cell types** — Choose 5-10 major types expected in tissue
 2. **Curate markers** — Extract 40-50 genes per type from CellGuide  
@@ -62,6 +67,8 @@ Filter to genes present in your dataset (`adata.var_names`)
 ---
 
 ## Step 3: Filter for Discriminatory Markers
+
+**⛔ STOP**: If the dataset exceeds 2 GiB, you must subset to a single sample before running this step.
 
 Evaluate each marker's ability to distinguish cell types by computing **median fold change** across all cluster pairs.
 
