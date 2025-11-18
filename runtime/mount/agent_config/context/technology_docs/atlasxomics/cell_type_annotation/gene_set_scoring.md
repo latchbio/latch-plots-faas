@@ -9,20 +9,29 @@ Gene set scoring is a **fast exploratory approach** for cell type annotation tha
 
 ## Workflow Summary
 
-0. **Check dataset scale and subset AnnData if large** — inspect number of samples, total cells, and file size.
+0. **Check dataset scale** — Inspect samples, cells, and file size
+   - **⚠️ CRITICAL**: Large datasets (>100k cells) MUST be subset to one sample first
+   - **DO NOT** run all samples at once - it's notoriously slow and ineffective
 
-**⚠️ CRITICAL:** IF the dataset is large, THEN you MUST **subset the AnnData to a single representative sample** to build and validate the workflow before scaling up. Running all samples at once is **notoriously slow and ineffective.**
+1. **Select cell types** — Choose 5-10 major types expected in tissue
+2. **Curate markers** — Extract 40-50 genes per type from CellGuide  
+3. **Filter markers** — Keep discriminatory genes (high fold change)
+4. **Balance markers** — Ensure equal counts across cell types
+5. **⚠️ CRITICAL: Normalize scores** - z-score or min-max
+6. **Assign & visualize cell types** — Label by highest normalized score. 
+7. **⚠️ CRITICAL - Validate (ALL 7 REQUIRED)**:
+   **DO NOT skip, omit, or summarize ANY metric - missing even one invalidates the workflow**
+   - Cell type proportions
+   - Cluster purity
+   - Spatial coherence
+   - Marker enrichment
+   - Confidence scores
+   - Sample consistency
+   - Condition changes
 
-1. **Select expected cell types** (5-10 major types for tissue)
-2. **Curate 40-50 markers** per cell type from CellGuide
-3. **Filter discriminatory markers** (median fold change threshold)
-4. **Balance marker counts** across cell types
-5. **⚠️ CRITICAL: Normalize scores** (z-score or min-max)
-6. **Assign cell types** by highest normalized score
-7. ⚠️ **CRITICAL — You must compute and return all seven validation outputs** (proportions, cluster purity, spatial coherence, marker enrichment, confidence scores, sample consistency, condition-wise changes). **Do not skip, omit, or summarize any step; missing even one makes the workflow invalid.**
-8. **Self-evaluate** based on computed metrics, reflect, and modify your work as needed. Be honest and objective.
+8. **Self-evaluate** — Be honest and objective about results
 
-**Presentation Style**: At EVERY step, generate visuals using `w_table`, markdown, and/or `w_plot`. 
+**Presentation**: Generate visuals at EVERY step using `w_table`, `w_plot`, and markdown.
 
 ---
 
@@ -137,6 +146,7 @@ After normalization:
 1. For each cell, identify the cell type with the **highest normalized score**
 2. Calculate **prediction confidence** = difference between top and second-highest score
 3. Add predictions and confidence to `adata.obs`
+4. Visualize predicted cell types.
 
 Higher confidence (>0.3) indicates clear cell type identity. Lower confidence (<0.15) suggests ambiguous or mixed populations.
 
@@ -287,8 +297,3 @@ Before accepting predictions, verify:
 | No spatial coherence | Poor quality predictions | Verify normalization and thresholds |
 | Low marker specificity | Markers not discriminatory | Lower threshold or use different markers |
 | Low overall confidence | Weak marker signal | Increase markers or try cluster-based |
-
----
-
-### Next Steps
-- Refer to <atlasx_analysis_overview> to see the guide for other types of analyses. runtime/mount/agent_config/context/technology_docs/

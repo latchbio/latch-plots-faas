@@ -162,8 +162,3 @@ Before launching the workflow, evaluate your work:
     - Fragment files: /[sample]/chromap_output/fragments.tsv.gz
     - Spatial dirs: /[sample]/spatial/
 - If there is AnnData object in notebook, confirm samples match between adata and raw data
-
----
-
-### Next Steps
-- Refer to <atlasx_analysis_overview> to see the guide for other types of analyses. 

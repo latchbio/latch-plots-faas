@@ -798,7 +798,7 @@ w_table(source=qc_df, label="QC Metrics Summary")
 # Create violin plot
 fig = px.violin(adata.obs, y='n_genes_by_counts', box=True, points='outliers')
 fig.update_layout(title="Genes per Cell Distribution")
-w_plot(fig, title="Gene Count Distribution")
+w_plot(fig, label="Gene Count Distribution")
 ```
 
 **After Running:**

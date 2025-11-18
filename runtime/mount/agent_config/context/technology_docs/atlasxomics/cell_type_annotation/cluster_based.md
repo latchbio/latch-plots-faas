@@ -197,8 +197,3 @@ def annotate_adata(adata, cluster_summary, cluster_col="cluster", cell_col="cell
 | Many “Unknown” clusters | Weak markers | Relax p-value or fold-change thresholds |
 | Multiple top cell types | Shared marker profiles | Keep both; could represent mixed lineage |
 | Missing cluster column | Dataset not clustered | Run UMAP + Leiden/Louvain before annotation |
-
----
-
-### Next Steps
-- Refer to <atlasx_analysis_overview> to see the guide for other types of analyses. 
