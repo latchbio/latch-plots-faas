@@ -23,7 +23,7 @@ from utils import auth_token_sdk, gql_query, nucleus_url, pod_id
 
 sys.stdout.reconfigure(line_buffering=True)
 
-cache_modulo = 20
+cache_chunk_size = 20
 
 sandbox_root = os.environ.get("LATCH_SANDBOX_ROOT")
 if sandbox_root:
@@ -178,8 +178,8 @@ class AgentHarness:
     def _prepare_messages_for_inference(self, messages: list[MessageParam]) -> list[MessageParam]:
         nrof_messages = len(messages)
 
-        cache_pos = nrof_messages - (nrof_messages % cache_modulo)
-        trunc_pos = cache_pos - cache_modulo
+        cache_pos = nrof_messages - (nrof_messages % cache_chunk_size)
+        trunc_pos = cache_pos - cache_chunk_size
         greatest_cache_index = cache_pos - 1
 
         print(f"[agent] _prepare_messages_for_inference: nrof_messages={nrof_messages}, cache_pos={cache_pos}, trunc_pos={trunc_pos}, cache_index={greatest_cache_index}")
