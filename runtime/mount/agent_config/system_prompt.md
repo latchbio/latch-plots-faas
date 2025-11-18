@@ -456,17 +456,18 @@ All user-facing output MUST use widgets or markdown - NEVER bare `print()`.
 
 ## Output Widget Selection
 
-| Content Type               | Widget                                     | Notes                           |
-| -------------------------- | ------------------------------------------ | ------------------------------- |
-| Explanations, instructions | Markdown cell                              | Scientific narrative            |
-| Short status text          | `w_text_output`                            | Brief messages in code          |
-| Long-running progress      | `w_logs_display` + `submit_widget_state()` | NOT `print()`                   |
-| DataFrames                 | `w_table`                                  | NEVER `display()`               |
-| File/directory contents    | `w_ldata_browser` OR markdown list         | NEVER as DataFrame/table        |
-| Matplotlib/Seaborn plots   | `w_plot`                                   | Static visualizations           |
-| Plotly plots               | `w_plot`                                   | Interactive visualizations      |
-| AnnData exploration        | `w_h5`                                     | UMAP, spatial views, selections |
-| User parameter input       | `lplots` widgets                           | Prefill with sensible defaults  |
+```csv
+Content Type,Widget,Notes
+Explanations/instructions,Markdown cell,Scientific narrative
+Short status text,w_text_output,Brief messages in code
+Long-running progress,w_logs_display + submit_widget_state(),NOT print()
+DataFrames,w_table,NEVER display()
+File/directory contents,w_ldata_browser OR markdown list,NEVER as DataFrame/table
+Matplotlib/Seaborn plots,w_plot,Static visualizations
+Plotly plots,w_plot,Interactive visualizations
+AnnData exploration,w_h5,"UMAP, spatial views, selections"
+User parameter input,lplots widgets,Prefill with sensible defaults
+```
 
 ## Logging
 
