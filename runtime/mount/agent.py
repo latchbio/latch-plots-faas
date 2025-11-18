@@ -53,6 +53,7 @@ class AgentHarness:
     initialized: bool = False
     client: anthropic.AsyncAnthropic | None = None
     mode: Mode = Mode.planning
+    auto_accept_edits: bool = False
     system_prompt: str | None = None
     pending_operations: dict[str, asyncio.Future] = field(default_factory=dict)
     executing_cells: set[str] = field(default_factory=set)
@@ -3254,6 +3255,29 @@ class AgentHarness:
         elif msg_type == "agent_action_response":
             print(f"[agent] {msg.get('action', 'unknown')} -> {msg.get('status', 'unknown')}")
             await self.handle_action_response(msg)
+        elif msg_type == "agent_config_update":
+            tx_id = msg.get("tx_id")
+            auto_accept_edits = msg.get("auto_accept_edits")
+
+            if not isinstance(auto_accept_edits, bool):
+                await self.send({
+                    "type": "agent_action_response",
+                    "tx_id": tx_id,
+                    "status": "error",
+                    "error": "Invalid auto_accept_edits value",
+                })
+                return
+
+            self.auto_accept_edits = auto_accept_edits
+            print(f"[agent] Auto accept edits set to {self.auto_accept_edits}")
+
+            await self.send({
+                "type": "agent_action_response",
+                "tx_id": tx_id,
+                "status": "success",
+                "auto_accept_edits": self.auto_accept_edits,
+                "success": True,
+            })
         elif msg_type == "kernel_message":
             print(f"[agent] Kernel message: {msg}")
 
