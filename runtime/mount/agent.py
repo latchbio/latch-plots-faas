@@ -194,59 +194,47 @@ class AgentHarness:
             return messages
 
         user_cache_index = greatest_cache_index
+        message_to_cache = None
+
         while user_cache_index >= 0:
-            # caching tool results leads to repeated cache writes without reads? Maybe anthropic bug?
             msg = messages[user_cache_index]
             if msg.get("role") != "user":
                 user_cache_index -= 1
                 continue
 
             content = msg.get("content")
+
             if isinstance(content, str):
+                message_to_cache = {
+                    **msg.copy(),
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": content,
+                            "cache_control": {"type": "ephemeral"}
+                        }
+                    ]
+                }
                 break
 
             if isinstance(content, list) and len(content) > 0:
                 last_block = content[-1]
                 if isinstance(last_block, dict) and last_block.get("type") == "text":
+                    content_copy = content.copy()
+                    content_copy[-1]["cache_control"] = {"type": "ephemeral"}  # type: ignore
+                    message_to_cache = {
+                        **msg.copy(),
+                        "content": content_copy
+                    }
                     break
 
             user_cache_index -= 1
 
-        if user_cache_index < 0:
+        if message_to_cache is None:
             return messages
 
-        message_to_cache = messages[user_cache_index]
-        content = message_to_cache.get("content")
-
-        if isinstance(content, str):
-            message_to_cache = {
-                **message_to_cache,
-                "content": [
-                    {
-                        "type": "text",
-                        "text": content,
-                        "cache_control": {"type": "ephemeral"}
-                    }
-                ]
-            }
-        elif isinstance(content, list) and len(content) > 0:
-            new_content = [
-                block.copy() if isinstance(block, dict) else block
-                for block in content[:-1]
-            ]
-            last_block = content[-1]
-            if isinstance(last_block, dict):
-                new_content.append({**last_block, "cache_control": {"type": "ephemeral"}})
-            else:
-                new_content.append(last_block)
-
-            message_to_cache = {
-                **message_to_cache,
-                "content": new_content
-            }
-
         print(f"[agent] Caching message at index {user_cache_index}")
-        messages[user_cache_index] = message_to_cache
+        messages[user_cache_index] = message_to_cache  # pyright: ignore[reportCallIssue, reportArgumentType]
 
         return messages
 
