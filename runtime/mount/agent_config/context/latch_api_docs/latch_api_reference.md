@@ -39,8 +39,12 @@ csv = w_ldata_picker(
 
 if csv.value is not None:
     lp: LPath = csv.value
-    local_path = lp.download(cache=True)
-    df = pd.read_csv(local_path)
+    fname = lp.name()
+    suffix = Path(fname).suffix if fname else ""
+    local_p = Path(f"{lp.node_id()}{suffix}")
+    lp.download(local_p, cache=True)
+    df = pd.read_csv(local_p)
+
 ```
 
 ---
@@ -452,15 +456,48 @@ if button.value:
 - `appearance` (OutputAppearance, optional): Styling options
 - `key` (str, optional): Unique widget identifier
 
-**Note:** The source must be a named global variable for tracking.
+**Note:**
+- The plot source must be a named **global variable** for tracking.
+- **CRITICAL**: Each `w_plot` must reference **its own unique variable** — reusing a variable will cause all plots to render the same content and create a negative user experience.
+- **DO NOT** use `globals()` or dynamic variable naming in loops (e.g., `globals()[f'fig_{i}']`). This does NOT create proper unique variables.
+- **CORRECT APPROACH**: Explicitly declare each variable with a unique name (e.g., `fig_plot1`, `fig_plot2`, `fig_plot3`) outside of any loop structure.
+- When creating multiple plots, write out each plot creation separately with its own explicit variable name, or build all plots into a list/dict and then create separate variables from that collection.
 
-**Example:**
+#### Examples
+
+**Basic Usage:**
 ```python
 from lplots.widgets.plot import w_plot
 import plotly.express as px
 
-fig = px.scatter(df, x='x', y='y')
-w_plot(label="My Plot", source=fig)
+fig_scatter = px.scatter(df, x='x', y='y')
+w_plot(label="First Plot", source=fig_scatter)
+
+# Use unique variable for another visualization
+fig_bar = px.bar(df, x='x', y='y')
+w_plot(label="Second Plot", source=fig_bar)
+```
+
+#### ❌ WRONG - Do not do this:
+```python
+# Using globals() in a loop - plots will NOT render correctly
+for i, data in enumerate(datasets):
+    fig = px.scatter(data, x='x', y='y')
+    globals()[f'fig_{i}'] = fig  # This does NOT work!
+    w_plot(label=f"Plot {i}", source=globals()[f'fig_{i}'])
+```
+
+#### ✅ RIGHT - Do this instead:
+```python
+# Explicitly declare each variable
+fig_dataset1 = px.scatter(datasets[0], x='x', y='y')
+w_plot(label="Dataset 1", source=fig_dataset1)
+
+fig_dataset2 = px.scatter(datasets[1], x='x', y='y')
+w_plot(label="Dataset 2", source=fig_dataset2)
+
+fig_dataset3 = px.scatter(datasets[2], x='x', y='y')
+w_plot(label="Dataset 3", source=fig_dataset3)
 ```
 
 ---
@@ -767,7 +804,7 @@ with w_grid(columns=12) as g:
 - Remote (`latch://`) paths → **LPath** only. Local paths → **pathlib.Path** only
 - If a widget already returns an **LPath**, use it directly (don't wrap again)
 - **Always check for `None`** before using widget values
-- **Always cache file downloads**
+- **Always explicitly define local destination and cache file downloads**
 - **Never** pass LPath directly to libraries expecting local paths; download first
 
 **Valid Path Forms:**
@@ -813,9 +850,12 @@ child = LPath("latch://XXXXX.account/Data/project") / "file.csv"
 
 # Get basename (method, not attribute!)
 fname = lp.name()
+suffix = Path(fname).suffix if fname else ""
+local_p = Path(f"{lp.node_id()}{suffix}")
 
 # Download before using with local libraries
-local_p: Path = lp.download(cache=True)
+# Always cache downloads
+lp.download(local_p, cache=True)
 df = pd.read_csv(local_p)
 
 # Check if directory
