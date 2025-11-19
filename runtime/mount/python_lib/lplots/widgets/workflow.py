@@ -71,3 +71,68 @@ def w_workflow(
     _emit.emit_widget(key, res._state)
 
     return res
+
+
+workflow_automatic_widget_type: Literal["workflow_automatic"] = "workflow_automatic"
+
+
+class WorkflowAutomaticWidgetState(
+    _emit.WidgetState[workflow_automatic_widget_type, str]
+):
+    label: str
+    wf_name: str
+    params: dict[str, Any]
+    version: str | None
+    execution: NotRequired[Execution]
+    launched: NotRequired[bool]
+
+
+@dataclass(frozen=True, kw_only=True)
+class WorkflowAutomaticWidget(widget.BaseWidget):
+    _state: WorkflowAutomaticWidgetState
+
+    @property
+    def value(self) -> Execution:
+        if not self._state.get("launched"):
+            wf_name = self._state.get("wf_name")
+            self._state["execution"] = launch(
+                wf_name=wf_name,
+                params=self._state.get("params"),
+                version=self._state.get("version"),
+            )
+            self._state["launched"] = True
+            _state.submit_widget_state()
+
+        return self._state["execution"]
+
+    def sample(self) -> Execution | None:
+        return self._state.get("execution")
+
+
+_emit.widget_registry[workflow_automatic_widget_type] = WorkflowAutomaticWidget
+
+
+def w_workflow_automatic(
+    *,
+    key: str | None = None,
+    label: str,
+    wf_name: str,
+    version: str | None = None,
+    params: dict[str, Any],
+) -> WorkflowAutomaticWidget:
+    key = _state.use_state_key(key=key)
+
+    res = WorkflowAutomaticWidget(
+        _key=key,
+        _state={
+            "type": workflow_automatic_widget_type,
+            "label": label,
+            "wf_name": wf_name,
+            "params": params,
+            "version": version,
+        },
+    )
+
+    _emit.emit_widget(key, res._state)
+
+    return res
