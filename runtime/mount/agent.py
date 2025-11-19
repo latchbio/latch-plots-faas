@@ -2835,10 +2835,17 @@ class AgentHarness:
 
             assert self.system_prompt is not None
 
+            # Inject dynamic state into system prompt
+            agent_config = (
+                f"\n\n<agent_config>\n"
+                f"auto_accept_edits: {str(self.auto_accept_edits).lower()}\n"
+                f"</agent_config>"
+            )
+
             system_blocks = [
                 {
                     "type": "text",
-                    "text": self.system_prompt,
+                    "text": self.system_prompt + agent_config,
                     "cache_control": {"type": "ephemeral"}
                 }
             ]
@@ -3270,14 +3277,6 @@ class AgentHarness:
 
             self.auto_accept_edits = auto_accept_edits
             print(f"[agent] Auto accept edits set to {self.auto_accept_edits}")
-
-            await self.send({
-                "type": "agent_action_response",
-                "tx_id": tx_id,
-                "status": "success",
-                "auto_accept_edits": self.auto_accept_edits,
-                "success": True,
-            })
         elif msg_type == "kernel_message":
             print(f"[agent] Kernel message: {msg}")
 

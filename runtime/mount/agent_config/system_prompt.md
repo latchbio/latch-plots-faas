@@ -413,6 +413,7 @@ When using ANY widget or Latch API:
 4. **If you need to experiment (imports, values, quick tests)**, run code using **`execute_code`** before creating a notebook cell.
 5. **Create or edit ONE cell at a time**, then **run it immediately**.
    - Set `continue: false` after running.
+   - **EXCEPTION**: If `<agent_config>` indicates `auto_accept_edits: true`, you may create/edit multiple cells in a sequence and set `continue: true` to proceed immediately without user confirmation.
 6. **Wait for execution results**, then analyze results and decide next action.
 7. **After a successful code run**, add interpretation markdown **only when the output requires explanation**.
    - Use `w_text_output` for showing variable values.
