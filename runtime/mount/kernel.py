@@ -653,19 +653,18 @@ class Kernel:
         pio.templates["graphpad_inspired_theme"] = graphpad_inspired_theme()
 
         def sigint_handler(signum: int, frame: FrameType | None) -> None:
+            if signum != signal.SIGINT:
+                return
+
             if self.active_cell_task is not None and not self.active_cell_task.done():
-                print("[kernel] SIGINT received: cancelling active cell task", file=sys.stderr)
-                # First try to cancel the task (works for async code)
                 self.active_cell_task.cancel()
-                # If we're in user code (not event loop I/O), raise KeyboardInterrupt
-                # to interrupt synchronous blocking operations
-                try:
-                    if asyncio.current_task() == self.active_cell_task:
-                        raise KeyboardInterrupt
-                except RuntimeError:
-                    pass
-            else:
-                print(f"[kernel] SIGINT received but not interrupting: active_cell={self.active_cell}, status={self.cell_status.get(self.active_cell) if self.active_cell else 'N/A'}", file=sys.stderr)
+
+                if asyncio.current_task() == self.active_cell_task:
+                    raise KeyboardInterrupt
+
+                return
+
+            print(f"[kernel] SIGINT received but not interrupting: active_cell={self.active_cell}, status={self.cell_status.get(self.active_cell) if self.active_cell else 'N/A'}", file=sys.stderr)
 
         signal.signal(signal.SIGINT, sigint_handler)
 
@@ -1245,25 +1244,14 @@ class Kernel:
             x.__name__ = filename
 
             try:
-                # Store the task so we can cancel it on SIGINT
-                self.active_cell_task = asyncio.create_task(ctx.run(x, _cell_id=cell_id, code=code))
+                self.active_cell_task = ctx.run(x, _cell_id=cell_id, code=code)
                 await self.active_cell_task
-            except asyncio.CancelledError:
-                print(f"[kernel] Cell {cell_id} was cancelled (CancelledError)", file=sys.stderr)
-                self.cell_status[cell_id] = "error"
-                await self.send_cell_result(cell_id)
-            except KeyboardInterrupt:
-                print(f"[kernel] Cell {cell_id} was interrupted (KeyboardInterrupt)", file=sys.stderr)
-                self.cell_status[cell_id] = "error"
-                await self.send_cell_result(cell_id)
             finally:
                 self.active_cell_task = None
 
         except (KeyboardInterrupt, Exception):
-            print(f"[kernel] Cell {cell_id} error in outer handler: {type(sys.exception()).__name__}", file=sys.stderr)
             self.cell_status[cell_id] = "error"
             await self.send_cell_result(cell_id)
-            self.active_cell_task = None
 
     async def send_cell_result(self, cell_id: str) -> None:
         await self.send_global_updates()
