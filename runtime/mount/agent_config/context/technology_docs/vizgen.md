@@ -216,6 +216,7 @@ params = {
 }
 w = w_workflow(
     wf_name="wf.__init__.domain_detection_wf",
+    key="domain_detection_workflow_run_1",
     version=None,
     automatic=True,
     label="Launch Domain Detection Workflow",
@@ -576,7 +577,9 @@ The **algorithm.json** file should look similar to
 
 When you use the `w_ldata_picker` widget to populate the `output_directory` or `cell_segmentation_algorithm` params, ALWAYS retrieve the LData path string by accessing the widget `.value.path` before passing to LatchFile(...) or LatchDir(...)
                      
-Use the code below as a template, that uses `w_workflow`. Always make sure you are launching the workflow with the statement `execution = w.value`, where w is the workflow. Always use the `automatic` argument or the workflow will not launch. Always make sure to wait for the workflow to complete before proceeding. This is included in the code below.
+
+Use the code below as a template, that uses w_workflow. Always use the `automatic` argument or the workflow will not launch. The workflow will launch automatically when the cell is run. Subsequent cell runs with the same key will not relaunch the workflow, so change the key to a new value if you need to relaunch the workflow.
+Finally, you need to make sure to wait for the workflow to complete before proceeding. This is included in the code below.
 
 #### Input directory to workflow
 
@@ -606,6 +609,7 @@ params = {
 
 w = w_workflow(
     wf_name="wf.__init__.vizgen_cell_segmentation_wf",
+    key="vizgen_cellsegmentation_workflow_run_1",
     version="0.0.0-c28480",
     params=params,
     automatic=True,

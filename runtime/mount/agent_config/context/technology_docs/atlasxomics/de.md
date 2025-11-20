@@ -68,6 +68,7 @@ params = {
 
 w = w_workflow(
     wf_name="wf.__init__.compare_workflow",
+    key="comparison_workflow_run_1",
     version="0.7.1-8484d6-wip-4ae938",
     params=params,
     automatic=True,

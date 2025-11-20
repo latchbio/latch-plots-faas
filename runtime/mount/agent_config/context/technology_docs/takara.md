@@ -117,7 +117,7 @@ For each sample, you must ALWAYS **provide a form using latch widgets** for the 
 
 When you use the w_ldata_picker widget to populate the `output_dir` or `sc_outdir` params, ALWAYS retrieve the LData path string by accessing the widget `.value.path` before passing to LatchFile(...) or LatchDir(...)
 
-Use the code below as a template, that uses w_workflow. Always make sure you are activating the workflow by ```execution = w.value```, where w is the workflow. Always use the `automatic` argument or the workflow will not launch.
+Use the code below as a template, that uses w_workflow. Always use the `automatic` argument or the workflow will not launch. The workflow will launch automatically when the cell is run. Subsequent cell runs with the same key will not relaunch the workflow, so change the key to a new value if you need to relaunch the workflow.
 
 Finally, you need to make sure to wait for the workflow to complete before proceeding. This is included in the code below.
 
@@ -141,6 +141,7 @@ params = {
 
 w = w_workflow(
     wf_name="wf.__init__.trekker_pipeline_wf",
+    key="trekker_workflow_run_1",
     version="0.2.3-4fdda8",
     params=params,
     automatic=True,

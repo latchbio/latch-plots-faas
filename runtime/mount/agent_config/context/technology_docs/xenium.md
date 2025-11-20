@@ -167,6 +167,7 @@ params = {
 
 w = w_workflow(
     wf_name="wf.__init__.xenium_cell_segmentation_workflow",
+    key="xenium_cell_segmentation_workflow_run_1",
     version=None,
     automatic=True,
     label="Cell Segmentation Workflow",
@@ -211,6 +212,7 @@ params = {
 
 w = w_workflow(
     wf_name="wf.__init__.domain_detection_wf",
+    key="domain_detection_workflow_run_1",
     version=None,
     automatic=True,
     label="Domain Detection Workflow",

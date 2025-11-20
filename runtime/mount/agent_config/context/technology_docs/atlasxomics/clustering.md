@@ -145,6 +145,7 @@ params = {
 
 w = w_workflow(
   wf_name="wf.__init__.opt_workflow",
+  key="clustering_workflow_run_1",
   version="0.3.5-9e16e4",
   params=params,
   automatic=True,
