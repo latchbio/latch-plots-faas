@@ -617,6 +617,7 @@ class Kernel:
     snapshot_status: KernelSnapshotStatus = "done"
 
     active_cell: str | None = None
+    active_cell_task: asyncio.Task[None] | None = None
 
     widget_signals: dict[str, Signal[Any]] = field(default_factory=dict)
     nodes_with_widgets: dict[str, Node] = field(default_factory=dict)
@@ -658,6 +659,13 @@ class Kernel:
         def sigint_handler(signum: int, frame: FrameType | None) -> None:
             if self.active_cell is not None and self.cell_status.get(self.active_cell) == "running":
                 print(f"[kernel] SIGINT received: active_cell={self.active_cell}, status={self.cell_status.get(self.active_cell) if self.active_cell else 'N/A'}", file=sys.stderr)
+
+                # Cancel the running task if it exists (handles async awaits)
+                if self.active_cell_task is not None and not self.active_cell_task.done():
+                    print("[kernel] Cancelling active cell task", file=sys.stderr)
+                    self.active_cell_task.cancel()
+
+                # Also raise KeyboardInterrupt for synchronous code
                 cell_interrupt()
             else:
                 print(f"[kernel] SIGINT received but not interrupting: active_cell={self.active_cell}, status={self.cell_status.get(self.active_cell) if self.active_cell else 'N/A'}", file=sys.stderr)
@@ -1239,11 +1247,22 @@ class Kernel:
 
             x.__name__ = filename
 
-            await ctx.run(x, _cell_id=cell_id, code=code)
+            # Store the task so we can cancel it on SIGINT
+            self.active_cell_task = asyncio.create_task(ctx.run(x, _cell_id=cell_id, code=code))
+
+            try:
+                await self.active_cell_task
+            except asyncio.CancelledError:
+                print(f"[kernel] Cell {cell_id} was cancelled", file=sys.stderr)
+                self.cell_status[cell_id] = "error"
+                await self.send_cell_result(cell_id)
+            finally:
+                self.active_cell_task = None
 
         except (KeyboardInterrupt, Exception):
             self.cell_status[cell_id] = "error"
             await self.send_cell_result(cell_id)
+            self.active_cell_task = None
 
     async def send_cell_result(self, cell_id: str) -> None:
         await self.send_global_updates()
