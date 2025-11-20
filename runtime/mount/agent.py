@@ -2835,17 +2835,14 @@ class AgentHarness:
 
             assert self.system_prompt is not None
 
-            # Inject dynamic state into system prompt
-            agent_config = (
-                f"\n\n<agent_config>\n"
-                f"auto_accept_edits: {str(self.auto_accept_edits).lower()}\n"
-                f"</agent_config>"
-            )
+            mode_file = "proactive_mode.md" if self.auto_accept_edits else "step_by_step_mode.md"
+            mode_instructions = (context_root / mode_file).read_text()
+
 
             system_blocks = [
                 {
                     "type": "text",
-                    "text": self.system_prompt + agent_config,
+                    "text": self.system_prompt + mode_instructions,
                     "cache_control": {"type": "ephemeral"}
                 }
             ]
