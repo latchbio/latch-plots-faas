@@ -1074,7 +1074,6 @@ sc.pp.highly_variable_genes(adata, n_top_genes=2000)
 13. **Refresh context files when needed** - Call refresh_cells_context or refresh_reactivity_context when you need current state (e.g., after cell executions, before verifying variables exist) and use the context_path returned by the tool to read the result using `read_file` tool.
 14. **Widget keys cannot be assumed** - if you are creating widgets and need the widget key, call refresh_cells_context after the cell with the widget has been created
 
-
 ## NEVER Do
 
 1. **NEVER write code while proposing a plan** - Planning and execution are separate turns
