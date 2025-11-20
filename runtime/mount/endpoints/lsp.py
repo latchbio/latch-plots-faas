@@ -1,8 +1,5 @@
 import asyncio
 import os
-import shutil
-import tempfile
-from pathlib import Path
 
 import orjson
 from latch_asgi.context.websocket import Context, HandlerResult
@@ -49,20 +46,12 @@ async def lsp_proxy(ctx: Context) -> HandlerResult:
     stdout_pipe = asyncio.subprocess.PIPE
     stderr_pipe = asyncio.subprocess.PIPE
 
-    tmpdir = tempfile.mkdtemp()
-    config_path = Path(tmpdir) / "pyrightconfig.json"
-    config = {
-        "pythonVersion": "3.11",
-    }
-    config_path.write_text(orjson.dumps(config).decode("utf-8"))
-
     proc = await asyncio.subprocess.create_subprocess_exec(
         "/opt/mamba/envs/plots-faas/bin/pyright-langserver",
         "--stdio",
         stdin=stdin_pipe,
         stdout=stdout_pipe,
         stderr=stderr_pipe,
-        cwd=tmpdir,
         env={"PATH": "/opt/mamba/envs/plots-faas/bin:" + os.environ["PATH"]},
     )
     stdin = proc.stdin
@@ -98,7 +87,4 @@ async def lsp_proxy(ctx: Context) -> HandlerResult:
 
     proc.kill()
     await proc.wait()
-
-    shutil.rmtree(tmpdir)
-
     return "Ok"
