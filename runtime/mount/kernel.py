@@ -1243,15 +1243,14 @@ class Kernel:
 
             x.__name__ = filename
 
-            try:
-                self.active_cell_task = asyncio.create_task(ctx.run(x, _cell_id=cell_id, code=code))
-                await self.active_cell_task
-            finally:
-                self.active_cell_task = None
+            self.active_cell_task = asyncio.create_task(ctx.run(x, _cell_id=cell_id, code=code))
+            await self.active_cell_task
 
-        except (KeyboardInterrupt, Exception):
+        except (KeyboardInterrupt, asyncio.CancelledError, Exception):
             self.cell_status[cell_id] = "error"
             await self.send_cell_result(cell_id)
+        finally:
+            self.active_cell_task = None
 
     async def send_cell_result(self, cell_id: str) -> None:
         await self.send_global_updates()
