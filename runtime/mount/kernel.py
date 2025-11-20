@@ -662,11 +662,13 @@ class Kernel:
 
                 # Cancel the running task if it exists (handles async awaits)
                 if self.active_cell_task is not None and not self.active_cell_task.done():
-                    print("[kernel] Cancelling active cell task", file=sys.stderr)
+                    print("[kernel] Cancelling active cell task (async)", file=sys.stderr)
                     self.active_cell_task.cancel()
-
-                # Also raise KeyboardInterrupt for synchronous code
-                cell_interrupt()
+                else:
+                    # Only raise KeyboardInterrupt if there's no async task to cancel
+                    # (for synchronous blocking code like time.sleep)
+                    print("[kernel] Raising KeyboardInterrupt (sync)", file=sys.stderr)
+                    cell_interrupt()
             else:
                 print(f"[kernel] SIGINT received but not interrupting: active_cell={self.active_cell}, status={self.cell_status.get(self.active_cell) if self.active_cell else 'N/A'}", file=sys.stderr)
 
