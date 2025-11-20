@@ -655,13 +655,14 @@ class Kernel:
         self.k_globals.clear()
         pio.templates["graphpad_inspired_theme"] = graphpad_inspired_theme()
 
-        signal.signal(
-            signal.SIGINT,
-            lambda signum, frame: cell_interrupt()
-            if self.active_cell is not None
-            and self.cell_status[self.active_cell] == "running"
-            else None,
-        )
+        def sigint_handler(signum: int, frame: FrameType | None) -> None:
+            if self.active_cell is not None and self.cell_status.get(self.active_cell) == "running":
+                print(f"[kernel] SIGINT received: active_cell={self.active_cell}, status={self.cell_status.get(self.active_cell) if self.active_cell else 'N/A'}", file=sys.stderr)
+                cell_interrupt()
+            else:
+                print(f"[kernel] SIGINT received but not interrupting: active_cell={self.active_cell}, status={self.cell_status.get(self.active_cell) if self.active_cell else 'N/A'}", file=sys.stderr)
+
+        signal.signal(signal.SIGINT, sigint_handler)
 
     def debug_state(self) -> dict[str, object]:
         return {
