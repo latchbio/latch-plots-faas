@@ -17,7 +17,6 @@ class WorkflowWidgetState(_emit.WidgetState[workflow_widget_type, str]):
     version: str | None
     automatic: bool
     execution: NotRequired[Execution]
-    launched: NotRequired[bool]
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -71,13 +70,12 @@ def w_workflow(
         },
     )
 
-    if automatic and not res._state.get("launched"):
+    if automatic and res._state.get("execution") is None:
         res._state["execution"] = launch(
             wf_name=wf_name,
             params=params,
             version=version,
         )
-        res._state["launched"] = True
 
     _emit.emit_widget(key, res._state)
 
