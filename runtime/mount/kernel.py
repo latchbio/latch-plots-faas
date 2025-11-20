@@ -646,8 +646,6 @@ class Kernel:
     restored_signals: dict[str, Signal[object]] = field(default_factory=dict)
     restored_globals: dict[str, object] = field(default_factory=dict)
 
-    in_synchronous_eval: bool = False
-
     def __post_init__(self) -> None:
         self.k_globals = TracedDict(self.duckdb)
         self.k_globals["exit"] = cell_exit
@@ -661,8 +659,11 @@ class Kernel:
                 self.active_cell_task.cancel()
                 # If we're in user code (not event loop I/O), raise KeyboardInterrupt
                 # to interrupt synchronous blocking operations
-                if self.in_synchronous_eval:
-                    raise KeyboardInterrupt
+                try:
+                    if asyncio.current_task() == self.active_cell_task:
+                        raise KeyboardInterrupt
+                except RuntimeError:
+                    pass
             else:
                 print(f"[kernel] SIGINT received but not interrupting: active_cell={self.active_cell}, status={self.cell_status.get(self.active_cell) if self.active_cell else 'N/A'}", file=sys.stderr)
 
@@ -1146,23 +1147,18 @@ class Kernel:
         try:
             async with ctx.transaction:
                 with redirect_stdout(stdout_capture), redirect_stderr(stderr_capture):
-                    try:
-                        self.in_synchronous_eval = True
-                        result_value = eval(  # noqa: S307
-                            compile(
-                                code,
-                                filename=filename,
-                                mode="exec",
-                                flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT,
-                            ),
-                            self.k_globals
-                        )
+                    result_value = eval(  # noqa: S307
+                        compile(
+                            code,
+                            filename=filename,
+                            mode="exec",
+                            flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT,
+                        ),
+                        self.k_globals
+                    )
 
-                        if asyncio.iscoroutine(result_value):
-                            self.in_synchronous_eval = False
-                            result_value = await result_value
-                    finally:
-                        self.in_synchronous_eval = False
+                    if asyncio.iscoroutine(result_value):
+                        result_value = await result_value
         except Exception as e:
             exception_msg = traceback.format_exc()
             error_msg = str(e)
@@ -1221,7 +1217,6 @@ class Kernel:
                     self.k_globals.clear()
 
                     try:
-                        self.in_synchronous_eval = True
                         res = eval(  # noqa: S307
                             compile(
                                 parsed,
@@ -1232,12 +1227,9 @@ class Kernel:
                             self.k_globals,
                         )
                         if asyncio.iscoroutine(res):
-                            self.in_synchronous_eval = False
                             res = await res
                     except ExitException:
                         ...
-                    finally:
-                        self.in_synchronous_eval = False
 
                     self.cell_status[cell_id] = "ok"
                     await self.send_cell_result(cell_id)
