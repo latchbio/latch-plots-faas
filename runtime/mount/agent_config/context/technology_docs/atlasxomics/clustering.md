@@ -54,7 +54,7 @@
 - `pt_size` (int or None): Point size for spatial plots
 - `qc_pt_size` (int or None): Point size for QC plots
 
-### Implementation Template
+### Implementation Template for Collecting User Inputs
 ```python
 from dataclasses import dataclass
 from latch.types import LatchFile, LatchDir
@@ -121,7 +121,11 @@ resolution = w_text_input(label="Resolution(s)", default="0.5")
 
 def to_list_of_floats(text: str):
     return [float(x.strip()) for x in text.split(",") if x.strip()]
+```
 
+### Implementation Template for Launching the Workflow and Waiting for it to Complete
+
+```python
 params = {
      "runs": runs, 
      "adata_subsetted_file": LatchFile("latch:///adata_subset.h5ad"),  # optional
@@ -143,10 +147,20 @@ w = w_workflow(
   wf_name="wf.__init__.opt_workflow",
   version="0.3.5-9e16e4",
   params=params,
+  automatic=True,
   label="Run clustering workflow",
 )
 
 execution = w.value
+
+if execution is not None:
+    next(execution.poll())
+    
+    if execution.status in {"SUCCEEDED", "FAILED", "ABORTED"}:
+        result = await execution.wait()
+        workflow_outputs = list(result.output.values())
+    else:
+        print(f"Execution {execution.status}")
 ```
 
 ---

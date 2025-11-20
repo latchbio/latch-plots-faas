@@ -168,10 +168,20 @@ params = {
 w = w_workflow(
     wf_name="wf.__init__.xenium_cell_segmentation_workflow",
     version=None,
-    label="Launch Cell Segmentation Workflow",
+    automatic=True,
+    label="Cell Segmentation Workflow",
     params=params
 )
 execution = w.value
+
+if execution is not None:
+    next(execution.poll())
+    
+    if execution.status in {"SUCCEEDED", "FAILED", "ABORTED"}:
+        result = await execution.wait()
+        workflow_outputs = list(result.output.values())
+    else:
+        print(f"Execution {execution.status}")
 ```
 
 ---
@@ -204,9 +214,19 @@ params = {
 w = w_workflow(
     wf_name="wf.__init__.domain_detection_wf",
     version=None,
-    label="Launch Domain Detection Workflow",
+    automatic=True,
+    label="Domain Detection Workflow",
     params=params,
 )
 execution = w.value
+
+if execution is not None:
+    next(execution.poll())
+    
+    if execution.status in {"SUCCEEDED", "FAILED", "ABORTED"}:
+        result = await execution.wait()
+        workflow_outputs = list(result.output.values())
+    else:
+        print(f"Execution {execution.status}")
 ```
 

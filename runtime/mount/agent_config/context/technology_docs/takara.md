@@ -117,9 +117,9 @@ For each sample, you must ALWAYS **provide a form using latch widgets** for the 
 
 When you use the w_ldata_picker widget to populate the `output_dir` or `sc_outdir` params, ALWAYS retrieve the LData path string by accessing the widget `.value.path` before passing to LatchFile(...) or LatchDir(...)
 
-Use the code below as a template, that uses w_workflow. The code will generate a “Launch” button. Always make sure you are activating the workflow by ```execution = w.value```, where w is the workflow.
+Use the code below as a template, that uses w_workflow. Always make sure you are activating the workflow by ```execution = w.value```, where w is the workflow. Always use the `automatic` argument or the workflow will not launch.
 
-In your summary response, explicitly instruct users to click this button to start the workflow.
+Finally, you need to make sure to wait for the workflow to complete before proceeding. This is included in the code below.
 
 #### Example Implementation
 
@@ -143,7 +143,17 @@ w = w_workflow(
     wf_name="wf.__init__.trekker_pipeline_wf",
     version="0.2.3-4fdda8",
     params=params,
-    label="Run Trekker workflow",
+    automatic=True,
+    label="Trekker workflow",
 )
 execution = w.value
+
+if execution is not None:
+    next(execution.poll())
+    
+    if execution.status in {"SUCCEEDED", "FAILED", "ABORTED"}:
+        result = await execution.wait()
+        workflow_outputs = list(result.output.values())
+    else:
+        print(f"Execution {execution.status}")
 ```

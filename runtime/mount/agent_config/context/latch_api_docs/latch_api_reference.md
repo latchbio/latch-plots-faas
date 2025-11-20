@@ -694,6 +694,7 @@ submit_widget_state()
 - `label` (str, required): Button label
 - `wf_name` (str, required): Name of the workflow to execute
 - `params` (dict, required): Dictionary of input parameters
+- `automatic` (bool, required): Launch workflow automatically. Should always be True.
 - `version` (str, optional): Workflow version; defaults to latest
 - `readonly` (bool, optional): Disable button if True. Default: False
 - `key` (str, optional): Unique widget identifier
@@ -706,6 +707,7 @@ from lplots.widgets.workflow import w_workflow
 
 workflow = w_workflow(
     label="Run Analysis",
+    automatic=True,
     wf_name="my_analysis_workflow",
     params={
         "input_file": "latch://workspace/data/sample.fastq",
@@ -717,7 +719,6 @@ workflow = w_workflow(
 execution = workflow.value
 
 if execution is not None:
-    # Poll for latest results first
     next(execution.poll())
     
     if execution.status in {"SUCCEEDED", "FAILED", "ABORTED"}:
