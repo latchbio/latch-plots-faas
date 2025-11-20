@@ -70,13 +70,14 @@ def w_workflow(
         },
     )
 
+    _emit.emit_widget(key, res._state)
+
     if automatic and res._state.get("execution") is None:
         res._state["execution"] = launch(
             wf_name=wf_name,
             params=params,
             version=version,
         )
-
-    _emit.emit_widget(key, res._state)
+        _state.submit_widget_state()
 
     return res
