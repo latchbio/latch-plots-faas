@@ -253,10 +253,6 @@ def cell_exit(code: int = 0) -> None:
     raise ExitException
 
 
-def cell_interrupt(code: int = 0) -> None:
-    raise KeyboardInterrupt
-
-
 leading_digits_and_dash = re.compile(r"^\d+-")
 
 
@@ -661,7 +657,7 @@ class Kernel:
         def sigint_handler(signum: int, frame: FrameType | None) -> None:
             if self.active_cell_task is not None and not self.active_cell_task.done():
                 print("[kernel] SIGINT received: cancelling active cell task", file=sys.stderr)
-                cell_interrupt()
+                self.active_cell_task.cancel()
             else:
                 print(f"[kernel] SIGINT received but not interrupting: active_cell={self.active_cell}, status={self.cell_status.get(self.active_cell) if self.active_cell else 'N/A'}", file=sys.stderr)
 
