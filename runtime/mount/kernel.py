@@ -660,13 +660,18 @@ class Kernel:
             if self.active_cell is not None and self.cell_status.get(self.active_cell) == "running":
                 print(f"[kernel] SIGINT received: active_cell={self.active_cell}, status={self.cell_status.get(self.active_cell) if self.active_cell else 'N/A'}", file=sys.stderr)
 
-                # Cancel the task (for async code)
+                # Cancel the task (handles async code and will eventually reach sync code)
                 if self.active_cell_task is not None and not self.active_cell_task.done():
                     print("[kernel] Cancelling active cell task", file=sys.stderr)
-                    self.active_cell_task.cancel()
+                    # Schedule cancellation on the event loop to avoid race conditions
+                    if loop is not None:
+                        loop.call_soon_threadsafe(self.active_cell_task.cancel)
+                    else:
+                        self.active_cell_task.cancel()
 
-                # Always raise KeyboardInterrupt to handle synchronous blocking code
-                # Task cancellation alone won't interrupt sync operations like time.sleep()
+                # Also raise KeyboardInterrupt to interrupt synchronous blocking code
+                # The main loop will catch this to prevent kernel crashes
+                print("[kernel] Raising KeyboardInterrupt for sync code", file=sys.stderr)
                 cell_interrupt()
             else:
                 print(f"[kernel] SIGINT received but not interrupting: active_cell={self.active_cell}, status={self.cell_status.get(self.active_cell) if self.active_cell else 'N/A'}", file=sys.stderr)
@@ -2073,6 +2078,11 @@ async def main() -> None:
         while not shutdown_requested:
             try:
                 await k.accept()
+            except KeyboardInterrupt:
+                # KeyboardInterrupt from signal handler - don't crash the kernel
+                # The cell execution will handle the interruption via task cancellation
+                print("[kernel] KeyboardInterrupt in main loop, continuing...", file=sys.stderr)
+                continue
             except Exception:
                 traceback.print_exc()
                 continue
