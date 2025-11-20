@@ -613,7 +613,7 @@ class Kernel:
     snapshot_status: KernelSnapshotStatus = "done"
 
     active_cell: str | None = None
-    active_cell_task: asyncio.Task[None] | None = None
+    active_cell_task: asyncio.Task[Any] | None = None
 
     widget_signals: dict[str, Signal[Any]] = field(default_factory=dict)
     nodes_with_widgets: dict[str, Node] = field(default_factory=dict)
@@ -1244,7 +1244,7 @@ class Kernel:
             x.__name__ = filename
 
             try:
-                self.active_cell_task = ctx.run(x, _cell_id=cell_id, code=code)
+                self.active_cell_task = asyncio.create_task(ctx.run(x, _cell_id=cell_id, code=code))
                 await self.active_cell_task
             finally:
                 self.active_cell_task = None
