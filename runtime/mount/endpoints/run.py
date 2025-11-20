@@ -198,12 +198,8 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
                 cell_last_run_outputs.pop(cell_id, None)
                 cell_sequencers.pop(cell_id, None)
 
-            if msg["type"] == "stop_cell":
-                if k_proc.proc is not None:
-                    print(f"[run] Sending SIGINT to kernel process (pid={k_proc.proc.pid})")
-                    k_proc.proc.send_signal(signal.SIGINT)
-                else:
-                    print("[run] Cannot stop cell: kernel process is None")
+            if msg["type"] == "stop_cell" and k_proc.proc is not None:
+                k_proc.proc.send_signal(signal=signal.SIGINT)
                 continue
 
             if msg["type"] == "override_session_owner":
