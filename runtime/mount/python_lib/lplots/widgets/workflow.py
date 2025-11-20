@@ -27,18 +27,7 @@ class WorkflowWidget(widget.BaseWidget):
 
     @property
     def value(self) -> Execution | None:
-        automatic = self._state.get("automatic")
-
-        if automatic:
-            if not self._state.get("launched"):
-                self._state["execution"] = launch(
-                    wf_name=self._state.get("wf_name"),
-                    params=self._state.get("params"),
-                    version=self._state.get("version"),
-                )
-                self._state["launched"] = True
-                _state.submit_widget_state()
-        elif self._button is not None and self._button.value:
+        if not self._state.get("automatic") and self._button is not None and self._button.value:
             self._state["execution"] = launch(
                 wf_name=self._state.get("wf_name"),
                 params=self._state.get("params"),
@@ -81,6 +70,14 @@ def w_workflow(
             "automatic": automatic,
         },
     )
+
+    if automatic and not res._state.get("launched"):
+        res._state["execution"] = launch(
+            wf_name=wf_name,
+            params=params,
+            version=version,
+        )
+        res._state["launched"] = True
 
     _emit.emit_widget(key, res._state)
 
