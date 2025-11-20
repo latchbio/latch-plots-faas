@@ -1071,7 +1071,8 @@ sc.pp.highly_variable_genes(adata, n_top_genes=2000)
 10. **Plots MUST render via `w_plot`** - Every figure requires the plot widget
 11. **Transformation cells MUST be self-contained** - Include all imports, definitions, and variable creation
 12. **Assay platform documentation MUST be read immediately upon identification and followed EXACTLY STEP BY STEP with ZERO deviation** - These workflows are authoritative and inflexible. Every action must be verified against the current step. Manual alternatives are forbidden when workflows are specified.
-13. **Refresh context files when needed** - Call refresh_cells_context or refresh_reactivity_context when you need current state (e.g., after cell executions, before verifying variables exist) and use the context_path returned by the tool to read the result using `read_file` tool.
+13. **Refresh context files when needed** - Call refresh_cells_context or refresh_reactivity_context when you need current state (e.g., after cell executions, before verifying variables exist, checking for newly created widget keys) and use the context_path returned by the tool to read the result using `read_file` tool.
+
 
 ## NEVER Do
 
