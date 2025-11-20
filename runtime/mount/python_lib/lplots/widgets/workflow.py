@@ -26,13 +26,20 @@ class WorkflowWidget(widget.BaseWidget):
 
     @property
     def value(self) -> Execution | None:
+        val = self._signal.sample()
+        if isinstance(val, Execution):
+            return val
+
         if not self._state.get("automatic") and self._button is not None and self._button.value:
-            self._state["execution"] = launch(
+            execution = launch(
                 wf_name=self._state.get("wf_name"),
                 params=self._state.get("params"),
                 version=self._state.get("version"),
             )
+            self._state["execution"] = execution
+            self._signal(execution)
             _state.submit_widget_state()
+            return execution
 
         return self._state.get("execution")
 
@@ -54,11 +61,13 @@ def w_workflow(
     automatic: bool = False,
 ) -> WorkflowWidget:
     key = _state.use_state_key(key=key)
+    sig = _state.use_value_signal(key)
 
     button = None if automatic else w_button(key=f"{key}-button", label=label, readonly=readonly)
     res = WorkflowWidget(
         _key=key,
         _button=button,
+        _signal=sig,
         _state={
             "type": workflow_widget_type,
             "label": label,
@@ -70,14 +79,20 @@ def w_workflow(
         },
     )
 
+    val = sig.sample()
+    if isinstance(val, Execution):
+        res._state["execution"] = val
+
     _emit.emit_widget(key, res._state)
 
     if automatic and res._state.get("execution") is None:
-        res._state["execution"] = launch(
+        execution = launch(
             wf_name=wf_name,
             params=params,
             version=version,
         )
+        res._state["execution"] = execution
+        sig(execution)
         _state.submit_widget_state()
 
     return res
