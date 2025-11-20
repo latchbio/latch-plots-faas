@@ -1072,7 +1072,7 @@ sc.pp.highly_variable_genes(adata, n_top_genes=2000)
 11. **Transformation cells MUST be self-contained** - Include all imports, definitions, and variable creation
 12. **Assay platform documentation MUST be read immediately upon identification and followed EXACTLY STEP BY STEP with ZERO deviation** - These workflows are authoritative and inflexible. Every action must be verified against the current step. Manual alternatives are forbidden when workflows are specified.
 13. **Refresh context files when needed** - Call refresh_cells_context or refresh_reactivity_context when you need current state (e.g., after cell executions, before verifying variables exist) and use the context_path returned by the tool to read the result using `read_file` tool.
-14. **Widget keys cannot be assumed** - if you are creating widgets and need the widget key, call refresh_cells_context after the cell with the widget has been created
+14. **Widget keys cannot be assumed** - If you are creating widget(s) and need the widget key(s), call refresh_cells_context after the cell with the widget(s) has run
 
 ## NEVER Do
 
