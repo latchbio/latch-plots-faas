@@ -592,8 +592,7 @@ class AgentHarness:
             if result.get("status") == "success":
                 cell_id = result.get("cell_id", "unknown")
                 tf_id = result.get("tf_id", "unknown")
-                msg = f"Created cell at position {position} (cell_id: {cell_id}, tf_id: {tf_id}, Title: {title})"
-                
+                msg = f"Created cell at position {position} (cell_id: {cell_id}, tf_id: {tf_id}, title: {title})"
                 print(f"[tool] create_cell -> {msg}")  
                 return {
                     "tool_name": "create_cell",
