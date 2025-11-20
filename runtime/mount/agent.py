@@ -635,11 +635,7 @@ class AgentHarness:
             result = await self.atomic_operation("create_markdown_cell", params)
             if result.get("status") == "success":
                 cell_id = result.get("cell_id", "unknown")
-                tf_id = result.get("tf_id")
-
                 msg = f"Created markdown cell at position {position} (ID: {cell_id})"
-                if tf_id:
-                    msg += f", TF_ID: {tf_id}"
 
                 print(f"[tool] create_markdown_cell -> {msg}")
                 return {
@@ -647,7 +643,6 @@ class AgentHarness:
                     "summary": msg,
                     "code": code,
                     "cell_id": cell_id,
-                    "tf_id": tf_id,
                     "cell_name": title,
                     "position": position,
                     "message": action_summary,
