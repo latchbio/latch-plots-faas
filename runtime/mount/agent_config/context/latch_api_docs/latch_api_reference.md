@@ -719,13 +719,11 @@ workflow = w_workflow(
 execution = workflow.value
 
 if execution is not None:
-    next(execution.poll())
-    
-    if execution.status in {"SUCCEEDED", "FAILED", "ABORTED"}:
-        result = await execution.wait()
-        workflow_outputs = list(result.output.values())
-    else:
-        print(f"Execution {execution.status}")
+  res = await execution.wait()
+
+  if res is not None and res.status in {"SUCCEEDED", "FAILED", "ABORTED"}:
+      # inspect workflow outputs for downstream analysis
+      workflow_outputs = list(res.output.values())
 ```
 
 ---
