@@ -71,7 +71,7 @@ class AgentHarness:
     latest_notebook_context: dict = field(default_factory=dict)
     current_status: str | None = None
     expected_widgets: dict[str, object | None] = field(default_factory=dict)
-    proactive_behavior_enabled: bool = False
+    proactive_behavior_enabled: bool | None = None
 
     mode_config: dict[Mode, tuple[str, int | None]] = field(default_factory=lambda: {
         Mode.planning: ("claude-sonnet-4-5-20250929", 4096),
