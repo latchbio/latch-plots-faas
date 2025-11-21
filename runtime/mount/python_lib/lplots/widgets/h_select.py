@@ -47,7 +47,7 @@ class HSelect(widget.BaseWidget):
             else:
                 all_options.add(cur)
 
-        return {x for x in val if x in self._state["options"]}
+        return {x for x in val if x in all_options}
 
     @property
     def value(self) -> set[str | int | float | bool | datetime] | None:
