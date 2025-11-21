@@ -2527,6 +2527,15 @@ class AgentHarness:
 
             current_tab_name = default_tab_name
 
+            reactivity_result = await self.atomic_operation("request_reactivity_summary")
+            reactivity_error = None
+            cell_reactivity: dict[str, dict[str, object]] = {}
+
+            if reactivity_result.get("status") == "success":
+                cell_reactivity = reactivity_result.get("cell_reactivity", {}) or {}
+            else:
+                reactivity_error = reactivity_result.get("error", "Unknown error")
+
             for cell in cells:
                 index = cell.get("index", "?")
                 cell_id = cell.get("cell_id", "?")
@@ -2572,43 +2581,41 @@ class AgentHarness:
                         w_label = w.get("label", "")
                         cell_lines.append(f"- WIDGET: {w_type} | {w_label} | {w_key}")
 
-            reactivity_result = await self.atomic_operation("request_reactivity_summary")
-            reactivity_summary_text = None
-            reactivity_error = None
+                reactivity_meta = cell_reactivity.get(cell_id)
+                if reactivity_meta is not None:
+                    signals_defined = reactivity_meta.get("signals_defined") or []
+                    depends_on_signals = reactivity_meta.get("depends_on_signals") or []
+                    depends_on_cells = reactivity_meta.get("depends_on_cells") or []
 
-            if reactivity_result.get("status") == "success":
-                reactivity_summary_text = reactivity_result.get("summary")
-            else:
-                reactivity_error = reactivity_result.get("error", "Unknown error")
-
-            if not reactivity_summary_text:
-                if reactivity_error:
-                    reactivity_summary_text = (
-                        "# Reactivity Summary\n\n"
-                        f"Failed to retrieve reactivity information: {reactivity_error}"
+                    cell_lines.append("\nREACTIVITY:")
+                    cell_lines.append(
+                        "- Signals defined: "
+                        + (", ".join(signals_defined) if signals_defined else "None")
                     )
-                else:
-                    reactivity_summary_text = (
-                        "# Reactivity Summary\n\nNo reactive dependencies in this notebook.\n"
+                    cell_lines.append(
+                        "- Depends on signals: "
+                        + (", ".join(depends_on_signals) if depends_on_signals else "None")
                     )
-
-            cell_lines.extend([
-                "",
-                "# Reactivity Context",
-                "",
-                reactivity_summary_text,
-            ])
+                    cell_lines.append(
+                        "- Depends on cells: "
+                        + (", ".join(depends_on_cells) if depends_on_cells else "None")
+                    )
+                elif reactivity_error is not None:
+                    cell_lines.append("\nREACTIVITY:")
+                    cell_lines.append(
+                        f"- Unable to load reactivity information: {reactivity_error}"
+                    )
 
             context_dir = context_root / "notebook_context"
             context_dir.mkdir(parents=True, exist_ok=True)
             (context_dir / "cells.md").write_text("\n".join(cell_lines))
 
             summary_msg = (
-                f"Refreshed cells and reactivity context for {cell_count} cells "
+                f"Refreshed cells context with per-cell reactivity info for {cell_count} cells "
                 "and stored result in notebook_context/cells.md"
             )
             if reactivity_error:
-                summary_msg += f" (reactivity summary unavailable: {reactivity_error})"
+                summary_msg += f" (reactivity data unavailable: {reactivity_error})"
 
             return {
                 "tool_name": "refresh_cells_context",

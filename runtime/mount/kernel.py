@@ -1584,7 +1584,7 @@ class Kernel:
 
         await self.send(msg)
 
-    def get_reactivity_summary(self) -> str:
+    def get_reactivity_summary(self) -> tuple[str, dict[str, dict[str, list[str]]]]:
         signal_id_to_name: dict[str, str] = {}
         global_signal_ids: set[str] = set()
         widget_signal_ids: set[str] = set()
@@ -1621,6 +1621,8 @@ class Kernel:
             collect_all_signals(node)
 
         cell_dependencies: dict[str, set[str]] = {}
+        signal_producers: dict[str, str] = {}
+        cell_signal_definitions: dict[str, list[str]] = {}
 
         def traverse_node(n: Node, deps_set: set[str]) -> None:
             deps_set.update(n.signals)
@@ -1633,6 +1635,15 @@ class Kernel:
 
             traverse_node(node, deps)
             cell_dependencies[cell_id] = deps
+
+            defined_signals: list[str] = []
+            for sig_id, sig in node.signals.items():
+                if sig is None:
+                    continue
+                signal_producers[sig_id] = cell_id
+                sig_name = signal_id_to_name.get(sig_id, sig._name)
+                defined_signals.append(sig_name)
+            cell_signal_definitions[cell_id] = sorted(set(defined_signals))
 
         summary_lines: list[str] = []
         summary_lines += [
@@ -1683,12 +1694,39 @@ class Kernel:
             else:
                 summary_lines.append(f"- **Cell {cell_id}** has no signal dependencies")
 
-        return "\n".join(summary_lines)
+        cell_reactivity: dict[str, dict[str, list[str]]] = {}
+        for cell_id in self.cell_rnodes.keys():
+            defined = cell_signal_definitions.get(cell_id, [])
+            dep_signal_ids = cell_dependencies.get(cell_id, set())
+            dep_signal_names = sorted(
+                {
+                    signal_id_to_name.get(sig_id, f"<unknown-{sig_id[:8]}>")
+                    for sig_id in dep_signal_ids
+                }
+            )
+            dep_cells = sorted(
+                {
+                    producer
+                    for sig_id in dep_signal_ids
+                    if (producer := signal_producers.get(sig_id))
+                }
+            )
+            cell_reactivity[cell_id] = {
+                "signals_defined": defined,
+                "depends_on_signals": dep_signal_names,
+                "depends_on_cells": dep_cells,
+            }
+
+        return "\n".join(summary_lines), cell_reactivity
 
     async def send_reactivity_summary(self, agent_tx_id: str | None = None) -> None:
-        summary_text = self.get_reactivity_summary()
+        summary_text, cell_reactivity = self.get_reactivity_summary()
 
-        msg = {"type": "reactivity_summary", "summary": summary_text}
+        msg = {
+            "type": "reactivity_summary",
+            "summary": summary_text,
+            "cell_reactivity": cell_reactivity,
+        }
         if agent_tx_id is not None:
             msg["agent_tx_id"] = agent_tx_id
 

@@ -705,7 +705,7 @@ Use this tool to refresh notebook state files before reading them.
 
 ## Context Files (Refresh On-Demand)
 
-The notebook state—including reactivity information—is persisted in `cells.md`. This file is initialized when you start but is NOT automatically updated; you must explicitly refresh it when needed.
+The notebook state—including per-cell reactivity details—is persisted in `cells.md`. You must explicitly refresh it when needed.
 
 ### cells.md
 
@@ -717,20 +717,20 @@ The notebook state—including reactivity information—is persisted in `cells.m
 - After creating cells to see updated structure
 - Looking for specific code or widget locations
 - Checking cell execution status
-- Inspecting the appended reactivity summary before reasoning about signal dependencies
+- Creating or reasoning about reactive relationships between cells/signals
 
 **Refresh tool:** `refresh_cells_context`
 
 - Returns updated cell count
 - Returns context path to read result from
-- Writes latest cell structure, widget metadata, and reactivity summary to `cells.md`
+- Writes latest cell structure and, for every cell, the signals it defines and the signals/cells it depends on
 
 **Search with grep:**
 
 - Find by ID: `grep "CELL_ID: abc123" notebook_context/cells.md`
 - Find by code: `grep "import pandas" notebook_context/cells.md`
 
-**Format:** Cell metadata on separate lines (CELL_ID, CELL_INDEX, TYPE, STATUS), code between `CODE_START/CODE_END` markers, and a trailing `# Reactivity Context` section containing the latest dependency summary. Spacing between cells is consistent; scroll carefully when editing large cells.
+**Format:** Cell metadata on separate lines (CELL_ID, CELL_INDEX, TYPE, STATUS), code between `CODE_START/CODE_END` markers, followed by a `REACTIVITY` subsection summarizing defined signals and dependencies. Spacing between cells is consistent; scroll carefully when editing large cells.
 
 ### Refresh Strategy
 
@@ -739,7 +739,7 @@ The notebook state—including reactivity information—is persisted in `cells.m
 **Refresh selectively:**
 
 - Refresh cells before inspecting/modifying notebook structure
-- Refresh whenever you need the reactivity summary to reason about signals
+- Refresh whenever you need the up-to-date per-cell reactivity information to reason about signals
 
 ### Creating Custom Files
 
