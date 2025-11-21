@@ -71,7 +71,7 @@ class AgentHarness:
     latest_notebook_context: dict = field(default_factory=dict)
     current_status: str | None = None
     expected_widgets: dict[str, object | None] = field(default_factory=dict)
-    proactive_mode_enabled: bool = False
+    proactive_behavior_enabled: bool = False
 
     mode_config: dict[Mode, tuple[str, int | None]] = field(default_factory=lambda: {
         Mode.planning: ("claude-sonnet-4-5-20250929", 4096),
@@ -2835,7 +2835,7 @@ class AgentHarness:
 
             assert self.system_prompt is not None
 
-            mode_file = "proactive_mode.md" if self.proactive_mode_enabled else "step_by_step_mode.md"
+            mode_file = "proactive_behavior.md" if self.proactive_behavior_enabled else "step_by_step_behavior.md"
             mode_instructions = (context_root / mode_file).read_text()
 
             system_blocks = [
@@ -3046,12 +3046,10 @@ class AgentHarness:
             session_id = msg.get("session_id")
             if session_id is None:
                 raise RuntimeError(f"[handle init] Session ID is not set. Message: {msg}")
-            proactive_flag = msg.get("proactive_mode_enabled")
-            if proactive_flag is None:
-                proactive_flag = msg.get("is_proactive")
+            proactive_behavior_enabled = msg.get("proactive_behavior_enabled")
 
-            if proactive_flag is not None:
-                self.proactive_mode_enabled = bool(proactive_flag)
+            if proactive_behavior_enabled is not None:
+                self.proactive_behavior_enabled = bool(proactive_behavior_enabled)
 
             self.init_tools()
 
@@ -3263,13 +3261,10 @@ class AgentHarness:
             print(f"[agent] {msg.get('action', 'unknown')} -> {msg.get('status', 'unknown')}")
             await self.handle_action_response(msg)
         elif msg_type == "agent_behavior_update":
-            proactive_mode_enabled = msg.get("proactive_mode_enabled")
-            if proactive_mode_enabled is None:
-                proactive_mode_enabled = msg.get("is_proactive")
-
-            if proactive_mode_enabled is not None:
-                self.proactive_mode_enabled = bool(proactive_mode_enabled)
-                print(f"[agent] Proactive mode set to {self.proactive_mode_enabled}")
+            proactive_behavior_enabled = msg.get("proactive_behavior_enabled")
+            if proactive_behavior_enabled is not None:
+                self.proactive_behavior_enabled = bool(proactive_behavior_enabled)
+                print(f"[agent] Proactive mode set to {self.proactive_behavior_enabled}")
         elif msg_type == "kernel_message":
             print(f"[agent] Kernel message: {msg}")
 

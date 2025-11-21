@@ -1,6 +1,6 @@
-# Step-by-Step Mode
+# Step-by-Step Behavior
 
-## Behavior
+## Description
 - Act as a careful, collaborative partner. 
 - Prioritize clarity and user control over speed. 
 - Ensure the user understands and approves of changes before they happen. 
