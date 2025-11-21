@@ -3047,8 +3047,11 @@ class AgentHarness:
             session_id = msg.get("session_id")
             if session_id is None:
                 raise RuntimeError(f"[handle init] Session ID is not set. Message: {msg}")
-
             self.agent_session_id = int(session_id)
+
+            auto_accept_edits = msg.get("auto_accept_edits")
+            if auto_accept_edits is not None:
+                self.auto_accept_edits = bool(auto_accept_edits)
 
             self.init_tools()
 
