@@ -1832,12 +1832,15 @@ class Kernel:
             return
 
         if msg["type"] == "reset_kernel_globals":
-            keys_to_delete = [
-                k for k in self.k_globals.keys()
-                if k not in {"__builtins__", "exit"}
-            ]
-            for key in keys_to_delete:
-                del self.k_globals[key]
+            builtins = self.k_globals.get("__builtins__")
+            exit_fn = self.k_globals.get("exit")
+
+            dict.clear(self.k_globals)
+
+            if builtins is not None:
+                self.k_globals["__builtins__"] = builtins
+            if exit_fn is not None:
+                self.k_globals["exit"] = exit_fn
 
             self.k_globals.clear()
 
