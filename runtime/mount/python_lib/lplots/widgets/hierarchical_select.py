@@ -7,29 +7,29 @@ from ..reactive import Signal
 from . import _emit, _state, widget
 from .shared import FormInputAppearance
 
-h_select_widget_type: Literal["h_select"] = "h_select"
+hierarchical_select_widget_type: Literal["hierarchical_select"] = "hierarchical_select"
 
 
-class HSelectOptionCategory(TypedDict):
+class HierarchicalSelectOptionCategory(TypedDict):
     title: str
-    children: "list[HSelectOption]"
+    children: "list[HierarchicalSelectOption]"
 
 
-HSelectOption: TypeAlias = str | int | float | bool | datetime | HSelectOptionCategory
+HierarchicalSelectOption: TypeAlias = str | int | float | bool | datetime | HierarchicalSelectOptionCategory
 
 
-class HSelectState(_emit.WidgetState[h_select_widget_type, str]):
+class HierarchicalSelectState(_emit.WidgetState[hierarchical_select_widget_type, str]):
     label: str
     readonly: bool
-    options: list[HSelectOption]
+    options: list[HierarchicalSelectOption]
     default: NotRequired[set[str | int | float | bool | datetime] | None]
     appearance: NotRequired[FormInputAppearance | None]
 
 
 @dataclass(frozen=True, kw_only=True)
-class HSelect(widget.BaseWidget):
+class HierarchicalSelect(widget.BaseWidget):
     _key: str
-    _state: HSelectState
+    _state: HierarchicalSelectState
     _signal: Signal[object]
 
     def _value(self, val: object) -> set[str | int | float | bool | datetime] | None:
@@ -59,24 +59,24 @@ class HSelect(widget.BaseWidget):
         return self._value(res)
 
 
-_emit.widget_registry[h_select_widget_type] = HSelect
+_emit.widget_registry[hierarchical_select_widget_type] = HierarchicalSelect
 
 
-def w_h_select(
+def w_hierarchical_select(
     *,
     key: str | None = None,
     label: str,
     readonly: bool = False,
-    options: Iterable[HSelectOption],
+    options: Iterable[HierarchicalSelectOption],
     default: set[str | int | float | bool | datetime] | None = None,
     appearance: FormInputAppearance | None = None,
-) -> HSelect:
+) -> HierarchicalSelect:
     key = _state.use_state_key(key=key)
 
-    res = HSelect(
+    res = HierarchicalSelect(
         _key=key,
         _state={
-            "type": h_select_widget_type,
+            "type": hierarchical_select_widget_type,
             "label": label,
             "readonly": readonly,
             "options": list(options),
