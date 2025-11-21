@@ -15,6 +15,7 @@ from lplots.utils.nothing import _Nothing
 from matplotlib.figure import Figure, SubFigure
 from typing_extensions import _AnnotatedAlias
 from yarl import URL
+from molviewspec.builder import State
 
 # todo(rteqs): get rid of this
 sys.path.append(str(Path(__file__).parent.parent.absolute()))
@@ -167,5 +168,8 @@ def orjson_encoder(obj: object) -> str | None:
     # todo(rteqs): figure out what's going in orjson interanally when serializing pandas dataframes with Nothign.x
     if isinstance(obj, _Nothing | type | _AnnotatedAlias):
         return str(obj)
+
+    if isinstance(obj, State):
+        return obj.dumps()
 
     raise TypeError(f"Type {type(obj)} not serializable")
