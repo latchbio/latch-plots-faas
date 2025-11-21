@@ -71,6 +71,7 @@ class AgentHarness:
     latest_notebook_context: dict = field(default_factory=dict)
     current_status: str | None = None
     expected_widgets: dict[str, object | None] = field(default_factory=dict)
+    proactive_behavior_enabled: bool | None = None
 
     mode_config: dict[Mode, tuple[str, int | None]] = field(default_factory=lambda: {
         Mode.planning: ("claude-sonnet-4-5-20250929", 4096),
@@ -2834,10 +2835,13 @@ class AgentHarness:
 
             assert self.system_prompt is not None
 
+            behavior_file = "proactive_behavior.md" if self.proactive_behavior_enabled is True else "step_by_step_behavior.md"
+            behavior_instructions = (context_root / behavior_file).read_text()
+
             system_blocks = [
                 {
                     "type": "text",
-                    "text": self.system_prompt,
+                    "text": self.system_prompt + behavior_instructions,
                     "cache_control": {"type": "ephemeral"}
                 }
             ]
@@ -3117,6 +3121,11 @@ class AgentHarness:
         request_id = msg.get("request_id")
         contextual_node_data = msg.get("contextual_node_data")
         template_version_id = msg.get("template_version_id")
+        proactive_behavior_enabled = msg.get("proactive_behavior_enabled")
+
+        if proactive_behavior_enabled is not None:
+            self.proactive_behavior_enabled = bool(proactive_behavior_enabled)
+            print(f"[agent] Proactive mode set to {self.proactive_behavior_enabled} (via agent_query)")
 
         full_query = query
         if contextual_node_data:
