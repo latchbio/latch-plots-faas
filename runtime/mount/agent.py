@@ -2530,13 +2530,10 @@ class AgentHarness:
 
             current_tab_name = default_tab_name
 
-            reactivity_error = None
             cell_reactivity: dict[str, dict[str, object]] = {}
 
             if reactivity_result.get("status") == "success":
                 cell_reactivity = reactivity_result.get("cell_reactivity", {}) or {}
-            else:
-                reactivity_error = reactivity_result.get("error", "Unknown error")
 
             for cell in cells:
                 index = cell.get("index", "?")
@@ -2589,7 +2586,7 @@ class AgentHarness:
                     depends_on_signals = reactivity_meta.get("depends_on_signals") or []
                     depends_on_cells = reactivity_meta.get("depends_on_cells") or []
 
-                    cell_lines.append("\nREACTIVITY:")
+                    cell_lines.append("\nREACTIVITY:")  # noqa: FURB113
                     cell_lines.append(
                         "- Signals defined: "
                         + (", ".join(signals_defined) if signals_defined else "None")
@@ -2602,34 +2599,22 @@ class AgentHarness:
                         "- Depends on cells: "
                         + (", ".join(depends_on_cells) if depends_on_cells else "None")
                     )
-                elif reactivity_error is not None:
-                    cell_lines.append("\nREACTIVITY:")
-                    cell_lines.append(
-                        f"- Unable to load reactivity information: {reactivity_error}"
-                    )
 
             context_dir = context_root / "notebook_context"
             context_dir.mkdir(parents=True, exist_ok=True)
             (context_dir / "cells.md").write_text("\n".join(cell_lines))
 
-            summary_msg = (
-                f"Refreshed cells context with per-cell reactivity info for {cell_count} cells "
-                "and stored result in notebook_context/cells.md"
-            )
-            if reactivity_error:
-                summary_msg += f" (reactivity data unavailable: {reactivity_error})"
-
             return {
                 "tool_name": "refresh_cells_context",
                 "success": True,
-                "summary": summary_msg,
+                "summary": f"Refreshed reactive notebook context for {cell_count} cells and stored result in notebook_context/cells.md",
                 "cell_count": cell_count,
                 "context_path": "notebook_context/cells.md"
             }
 
         self.tools.append({
             "name": "refresh_cells_context",
-            "description": "Refresh the cells.md context file with current notebook cell structure, contents, and reactivity summary.",
+            "description": "Refresh the cells.md context file with current reactive notebook structure and contents.",
             "input_schema": {
                 "type": "object",
                 "properties": {},

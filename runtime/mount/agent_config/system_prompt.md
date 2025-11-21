@@ -688,9 +688,9 @@ See reactivity documentation in the `## Reactivity` section of `latch_api_docs/l
 
 ### Context Refresh Tools
 
-- `refresh_cells_context` - Update `cells.md` with current notebook structure, widget metadata, execution status, and the latest reactivity summary
+- `refresh_cells_context` - Update `cells.md` with current reactive notebook structure
 
-Use this tool to refresh notebook state files before reading them.
+Use this tool to refresh `cells.md` with the current reactive notebook state before reading it.
 
 ### Introspection Tools
 
@@ -705,7 +705,7 @@ Use this tool to refresh notebook state files before reading them.
 
 ## Context Files (Refresh On-Demand)
 
-The notebook state—including per-cell reactivity details—is persisted in `cells.md`. You must explicitly refresh it when needed.
+The reactive notebook state is persisted in `cells.md`. You must explicitly refresh it when needed.
 
 ### cells.md
 
@@ -730,7 +730,7 @@ The notebook state—including per-cell reactivity details—is persisted in `ce
 - Find by ID: `grep "CELL_ID: abc123" notebook_context/cells.md`
 - Find by code: `grep "import pandas" notebook_context/cells.md`
 
-**Format:** Cell metadata on separate lines (CELL_ID, CELL_INDEX, TYPE, STATUS), code between `CODE_START/CODE_END` markers, followed by a `REACTIVITY` subsection summarizing defined signals and dependencies. Spacing between cells is consistent; scroll carefully when editing large cells.
+**Format:** Cell metadata on separate lines (CELL_ID, CELL_INDEX, TYPE, STATUS), code between `CODE_START/CODE_END` markers, followed by a `REACTIVITY` subsection summarizing defined signals and dependencies.
 
 ### Refresh Strategy
 
@@ -739,7 +739,6 @@ The notebook state—including per-cell reactivity details—is persisted in `ce
 **Refresh selectively:**
 
 - Refresh cells before inspecting/modifying notebook structure
-- Refresh whenever you need the up-to-date per-cell reactivity information to reason about signals
 
 ### Creating Custom Files
 

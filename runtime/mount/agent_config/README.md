@@ -23,9 +23,8 @@ agent_config/
 │   │       ├── reactivity.mdx
 │   │       └── widget-types.mdx
 │   ├── agent_scratch/            # Agent-created notes and state
-│   └── notebook_context/         # Auto-generated runtime state
-│       ├── cells.md              # (populated by the agent via refresh_cells_context; includes per-cell reactivity info)
-│       └── globals.md            # (populated by the agent calling tool to refresh the context)
+│   └── notebook_context/
+│       └── cells.md              # Populated by the agent via refresh_cells_context
 └── README.md                     # This file
 ```
 
