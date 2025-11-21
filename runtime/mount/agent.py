@@ -2584,7 +2584,10 @@ class AgentHarness:
                         w_label = w.get("label", "")
                         cell_lines.append(f"- WIDGET: {w_type} | {w_label} | {w_key}")
 
-                reactivity_meta = cell_reactivity.get(cell_id)
+                if tf_id is None:
+                    reactivity_meta = None
+                else:
+                    reactivity_meta = cell_reactivity.get(str(tf_id))
                 if reactivity_meta is not None:
                     signals_defined = reactivity_meta.get("signals_defined") or []
                     depends_on_signals = reactivity_meta.get("depends_on_signals") or []
