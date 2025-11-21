@@ -8,8 +8,19 @@ from . import _emit, _state, widget
 molstar_type: Literal["molstar"] = "molstar"
 
 
+class LayoutShownByDefault(TypedDict, total=False):
+    logs: bool
+    sequence_viewer: bool
+    right_controls: bool
+    left_controls: bool
+
+
+class LayoutOptions(TypedDict, total=False):
+    layout_shown_by_default: LayoutShownByDefault
+
+
 class MolstarOptions(TypedDict, total=False):
-    """Options for Molstar widget configuration."""
+    layout: LayoutOptions
 
 
 class MolstarState(_emit.WidgetState[molstar_type, str]):
