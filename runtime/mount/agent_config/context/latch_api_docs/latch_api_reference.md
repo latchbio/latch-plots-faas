@@ -822,6 +822,7 @@ with w_grid(columns=12) as g:
 - `content_type(load_if_missing=True) -> Optional[str]` - Get MIME type
 - `is_dir(load_if_missing=True) -> bool` - Check if directory
 - `fetch_metadata() -> None` - Force network fetch and cache metadata
+- `exists(load_if_missing=True) -> bool` - Check if path exists
 
 **Directory Operations:**
 - `iterdir() -> Iterator[LPath]` - Iterate over directory contents (non-recursive, network call)
