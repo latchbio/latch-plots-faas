@@ -436,10 +436,7 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                         "status": "success",
                         "summary": msg.get("summary", "")
                     })
-                else:
-                    print("[entrypoint] Could not route reactivity response: agent not connected")
-
-                continue
+                    continue
 
             elif msg["type"] == "execute_code_response" and "agent_tx_id" in msg:
                 tx_id = msg.get("agent_tx_id")
@@ -456,8 +453,7 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                         "exception": msg.get("exception"),
                         "error": msg.get("error")
                     })
-
-                continue
+                    continue
 
             elif msg["type"] == "get_global_info_response" and "agent_tx_id" in msg:
                 tx_id = msg.get("agent_tx_id")
@@ -471,8 +467,7 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                         "info": msg.get("info"),
                         "error": msg.get("error")
                     })
-
-                continue
+                    continue
 
             await plots_ctx_manager.broadcast_message(orjson.dumps(msg).decode())
 

@@ -3246,6 +3246,11 @@ class AgentHarness:
         elif msg_type == "agent_clear_history":
             print("[agent] Clear history request")
             await self.handle_clear_history()
+        elif msg_type == "agent_reset_kernel":
+            print("[agent] Reset kernel globals request")
+            result = await self.atomic_operation("reset_kernel_globals", {})
+            if result.get("status") != "success":
+                print(f"[agent] Failed to reset kernel: {result.get('error')}")
         elif msg_type == "agent_action_response":
             print(f"[agent] {msg.get('action', 'unknown')} -> {msg.get('status', 'unknown')}")
             await self.handle_action_response(msg)

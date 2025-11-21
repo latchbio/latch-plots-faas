@@ -1839,6 +1839,32 @@ class Kernel:
 
             return
 
+        if msg["type"] == "reset_kernel_globals":
+            builtins = self.k_globals.get("__builtins__")
+            exit_fn = self.k_globals.get("exit")
+
+            dict.clear(self.k_globals)
+
+            if builtins is not None:
+                self.k_globals["__builtins__"] = builtins
+            if exit_fn is not None:
+                self.k_globals["exit"] = exit_fn
+
+            self.k_globals.clear()
+
+            self.cell_rnodes.clear()
+            self.cell_status.clear()
+
+            self.ldata_dataframes.clear()
+            self.registry_dataframes.clear()
+            self.url_dataframes.clear()
+
+            await self.send({
+                "type": "reset_kernel_globals_complete",
+                "agent_tx_id": msg.get("agent_tx_id")
+            })
+            return
+
         if msg["type"] == "get_plot_data":
             self.plot_data_selections[msg["plot_id"]] = msg["key"]
 
