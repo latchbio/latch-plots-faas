@@ -1,17 +1,17 @@
 {
-"id": "xenium_breast_cancer_luminal_onevsall_marker_jaccard_v1_ttest",
-"task": "Input: Xenium FFPE Human Breast Cancer data from outs.zip. Load the data using scanpy, perform one-vs-all t-test_overestim_var differential expression per cluster (logFC > 0, adj p ≤ 0.05, use_raw=False), rank genes by logFC then −log₁₀(p_adj), convert to uppercase gene symbols, identify clusters expressing luminal cancer cell markers (KRT8, KRT18, KRT19, EPCAM), and return all the combined luminal cancer cell marker genes from those luminal clusters as cell_types_predicted.",
-"data_node": ["latch://39494.account/10X/GSE243280_RAW/GSM7780153_Xenium_FFPE_Human_Breast_Cancer_Rep1_outs.zip"],
-"grader": {
-    "type": "label_set_jaccard",
-    "config": {
-    "ground_truth_labels": ["KRT8", "KRT18", "KRT19", "EPCAM"],
-    "scoring": {
-        "method": "jaccard_index",
-        "k_top_agent_markers": 8,
-        "pass_threshold": 0.36,
-        "penalize_extra_labels": false,
-        "description": "Pass if Jaccard ≥ 0.36 (≥80% overlap with 4 GT markers using top-8)."
+    "id": "xenium_breast_cancer_luminal_onevsall_marker_jaccard_v1_ttest",
+    "task": "Input: Xenium FFPE Human Breast Cancer data from outs.zip. Load the data using scanpy, perform one-vs-all t-test_overestim_var differential expression per cluster (logFC > 0, adj p ≤ 0.05, use_raw=False), rank genes by logFC then −log₁₀(p_adj), convert to uppercase gene symbols, identify clusters expressing luminal cancer cell markers (KRT8, KRT18, KRT19, EPCAM), and return all the combined luminal cancer cell marker genes from those luminal clusters as cell_types_predicted.",
+    "data_node": ["latch://39494.account/10X/GSE243280_RAW/GSM7780153_Xenium_FFPE_Human_Breast_Cancer_Rep1_outs.zip"],
+    "grader": {
+        "type": "label_set_jaccard",
+        "config": {
+        "ground_truth_labels": ["KRT8", "KRT18", "KRT19", "EPCAM"],
+        "scoring": {
+            "method": "jaccard_index",
+            "k_top_agent_markers": 8,
+            "pass_threshold": 0.36,
+            "penalize_extra_labels": false,
+            "description": "Pass if Jaccard ≥ 0.36 (≥80% overlap with 4 GT markers using top-8)."
             }
         }
     }
