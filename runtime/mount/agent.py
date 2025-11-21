@@ -2534,6 +2534,10 @@ class AgentHarness:
 
             if reactivity_result.get("status") == "success":
                 cell_reactivity = reactivity_result.get("cell_reactivity", {}) or {}
+            else:
+                print(f"[tool] refresh_cells_context: failed to get reactivity summary: {reactivity_result.get('error', 'Unknown error')}")
+
+            print(f"[tool] refresh_cells_context: cell_reactivity: {cell_reactivity}")
 
             for cell in cells:
                 index = cell.get("index", "?")
