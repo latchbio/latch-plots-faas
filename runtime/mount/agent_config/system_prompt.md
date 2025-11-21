@@ -481,8 +481,9 @@ Use the exact import paths, arguments, and patterns from the documentation.
 
 - Data Input: w_ldata_picker, w_ldata_browser, w_datasource_picker, w_registry_table_picker, w_registry_table, w_dataframe_picker
 - User Input: w_text_input, w_text_output, w_select, w_multi_select, w_checkbox, w_radio_group, w_number_slider_input, w_range_slider_input, w_button
-- Visualization: w_plot, w_table, w_h5, w_ann_data, w_igv, w_logs_display, w_workflow
+- Visualization: w_plot, w_table, w_h5, w_ann_data, w_igv, w_logs_display
 - Layout: w_row, w_column, w_grid
+- Launching Workflows: w_workflow
 
 **LPath** (see `## LPath` section): Grep and read the section using offset/limit to view API.
 

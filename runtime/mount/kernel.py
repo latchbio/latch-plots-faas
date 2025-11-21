@@ -253,10 +253,6 @@ def cell_exit(code: int = 0) -> None:
     raise ExitException
 
 
-def cell_interrupt(code: int = 0) -> None:
-    raise KeyboardInterrupt
-
-
 leading_digits_and_dash = re.compile(r"^\d+-")
 
 
@@ -617,6 +613,7 @@ class Kernel:
     snapshot_status: KernelSnapshotStatus = "done"
 
     active_cell: str | None = None
+    active_cell_task: asyncio.Task[Any] | None = None
 
     widget_signals: dict[str, Signal[Any]] = field(default_factory=dict)
     nodes_with_widgets: dict[str, Node] = field(default_factory=dict)
@@ -655,13 +652,21 @@ class Kernel:
         self.k_globals.clear()
         pio.templates["graphpad_inspired_theme"] = graphpad_inspired_theme()
 
-        signal.signal(
-            signal.SIGINT,
-            lambda signum, frame: cell_interrupt()
-            if self.active_cell is not None
-            and self.cell_status[self.active_cell] == "running"
-            else None,
-        )
+        def sigint_handler(signum: int, frame: FrameType | None) -> None:
+            if signum != signal.SIGINT:
+                return
+
+            if self.active_cell_task is not None and not self.active_cell_task.done():
+                self.active_cell_task.cancel()
+
+                if asyncio.current_task() == self.active_cell_task:
+                    raise KeyboardInterrupt
+
+                return
+
+            print(f"[kernel] SIGINT received but not interrupting: active_cell={self.active_cell}, status={self.cell_status.get(self.active_cell) if self.active_cell is not None else 'N/A'}", file=sys.stderr)
+
+        signal.signal(signal.SIGINT, sigint_handler)
 
     def debug_state(self) -> dict[str, object]:
         return {
@@ -1238,11 +1243,14 @@ class Kernel:
 
             x.__name__ = filename
 
-            await ctx.run(x, _cell_id=cell_id, code=code)
+            self.active_cell_task = asyncio.create_task(ctx.run(x, _cell_id=cell_id, code=code))
+            await self.active_cell_task
 
-        except (KeyboardInterrupt, Exception):
+        except (KeyboardInterrupt, asyncio.CancelledError, Exception):
             self.cell_status[cell_id] = "error"
             await self.send_cell_result(cell_id)
+        finally:
+            self.active_cell_task = None
 
     async def send_cell_result(self, cell_id: str) -> None:
         await self.send_global_updates()

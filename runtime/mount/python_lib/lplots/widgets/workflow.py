@@ -3,6 +3,7 @@ from typing import Any, Literal, NotRequired
 
 from latch_cli.services.launch.launch_v2 import Execution, launch
 
+from ..reactive import Signal
 from . import _emit, _state, widget
 from .button import ButtonWidget, w_button
 
@@ -15,24 +16,32 @@ class WorkflowWidgetState(_emit.WidgetState[workflow_widget_type, str]):
     wf_name: str
     params: dict[str, Any]
     version: str | None
+    automatic: bool
     execution: NotRequired[Execution]
 
 
 @dataclass(frozen=True, kw_only=True)
 class WorkflowWidget(widget.BaseWidget):
-    _button: ButtonWidget
+    _button: ButtonWidget | None
     _state: WorkflowWidgetState
+    _signal: Signal[object]
 
     @property
     def value(self) -> Execution | None:
-        if self._button.value:
-            wf_name = self._state.get("wf_name")
-            self._state["execution"] = launch(
-                wf_name=wf_name,
+        val = self._signal.sample()
+        if isinstance(val, Execution):
+            return val
+
+        if not self._state.get("automatic") and self._button is not None and self._button.value:
+            execution = launch(
+                wf_name=self._state.get("wf_name"),
                 params=self._state.get("params"),
                 version=self._state.get("version"),
             )
+            self._state["execution"] = execution
+            self._signal(execution)
             _state.submit_widget_state()
+            return execution
 
         return self._state.get("execution")
 
@@ -51,13 +60,16 @@ def w_workflow(
     version: str | None = None,
     params: dict[str, Any],
     readonly: bool = False,
+    automatic: bool = False,
 ) -> WorkflowWidget:
     key = _state.use_state_key(key=key)
+    sig = _state.use_value_signal(key)
 
-    button = w_button(key=f"{key}-button", label=label, readonly=readonly)
+    button = None if automatic else w_button(key=f"{key}-button", label=label, readonly=readonly)
     res = WorkflowWidget(
         _key=key,
         _button=button,
+        _signal=sig,
         _state={
             "type": workflow_widget_type,
             "label": label,
@@ -65,9 +77,24 @@ def w_workflow(
             "wf_name": wf_name,
             "params": params,
             "version": version,
+            "automatic": automatic,
         },
     )
 
+    val = sig.sample()
+    if isinstance(val, Execution):
+        res._state["execution"] = val
+
     _emit.emit_widget(key, res._state)
+
+    if automatic and res._state.get("execution") is None:
+        execution = launch(
+            wf_name=wf_name,
+            params=params,
+            version=version,
+        )
+        res._state["execution"] = execution
+        sig(execution)
+        _state.submit_widget_state()
 
     return res

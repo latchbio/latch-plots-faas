@@ -216,11 +216,20 @@ params = {
 }
 w = w_workflow(
     wf_name="wf.__init__.domain_detection_wf",
+    key="domain_detection_workflow_run_1",
     version=None,
+    automatic=True,
     label="Launch Domain Detection Workflow",
     params=params,
 )
 execution = w.value
+
+if execution is not None:
+  res = await execution.wait()
+
+  if res is not None and res.status in {"SUCCEEDED", "FAILED", "ABORTED"}:
+      # inspect workflow outputs for downstream analysis
+      workflow_outputs = list(res.output.values())
 ```
 ---
 
@@ -568,9 +577,9 @@ The **algorithm.json** file should look similar to
 
 When you use the `w_ldata_picker` widget to populate the `output_directory` or `cell_segmentation_algorithm` params, ALWAYS retrieve the LData path string by accessing the widget `.value.path` before passing to LatchFile(...) or LatchDir(...)
                      
-Use the code below as a template, that uses `w_workflow`. The code will generate a “Launch” button. Always make sure you are activating the workflow by `execution = w.value`, where w is the workflow.
 
-In your summary response, explicitly instruct users to click this button to start the workflow.
+Use the code below as a template, that uses w_workflow. Always use the `automatic` argument or the workflow will not launch. The workflow will launch automatically when the cell is run. Subsequent cell runs with the same key will not relaunch the workflow, so change the key to a new value if you need to relaunch the workflow.
+Finally, you need to make sure to wait for the workflow to complete before proceeding. This is included in the code below.
 
 #### Input directory to workflow
 
@@ -600,9 +609,18 @@ params = {
 
 w = w_workflow(
     wf_name="wf.__init__.vizgen_cell_segmentation_wf",
+    key="vizgen_cellsegmentation_workflow_run_1",
     version="0.0.0-c28480",
     params=params,
+    automatic=True,
     label="Run Cell Segmentation Workflow",
 )
 execution = w.value
+
+if execution is not None:
+  res = await execution.wait()
+
+  if res is not None and res.status in {"SUCCEEDED", "FAILED", "ABORTED"}:
+      # inspect workflow outputs for downstream analysis
+      workflow_outputs = list(res.output.values())
 ```

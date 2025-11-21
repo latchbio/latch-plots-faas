@@ -694,9 +694,10 @@ submit_widget_state()
 - `label` (str, required): Button label
 - `wf_name` (str, required): Name of the workflow to execute
 - `params` (dict, required): Dictionary of input parameters
+- `automatic` (bool, required): Launch workflow automatically. Should always be True.
+- `key` (str, required): Unique widget identifier -- determines when the workflow will relaunch (subsequent cell runs with the same key will not relaunch the workflow)
 - `version` (str, optional): Workflow version; defaults to latest
 - `readonly` (bool, optional): Disable button if True. Default: False
-- `key` (str, optional): Unique widget identifier
 
 **Returns:** `Execution` object or None
 
@@ -706,6 +707,8 @@ from lplots.widgets.workflow import w_workflow
 
 workflow = w_workflow(
     label="Run Analysis",
+    automatic=True,
+    key="my_analysis_workflow_run_1",
     wf_name="my_analysis_workflow",
     params={
         "input_file": "latch://workspace/data/sample.fastq",
@@ -717,14 +720,11 @@ workflow = w_workflow(
 execution = workflow.value
 
 if execution is not None:
-    # Poll for latest results first
-    next(execution.poll())
-    
-    if execution.status in {"SUCCEEDED", "FAILED", "ABORTED"}:
-        result = await execution.wait()
-        workflow_outputs = list(result.output.values())
-    else:
-        print(f"Execution {execution.status}")
+  res = await execution.wait()
+
+  if res is not None and res.status in {"SUCCEEDED", "FAILED", "ABORTED"}:
+      # inspect workflow outputs for downstream analysis
+      workflow_outputs = list(res.output.values())
 ```
 
 ---
@@ -822,6 +822,7 @@ with w_grid(columns=12) as g:
 - `content_type(load_if_missing=True) -> Optional[str]` - Get MIME type
 - `is_dir(load_if_missing=True) -> bool` - Check if directory
 - `fetch_metadata() -> None` - Force network fetch and cache metadata
+- `exists(load_if_missing=True) -> bool` - Check if path exists
 
 **Directory Operations:**
 - `iterdir() -> Iterator[LPath]` - Iterate over directory contents (non-recursive, network call)
