@@ -2835,13 +2835,13 @@ class AgentHarness:
 
             assert self.system_prompt is not None
 
-            mode_file = "proactive_behavior.md" if self.proactive_behavior_enabled else "step_by_step_behavior.md"
-            mode_instructions = (context_root / mode_file).read_text()
+            behavior_file = "proactive_behavior.md" if self.proactive_behavior_enabled else "step_by_step_behavior.md"
+            behavior_instructions = (context_root / behavior_file).read_text()
 
             system_blocks = [
                 {
                     "type": "text",
-                    "text": self.system_prompt + mode_instructions,
+                    "text": self.system_prompt + behavior_instructions,
                     "cache_control": {"type": "ephemeral"}
                 }
             ]
