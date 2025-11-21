@@ -3,6 +3,7 @@ from typing import Any, Literal, NotRequired
 
 from latch_cli.services.launch.launch_v2 import Execution, launch
 
+from ..reactive import Signal
 from . import _emit, _state, widget
 from .button import ButtonWidget, w_button
 
@@ -23,6 +24,7 @@ class WorkflowWidgetState(_emit.WidgetState[workflow_widget_type, str]):
 class WorkflowWidget(widget.BaseWidget):
     _button: ButtonWidget | None
     _state: WorkflowWidgetState
+    _signal: Signal[object]
 
     @property
     def value(self) -> Execution | None:

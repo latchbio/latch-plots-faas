@@ -664,7 +664,7 @@ class Kernel:
 
                 return
 
-            print(f"[kernel] SIGINT received but not interrupting: active_cell={self.active_cell}, status={self.cell_status.get(self.active_cell) if self.active_cell else 'N/A'}", file=sys.stderr)
+            print(f"[kernel] SIGINT received but not interrupting: active_cell={self.active_cell}, status={self.cell_status.get(self.active_cell) if self.active_cell is not None else 'N/A'}", file=sys.stderr)
 
         signal.signal(signal.SIGINT, sigint_handler)
 
