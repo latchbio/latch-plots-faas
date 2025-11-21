@@ -1,5 +1,5 @@
 # Vizgen Merfish Analysis Workflow
-This is the **authoritative step-by-step pipeline** for **Vizgen Merfish** experiments.  
+This is an authoritative **step-by-step pipeline** for **Vizgen Merfish** experiments.  
 Always follow steps **in order**. ALWAYS use **lplots widgets such as `w_text_input`,`w_text_output`, `w_checkbox`, `w_select`, `w_multi_select`, `w_radio_button_group` to configure parameters for various analysis steps. 
 
 ---
@@ -38,6 +38,13 @@ Always follow steps **in order**. ALWAYS use **lplots widgets such as `w_text_in
 
 ## **PREPROCESSING**
 
+**ALWAYS** Check if your adata has > 100,000 cells,
+IF TRUE
+## **ALWAYS FOLLOW INSTRUCTIONS FROM `rapids.md`**
+Procced to Spatial Step after the rapids workflow finishes.
+
+ELSE Skip steps 4-10:
+
 ### **4. Normalization**
 - Provide an option between **log1p** and **total count scaling** using **lplots widgets**.  
 - Apply **log1p transformation** by default on the QC-filtered dataset.
@@ -63,13 +70,18 @@ Always follow steps **in order**. ALWAYS use **lplots widgets such as `w_text_in
 - Use **default resolution = 0.3**.  
 - Display clusters on both **UMAP** and **spatial embedding**.
 
+### **10. Differential Gene Expression (DGE)**
+- Identify **marker genes per cluster** using rank-based DGE tests.  
+- Use **t-test** by default; allow user to select other methods using **lplots widgets**.  
+- Report **top marker genes per cluster**.  
+- Visualize using **Scanpy dot plots**.
 ---
 
 ## **SPATIAL ANALYSIS (using Squidpy)**
 
 All spatial analyses must use **Squidpy** functions (`sq.gr`, `sq.pl`) and rely on spatial coordinates within the AnnData object.
 
-### **10. Centrality Analysis**
+### **11. Centrality Analysis**
 - Compute **spatial centrality metrics** (e.g., degree, betweenness, closeness) using `sq.gr.centrality_scores`. If these centrality scores do not exist, compute these sentrality scores and plot them.
 - Plot **centrality plots** overlayed on spatial coordinates.  
 - Allow the user to select which metric(s) to visualize. 
@@ -77,7 +89,7 @@ All spatial analyses must use **Squidpy** functions (`sq.gr`, `sq.pl`) and rely 
 sq.gr.centrality_scores(adata, cluster_key="leiden")
 ```
 
-### **11. Co-occurrence Analysis**
+### **12. Co-occurrence Analysis**
 - Compute **pairwise co-occurrence scores** between clusters using `sq.gr.co_occurrence`.  
 - **Allow users to specify** which clusters or cell types to compare using **lplots widgets**.  
 - Display **heatmaps** or **bar plots** of co-occurrence frequencies using `sq.pl.co_occurrence`.
@@ -103,18 +115,19 @@ sns.heatmap(
     ax=ax
 )
 ```
-### **12. Neighborhood Enrichment**
+### **13. Neighborhood Enrichment**
 - Compute **neighborhood enrichment** between clusters using `sq.gr.nhood_enrichment`.  
 - Visualize using **heatmaps** and **spatial overlays** (`sq.pl.nhood_enrichment`).  
 - Optionally display **z-score–normalized enrichment**.
 
-### **13. Ripley’s Statistics**
+### **14. Ripley’s Statistics**
 - Compute **Ripley’s L** statistics using `sq.gr.ripley`.  
 - Plot **observed vs. expected K(r)** curves for major clusters.  
 - Highlight clusters showing **significant spatial aggregation**.
-- Plot the Ripley's L statistic for **EVERY** cluster using plotly. 
+- Plot the Ripley's statistic for **EVERY** cluster using plotly. 
+- Allow the user to select between L,F anf G statistics. Default (F)
 ```python
-mode = "L"
+mode = "F"
 sq.gr.ripley(adata, cluster_key="leiden", mode=mode)
 
 # Access the ripley results - key format is 'leiden_ripley_L'
@@ -127,7 +140,7 @@ ripley_results = adata.uns[ripley_key]
 n_clusters = adata.obs['leiden'].nunique()
 
 # Create line plot for all clusters
-df = ripley_results["L_stat"]   # tidy dataframe with: bins, leiden, stats
+df = ripley_results[f"{mode}_stat"]   # tidy dataframe with: bins, leiden, stats
 
 # Create Plotly figure
 fig_ripley = go.Figure()
@@ -155,7 +168,7 @@ fig_ripley.add_hline(
 fig_ripley.update_layout(
     title="Ripley's L Statistic for All Clusters",
     xaxis_title="Spatial Distance (r)",
-    yaxis_title="Ripley's L(r)",
+    yaxis_title=f"Ripley's {mode}(r)",
     height=600,
     showlegend=True,
     legend=dict(
@@ -168,7 +181,7 @@ fig_ripley.update_layout(
 )
 ```
 
-### **14. Spatial Autocorrelation (Moran’s I)**
+### **15. Spatial Autocorrelation (Moran’s I)**
 - Compute **Moran’s I** for gene expression spatial autocorrelation using `sq.gr.spatial_autocorr`.  
 - Rank genes by Moran’s I score.  
 - Display a **table of top 10 spatially autocorrelated genes**.  
@@ -177,12 +190,6 @@ fig_ripley.update_layout(
 ---
 
 ## **SECONDARY ANALYSIS**
-
-### **15. Differential Gene Expression (DGE)**
-- Identify **marker genes per cluster** using rank-based DGE tests.  
-- Use **t-test** by default; allow user to select other methods using **lplots widgets**.  
-- Report **top marker genes per cluster**.  
-- Visualize using **Scanpy dot plots**.
 
 ### **16. Cell Type Annotation**
 - Prompt the user for **tissue** and **organism**.  
@@ -199,7 +206,7 @@ fig_ripley.update_layout(
     # Save the processed H5AD file
     output_h5ad_path = "/tmp/merfish_processed_for_domain_detection.h5ad"
     adata.write_h5ad(output_h5ad_path)
-    output_lpath = LPath("latch:///xenium/analysis_output/merfish_processed_for_domain_detection.h5ad")
+    output_lpath = LPath("latch:///merfish/analysis_output/merfish_processed_for_domain_detection.h5ad")
     output_lpath.upload_from(output_h5ad_path)
     local_path = Path(output_h5ad_path)
     output_lpath.upload_from(local_path)
@@ -209,7 +216,7 @@ fig_ripley.update_layout(
 - Allow the user to select lambda, runname and output_dir using a form created with **lplots widgets**
 ```python
 params = {
-    "input_file": LatchFile("latch:///xenium_processed_for_domain_detection.h5ad"),
+    "input_file": LatchFile("latch:///merfish_processed_for_domain_detection.h5ad"),
     "run_name": "my_run",
     "output_dir": LatchDir("latch:///Domain_detection_output"),
     "lambda_list": "0.5",
