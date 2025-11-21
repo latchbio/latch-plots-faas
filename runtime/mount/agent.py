@@ -53,7 +53,6 @@ class AgentHarness:
     initialized: bool = False
     client: anthropic.AsyncAnthropic | None = None
     mode: Mode = Mode.planning
-    auto_accept_edits: bool = False
     system_prompt: str | None = None
     pending_operations: dict[str, asyncio.Future] = field(default_factory=dict)
     executing_cells: set[str] = field(default_factory=set)
@@ -72,6 +71,7 @@ class AgentHarness:
     latest_notebook_context: dict = field(default_factory=dict)
     current_status: str | None = None
     expected_widgets: dict[str, object | None] = field(default_factory=dict)
+    proactive_mode_enabled: bool = False
 
     mode_config: dict[Mode, tuple[str, int | None]] = field(default_factory=lambda: {
         Mode.planning: ("claude-sonnet-4-5-20250929", 4096),
@@ -2835,9 +2835,8 @@ class AgentHarness:
 
             assert self.system_prompt is not None
 
-            mode_file = "proactive_mode.md" if self.auto_accept_edits else "step_by_step_mode.md"
+            mode_file = "proactive_mode.md" if self.proactive_mode_enabled else "step_by_step_mode.md"
             mode_instructions = (context_root / mode_file).read_text()
-
 
             system_blocks = [
                 {
@@ -3047,11 +3046,12 @@ class AgentHarness:
             session_id = msg.get("session_id")
             if session_id is None:
                 raise RuntimeError(f"[handle init] Session ID is not set. Message: {msg}")
-            self.agent_session_id = int(session_id)
+            proactive_flag = msg.get("proactive_mode_enabled")
+            if proactive_flag is None:
+                proactive_flag = msg.get("is_proactive")
 
-            auto_accept_edits = msg.get("auto_accept_edits")
-            if auto_accept_edits is not None:
-                self.auto_accept_edits = bool(auto_accept_edits)
+            if proactive_flag is not None:
+                self.proactive_mode_enabled = bool(proactive_flag)
 
             self.init_tools()
 
@@ -3262,21 +3262,14 @@ class AgentHarness:
         elif msg_type == "agent_action_response":
             print(f"[agent] {msg.get('action', 'unknown')} -> {msg.get('status', 'unknown')}")
             await self.handle_action_response(msg)
-        elif msg_type == "agent_config_update":
-            tx_id = msg.get("tx_id")
-            auto_accept_edits = msg.get("auto_accept_edits")
+        elif msg_type == "agent_behavior_update":
+            proactive_mode_enabled = msg.get("proactive_mode_enabled")
+            if proactive_mode_enabled is None:
+                proactive_mode_enabled = msg.get("is_proactive")
 
-            if not isinstance(auto_accept_edits, bool):
-                await self.send({
-                    "type": "agent_action_response",
-                    "tx_id": tx_id,
-                    "status": "error",
-                    "error": "Invalid auto_accept_edits value",
-                })
-                return
-
-            self.auto_accept_edits = auto_accept_edits
-            print(f"[agent] Auto accept edits set to {self.auto_accept_edits}")
+            if proactive_mode_enabled is not None:
+                self.proactive_mode_enabled = bool(proactive_mode_enabled)
+                print(f"[agent] Proactive mode set to {self.proactive_mode_enabled}")
         elif msg_type == "kernel_message":
             print(f"[agent] Kernel message: {msg}")
 
