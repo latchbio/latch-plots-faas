@@ -482,7 +482,9 @@ async def handle_agent_messages(conn_a: SocketIo) -> None:
     while True:
         msg = await conn_a.recv()
         msg_type = msg.get("type", "unknown")
-        print(f"[entrypoint] Agent > {msg_type}")
+
+        if msg_type != "agent_stream_delta":
+            print(f"[entrypoint] Agent > {msg_type}")
 
         if msg_type == "agent_action" and msg.get("action") == "request_reactivity_summary":
             if k_proc.conn_k is not None:

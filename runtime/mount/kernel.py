@@ -1670,7 +1670,7 @@ class Kernel:
 
         if len(self.cell_rnodes) == 0:
             summary_lines.append("\nNo reactive dependencies in this notebook.")
-            return "\n".join(summary_lines)
+            return "\n".join(summary_lines), {}
 
         signal_name_to_id: dict[str, str] = {}
         signal_usage: dict[str, list[str]] = {}
