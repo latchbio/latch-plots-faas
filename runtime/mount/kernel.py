@@ -1831,6 +1831,29 @@ class Kernel:
 
             return
 
+        if msg["type"] == "reset_kernel_globals":
+            keys_to_delete = [
+                k for k in self.k_globals.keys()
+                if k not in {"__builtins__", "exit"}
+            ]
+            for key in keys_to_delete:
+                del self.k_globals[key]
+
+            self.k_globals.clear()
+
+            self.cell_rnodes.clear()
+            self.cell_status.clear()
+
+            self.ldata_dataframes.clear()
+            self.registry_dataframes.clear()
+            self.url_dataframes.clear()
+
+            await self.send({
+                "type": "reset_kernel_globals_complete",
+                "agent_tx_id": msg.get("agent_tx_id")
+            })
+            return
+
         if msg["type"] == "get_plot_data":
             self.plot_data_selections[msg["plot_id"]] = msg["key"]
 
