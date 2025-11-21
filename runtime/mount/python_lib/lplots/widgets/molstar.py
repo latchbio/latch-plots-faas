@@ -2,7 +2,6 @@ from dataclasses import dataclass
 from typing import Literal, NotRequired, TypedDict
 
 from molviewspec.builder import Root, State
-from molviewspec.nodes import validate_state_tree
 
 from . import _emit, _state, widget
 
@@ -35,9 +34,11 @@ def w_molstar(
 
     if molstarviewspec_builder is not None:
         molstarviewspec = molstarviewspec_builder.get_state()
+
+        # Validate the values in the state
         try:
-            state_json = molstarviewspec.model_dump_json()
-            validate_state_tree(state_json)
+            state_dict = molstarviewspec.model_dump(exclude_none=True)
+            State.model_validate(state_dict)
         except Exception as e:
             raise ValueError(f"Invalid molstarviewspec state: {e}") from e
     else:
