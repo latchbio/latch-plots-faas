@@ -1585,6 +1585,13 @@ class Kernel:
         await self.send(msg)
 
     def get_reactivity_summary(self) -> tuple[str, dict[str, dict[str, list[str]]]]:
+        print(
+            "[kernel] get_reactivity_summary: "
+            f"cell_rnodes={len(self.cell_rnodes)}, "
+            f"restored_nodes={len(self.restored_nodes)}, "
+            f"widget_signals={len(self.widget_signals)}, "
+            f"live_signals={len(live_signals)}"
+        )
         signal_id_to_name: dict[str, str] = {}
         global_signal_ids: set[str] = set()
         widget_signal_ids: set[str] = set()
@@ -1644,6 +1651,16 @@ class Kernel:
                 sig_name = signal_id_to_name.get(sig_id, sig._name)
                 defined_signals.append(sig_name)
             cell_signal_definitions[cell_id] = sorted(set(defined_signals))
+
+            print(
+                "[kernel] get_reactivity_summary:"
+                f" cell_id={cell_id}, index={node.cell_id}, "
+                f"defined_signals={defined_signals}, "
+                f"deps={len(deps)}"
+            )
+
+        if len(self.cell_rnodes) == 0:
+            print("[kernel] get_reactivity_summary: no reactive cell nodes are currently registered.")
 
         summary_lines: list[str] = []
         summary_lines += [
