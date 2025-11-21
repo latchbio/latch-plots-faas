@@ -3046,8 +3046,9 @@ class AgentHarness:
             session_id = msg.get("session_id")
             if session_id is None:
                 raise RuntimeError(f"[handle init] Session ID is not set. Message: {msg}")
-            proactive_behavior_enabled = msg.get("proactive_behavior_enabled")
+            self.agent_session_id = int(session_id)
 
+            proactive_behavior_enabled = msg.get("proactive_behavior_enabled")
             if proactive_behavior_enabled is not None:
                 self.proactive_behavior_enabled = bool(proactive_behavior_enabled)
 
