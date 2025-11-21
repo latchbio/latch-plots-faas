@@ -2499,7 +2499,10 @@ class AgentHarness:
         self.tool_map["get_global_info"] = get_global_info
 
         async def refresh_cells_context(_args: dict) -> dict:
-            context_result = await self.atomic_operation("get_context")
+            context_result, reactivity_result = await asyncio.gather(
+                self.atomic_operation("get_context"),
+                self.atomic_operation("request_reactivity_summary"),
+            )
 
             if context_result.get("status") != "success":
                 return {
@@ -2527,7 +2530,6 @@ class AgentHarness:
 
             current_tab_name = default_tab_name
 
-            reactivity_result = await self.atomic_operation("request_reactivity_summary")
             reactivity_error = None
             cell_reactivity: dict[str, dict[str, object]] = {}
 
