@@ -9,7 +9,7 @@
         "scoring": {
           "method": "jaccard_index",
           "k_top_agent_markers": 7,
-          "pass_threshold": 0.32,
+          "pass_threshold": 0.320,
           "penalize_extra_labels": false,
           "description": "Pass if Jaccard ≥ 0.32 (≥80% overlap with 3 GT markers using top-7)."
         }
