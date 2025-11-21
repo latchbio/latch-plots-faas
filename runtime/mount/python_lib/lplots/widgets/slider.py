@@ -40,14 +40,14 @@ class NumberSliderInputWidget(widget.BaseWidget):
     _signal: Signal[int | float]
 
     def _value(self, val: int | float | None) -> int | float:
-        if val is None:
-            default = self._state.get("default")
-            if default is None:
-                return self._state.get("min", 0)
+        if isinstance(val, int | float):
+            return val
 
-            return default
+        default = self._state.get("default")
+        if default is None:
+            return self._state.get("min", 0)
 
-        return val
+        return default
 
     @property
     def value(self) -> int | float:
@@ -118,16 +118,16 @@ class RangeSliderInputWidget(widget.BaseWidget):
     _signal: Signal[RangeSliderValue]
 
     def _value(self, val: RangeSliderValue | None) -> RangeSliderValue:
-        if val is None:
-            default = self._state.get("default")
-            if default is None:
-                min_value = self._state.get("min", 0)
-                max_value = self._state.get("max", 100)
-                return (min_value, max_value)
+        if isinstance(val, int | float):
+            return val
 
-            return default
+        default = self._state.get("default")
+        if default is None:
+            min_value = self._state.get("min", 0) or 0
+            max_value = self._state.get("max", 100) or 100
+            return (min_value, max_value)
 
-        return val
+        return default
 
     @property
     def value(self) -> RangeSliderValue:
