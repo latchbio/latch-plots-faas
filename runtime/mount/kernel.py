@@ -20,6 +20,7 @@ from collections import defaultdict
 from contextlib import redirect_stderr, redirect_stdout
 from copy import copy, deepcopy
 from dataclasses import asdict, dataclass, field, fields
+from datetime import datetime, timezone
 from io import TextIOWrapper
 from pathlib import Path
 from traceback import format_exc
@@ -586,6 +587,23 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
 
 snapshot_dir = Path.home() / ".cache" / "plots-faas"
 snapshot_f_name = "snapshot.json"
+
+DEBUG_LOG_PATH = Path("/var/log/debug.log")
+FALLBACK_DEBUG_LOG_PATH = Path("/tmp/plots-agent-debug.log")
+
+
+def log_debug(message: str) -> None:
+    timestamp = datetime.now(timezone.utc).isoformat()
+    line = f"{timestamp} [kernel] {message}\n"
+
+    for candidate in (DEBUG_LOG_PATH, FALLBACK_DEBUG_LOG_PATH):
+        try:
+            candidate.parent.mkdir(parents=True, exist_ok=True)
+            with candidate.open("a", encoding="utf-8") as f:
+                f.write(line)
+            break
+        except Exception:
+            continue
 
 
 class SerializedGlobal(TypedDict):
@@ -1585,8 +1603,8 @@ class Kernel:
         await self.send(msg)
 
     def get_reactivity_summary(self) -> tuple[str, dict[str, dict[str, list[str]]]]:
-        print(
-            "[kernel] get_reactivity_summary: "
+        log_debug(
+            "get_reactivity_summary: "
             f"cell_rnodes={len(self.cell_rnodes)}, "
             f"restored_nodes={len(self.restored_nodes)}, "
             f"widget_signals={len(self.widget_signals)}, "
@@ -1652,15 +1670,15 @@ class Kernel:
                 defined_signals.append(sig_name)
             cell_signal_definitions[cell_id] = sorted(set(defined_signals))
 
-            print(
-                "[kernel] get_reactivity_summary:"
+            log_debug(
+                "get_reactivity_summary:"
                 f" cell_id={cell_id}, index={node.cell_id}, "
                 f"defined_signals={defined_signals}, "
                 f"deps={len(deps)}"
             )
 
         if len(self.cell_rnodes) == 0:
-            print("[kernel] get_reactivity_summary: no reactive cell nodes are currently registered.")
+            log_debug("get_reactivity_summary: no reactive cell nodes are currently registered.")
 
         summary_lines: list[str] = []
         summary_lines += [
