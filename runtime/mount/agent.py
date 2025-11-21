@@ -3049,10 +3049,6 @@ class AgentHarness:
 
             self.agent_session_id = int(session_id)
 
-            proactive_behavior_enabled = msg.get("proactive_behavior_enabled")
-            if proactive_behavior_enabled is not None:
-                self.proactive_behavior_enabled = bool(proactive_behavior_enabled)
-
             self.init_tools()
 
             self.client = anthropic.AsyncAnthropic(
@@ -3125,6 +3121,11 @@ class AgentHarness:
         request_id = msg.get("request_id")
         contextual_node_data = msg.get("contextual_node_data")
         template_version_id = msg.get("template_version_id")
+        proactive_behavior_enabled = msg.get("proactive_behavior_enabled")
+
+        if proactive_behavior_enabled is not None:
+            self.proactive_behavior_enabled = bool(proactive_behavior_enabled)
+            print(f"[agent] Proactive mode set to {self.proactive_behavior_enabled} (via agent_query)")
 
         full_query = query
         if contextual_node_data:
@@ -3262,11 +3263,6 @@ class AgentHarness:
         elif msg_type == "agent_action_response":
             print(f"[agent] {msg.get('action', 'unknown')} -> {msg.get('status', 'unknown')}")
             await self.handle_action_response(msg)
-        elif msg_type == "agent_behavior_update":
-            proactive_behavior_enabled = msg.get("proactive_behavior_enabled")
-            if proactive_behavior_enabled is not None:
-                self.proactive_behavior_enabled = bool(proactive_behavior_enabled)
-                print(f"[agent] Proactive mode set to {self.proactive_behavior_enabled}")
         elif msg_type == "kernel_message":
             print(f"[agent] Kernel message: {msg}")
 
