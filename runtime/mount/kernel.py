@@ -1661,19 +1661,9 @@ class Kernel:
             traverse_node(node, deps)
             cell_dependencies[cell_id] = deps
 
-            defined_signals: list[str] = []
-            for sig_id, sig in node.signals.items():
-                if sig is None:
-                    continue
-                signal_producers[sig_id] = cell_id
-                sig_name = signal_id_to_name.get(sig_id, sig._name)
-                defined_signals.append(sig_name)
-            cell_signal_definitions[cell_id] = sorted(set(defined_signals))
-
             log_debug(
                 "get_reactivity_summary:"
                 f" cell_id={cell_id}, index={node.cell_id}, "
-                f"defined_signals={defined_signals}, "
                 f"deps={len(deps)}"
             )
 
@@ -1729,9 +1719,16 @@ class Kernel:
             else:
                 summary_lines.append(f"- **Cell {cell_id}** has no signal dependencies")
 
+        for sig in live_signals.values():
+            producer_cell_id = getattr(sig, "_producer_cell_id", None)
+            if producer_cell_id is None:
+                continue
+            signal_producers[sig.id] = producer_cell_id
+            cell_signal_definitions.setdefault(producer_cell_id, []).append(sig._name)
+
         cell_reactivity: dict[str, dict[str, list[str]]] = {}
         for cell_id in self.cell_rnodes.keys():
-            defined = cell_signal_definitions.get(cell_id, [])
+            defined = sorted(set(cell_signal_definitions.get(cell_id, [])))
             dep_signal_ids = cell_dependencies.get(cell_id, set())
             dep_signal_names = sorted(
                 {
