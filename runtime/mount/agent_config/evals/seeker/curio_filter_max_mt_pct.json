@@ -1,13 +1,13 @@
 {
   "id": "curio_filter_max_mt_pct",
-  "task": "Filter beads with high mitochondrial percentage (indicating stressed or dying cells) using a reasonable maximum threshold. Return a JSON object with fields: on_tissue_beads (initial number), beads_after_filtering (number remaining after filter).",
-  "data_node": "latch://38438.account/curio_ovary/adata_after_background_removal.h5ad",
+  "task": "Attached is a mouse ovary dataset generated with the Takara Seeker kit. Perform mitochondrial-quality filtering by applying both a reasonable minimum MT% threshold and a reasonable maximum MT% threshold. Return a JSON object with the fields: on_tissue_beads (initial bead count) and beads_after_filtering (bead count after filtering).",
+  "data_node": "latch://38438.account/curio_ovary/v2/adata_ovary_8hr_after_bg_removal.h5ad",
   "grader": {
     "type": "numeric_tolerance",
     "config": {
       "ground_truth": {
-        "on_tissue_beads": 12131,
-        "beads_after_filtering": 12123
+        "on_tissue_beads": 17444,
+        "beads_after_filtering": 8302
       },
       "tolerances": {
         "on_tissue_beads": {
@@ -16,9 +16,10 @@
         },
         "beads_after_filtering": {
           "type": "absolute",
-          "value": 100
+          "value": 2000
         }
       }
-    }
+    },
+    "description": "Test that agent not only can find high MT % threshold to filter (easy), but also has the scientific understanding that ovary is very metabolically active so beads with low MT % likely are off-tissue and should be filtered out (difficult)."
   }
 }

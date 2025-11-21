@@ -1,0 +1,20 @@
+{
+  "id": "no_background_removal",
+  "task": "Evaluate overall sample quality and apply background removal only if necessary. Quantify the fraction of all detected beads that are classified as off-target, expressed as a percentage. Return a JSON object with one field: off_target_percentage (float).",
+  "data_node": "latch://38438.account/curio_ovary/v2/adata_ovary_8hr.h5ad", 
+  "grader": {
+    "type": "numeric_tolerance",
+    "config": {
+      "ground_truth": {
+        "off_target_percentage": 0
+      },
+      "tolerances": {
+        "off_target_percentage": {
+          "type": "max",
+          "value": 10.0
+        }
+      }
+    },
+    "description": "Test that agent can handle a dataset that is already background removed."
+  } 
+}

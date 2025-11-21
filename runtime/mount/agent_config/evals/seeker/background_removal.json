@@ -1,22 +1,22 @@
 {
   "id": "Background Removal",
-  "task": "Tell me the percentage of off-target beads in this sample. Return a JSON object with the following fields: total_beads (number), on_target_beads (number), off_target_beads (number), off_target_percentage (percentage), threshold_description (string describing the threshold used).",
-  "data_node": "latch://38438.account/curio_ovary/GSM7689281_adata_ovary_1hr_spatial_raw_counts_susampled.h5ad",
+  "task": "Perform background removal and tell me the percentage of off-target beads in this sample. Return a JSON object with the following fields: total_beads (number), on_target_beads (number), off_target_beads (number), off_target_percentage (percentage), threshold_description (string describing the threshold used).",
+  "data_node": "latch://38438.account/curio_ovary/raw_h5ads/uncompressed/GSM7689284_adata_ovary_8hr_spatial_raw_counts.h5ad",
   "grader": {
     "type": "numeric_tolerance",
     "config": {
       "ground_truth": {
-        "off_target_percentage": 55.1,
-        "total_beads": 27020
+        "off_target_percentage": 77.3,
+        "on_target_beads": 17444
       },
       "tolerances": {
         "off_target_percentage": {
           "type": "absolute",
           "value": 5.0
         },
-        "total_beads": {
+        "on_target_beads": {
           "type": "absolute",
-          "value": 100
+          "value": 2000 
         }
       }
     }
