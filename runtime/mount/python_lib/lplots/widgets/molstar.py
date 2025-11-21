@@ -34,13 +34,6 @@ def w_molstar(
 
     if molstarviewspec_builder is not None:
         molstarviewspec = molstarviewspec_builder.get_state()
-
-        # Validate the values in the state
-        try:
-            state_dict = molstarviewspec.model_dump(exclude_none=True)
-            State.model_validate(state_dict)
-        except Exception as e:
-            raise ValueError(f"Invalid molstarviewspec state: {e}") from e
     else:
         molstarviewspec = None
 
