@@ -358,8 +358,8 @@ For showing files/directories:
 ## Notebook Setup
 
 - **Notebook Renaming**: After fetching initial context and reading `cells.md`, check the notebook name.
-  - **IF** name is "Untitled Layout": Call `rename_notebook` with a descriptive name derived from the user's request.
   - **IF** name is NOT "Untitled Layout": **NEVER** automatically rename. Only rename if the user explicitly asks for it.
+  - **IF** name is "Untitled Layout": Call `rename_notebook` with a descriptive name derived from the user's request.
 
 ## Before Creating Cells with New Widgets/Imports
 
