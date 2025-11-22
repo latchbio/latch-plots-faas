@@ -20,6 +20,7 @@ from collections import defaultdict
 from contextlib import redirect_stderr, redirect_stdout
 from copy import copy, deepcopy
 from dataclasses import asdict, dataclass, field, fields
+from datetime import datetime, timezone
 from io import TextIOWrapper
 from pathlib import Path
 from traceback import format_exc
@@ -586,6 +587,23 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
 
 snapshot_dir = Path.home() / ".cache" / "plots-faas"
 snapshot_f_name = "snapshot.json"
+
+DEBUG_LOG_PATH = Path("/var/log/debug.log")
+FALLBACK_DEBUG_LOG_PATH = Path("/tmp/plots-agent-debug.log")
+
+
+def log_debug(message: str) -> None:
+    timestamp = datetime.now(timezone.utc).isoformat()
+    line = f"{timestamp} [kernel] {message}\n"
+
+    for candidate in (DEBUG_LOG_PATH, FALLBACK_DEBUG_LOG_PATH):
+        try:
+            candidate.parent.mkdir(parents=True, exist_ok=True)
+            with candidate.open("a", encoding="utf-8") as f:
+                f.write(line)
+            break
+        except Exception:
+            continue
 
 
 class SerializedGlobal(TypedDict):
@@ -1584,10 +1602,19 @@ class Kernel:
 
         await self.send(msg)
 
-    def get_reactivity_summary(self) -> str:
+    def get_reactivity_summary(self) -> tuple[str, dict[str, dict[str, list[str]]]]:
+        log_debug(
+            "get_reactivity_summary: "
+            f"cell_rnodes={len(self.cell_rnodes)}, "
+            f"restored_nodes={len(self.restored_nodes)}, "
+            f"widget_signals={len(self.widget_signals)}, "
+            f"live_signals={len(live_signals)}"
+        )
         signal_id_to_name: dict[str, str] = {}
+        global_signal_names: dict[str, str] = {}
         global_signal_ids: set[str] = set()
         widget_signal_ids: set[str] = set()
+        cell_defined_global_names: dict[str, list[str]] = {}
 
         for widget_key, sig in self.widget_signals.items():
             signal_id_to_name[sig.id] = widget_key
@@ -1598,9 +1625,16 @@ class Kernel:
                 continue
 
             sig = self.k_globals.get_signal(var_name)
-            if sig is not None and sig.id not in signal_id_to_name:
-                signal_id_to_name[sig.id] = var_name
-                global_signal_ids.add(sig.id)
+            if sig is None:
+                continue
+
+            signal_id_to_name.setdefault(sig.id, var_name)
+            global_signal_ids.add(sig.id)
+            global_signal_names[sig.id] = var_name
+
+            producer_cell_id = getattr(sig, "_producer_cell_id", None)
+            if producer_cell_id is not None:
+                cell_defined_global_names.setdefault(producer_cell_id, []).append(var_name)
 
         all_signals: dict[str, Signal[object]] = {}
 
@@ -1621,6 +1655,7 @@ class Kernel:
             collect_all_signals(node)
 
         cell_dependencies: dict[str, set[str]] = {}
+        signal_producers: dict[str, str] = {}
 
         def traverse_node(n: Node, deps_set: set[str]) -> None:
             deps_set.update(n.signals)
@@ -1634,6 +1669,15 @@ class Kernel:
             traverse_node(node, deps)
             cell_dependencies[cell_id] = deps
 
+            log_debug(
+                "get_reactivity_summary:"
+                f" cell_id={cell_id}, index={node.cell_id}, "
+                f"deps={len(deps)}"
+            )
+
+        if len(self.cell_rnodes) == 0:
+            log_debug("get_reactivity_summary: no reactive cell nodes are currently registered.")
+
         summary_lines: list[str] = []
         summary_lines += [
             "## Reactive Dependencies",
@@ -1642,7 +1686,7 @@ class Kernel:
 
         if len(self.cell_rnodes) == 0:
             summary_lines.append("\nNo reactive dependencies in this notebook.")
-            return "\n".join(summary_lines)
+            return "\n".join(summary_lines), {}
 
         signal_name_to_id: dict[str, str] = {}
         signal_usage: dict[str, list[str]] = {}
@@ -1683,12 +1727,46 @@ class Kernel:
             else:
                 summary_lines.append(f"- **Cell {cell_id}** has no signal dependencies")
 
-        return "\n".join(summary_lines)
+        for sig in live_signals.values():
+            producer_cell_id = getattr(sig, "_producer_cell_id", None)
+            if producer_cell_id is None:
+                continue
+            signal_producers[sig.id] = producer_cell_id
+
+        cell_reactivity: dict[str, dict[str, list[str]]] = {}
+        for cell_id in self.cell_rnodes.keys():
+            defined = sorted(set(cell_defined_global_names.get(cell_id, [])))
+            dep_signal_ids = cell_dependencies.get(cell_id, set())
+            dep_signal_names = sorted(
+                {
+                    global_signal_names[sig_id]
+                    for sig_id in dep_signal_ids
+                    if sig_id in global_signal_names
+                }
+            )
+            dep_cells = sorted(
+                {
+                    producer
+                    for sig_id in dep_signal_ids
+                    if (producer := signal_producers.get(sig_id))
+                }
+            )
+            cell_reactivity[cell_id] = {
+                "signals_defined": defined,
+                "depends_on_signals": dep_signal_names,
+                "depends_on_cells": dep_cells,
+            }
+
+        return "\n".join(summary_lines), cell_reactivity
 
     async def send_reactivity_summary(self, agent_tx_id: str | None = None) -> None:
-        summary_text = self.get_reactivity_summary()
+        summary_text, cell_reactivity = self.get_reactivity_summary()
 
-        msg = {"type": "reactivity_summary", "summary": summary_text}
+        msg = {
+            "type": "reactivity_summary",
+            "summary": summary_text,
+            "cell_reactivity": cell_reactivity,
+        }
         if agent_tx_id is not None:
             msg["agent_tx_id"] = agent_tx_id
 

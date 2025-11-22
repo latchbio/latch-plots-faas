@@ -358,6 +358,7 @@ class Signal(Generic[T]):
     _value: T
     _name: str
     _id: str
+    _producer_cell_id: str | None
 
     _updates: list[T | Updater[T]]
     _listeners: dict[str, Node]
@@ -384,6 +385,7 @@ class Signal(Generic[T]):
 
         self._value = initial
         self._name = name
+        self._producer_cell_id = None
 
         self._updates = []
         self._listeners = {}
@@ -396,6 +398,9 @@ class Signal(Generic[T]):
 
         self._load_error_msg = _load_error_msg
 
+        if ctx.cur_comp is not None and ctx.cur_comp.cell_id is not None:
+            self._producer_cell_id = ctx.cur_comp.cell_id
+
     @property
     def id(self) -> str:
         assert self._id is not None
@@ -406,6 +411,7 @@ class Signal(Generic[T]):
 
     def serialize(self, short_val: bool = False) -> SerializedSignal:
         s_val, error_msg = safe_serialize_obj(self._value, short=short_val)
+        producer = getattr(self, "_producer_cell_id", None)
         return SerializedSignal(
             value=s_val,
             name=self._name,
@@ -413,11 +419,14 @@ class Signal(Generic[T]):
             dump_error_msg="" if error_msg is None else error_msg,
             load_error_msg=self._load_error_msg,
             id=self.id,
+            producer_cell_id=producer,
         )
 
     @classmethod
     def load(cls, s_sig) -> "Signal[T]":
         val, error_msg = safe_unserialize_obj(s_sig["value"])
+
+        producer_cell_id = s_sig.get("producer_cell_id")
 
         if val is None or val is unable_to_unserialize_symbol:
             sig = cls(
@@ -429,6 +438,7 @@ class Signal(Generic[T]):
         else:
             sig = cls(val, name=s_sig["name"], _id=s_sig["id"])
 
+        sig._producer_cell_id = producer_cell_id
         return sig
 
     @overload
@@ -462,6 +472,9 @@ class Signal(Generic[T]):
             ctx.signals_updated_from_code[self.id] = self
         else:
             self._ui_update = True
+
+        if ctx.cur_comp is not None and ctx.cur_comp.cell_id is not None:
+            self._producer_cell_id = ctx.cur_comp.cell_id
 
         self._mark_listeners()
 
