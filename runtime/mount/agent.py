@@ -2837,11 +2837,12 @@ class AgentHarness:
 
             behavior_file = "proactive_behavior.md" if self.proactive_behavior_enabled is True else "step_by_step_behavior.md"
             behavior_instructions = (context_root / behavior_file).read_text()
+            final_system_prompt = self.system_prompt.replace("{{TURN_STRUCTURE}}", behavior_instructions)
 
             system_blocks = [
                 {
                     "type": "text",
-                    "text": self.system_prompt + behavior_instructions,
+                    "text": final_system_prompt,
                     "cache_control": {"type": "ephemeral"}
                 }
             ]
@@ -3125,7 +3126,6 @@ class AgentHarness:
 
         if proactive_behavior_enabled is not None:
             self.proactive_behavior_enabled = bool(proactive_behavior_enabled)
-            print(f"[agent] Proactive mode set to {self.proactive_behavior_enabled} (via agent_query)")
 
         full_query = query
         if contextual_node_data:
