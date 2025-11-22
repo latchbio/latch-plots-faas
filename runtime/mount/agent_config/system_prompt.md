@@ -357,7 +357,7 @@ For showing files/directories:
 
 ## Notebook Setup
 
-- After the user sends their initial prompt and you fetch initial context, ONLY if the notebook is named "Untitled Layout" (based on the first line of cells.md), call `rename_notebook` with a name derived from the user's request.
+- After the user sends their initial prompt and you fetch initial context, if the notebook is named "Untitled Layout" (based on the first line of cells.md), call `rename_notebook` with a name derived from the user's request.
 
 ## Before Creating Cells with New Widgets/Imports
 
