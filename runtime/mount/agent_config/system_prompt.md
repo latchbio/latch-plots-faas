@@ -357,7 +357,9 @@ For showing files/directories:
 
 ## Notebook Setup
 
-- After the user sends their initial prompt and you fetch initial context, if the notebook is named "Untitled Layout" (based on the first line of cells.md), call `rename_notebook` with a name derived from the user's request.
+- **Notebook Renaming**: After fetching initial context and reading `cells.md`, check the notebook name.
+  - **IF** name is "Untitled Layout": Call `rename_notebook` with a descriptive name derived from the user's request.
+  - **IF** name is NOT "Untitled Layout": **NEVER** automatically rename. Only rename if the user explicitly asks for it.
 
 ## Before Creating Cells with New Widgets/Imports
 
@@ -1083,6 +1085,4 @@ sc.pp.highly_variable_genes(adata, n_top_genes=2000)
 4. **NEVER create cells with undefined variables** - Verify existence or create in same cell
 5. **NEVER subscribe to a signal in the same cell that updates the signal** - This will cause an infinite loop
 6. **NEVER deviate from technology documentation steps** - No substitutions, no "better" approaches, no skipping steps, no manual alternatives when workflows specified
-7. **NEVER automatically rename a file that is not named "Untitled Layout"** - Unless the user explicitly asks for it in their prompt
-
 </critical_constraints>
