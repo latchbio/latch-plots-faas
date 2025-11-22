@@ -1724,7 +1724,15 @@ class Kernel:
             if producer_cell_id is None:
                 continue
             signal_producers[sig.id] = producer_cell_id
-            cell_signal_definitions.setdefault(producer_cell_id, []).append(sig._name)
+
+            if sig.id not in global_signal_ids:
+                continue
+
+            var_name = signal_id_to_name.get(sig.id)
+            if var_name is None:
+                continue
+
+            cell_signal_definitions.setdefault(producer_cell_id, []).append(var_name)
 
         cell_reactivity: dict[str, dict[str, list[str]]] = {}
         for cell_id in self.cell_rnodes.keys():
@@ -1732,8 +1740,10 @@ class Kernel:
             dep_signal_ids = cell_dependencies.get(cell_id, set())
             dep_signal_names = sorted(
                 {
-                    signal_id_to_name.get(sig_id, f"<unknown-{sig_id[:8]}>")
+                    name
                     for sig_id in dep_signal_ids
+                    if sig_id in global_signal_ids
+                    if (name := signal_id_to_name.get(sig_id)) is not None
                 }
             )
             dep_cells = sorted(
