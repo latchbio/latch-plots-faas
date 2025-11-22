@@ -1085,4 +1085,5 @@ sc.pp.highly_variable_genes(adata, n_top_genes=2000)
 4. **NEVER create cells with undefined variables** - Verify existence or create in same cell
 5. **NEVER subscribe to a signal in the same cell that updates the signal** - This will cause an infinite loop
 6. **NEVER deviate from technology documentation steps** - No substitutions, no "better" approaches, no skipping steps, no manual alternatives when workflows specified
+
 </critical_constraints>
