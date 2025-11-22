@@ -179,52 +179,7 @@ class AgentHarness:
 
         return msg
 
-    @staticmethod
-    def _coerce_text_value(value: object) -> str:
-        if isinstance(value, str):
-            return value
-
-        if isinstance(value, dict):
-            nested_text = value.get("text")
-            if isinstance(nested_text, str):
-                return nested_text
-            return json.dumps(value, sort_keys=True)
-
-        if value is None:
-            return ""
-
-        return str(value)
-
-    @classmethod
-    def _sanitize_content_block(cls, block: object) -> object:
-        if not isinstance(block, dict):
-            return block
-
-        sanitized_block = block.copy()
-        block_type = sanitized_block.get("type")
-        sanitized_block.pop("parsed_output", None)
-
-        if block_type == "text":
-            sanitized_block["text"] = cls._coerce_text_value(sanitized_block.get("text"))
-
-        return sanitized_block
-
-    @classmethod
-    def _sanitize_message(cls, msg: MessageParam) -> MessageParam:
-        sanitized_message = msg.copy()
-        content = sanitized_message.get("content")
-
-        if isinstance(content, list):
-            sanitized_message["content"] = [
-                cls._sanitize_content_block(block) for block in content
-            ]
-        elif isinstance(content, dict):
-            sanitized_message["content"] = json.dumps(content, sort_keys=True)
-
-        return sanitized_message
-
     def _prepare_messages_for_inference(self, messages: list[MessageParam]) -> list[MessageParam]:
-        messages = [self._sanitize_message(msg) for msg in messages]
         nrof_messages = len(messages)
 
         cache_pos = nrof_messages - (nrof_messages % cache_chunk_size)
