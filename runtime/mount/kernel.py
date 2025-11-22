@@ -1611,8 +1611,10 @@ class Kernel:
             f"live_signals={len(live_signals)}"
         )
         signal_id_to_name: dict[str, str] = {}
+        global_signal_names: dict[str, str] = {}
         global_signal_ids: set[str] = set()
         widget_signal_ids: set[str] = set()
+        cell_defined_global_names: dict[str, list[str]] = {}
 
         for widget_key, sig in self.widget_signals.items():
             signal_id_to_name[sig.id] = widget_key
@@ -1623,9 +1625,16 @@ class Kernel:
                 continue
 
             sig = self.k_globals.get_signal(var_name)
-            if sig is not None and sig.id not in signal_id_to_name:
-                signal_id_to_name[sig.id] = var_name
-                global_signal_ids.add(sig.id)
+            if sig is None:
+                continue
+
+            signal_id_to_name.setdefault(sig.id, var_name)
+            global_signal_ids.add(sig.id)
+            global_signal_names[sig.id] = var_name
+
+            producer_cell_id = getattr(sig, "_producer_cell_id", None)
+            if producer_cell_id is not None:
+                cell_defined_global_names.setdefault(producer_cell_id, []).append(var_name)
 
         all_signals: dict[str, Signal[object]] = {}
 
@@ -1647,7 +1656,6 @@ class Kernel:
 
         cell_dependencies: dict[str, set[str]] = {}
         signal_producers: dict[str, str] = {}
-        cell_signal_definitions: dict[str, list[str]] = {}
 
         def traverse_node(n: Node, deps_set: set[str]) -> None:
             deps_set.update(n.signals)
@@ -1725,25 +1733,15 @@ class Kernel:
                 continue
             signal_producers[sig.id] = producer_cell_id
 
-            if sig.id not in global_signal_ids:
-                continue
-
-            var_name = signal_id_to_name.get(sig.id)
-            if var_name is None:
-                continue
-
-            cell_signal_definitions.setdefault(producer_cell_id, []).append(var_name)
-
         cell_reactivity: dict[str, dict[str, list[str]]] = {}
         for cell_id in self.cell_rnodes.keys():
-            defined = sorted(set(cell_signal_definitions.get(cell_id, [])))
+            defined = sorted(set(cell_defined_global_names.get(cell_id, [])))
             dep_signal_ids = cell_dependencies.get(cell_id, set())
             dep_signal_names = sorted(
                 {
-                    name
+                    global_signal_names[sig_id]
                     for sig_id in dep_signal_ids
-                    if sig_id in global_signal_ids
-                    if (name := signal_id_to_name.get(sig_id)) is not None
+                    if sig_id in global_signal_names
                 }
             )
             dep_cells = sorted(
