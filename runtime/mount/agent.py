@@ -2,6 +2,7 @@ import asyncio
 import contextlib
 import json
 import os
+import re
 import socket
 import subprocess
 import sys
@@ -46,6 +47,10 @@ class Mode(Enum):
     executing = "executing"
     debugging = "debugging"
 
+class Behavior(Enum):
+    normal = "normal"
+    proactive = "proactive"
+    step_by_step = "step_by_step"
 
 @dataclass
 class AgentHarness:
@@ -71,7 +76,7 @@ class AgentHarness:
     latest_notebook_context: dict = field(default_factory=dict)
     current_status: str | None = None
     expected_widgets: dict[str, object | None] = field(default_factory=dict)
-    proactive_behavior_enabled: bool | None = None
+    behavior: Behavior | None = None
 
     mode_config: dict[Mode, tuple[str, int | None]] = field(default_factory=lambda: {
         Mode.planning: ("claude-sonnet-4-5-20250929", 4096),
@@ -2835,9 +2840,19 @@ class AgentHarness:
 
             assert self.system_prompt is not None
 
-            behavior_file = "proactive_behavior.md" if self.proactive_behavior_enabled is True else "step_by_step_behavior.md"
+            if self.behavior == Behavior.normal:
+                behavior_file = "normal_behavior.md"
+            elif self.behavior == Behavior.proactive:
+                behavior_file = "proactive_behavior.md"
+            else:
+                behavior_file = "step_by_step_behavior.md"
             behavior_instructions = (context_root / behavior_file).read_text()
-            final_system_prompt = self.system_prompt.replace("{{TURN_STRUCTURE}}", behavior_instructions)
+            final_system_prompt = re.sub(
+                r"<turn_structure>.*?</turn_structure>",
+                f"<turn_structure>\n{behavior_instructions}\n</turn_structure>",
+                self.system_prompt,
+                flags=re.DOTALL,
+            )
 
             system_blocks = [
                 {
@@ -3122,10 +3137,10 @@ class AgentHarness:
         request_id = msg.get("request_id")
         contextual_node_data = msg.get("contextual_node_data")
         template_version_id = msg.get("template_version_id")
-        proactive_behavior_enabled = msg.get("proactive_behavior_enabled")
+        behavior = msg.get("behavior")
 
-        if proactive_behavior_enabled is not None:
-            self.proactive_behavior_enabled = bool(proactive_behavior_enabled)
+        if behavior is not None:
+            self.behavior = Behavior(behavior)
 
         full_query = query
         if contextual_node_data:
