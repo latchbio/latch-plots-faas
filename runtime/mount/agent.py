@@ -81,9 +81,9 @@ class AgentHarness:
     behavior: Behavior | None = None
 
     mode_config: dict[Mode, tuple[str, int | None]] = field(default_factory=lambda: {
-        Mode.planning: ("claude-sonnet-4-5-20250929", 4096),
-        Mode.executing: ("claude-sonnet-4-5-20250929", 1024),
-        Mode.debugging: ("claude-sonnet-4-5-20250929", 2048),
+        Mode.planning: ("claude-opus-4-5-20251101", 4096),
+        Mode.executing: ("claude-opus-4-5-20251101", 1024),
+        Mode.debugging: ("claude-opus-4-5-20251101", 2048),
     })
 
     async def send(self, msg: dict[str, object]) -> None:
@@ -2870,7 +2870,7 @@ class AgentHarness:
             turn += 1
             print(f"[agent] run_agent_loop: starting turn {turn}")
 
-            model, thinking_budget = self.mode_config.get(self.mode, ("claude-sonnet-4-5-20250929", 1024))
+            model, thinking_budget = self.mode_config.get(self.mode, ("claude-opus-4-5-20251101", 1024))
 
             print(f"[agent] Turn {turn}, mode={self.mode}, thinking_budget={thinking_budget}")
 
@@ -3292,7 +3292,7 @@ class AgentHarness:
             "system_prompt": self.system_prompt,
             "messages": messages,
             "truncated_messages": truncated_messages,
-            "model": self.mode_config.get(self.mode, ("claude-sonnet-4-5-20250929", 1024))[0],
+            "model": self.mode_config.get(self.mode, ("claude-opus-4-5-20251101", 1024))[0],
             "cells": cells_content,
             "tree": tree_content,
         }
