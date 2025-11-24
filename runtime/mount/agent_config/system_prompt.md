@@ -84,8 +84,7 @@ If you cannot find authorization in the tech doc for your planned action, STOP a
 
 ---
 
-<turn_structure>
-</turn_structure>
+<turn_structure></turn_structure>
 
 ---
 

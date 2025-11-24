@@ -2851,7 +2851,6 @@ class AgentHarness:
                 r"<turn_structure>.*?</turn_structure>",
                 f"<turn_structure>\n{behavior_instructions}\n</turn_structure>",
                 self.system_prompt,
-                flags=re.DOTALL,
             )
 
             system_blocks = [
