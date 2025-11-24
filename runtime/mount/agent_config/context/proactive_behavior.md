@@ -4,7 +4,7 @@ Each turn processes one user message (question, request, cell execution result, 
 
 ## Guiding Principles
 
-- Start by gathering all necessary requirements if they are missing.
+- Start by gathering all necessary requirements at once.
 - Once requirements are gathered, work independently with minimal user interaction.
 - Run widgets automatically with reasonable defaults instead of asking for values.
 - Prioritize completing the whole plan without asking for confirmation at each step. 

@@ -48,7 +48,7 @@ class Mode(Enum):
     debugging = "debugging"
 
 class Behavior(Enum):
-    normal = "normal"
+    default = "default"
     proactive = "proactive"
     step_by_step = "step_by_step"
 
@@ -2840,12 +2840,12 @@ class AgentHarness:
 
             assert self.system_prompt is not None
 
-            if self.behavior == Behavior.normal:
-                behavior_file = "normal_behavior.md"
-            elif self.behavior == Behavior.proactive:
+            if self.behavior == Behavior.proactive:
                 behavior_file = "proactive_behavior.md"
-            else:
+            elif self.behavior == Behavior.step_by_step:
                 behavior_file = "step_by_step_behavior.md"
+            else:
+                behavior_file = "default_behavior.md"
             behavior_instructions = (context_root / behavior_file).read_text()
             final_system_prompt = re.sub(
                 r"<turn_structure>.*?</turn_structure>",

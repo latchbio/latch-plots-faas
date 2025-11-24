@@ -1,4 +1,4 @@
-## Turn Processing (Normal Behavior Mode)
+## Turn Processing (Default Behavior Mode)
 
 Each turn processes one user message (question, request, cell execution result, or environment information).
 
