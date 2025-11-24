@@ -3,6 +3,7 @@ from typing import Literal, NotRequired, TypedDict
 
 from molviewspec.builder import Root, State
 
+from ..reactive import Signal
 from . import _emit, _state, widget
 
 molstar_type: Literal["molstar"] = "molstar"
@@ -48,7 +49,7 @@ class SequenceSelection(TypedDict):
 
 
 class MolstarValue(TypedDict):
-    selection: SequenceSelection
+    selection: SequenceSelection | None
 
 
 class MolstarState(_emit.WidgetState[molstar_type, MolstarValue]):
@@ -61,6 +62,42 @@ class MolstarState(_emit.WidgetState[molstar_type, MolstarValue]):
 class Molstar(widget.BaseWidget):
     _key: str
     _state: MolstarState
+    _signal: Signal[object | MolstarValue]
+
+    def _value(self, val: object) -> MolstarValue:
+        default = MolstarValue(selection=None)
+
+        if not isinstance(val, dict):
+            return default
+
+        selection = val.get("selection")
+        if not isinstance(selection, dict):
+            return default
+
+        segments = selection.get("segments")
+        if not isinstance(segments, list):
+            return default
+
+        full_sequence = selection.get("fullSequence")
+        if not isinstance(full_sequence, str):
+            return default
+
+        structure_label = selection.get("structureLabel")
+
+        res_selection = SequenceSelection(segments=segments, fullSequence=full_sequence)
+        if isinstance(structure_label, str):
+            res_selection["structureLabel"] = structure_label
+
+        return MolstarValue(selection=res_selection)
+
+    @property
+    def value(self) -> MolstarValue:
+        res = self._signal()
+        return self._value(res)
+
+    def sample(self) -> MolstarValue:
+        res = self._signal.sample()
+        return self._value(res)
 
 
 _emit.widget_registry[molstar_type] = Molstar
@@ -84,6 +121,7 @@ def w_molstar(
             "label": label,
             "molstarviewspec": molstarviewspec,
         },
+        _signal=_state.use_value_signal(key=key),
     )
     _emit.emit_widget(key, res._state)
 
