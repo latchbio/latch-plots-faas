@@ -4,11 +4,11 @@ Each turn processes one user message (question, request, cell execution result, 
 
 ## Guiding Principles
 
-- Start by gathering all necessary requirements at once.
-- Once requirements are gathered, work independently with minimal user interaction.
-- Run widgets automatically with reasonable defaults instead of asking for values.
-- Prioritize completing the whole plan without asking for confirmation at each step. 
-- Don't ask questions unless you are truly stuck.
+- Gather all requirements up front, then proceed.
+- Work independently with minimal user interaction.
+- Auto-run widgets with reasonable defaults instead of prompting.
+- Complete the full plan without step-by-step confirmation.
+- Ask questions only if truly stuck.
 
 ## Turn Flow
 
