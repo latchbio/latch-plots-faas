@@ -34,7 +34,7 @@ Gene set scoring is a **fast exploratory approach** for cell type annotation tha
    - Sample consistency
    - Condition changes
 
-8. **Self-evaluate** — Be honest and objective about results
+8. **Self-evaluate** — Be honest and objective about results. If results are unsatisfactory, go back and revise your work.
 
 **Presentation**: Generate visuals at EVERY step using `w_table`, `w_plot`, and markdown.
 
@@ -43,6 +43,8 @@ Gene set scoring is a **fast exploratory approach** for cell type annotation tha
 ## Step 1: Select Expected Cell Types
 
 Choose **5-10 major cell types** realistic for your tissue and organism. Focus on broad categories rather than fine subtypes.
+
+If a cell type is not found in the CellGuide's per-tissue query, expand the query to "All Tissues". 
 
 ---
 
@@ -54,6 +56,9 @@ Extract **40-50 top-ranked markers** per cell type from the CellGuide database.
 - CellGuide names may not match the cell type names you’re looking for exactly.
 - The database is comprehensive and includes broad categories, subtypes, and synonyms.
 - Prioritize biological equivalence over exact string matches when searching for cell types and markers. 
+
+**What if a cell type is not found?**
+- Use well-established canonical markers from public literature and include it in the analysis. **Never exclude an expected major cell type.**
 
 **Why 40-50?**
 - Expect 20-40% retention after discriminatory filtering
@@ -84,7 +89,9 @@ Evaluate each marker's ability to distinguish cell types by computing **median f
 
 **Method:** For each marker, compute median expression per cluster, then calculate pairwise fold changes. Keep markers where median fold change across all pairs exceeds threshold.
 
-**Quality check:** After filtering, verify **each cell type retains ≥2 markers AND there are ≥3 cell types**. If not, lower threshold to 1.05-1.1× or increase initial marker count to 50-60.
+**Quality check:** 
+- After filtering, verify **each cell type retains ≥2 markers AND there are ≥3 cell types**. 
+- If a major cell type does not have any discriminatory marker, use **known canonical markers** from your general knowledge.
 
 ---
 
@@ -100,7 +107,7 @@ Evaluate each marker's ability to distinguish cell types by computing **median f
 1. Calculate target count (median or minimum of filtered marker counts)
 2. Enforce minimum of 2 markers per cell type
 3. Take top 5 markers by fold change for each cell type
-4. Only include cell types with ≥3 final markers
+4. Only include cell types with ≥2 final markers
 
 **Result:** All cell types have equal "voting power" during scoring.
 
