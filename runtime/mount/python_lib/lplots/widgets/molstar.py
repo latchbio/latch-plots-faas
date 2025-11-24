@@ -23,7 +23,35 @@ class MolstarOptions(TypedDict, total=False):
     layout: LayoutOptions
 
 
-class MolstarState(_emit.WidgetState[molstar_type, str]):
+class SelectedResidue(TypedDict):
+    chainId: str
+    authChainId: str
+    residueName: str
+    residueNumber: int
+    authResidueNumber: int
+    compId: str
+    oneLetterCode: str
+
+
+class SequenceSegment(TypedDict):
+    chainId: str
+    residues: list[SelectedResidue]
+    sequence: str
+    startResidue: int
+    endResidue: int
+
+
+class SequenceSelection(TypedDict):
+    segments: list[SequenceSegment]
+    fullSequence: str
+    structureLabel: NotRequired[str]
+
+
+class MolstarValue(TypedDict):
+    selection: SequenceSelection
+
+
+class MolstarState(_emit.WidgetState[molstar_type, MolstarValue]):
     label: NotRequired[str | None]
     options: MolstarOptions
     molstarviewspec: NotRequired[State | None]
