@@ -26,6 +26,8 @@ sys.stdout.reconfigure(line_buffering=True)
 
 cache_chunk_size = 20
 
+reactivity_ready_statuses = {"ran", "ok", "success", "error"}
+
 sandbox_root = os.environ.get("LATCH_SANDBOX_ROOT")
 if sandbox_root:
     import pathlib
@@ -2517,6 +2519,14 @@ class AgentHarness:
                     "summary": f"Failed to refresh cells: {context_result.get('error', 'Unknown error')}"
                 }
 
+            if reactivity_result.get("status") != "success":
+                print(f"[tool] refresh_cells_context: failed to get reactivity summary: {reactivity_result.get('error', 'Unknown error')}")
+                return {
+                    "tool_name": "refresh_cells_context",
+                    "success": False,
+                    "summary": f"Failed to get reactivity summary: {reactivity_result.get('error', 'Unknown error')}"
+                }
+
             context = context_result.get("context", {})
             self.latest_notebook_context = context
 
@@ -2536,17 +2546,7 @@ class AgentHarness:
 
             current_tab_name = default_tab_name
 
-            cell_reactivity: dict[str, dict[str, object]] = {}
-
-            if reactivity_result.get("status") != "success":
-                print(f"[tool] refresh_cells_context: failed to get reactivity summary: {reactivity_result.get('error', 'Unknown error')}")
-                return {
-                    "tool_name": "refresh_cells_context",
-                    "success": False,
-                    "summary": f"Failed to get reactivity summary: {reactivity_result.get('error', 'Unknown error')}"
-                }
-
-            cell_reactivity = reactivity_result.get("cell_reactivity", {})
+            cell_reactivity: dict[str, dict[str, object]] = reactivity_result.get("cell_reactivity", {})
 
             for cell in cells:
                 index = cell.get("index", "?")
@@ -2597,24 +2597,34 @@ class AgentHarness:
                     continue
 
                 reactivity_meta = cell_reactivity.get(str(tf_id))
-                if reactivity_meta is not None:
-                    signals_defined = reactivity_meta.get("signals_defined", [])
-                    depends_on_signals = reactivity_meta.get("depends_on_signals", [])
-                    depends_on_cells = reactivity_meta.get("depends_on_cells", [])
+                is_reactivity_ready = status in reactivity_ready_statuses
 
-                    cell_lines.append("\nREACTIVITY:")  # noqa: FURB113
-                    cell_lines.append(
-                        "- Signals defined: "
-                        + (", ".join(signals_defined) if signals_defined else "None")
-                    )
-                    cell_lines.append(
-                        "- Depends on signals: "
-                        + (", ".join(depends_on_signals) if depends_on_signals else "None")
-                    )
-                    cell_lines.append(
-                        "- Depends on cells: "
-                        + (", ".join(depends_on_cells) if depends_on_cells else "None")
-                    )
+                cell_lines.append("\nREACTIVITY:")
+
+                if not is_reactivity_ready:
+                    cell_lines.append("- Not available: run this cell to establish reactive dependencies.")
+                    continue
+
+                if reactivity_meta is None:
+                    cell_lines.append("- Reactivity data missing for this cell.")
+                    continue
+
+                signals_defined = reactivity_meta.get("signals_defined", [])
+                depends_on_signals = reactivity_meta.get("depends_on_signals", [])
+                depends_on_cells = reactivity_meta.get("depends_on_cells", [])
+
+                cell_lines.append(  # noqa: FURB113
+                    "- Signals defined: "
+                    + (", ".join(signals_defined) if signals_defined else "None")
+                )
+                cell_lines.append(
+                    "- Depends on signals: "
+                    + (", ".join(depends_on_signals) if depends_on_signals else "None")
+                )
+                cell_lines.append(
+                    "- Depends on cells: "
+                    + (", ".join(depends_on_cells) if depends_on_cells else "None")
+                )
 
             context_dir = context_root / "notebook_context"
             context_dir.mkdir(parents=True, exist_ok=True)
