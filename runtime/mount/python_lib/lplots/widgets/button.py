@@ -1,10 +1,14 @@
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Literal, TypedDict
+from typing import Literal, NotRequired, TypedDict
 
 from ..persistence import SerializedWidget
 from ..reactive import Signal
 from . import _emit, _state, widget
+
+
+class ButtonAppearance(TypedDict, total=False):
+    variant: Literal["primary", "secondary", "text", "link"]
 
 
 class ButtonWidgetSignalValue(TypedDict):
@@ -19,6 +23,7 @@ class ButtonWidgetState(_emit.WidgetState[button_type, str]):
     label: str
     readonly: bool
     default: ButtonWidgetSignalValue
+    appearance: NotRequired[ButtonAppearance | None]
 
 
 class SerializedButtonWidget(SerializedWidget):
@@ -87,11 +92,7 @@ class ButtonWidget(widget.BaseWidget):
     ) -> "ButtonWidget":
         sig = widget_sigs[s_widget["signal_id"]]
 
-        return cls(
-            _signal=sig,
-            _state=s_widget["state"],
-            _key=s_widget["key"],
-        )
+        return cls(_signal=sig, _state=s_widget["state"], _key=s_widget["key"])
 
 
 _emit.widget_registry[button_type] = ButtonWidget
@@ -103,6 +104,7 @@ def w_button(
     label: str,
     default: ButtonWidgetSignalValue | None = None,
     readonly: bool = False,
+    appearance: ButtonAppearance | None = None,
 ) -> ButtonWidget:
     key = _state.use_state_key(key=key)
 
@@ -117,6 +119,7 @@ def w_button(
             "label": label,
             "default": default,
             "readonly": readonly,
+            "appearance": appearance,
         },
         _signal=_state.use_value_signal(key=key),
     )
