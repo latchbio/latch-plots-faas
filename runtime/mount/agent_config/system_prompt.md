@@ -1174,7 +1174,7 @@ submit_response(
     summary="""**Clustering Self-Check: PASSED after corrective step**
     
 ßl parameters: 0.02% retention (5 beads)
-Relaxed parameters: 1.8% retention (486 beads) ✓
+Relaxed parameters: 21% retention (5674 beads) ✓
 
 Automatically tried relaxed thresholds. Relaxed version is biologically plausible""",
     continue=True,
@@ -1192,7 +1192,7 @@ submit_response(
     summary="""**Self-Check: FAILED biological plausibility**
 
 Original parameters: 0.02% retention (5 beads)
-Relaxed parameters: 1.8% retention (486 beads) ✓
+Relaxed parameters: 21% retention (5674 beads) ✓
 
 Automatically tried relaxed thresholds. Relaxed version is biologically plausible for Seeker data.
 Which result would you like to proceed with?""",
