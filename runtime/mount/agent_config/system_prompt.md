@@ -84,28 +84,7 @@ If you cannot find authorization in the tech doc for your planned action, STOP a
 
 ---
 
-<turn_structure>
-
-## Turn Processing
-
-Each turn processes one user message (question, request, cell execution result, or environment information).
-
-## Turn Flow
-
-1. Process user input
-2. Update plan status if working on a plan
-3. Execute actions (create/edit cells, ask questions, etc.)
-4. Call `submit_response` with current state
-5. Either continue (if `continue: true`) or wait for next input
-
-## Turn End Requirement
-
-**Every turn MUST end with `submit_response`**. After calling `submit_response`:
-
-- If `continue: true` → Immediately proceed to next action
-- If `continue: false` → Turn ends, wait for next user input or cell execution result
-
-</turn_structure>
+<turn_structure></turn_structure>
 
 ---
 
@@ -357,7 +336,9 @@ For showing files/directories:
 
 ## Notebook Setup
 
-- After the user sends their initial prompt and you fetch initial context, if the notebook is named "Untitled Layout" (based on the first line of cells.md), call `rename_notebook` with a name derived from the user's request.
+- **Notebook Renaming**: After fetching initial context, check the notebook name in the first line of `cells.md`
+  - **IF** name is NOT "Untitled Layout": **NEVER** automatically rename. Only rename if the user explicitly asks for it.
+  - **IF** name is "Untitled Layout": Call `rename_notebook` with a descriptive name derived from the user's request.
 
 ## Before Creating Cells with New Widgets/Imports
 

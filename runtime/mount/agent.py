@@ -2,6 +2,7 @@ import asyncio
 import contextlib
 import json
 import os
+import re
 import socket
 import subprocess
 import sys
@@ -46,6 +47,10 @@ class Mode(Enum):
     executing = "executing"
     debugging = "debugging"
 
+class Behavior(Enum):
+    default = "default"
+    proactive = "proactive"
+    step_by_step = "step_by_step"
 
 @dataclass
 class AgentHarness:
@@ -71,6 +76,7 @@ class AgentHarness:
     latest_notebook_context: dict = field(default_factory=dict)
     current_status: str | None = None
     expected_widgets: dict[str, object | None] = field(default_factory=dict)
+    behavior: Behavior | None = None
 
     mode_config: dict[Mode, tuple[str, int | None]] = field(default_factory=lambda: {
         Mode.planning: ("claude-sonnet-4-5-20250929", 4096),
@@ -2832,10 +2838,23 @@ class AgentHarness:
 
             assert self.system_prompt is not None
 
+            if self.behavior == Behavior.proactive:
+                behavior_file = "proactive_behavior.md"
+            elif self.behavior == Behavior.step_by_step:
+                behavior_file = "step_by_step_behavior.md"
+            else:
+                behavior_file = "default_behavior.md"
+            behavior_instructions = (context_root / behavior_file).read_text()
+            final_system_prompt = re.sub(
+                r"<turn_structure>.*?</turn_structure>",
+                f"<turn_structure>\n{behavior_instructions}\n</turn_structure>",
+                self.system_prompt,
+            )
+
             system_blocks = [
                 {
                     "type": "text",
-                    "text": self.system_prompt,
+                    "text": final_system_prompt,
                     "cache_control": {"type": "ephemeral"}
                 }
             ]
@@ -3115,6 +3134,10 @@ class AgentHarness:
         request_id = msg.get("request_id")
         contextual_node_data = msg.get("contextual_node_data")
         template_version_id = msg.get("template_version_id")
+        behavior = msg.get("behavior")
+
+        if behavior is not None:
+            self.behavior = Behavior(behavior)
 
         full_query = query
         if contextual_node_data:

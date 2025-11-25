@@ -35,7 +35,13 @@ env_vars = {
     "PATH": "/opt/mamba/envs/plots-faas/bin:" + os.environ["PATH"],
 }
 
-os.system("git -C /opt/latch/plots-faas pull origin main")
+os.system(
+    "git -C /opt/latch/plots-faas remote add forgejo-mirror https://git.latch.bio/LatchBio/latch-plots-faas.git"
+)
+
+os.system(
+    "git -C /opt/latch/plots-faas pull origin main || git -C /opt/latch/plots-faas forgejo-mirror main"
+)
 os.system("git -C /opt/latch/plots-faas rev-parse HEAD > /opt/latch/plots_faas_version")
 
 os.chdir("/opt/latch/plots-faas")
