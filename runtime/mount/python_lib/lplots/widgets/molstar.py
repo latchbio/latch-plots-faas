@@ -78,11 +78,11 @@ class Molstar(widget.BaseWidget):
         if not isinstance(segments_raw, list):
             return default
 
-        full_sequence = selection.get("fullSequence")
+        full_sequence = selection.get("full_sequence")
         if not isinstance(full_sequence, str):
             return default
 
-        structure_label = selection.get("structureLabel")
+        structure_label = selection.get("structure_label")
 
         segments: list[SequenceSegment] = []
         for seg in segments_raw:
@@ -100,23 +100,23 @@ class Molstar(widget.BaseWidget):
 
                 residues.append(
                     SelectedResidue(
-                        chain_id=res.get("chainId", ""),
-                        auth_chain_id=res.get("authChainId", ""),
-                        residue_name=res.get("residueName", ""),
-                        residue_number=res.get("residueNumber", 0),
-                        auth_residue_number=res.get("authResidueNumber", 0),
-                        comp_id=res.get("compId", ""),
-                        one_letter_code=res.get("oneLetterCode", ""),
+                        chain_id=res.get("chain_id", ""),
+                        auth_chain_id=res.get("auth_chain_id", ""),
+                        residue_name=res.get("residue_name", ""),
+                        residue_number=res.get("residue_number", 0),
+                        auth_residue_number=res.get("auth_residue_number", 0),
+                        comp_id=res.get("comp_id", ""),
+                        one_letter_code=res.get("one_letter_code", ""),
                     )
                 )
 
             segments.append(
                 SequenceSegment(
-                    chain_id=seg.get("chainId", ""),
+                    chain_id=seg.get("chain_id", ""),
                     residues=residues,
                     sequence=seg.get("sequence", ""),
-                    start_residue=seg.get("startResidue", 0),
-                    end_residue=seg.get("endResidue", 0),
+                    start_residue=seg.get("start_residue", 0),
+                    end_residue=seg.get("end_residue", 0),
                 )
             )
 
