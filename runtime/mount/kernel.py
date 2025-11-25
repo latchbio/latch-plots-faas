@@ -1616,6 +1616,11 @@ class Kernel:
         widget_signal_ids: set[str] = set()
         cell_defined_global_names: dict[str, list[str]] = {}
 
+        def register_global_signal(sig: Signal[object], name: str) -> None:
+            signal_id_to_name.setdefault(sig.id, name)
+            global_signal_ids.add(sig.id)
+            global_signal_names[sig.id] = name
+
         for widget_key, sig in self.widget_signals.items():
             signal_id_to_name[sig.id] = widget_key
             widget_signal_ids.add(sig.id)
@@ -1628,13 +1633,15 @@ class Kernel:
             if sig is None:
                 continue
 
-            signal_id_to_name.setdefault(sig.id, var_name)
-            global_signal_ids.add(sig.id)
-            global_signal_names[sig.id] = var_name
+            register_global_signal(sig, var_name)
 
             producer_cell_id = getattr(sig, "_producer_cell_id", None)
             if producer_cell_id is not None:
                 cell_defined_global_names.setdefault(producer_cell_id, []).append(var_name)
+
+            value = sig.sample()
+            if isinstance(value, Signal):
+                register_global_signal(value, var_name)
 
         all_signals: dict[str, Signal[object]] = {}
 
