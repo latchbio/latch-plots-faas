@@ -25,27 +25,27 @@ class MolstarOptions(TypedDict, total=False):
 
 
 class SelectedResidue(TypedDict):
-    chainId: str
-    authChainId: str
-    residueName: str
-    residueNumber: int
-    authResidueNumber: int
-    compId: str
-    oneLetterCode: str
+    chain_id: str
+    auth_chain_id: str
+    residue_name: str
+    residue_number: int
+    auth_residue_number: int
+    comp_id: str
+    one_letter_code: str
 
 
 class SequenceSegment(TypedDict):
-    chainId: str
+    chain_id: str
     residues: list[SelectedResidue]
     sequence: str
-    startResidue: int
-    endResidue: int
+    start_residue: int
+    end_residue: int
 
 
 class SequenceSelection(TypedDict):
     segments: list[SequenceSegment]
-    fullSequence: str
-    structureLabel: NotRequired[str]
+    full_sequence: str
+    structure_label: NotRequired[str]
 
 
 class MolstarValue(TypedDict):
@@ -74,8 +74,8 @@ class Molstar(widget.BaseWidget):
         if not isinstance(selection, dict):
             return default
 
-        segments = selection.get("segments")
-        if not isinstance(segments, list):
+        segments_raw = selection.get("segments")
+        if not isinstance(segments_raw, list):
             return default
 
         full_sequence = selection.get("fullSequence")
@@ -84,9 +84,45 @@ class Molstar(widget.BaseWidget):
 
         structure_label = selection.get("structureLabel")
 
-        res_selection = SequenceSelection(segments=segments, fullSequence=full_sequence)
+        segments: list[SequenceSegment] = []
+        for seg in segments_raw:
+            if not isinstance(seg, dict):
+                continue
+
+            residues_raw = seg.get("residues")
+            if not isinstance(residues_raw, list):
+                continue
+
+            residues: list[SelectedResidue] = []
+            for res in residues_raw:
+                if not isinstance(res, dict):
+                    continue
+
+                residues.append(
+                    SelectedResidue(
+                        chain_id=res.get("chainId", ""),
+                        auth_chain_id=res.get("authChainId", ""),
+                        residue_name=res.get("residueName", ""),
+                        residue_number=res.get("residueNumber", 0),
+                        auth_residue_number=res.get("authResidueNumber", 0),
+                        comp_id=res.get("compId", ""),
+                        one_letter_code=res.get("oneLetterCode", ""),
+                    )
+                )
+
+            segments.append(
+                SequenceSegment(
+                    chain_id=seg.get("chainId", ""),
+                    residues=residues,
+                    sequence=seg.get("sequence", ""),
+                    start_residue=seg.get("startResidue", 0),
+                    end_residue=seg.get("endResidue", 0),
+                )
+            )
+
+        res_selection = SequenceSelection(segments=segments, full_sequence=full_sequence)
         if isinstance(structure_label, str):
-            res_selection["structureLabel"] = structure_label
+            res_selection["structure_label"] = structure_label
 
         return MolstarValue(selection=res_selection)
 
@@ -104,7 +140,11 @@ _emit.widget_registry[molstar_type] = Molstar
 
 
 def w_molstar(
-    *, key: str | None = None, label: str | None = None, options: MolstarOptions, molstarviewspec_builder: Root | None = None
+    *,
+    key: str | None = None,
+    label: str | None = None,
+    options: MolstarOptions,
+    molstarviewspec_builder: Root | None = None,
 ) -> Molstar:
     key = _state.use_state_key(key=key)
 
