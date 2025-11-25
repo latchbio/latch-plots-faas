@@ -11,7 +11,7 @@ This protocol identifies cell types in AtlasXOmics spatial ATAC-seq data using *
 
 2. **Check marker availability** — Verify markers exist in `adata.var_names`; update lists if coverage is low.
 
-3. **Score clusters** — Compute mean gene activity for each marker set and compare scores **across clusters** to identify enriched cell types.
+3. **Score clusters** — Compute mean gene activity and Z-scores for each marker set and compare Z-scores **across clusters** to identify enriched cell types.
 
 4. **Assign annotations** — Label each cluster with the cell type showing the highest relative marker score.
 
@@ -59,11 +59,23 @@ Research the major cell types for your tissue and their canonical markers. Use 1
 
 Verify which of your markers exist in `adata.var_names`. If <5 markers present for a cell type, find additional markers or reconsider that cell type.
 
-#### **3. Calculate Expression Scores**
+#### **3. Calculate Expression Scores (Z-score for Relative Enrichment)**
 
-For each cluster, calculate the mean gene activity across all available markers for each cell type. This gives you a score representing how strongly that cluster expresses markers for each cell type.
+For each cluster, compute the mean marker expression for each cell type. This produces a score matrix where rows represent clusters and columns represent cell types.
 
-**Key insight:** Compare scores **across clusters**, not absolute values. Relative enrichment matters.
+**Key principle:** Cell type identity depends on **relative enrichment across clusters**, not absolute magnitude. Some marker sets are globally high everywhere, which can cause incorrect assignments if raw means are used.
+
+**Required Approach**
+
+- Compute mean marker expression per cluster.  
+- **Z-score normalize each cell type across clusters** to convert raw scores into enrichment values.  
+- Assign the cell type whose marker set shows the **highest Z-score** in that cluster.
+
+**Why Z-scores Matter**
+
+- Highlights where a marker set is **uniquely enriched**, rather than simply abundant.  
+- Corrects for marker sets that are high across all clusters.  
+- Produces biologically meaningful, relative signals that reflect true cell type specificity.
 
 #### **4. Assign Primary Cell Types**
 

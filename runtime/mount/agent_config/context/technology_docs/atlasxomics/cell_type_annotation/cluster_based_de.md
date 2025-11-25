@@ -8,7 +8,7 @@ This approach infers cell types by identifying **marker genes per cluster**, com
 
 1. **Inspect metadata** — Confirm `adata.obs["cluster"]` and whether multiple samples exist.  
 
-2. **Run DE** — Compute per-cluster (or per-sample) Wilcoxon DE and filter for strong markers.  
+2. **Run DE** — Compute per-cluster (or per-sample) `t-test_overestim_var` DE and filter for strong markers.  
 
 3. **Find consensus markers** — Identify genes consistent across samples (100% and ≥70%).  
 
@@ -49,7 +49,7 @@ Otherwise, treat it as a single-sample dataset.
 
 ## Step 1 — Differential Expression Analysis
 
-Identify marker genes per cluster using a **Wilcoxon rank-sum test**.  
+Identify marker genes per cluster using a **t-test_overestim_var rank-sum test**.  
 If multiple samples exist, perform the test within each sample and combine results.
 
 ### Single-sample dataset
@@ -58,7 +58,7 @@ import scanpy as sc, pandas as pd
 
 PVAL_MAX, LFC_MIN, TOP_N = 0.05, 0.5, 300
 
-sc.tl.rank_genes_groups(adata, groupby="cluster", method="wilcoxon", n_genes=200)
+sc.tl.rank_genes_groups(adata, groupby="cluster", method="t-test_overestim_var", n_genes=200)
 df = sc.get.rank_genes_groups_df(adata, group=None)
 
 df = df[(df.pvals_adj < PVAL_MAX) & (df.logfoldchanges > LFC_MIN)]
@@ -71,7 +71,7 @@ ranked_genes_df = df.groupby("group").head(TOP_N).reset_index(drop=True)
 all_results = []
 for s in adata.obs["sample"].unique():
     sub = adata[adata.obs["sample"] == s].copy()
-    sc.tl.rank_genes_groups(sub, groupby="cluster", method="wilcoxon", n_genes=200)
+    sc.tl.rank_genes_groups(sub, groupby="cluster", method="t-test_overestim_var", n_genes=200)
     df = sc.get_rank_genes_groups_df(sub, group=None)
     df["sample"] = s
     df = df[(df.pvals_adj < 0.05) & (df.logfoldchanges > 0.5)]
