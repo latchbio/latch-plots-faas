@@ -434,8 +434,7 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                         "type": "agent_action_response",
                         "tx_id": tx_id,
                         "status": "success",
-                        "summary": msg.get("summary", ""),
-                        "cell_reactivity": msg.get("cell_reactivity"),
+                        "cell_reactivity": msg.get("cell_reactivity", {}),
                     })
                     continue
 

@@ -588,23 +588,6 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
 snapshot_dir = Path.home() / ".cache" / "plots-faas"
 snapshot_f_name = "snapshot.json"
 
-DEBUG_LOG_PATH = Path("/var/log/debug.log")
-FALLBACK_DEBUG_LOG_PATH = Path("/tmp/plots-agent-debug.log")
-
-
-def log_debug(message: str) -> None:
-    timestamp = datetime.now(timezone.utc).isoformat()
-    line = f"{timestamp} [kernel] {message}\n"
-
-    for candidate in (DEBUG_LOG_PATH, FALLBACK_DEBUG_LOG_PATH):
-        try:
-            candidate.parent.mkdir(parents=True, exist_ok=True)
-            with candidate.open("a", encoding="utf-8") as f:
-                f.write(line)
-            break
-        except Exception:
-            continue
-
 
 class SerializedGlobal(TypedDict):
     value: str
@@ -1602,28 +1585,17 @@ class Kernel:
 
         await self.send(msg)
 
-    def get_reactivity_summary(self) -> tuple[str, dict[str, dict[str, list[str]]]]:
-        log_debug(
-            "get_reactivity_summary: "
-            f"cell_rnodes={len(self.cell_rnodes)}, "
-            f"restored_nodes={len(self.restored_nodes)}, "
-            f"widget_signals={len(self.widget_signals)}, "
-            f"live_signals={len(live_signals)}"
-        )
-        signal_id_to_name: dict[str, str] = {}
+    def get_reactivity_summary(self) -> dict[str, dict[str, list[str]]]:
         global_signal_names: dict[str, str] = {}
         global_signal_ids: set[str] = set()
-        widget_signal_ids: set[str] = set()
         cell_defined_global_names: dict[str, list[str]] = {}
 
         def register_global_signal(sig: Signal[object], name: str) -> None:
-            signal_id_to_name.setdefault(sig.id, name)
             global_signal_ids.add(sig.id)
             global_signal_names[sig.id] = name
 
         for widget_key, sig in self.widget_signals.items():
-            signal_id_to_name[sig.id] = widget_key
-            widget_signal_ids.add(sig.id)
+            global_signal_names.setdefault(sig.id, widget_key)
 
         for var_name in self.k_globals:
             if var_name in {"__builtins__", "__warningregistry__"}:
@@ -1652,8 +1624,7 @@ class Kernel:
 
                 if sig_id not in all_signals:
                     all_signals[sig_id] = sig
-                    if sig_id not in signal_id_to_name:
-                        signal_id_to_name[sig_id] = sig._name  # noqa: SLF001
+                    global_signal_names.setdefault(sig_id, sig._name)  # noqa: SLF001
 
             for child in n.children.values():
                 collect_all_signals(child)
@@ -1676,63 +1647,8 @@ class Kernel:
             traverse_node(node, deps)
             cell_dependencies[cell_id] = deps
 
-            log_debug(
-                "get_reactivity_summary:"
-                f" cell_id={cell_id}, index={node.cell_id}, "
-                f"deps={len(deps)}"
-            )
-
         if len(self.cell_rnodes) == 0:
-            log_debug("get_reactivity_summary: no reactive cell nodes are currently registered.")
-
-        summary_lines: list[str] = []
-        summary_lines += [
-            "## Reactive Dependencies",
-            "Note: This summary is based on the code cell IDs as only code cells are reactive.",
-        ]
-
-        if len(self.cell_rnodes) == 0:
-            summary_lines.append("\nNo reactive dependencies in this notebook.")
-            return "\n".join(summary_lines), {}
-
-        signal_name_to_id: dict[str, str] = {}
-        signal_usage: dict[str, list[str]] = {}
-
-        for cell_id, signal_ids in cell_dependencies.items():
-            for sig_id in signal_ids:
-                sig_name = signal_id_to_name.get(sig_id, f"<unknown-{sig_id[:8]}>")
-                signal_name_to_id[sig_name] = sig_id
-                if sig_name not in signal_usage:
-                    signal_usage[sig_name] = []
-                signal_usage[sig_name].append(cell_id)
-
-        if len(signal_usage) > 0:
-            summary_lines.append("\n### Signals")
-
-            for sig_name in sorted(signal_usage.keys()):
-                cells = signal_usage[sig_name]
-                sig_id = signal_name_to_id.get(sig_name)
-
-                if sig_id is not None and sig_id in widget_signal_ids:
-                    scope = "widget"
-                elif sig_id is not None and sig_id in global_signal_ids:
-                    scope = "global variable"
-                else:
-                    scope = "local"
-
-                cell_list = ", ".join(sorted(cells))
-                summary_lines.append(f"- **{sig_name}** ({scope}) - used by cells: {cell_list}")
-
-        summary_lines.append("\n### Code Cell Dependencies")
-
-        for cell_id in sorted(self.cell_rnodes.keys()):
-            deps = cell_dependencies.get(cell_id, set())
-
-            if len(deps) > 0:
-                dep_names = sorted(signal_id_to_name.get(sig_id, f"<unknown-{sig_id[:8]}>") for sig_id in deps)
-                summary_lines.append(f"- **Cell {cell_id}** depends on: {', '.join(dep_names)}")
-            else:
-                summary_lines.append(f"- **Cell {cell_id}** has no signal dependencies")
+            return {}
 
         for sig in live_signals.values():
             producer_cell_id = getattr(sig, "_producer_cell_id", None)
@@ -1741,7 +1657,7 @@ class Kernel:
             signal_producers[sig.id] = producer_cell_id
 
         cell_reactivity: dict[str, dict[str, list[str]]] = {}
-        for cell_id in self.cell_rnodes.keys():
+        for cell_id in self.cell_rnodes:
             defined = sorted(set(cell_defined_global_names.get(cell_id, [])))
             dep_signal_ids = cell_dependencies.get(cell_id, set())
             dep_signal_names = sorted(
@@ -1764,14 +1680,13 @@ class Kernel:
                 "depends_on_cells": dep_cells,
             }
 
-        return "\n".join(summary_lines), cell_reactivity
+        return cell_reactivity
 
     async def send_reactivity_summary(self, agent_tx_id: str | None = None) -> None:
-        summary_text, cell_reactivity = self.get_reactivity_summary()
+        cell_reactivity = self.get_reactivity_summary()
 
         msg = {
             "type": "reactivity_summary",
-            "summary": summary_text,
             "cell_reactivity": cell_reactivity,
         }
         if agent_tx_id is not None:
