@@ -9,32 +9,36 @@ Gene set scoring is a **fast exploratory approach** for cell type annotation tha
 
 ## Workflow Summary
 
-0. **Check dataset scale** — Inspect samples, cells, and memory usage
-   - **⚠️ CRITICAL**: Large datasets (>2GiB) require sample-by-sample processing
-   - **NEVER** process all samples together - causes memory crashes and poor annotations
-   - **Required approach for multi-sample data:**
-     1. Subset to ONE sample
-     2. Complete ENTIRE workflow on subset
-     3. Validate results thoroughly
-     4. Only then repeat for remaining samples
+## Workflow Summary
 
-1. **Select cell types** — Choose 5-10 major types expected in tissue
-2. **Curate markers** — Extract 40-50 genes per type from CellGuide  
-3. **Filter markers** — Keep discriminatory genes (high fold change)
-4. **Balance markers** — Ensure equal counts across cell types
-5. **⚠️ CRITICAL: Normalize scores** - z-score or min-max
-6. **Assign & visualize cell types** — Label by highest normalized score. 
-7. **⚠️ CRITICAL - Validate (ALL 7 REQUIRED)**: Read `technology_docs/atlasxomics/cell_type_annotation/evals.md`
-   **DO NOT skip, omit, or summarize ANY metric - missing even one invalidates the workflow**
-   - Cell type proportions
-   - Cluster purity
-   - Spatial coherence
-   - Marker enrichment
-   - Confidence scores
-   - Sample consistency
-   - Condition changes
+0. **Check dataset scale** — Inspect number of samples, cells, and file size.  
+   - **⚠️ CRITICAL**: Large datasets (>2 GiB) must be processed **one sample at a time**.  
+   - Workflow for multi-sample data:  
+     1) Subset to a single sample → 2) Run full workflow → 3) Validate → 4) Repeat per sample.
 
-8. **Self-evaluate** — Be honest and objective about results. If results are unsatisfactory, go back and revise your work.
+1. **Select cell types** — Choose 5–10 major expected tissue cell types.
+
+2. **Curate markers** — Pull ~40–50 canonical genes per type from CellGuide.
+
+3. **Filter markers** — Keep only discriminatory, high–fold-change markers.
+
+4. **Balance markers** — Ensure each cell type has similar marker counts.
+
+5. **Normalize scores** — Apply z-score or min-max normalization **before** comparing cell types.
+
+6. **Assign & visualize** — Compute gene set scores, label by highest normalized score, and inspect spatial/UMAP patterns.
+
+7. **⚠️ CRITICAL: Evaluate your work** — Follow `technology_docs/atlasxomics/cell_type_annotation/evals.md`.  
+   Compute **all** required metrics:
+   - Cell type proportions  
+   - Cluster purity  
+   - Spatial coherence  
+   - Marker enrichment  
+   - Confidence scores  
+   - Sample consistency  
+   - Condition effects  
+
+8. **Revise** — If metrics fail or patterns look incorrect, first refine your workflow, or switch annotation approaches.
 
 **Presentation**: Generate visuals at EVERY step using `w_table`, `w_plot`, and markdown.
 
