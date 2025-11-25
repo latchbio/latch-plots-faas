@@ -118,7 +118,11 @@ class RangeSliderInputWidget(widget.BaseWidget):
     _signal: Signal[RangeSliderValue]
 
     def _value(self, val: RangeSliderValue | None) -> RangeSliderValue:
-        if isinstance(val, int | float):
+        if (
+            isinstance(val, list)
+            and len(val) == 2
+            and all(isinstance(x, int | float) for x in val)
+        ):
             return val
 
         default = self._state.get("default")
