@@ -1671,7 +1671,7 @@ class Kernel:
                 {
                     producer
                     for sig_id in dep_signal_ids
-                    if (producer := signal_producers.get(sig_id))
+                    if (producer := signal_producers.get(sig_id)) is not None
                 }
             )
             cell_reactivity[cell_id] = {
