@@ -14,7 +14,7 @@ This approach infers cell types by identifying **marker genes per cluster**, com
 
 4. **Match to CellGuide** — Map consensus markers to likely cell types.  
 
-5. **Assign annotations** — Write predicted cell types back to `adata.obs`.  
+5. **Assign annotations** — Write predicted cell types back to `adata.obs`. Format and normalize cell type names to be consistent and remove synonyms. 
 
 6. **⚠️ CRITICAL: Evaluate your work** — Read `technology_docs/atlasxomics/cell_type_annotation/evals.md`. Compute **all** required metrics: proportions, purity, spatial coherence, marker enrichment, confidence, sample consistency, condition effects. 
 
@@ -58,7 +58,7 @@ import scanpy as sc, pandas as pd
 
 PVAL_MAX, LFC_MIN, TOP_N = 0.05, 0.5, 300
 
-sc.tl.rank_genes_groups(adata, groupby="cluster", method="wilcoxon", n_genes=None)
+sc.tl.rank_genes_groups(adata, groupby="cluster", method="wilcoxon", n_genes=200)
 df = sc.get.rank_genes_groups_df(adata, group=None)
 
 df = df[(df.pvals_adj < PVAL_MAX) & (df.logfoldchanges > LFC_MIN)]
@@ -71,7 +71,7 @@ ranked_genes_df = df.groupby("group").head(TOP_N).reset_index(drop=True)
 all_results = []
 for s in adata.obs["sample"].unique():
     sub = adata[adata.obs["sample"] == s].copy()
-    sc.tl.rank_genes_groups(sub, groupby="cluster", method="wilcoxon", n_genes=None)
+    sc.tl.rank_genes_groups(sub, groupby="cluster", method="wilcoxon", n_genes=200)
     df = sc.get_rank_genes_groups_df(sub, group=None)
     df["sample"] = s
     df = df[(df.pvals_adj < 0.05) & (df.logfoldchanges > 0.5)]
@@ -195,6 +195,8 @@ def summarize_clusters(adata, ranked_df, db_path, organism="Mus musculus", tissu
 ## Step 5 — Annotate `adata`
 
 Add annotations directly to `adata.obs` for downstream plotting.
+
+CellGuide's default labels often include synonyms, so clean the names to produce consistent, non-duplicated names.
 
 ```python
 def annotate_adata(adata, cluster_summary, cluster_col="cluster", cell_col="cell_type"):
