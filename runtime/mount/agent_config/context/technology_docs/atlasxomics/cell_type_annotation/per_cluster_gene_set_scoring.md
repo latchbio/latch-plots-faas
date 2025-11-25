@@ -84,7 +84,9 @@ For each cluster, compute the mean marker expression for each cell type. This pr
 
 #### **4. Assign Primary Cell Types**
 
-Assign each cluster to the cell type(s) with the highest **relative** marker scores. Use score separation to judge confidence: if the top score is clearly higher, assign that type; if scores are low or poorly separated, flag the cluster for further review or label it as "Mixed (A, B, ...)".
+Assign each cluster to the cell type(s) with the highest **relative** marker scores. Use score separation to judge confidence: 
+- If the top score is **clearly** higher, assign that type
+- If sthe top scores are **poorly separated**, assigned it as **"Mixed (A, B, ...)"** and flag the cluster for further review.
 
 #### **5. Investigate Unknown Clusters**
 
