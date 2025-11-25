@@ -13,7 +13,12 @@ This protocol identifies cell types in AtlasXOmics spatial ATAC-seq data using *
 
 3. **Score clusters** — Compute mean gene activity and Z-scores for each marker set and compare Z-scores **across clusters** to identify enriched cell types.
 
-4. **Assign annotations** — Label each cluster with the cell type showing the highest relative marker score.
+4. **Assign annotations** — 
+    - Identify cell types with the highest relative marker scores for each cluster.
+
+    - If one cell type is clearly separated from the others, assign that cell type.
+
+    - If several candidates have similarly high scores (low separation), assign a Mixed (A, B, …) label.
 
 5. **Add results to AnnData** — Write primary cell type assignments (and optional detailed labels) to `adata.obs`.
 
@@ -79,7 +84,7 @@ For each cluster, compute the mean marker expression for each cell type. This pr
 
 #### **4. Assign Primary Cell Types**
 
-Assign each cluster to the cell type with the highest marker score. Clusters with similar low scores across all types need investigation.
+Assign each cluster to the cell type(s) with the highest **relative** marker scores. Use score separation to judge confidence: if the top score is clearly higher, assign that type; if scores are low or poorly separated, flag the cluster for further review or label it as "Mixed (A, B, ...)".
 
 #### **5. Investigate Unknown Clusters**
 
