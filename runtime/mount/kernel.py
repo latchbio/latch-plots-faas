@@ -20,6 +20,7 @@ from collections import defaultdict
 from contextlib import redirect_stderr, redirect_stdout
 from copy import copy, deepcopy
 from dataclasses import asdict, dataclass, field, fields
+from datetime import datetime, timezone
 from io import TextIOWrapper
 from pathlib import Path
 from traceback import format_exc
@@ -1584,23 +1585,35 @@ class Kernel:
 
         await self.send(msg)
 
-    def get_reactivity_summary(self) -> str:
-        signal_id_to_name: dict[str, str] = {}
+    def get_reactivity_summary(self) -> dict[str, dict[str, list[str]]]:
+        global_signal_names: dict[str, str] = {}
         global_signal_ids: set[str] = set()
-        widget_signal_ids: set[str] = set()
+        cell_defined_global_names: dict[str, list[str]] = {}
+
+        def register_global_signal(sig: Signal[object], name: str) -> None:
+            global_signal_ids.add(sig.id)
+            global_signal_names[sig.id] = name
 
         for widget_key, sig in self.widget_signals.items():
-            signal_id_to_name[sig.id] = widget_key
-            widget_signal_ids.add(sig.id)
+            global_signal_names.setdefault(sig.id, widget_key)
 
         for var_name in self.k_globals:
             if var_name in {"__builtins__", "__warningregistry__"}:
                 continue
 
             sig = self.k_globals.get_signal(var_name)
-            if sig is not None and sig.id not in signal_id_to_name:
-                signal_id_to_name[sig.id] = var_name
-                global_signal_ids.add(sig.id)
+            if sig is None:
+                continue
+
+            register_global_signal(sig, var_name)
+
+            producer_cell_id = getattr(sig, "_producer_cell_id", None)
+            if producer_cell_id is not None:
+                cell_defined_global_names.setdefault(producer_cell_id, []).append(var_name)
+
+            value = sig.sample()
+            if isinstance(value, Signal):
+                register_global_signal(value, var_name)
 
         all_signals: dict[str, Signal[object]] = {}
 
@@ -1611,8 +1624,7 @@ class Kernel:
 
                 if sig_id not in all_signals:
                     all_signals[sig_id] = sig
-                    if sig_id not in signal_id_to_name:
-                        signal_id_to_name[sig_id] = sig._name  # noqa: SLF001
+                    global_signal_names.setdefault(sig_id, sig._name)  # noqa: SLF001
 
             for child in n.children.values():
                 collect_all_signals(child)
@@ -1621,6 +1633,7 @@ class Kernel:
             collect_all_signals(node)
 
         cell_dependencies: dict[str, set[str]] = {}
+        signal_producers: dict[str, str] = {}
 
         def traverse_node(n: Node, deps_set: set[str]) -> None:
             deps_set.update(n.signals)
@@ -1634,61 +1647,48 @@ class Kernel:
             traverse_node(node, deps)
             cell_dependencies[cell_id] = deps
 
-        summary_lines: list[str] = []
-        summary_lines += [
-            "## Reactive Dependencies",
-            "Note: This summary is based on the code cell IDs as only code cells are reactive.",
-        ]
-
         if len(self.cell_rnodes) == 0:
-            summary_lines.append("\nNo reactive dependencies in this notebook.")
-            return "\n".join(summary_lines)
+            return {}
 
-        signal_name_to_id: dict[str, str] = {}
-        signal_usage: dict[str, list[str]] = {}
+        for sig in live_signals.values():
+            producer_cell_id = getattr(sig, "_producer_cell_id", None)
+            if producer_cell_id is None:
+                continue
+            signal_producers[sig.id] = producer_cell_id
 
-        for cell_id, signal_ids in cell_dependencies.items():
-            for sig_id in signal_ids:
-                sig_name = signal_id_to_name.get(sig_id, f"<unknown-{sig_id[:8]}>")
-                signal_name_to_id[sig_name] = sig_id
-                if sig_name not in signal_usage:
-                    signal_usage[sig_name] = []
-                signal_usage[sig_name].append(cell_id)
+        cell_reactivity: dict[str, dict[str, list[str]]] = {}
+        for cell_id in self.cell_rnodes:
+            defined = sorted(set(cell_defined_global_names.get(cell_id, [])))
+            dep_signal_ids = cell_dependencies.get(cell_id, set())
+            dep_signal_names = sorted(
+                {
+                    global_signal_names[sig_id]
+                    for sig_id in dep_signal_ids
+                    if sig_id in global_signal_names
+                }
+            )
+            dep_cells = sorted(
+                {
+                    producer
+                    for sig_id in dep_signal_ids
+                    if (producer := signal_producers.get(sig_id)) is not None
+                }
+            )
+            cell_reactivity[cell_id] = {
+                "signals_defined": defined,
+                "depends_on_signals": dep_signal_names,
+                "depends_on_cells": dep_cells,
+            }
 
-        if len(signal_usage) > 0:
-            summary_lines.append("\n### Signals")
-
-            for sig_name in sorted(signal_usage.keys()):
-                cells = signal_usage[sig_name]
-                sig_id = signal_name_to_id.get(sig_name)
-
-                if sig_id is not None and sig_id in widget_signal_ids:
-                    scope = "widget"
-                elif sig_id is not None and sig_id in global_signal_ids:
-                    scope = "global variable"
-                else:
-                    scope = "local"
-
-                cell_list = ", ".join(sorted(cells))
-                summary_lines.append(f"- **{sig_name}** ({scope}) - used by cells: {cell_list}")
-
-        summary_lines.append("\n### Code Cell Dependencies")
-
-        for cell_id in sorted(self.cell_rnodes.keys()):
-            deps = cell_dependencies.get(cell_id, set())
-
-            if len(deps) > 0:
-                dep_names = sorted(signal_id_to_name.get(sig_id, f"<unknown-{sig_id[:8]}>") for sig_id in deps)
-                summary_lines.append(f"- **Cell {cell_id}** depends on: {', '.join(dep_names)}")
-            else:
-                summary_lines.append(f"- **Cell {cell_id}** has no signal dependencies")
-
-        return "\n".join(summary_lines)
+        return cell_reactivity
 
     async def send_reactivity_summary(self, agent_tx_id: str | None = None) -> None:
-        summary_text = self.get_reactivity_summary()
+        cell_reactivity = self.get_reactivity_summary()
 
-        msg = {"type": "reactivity_summary", "summary": summary_text}
+        msg = {
+            "type": "reactivity_summary",
+            "cell_reactivity": cell_reactivity,
+        }
         if agent_tx_id is not None:
             msg["agent_tx_id"] = agent_tx_id
 

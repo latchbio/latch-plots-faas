@@ -20,6 +20,7 @@ class SerializedSignal(TypedDict):
     dump_error_msg: str | None
     load_error_msg: str | None
     id: str
+    producer_cell_id: str | None
 
 
 class SerializedWidget(TypedDict, Generic[_emit.WidgetType, _emit.WidgetValue]):

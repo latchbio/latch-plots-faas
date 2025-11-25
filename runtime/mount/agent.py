@@ -26,6 +26,8 @@ sys.stdout.reconfigure(line_buffering=True)
 
 cache_chunk_size = 20
 
+reactivity_ready_statuses = {"ran", "ok", "success", "error"}
+
 sandbox_root = os.environ.get("LATCH_SANDBOX_ROOT")
 if sandbox_root:
     import pathlib
@@ -2504,14 +2506,25 @@ class AgentHarness:
         })
         self.tool_map["get_global_info"] = get_global_info
 
-        async def refresh_cells_context(args: dict) -> dict:
-            context_result = await self.atomic_operation("get_context")
+        async def refresh_cells_context(_args: dict) -> dict:
+            context_result, reactivity_result = await asyncio.gather(
+                self.atomic_operation("get_context"),
+                self.atomic_operation("request_reactivity_summary"),
+            )
 
             if context_result.get("status") != "success":
                 return {
                     "tool_name": "refresh_cells_context",
                     "success": False,
                     "summary": f"Failed to refresh cells: {context_result.get('error', 'Unknown error')}"
+                }
+
+            if reactivity_result.get("status") != "success":
+                print(f"[tool] refresh_cells_context: failed to get reactivity summary: {reactivity_result.get('error', 'Unknown error')}")
+                return {
+                    "tool_name": "refresh_cells_context",
+                    "success": False,
+                    "summary": f"Failed to get reactivity summary: {reactivity_result.get('error', 'Unknown error')}"
                 }
 
             context = context_result.get("context", {})
@@ -2532,6 +2545,8 @@ class AgentHarness:
             cell_lines.append("---")
 
             current_tab_name = default_tab_name
+
+            cell_reactivity: dict[str, dict[str, object]] = reactivity_result.get("cell_reactivity", {})
 
             for cell in cells:
                 index = cell.get("index", "?")
@@ -2578,6 +2593,39 @@ class AgentHarness:
                         w_label = w.get("label", "")
                         cell_lines.append(f"- WIDGET: {w_type} | {w_label} | {w_key}")
 
+                if tf_id is None:
+                    continue
+
+                reactivity_meta = cell_reactivity.get(str(tf_id))
+                is_reactivity_ready = status in reactivity_ready_statuses
+
+                cell_lines.append("\nREACTIVITY:")
+
+                if not is_reactivity_ready:
+                    cell_lines.append("- Not available: run this cell to establish reactive dependencies.")
+                    continue
+
+                if reactivity_meta is None:
+                    cell_lines.append("- Reactivity data missing for this cell.")
+                    continue
+
+                signals_defined = reactivity_meta.get("signals_defined", [])
+                depends_on_signals = reactivity_meta.get("depends_on_signals", [])
+                depends_on_cells = reactivity_meta.get("depends_on_cells", [])
+
+                cell_lines.append(  # noqa: FURB113
+                    "- Signals defined: "
+                    + (", ".join(signals_defined) if signals_defined else "None")
+                )
+                cell_lines.append(
+                    "- Depends on signals: "
+                    + (", ".join(depends_on_signals) if depends_on_signals else "None")
+                )
+                cell_lines.append(
+                    "- Depends on cells: "
+                    + (", ".join(depends_on_cells) if depends_on_cells else "None")
+                )
+
             context_dir = context_root / "notebook_context"
             context_dir.mkdir(parents=True, exist_ok=True)
             (context_dir / "cells.md").write_text("\n".join(cell_lines))
@@ -2585,57 +2633,20 @@ class AgentHarness:
             return {
                 "tool_name": "refresh_cells_context",
                 "success": True,
-                "summary": f"Refreshed cells context for {cell_count} cells and stored result in notebook_context/cells.md",
+                "summary": f"Refreshed reactive notebook context for {cell_count} cells and stored result in notebook_context/cells.md",
                 "cell_count": cell_count,
                 "context_path": "notebook_context/cells.md"
             }
 
-        async def refresh_reactivity_context(args: dict) -> dict:
-            reactivity_result = await self.atomic_operation("request_reactivity_summary")
-
-            if reactivity_result.get("status") != "success":
-                return {
-                    "tool_name": "refresh_reactivity_context",
-                    "success": False,
-                    "summary": f"Failed to refresh reactivity: {reactivity_result.get('error', 'Unknown error')}"
-                }
-
-            reactivity_summary = reactivity_result.get("summary")
-
-            context_dir = context_root / "notebook_context"
-            context_dir.mkdir(parents=True, exist_ok=True)
-
-            if reactivity_summary is not None:
-                (context_dir / "signals.md").write_text(reactivity_summary)
-            else:
-                (context_dir / "signals.md").write_text("# Reactivity Summary\n\nNo reactive dependencies in this notebook.\n")
-
-            return {
-                "tool_name": "refresh_reactivity_context",
-                "success": True,
-                "summary": "Refreshed reactivity context and stored result in notebook_context/signals.md",
-                "context_path": "notebook_context/signals.md",
-            }
-
         self.tools.append({
             "name": "refresh_cells_context",
-            "description": "Refresh the cells.md context file with current notebook cell structure and contents.",
+            "description": "Refresh the cells.md context file with current reactive notebook structure and contents.",
             "input_schema": {
                 "type": "object",
                 "properties": {},
             },
         })
         self.tool_map["refresh_cells_context"] = refresh_cells_context
-
-        self.tools.append({
-            "name": "refresh_reactivity_context",
-            "description": "Refresh the signals.md context file with current reactive signal dependencies.",
-            "input_schema": {
-                "type": "object",
-                "properties": {},
-            },
-        })
-        self.tool_map["refresh_reactivity_context"] = refresh_reactivity_context
 
         if len(self.tools) > 0:
             self.tools[-1]["cache_control"] = {"type": "ephemeral"}
@@ -3198,7 +3209,6 @@ class AgentHarness:
             return f"# {filename}\n\nFile not yet generated."
 
         cells_content = read_context_file("cells.md")
-        signals_content = read_context_file("signals.md")
 
         def build_tree(path: Path, prefix: str = "") -> list[str]:
             lines = []
@@ -3224,7 +3234,6 @@ class AgentHarness:
             "truncated_messages": truncated_messages,
             "model": self.mode_config.get(self.mode, ("claude-sonnet-4-5-20250929", 1024))[0],
             "cells": cells_content,
-            "signals": signals_content,
             "tree": tree_content,
         }
 

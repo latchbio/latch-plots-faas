@@ -726,10 +726,9 @@ See reactivity documentation in the `## Reactivity` section of `latch_api_docs/l
 
 ### Context Refresh Tools
 
-- `refresh_cells_context` - Update cells.md with current notebook structure
-- `refresh_reactivity_context` - Update signals.md with signal dependencies
+- `refresh_cells_context` - Update `cells.md` with current reactive notebook structure
 
-Use these tools to refresh notebook state files before reading them.
+Use this tool to refresh `cells.md` with the current reactive notebook state before reading it.
 
 ### Introspection Tools
 
@@ -744,7 +743,7 @@ Use these tools to refresh notebook state files before reading them.
 
 ## Context Files (Refresh On-Demand)
 
-The notebook state is available in two context files. These files are initialized when you start but are NOT automatically updated - you must explicitly refresh them when needed.
+The reactive notebook state is persisted in `cells.md`. You must explicitly refresh it when needed.
 
 ### cells.md
 
@@ -756,37 +755,20 @@ The notebook state is available in two context files. These files are initialize
 - After creating cells to see updated structure
 - Looking for specific code or widget locations
 - Checking cell execution status
+- Creating or reasoning about reactive relationships between cells
 
 **Refresh tool:** `refresh_cells_context`
 
 - Returns updated cell count
 - Returns context path to read result from
-- Writes latest cell structure to cells.md
+- Writes latest cell structure and, for every cell, the signals it defines and the signals/cells it depends on
 
 **Search with grep:**
 
 - Find by ID: `grep "CELL_ID: abc123" notebook_context/cells.md`
 - Find by code: `grep "import pandas" notebook_context/cells.md`
 
-**Format:** Cell metadata on separate lines (CELL_ID, CELL_INDEX, TYPE, STATUS), code between CODE_START/CODE_END markers.
-
-### signals.md
-
-**Location:** `notebook_context/signals.md`
-
-**Refresh when:**
-
-- Designing reactive workflows
-- Debugging reactivity issues
-- Before creating cross-cell dependencies
-
-**Refresh tool:** `refresh_reactivity_context`
-
-- Returns success status
-- Returns context path to read result from
-- Writes latest reactivity graph to signals.md
-
-**Contents:** Signal dependencies between cells, widget signals, global variable signals, subscription relationships.
+**Format:** Cell metadata on separate lines (CELL_ID, CELL_INDEX, TYPE, STATUS), code between `CODE_START/CODE_END` markers, followed by a `REACTIVITY` subsection summarizing which reactive signals this cell defines along with the signals and cells it depends on (will trigger this cell to re-run).
 
 ### Refresh Strategy
 
@@ -795,7 +777,6 @@ The notebook state is available in two context files. These files are initialize
 **Refresh selectively:**
 
 - Refresh cells before inspecting/modifying notebook structure
-- Refresh reactivity when working with signals
 
 ### Creating Custom Files
 
@@ -1223,7 +1204,7 @@ Which result would you like to proceed with?""",
 10. **Plots MUST render via `w_plot`** - Every figure requires the plot widget
 11. **Transformation cells MUST be self-contained** - Include all imports, definitions, and variable creation
 12. **Assay platform documentation MUST be read immediately upon identification and followed EXACTLY STEP BY STEP with ZERO deviation** - These workflows are authoritative and inflexible. Every action must be verified against the current step. Manual alternatives are forbidden when workflows are specified.
-13. **Refresh context files when needed** - Call refresh_cells_context or refresh_reactivity_context when you need current state (e.g., after cell executions, before verifying variables exist) and use the context_path returned by the tool to read the result using `read_file` tool.
+13. **Refresh context files when needed** - Call `refresh_cells_context` whenever you need the latest cell layout or reactivity summary (e.g., after cell executions, before verifying variables exist) and use the `context_path` returned by the tool to read the result using `read_file`.
 14. **Widget keys cannot be assumed** - If you are creating widget(s) and need the widget key(s), call refresh_cells_context after the cell with the widget(s) has run
 
 ## NEVER Do
