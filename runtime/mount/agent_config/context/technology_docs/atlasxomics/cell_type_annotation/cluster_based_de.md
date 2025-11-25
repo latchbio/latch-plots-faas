@@ -2,6 +2,26 @@
 
 This approach infers cell types by identifying **marker genes per cluster**, comparing them to known CellGuide markers, and assigning the most likely identity.
 
+--
+
+## Workflow Summary
+
+1. **Inspect metadata** — Confirm `adata.obs["cluster"]` and whether multiple samples exist.  
+
+2. **Run DE** — Compute per-cluster (or per-sample) Wilcoxon DE and filter for strong markers.  
+
+3. **Find consensus markers** — Identify genes consistent across samples (100% and ≥70%).  
+
+4. **Match to CellGuide** — Map consensus markers to likely cell types.  
+
+5. **Assign annotations** — Write predicted cell types back to `adata.obs`.  
+
+6. **⚠️ CRITICAL: Evaluate your work** — Read `technology_docs/atlasxomics/cell_type_annotation/evals.md`. Compute **all** required metrics: proportions, purity, spatial coherence, marker enrichment, confidence, sample consistency, condition effects. 
+
+7. **Revise** — If results are weak, adjust thresholds, refine steps, or switch to another annotation approach.
+
+--
+
 ## Prerequisites
 
 Your `AnnData` must include:

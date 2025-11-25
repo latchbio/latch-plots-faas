@@ -3,6 +3,24 @@
 ### Overview
 This protocol identifies cell types in AtlasXOmics spatial ATAC-seq data using **literature-based marker genes**. AtlasXOmics measures chromatin accessibility and imputes gene activity scores, not direct RNA expression.
 
+--
+
+## Workflow Summary
+
+1. **Define expected cell types** — Collect literature-based marker genes (≥10 per type) suitable for ATAC-derived gene activity.
+
+2. **Check marker availability** — Verify markers exist in `adata.var_names`; update lists if coverage is low.
+
+3. **Score clusters** — Compute mean gene activity for each marker set and compare scores **across clusters** to identify enriched cell types.
+
+4. **Assign annotations** — Label each cluster with the cell type showing the highest relative marker score.
+
+5. **Add results to AnnData** — Write primary cell type assignments (and optional detailed labels) to `adata.obs`.
+
+6. **⚠️ CRITICAL: Evaluate your work** — Read `technology_docs/atlasxomics/cell_type_annotation/evals.md`. Compute **all** required metrics: proportions, purity, spatial coherence, marker enrichment, confidence, sample consistency, condition effects.  
+
+7. **Revise** — If results are weak, adjust markers, thresholds, or scoring logic, or switch to another annotation approach.
+
 ---
 
 ### Key AtlasXOmics Considerations

@@ -3,19 +3,19 @@
 ## Supported Methods
 
 **Per-cluster Gene Set Scoring**  
-Scores canonical marker sets per cluster and assigns one label per group.  
+- Scores canonical marker sets per cluster and assigns one label per group.  
 Best when clusters are well separated and biologically meaningful.  
-See `technology_docs/atlasxomics/cell_type_annotation/per_cluster_gene_set_scoring.md`
+- See `technology_docs/atlasxomics/cell_type_annotation/per_cluster_gene_set_scoring.md`
 
 **Per-cell Gene Set Scoring**  
-Rapid, exploratory annotation at single-cell resolution.  
-Useful for capturing heterogeneity or when clustering is preliminary.  
-See `technology_docs/cell_type_annotation/per_cell_gene_set_scoring.md`
+- Rapid, exploratory annotation at single-cell resolution.  
+- Useful for capturing heterogeneity or when clustering is preliminary.  
+- See `technology_docs/cell_type_annotation/per_cell_gene_set_scoring.md`
 
 **Unbiased Cluster-based Annotation (DE-driven)**  
-Performs differential expression between clusters to identify defining markers, then matches them to known cell types using literature or databases.  
-Helpful when expected cell types are unclear or curated marker sets are incomplete.
-See `technology_docs/atlasxomics/cell_type_annotation/cluster_based_de.md`
+- Performs differential expression between clusters to identify defining markers, then matches them to known cell types using literature or databases.  
+- Helpful when expected cell types are unclear or curated marker sets are incomplete.
+- See `technology_docs/atlasxomics/cell_type_annotation/cluster_based_de.md`
 
 ## When to Use Each Method
 
