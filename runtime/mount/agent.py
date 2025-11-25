@@ -2538,12 +2538,15 @@ class AgentHarness:
 
             cell_reactivity: dict[str, dict[str, object]] = {}
 
-            if reactivity_result.get("status") == "success":
-                cell_reactivity = reactivity_result.get("cell_reactivity", {}) or {}
-            else:
+            if reactivity_result.get("status") != "success":
                 print(f"[tool] refresh_cells_context: failed to get reactivity summary: {reactivity_result.get('error', 'Unknown error')}")
+                return {
+                    "tool_name": "refresh_cells_context",
+                    "success": False,
+                    "summary": f"Failed to get reactivity summary: {reactivity_result.get('error', 'Unknown error')}"
+                }
 
-            print(f"[tool] refresh_cells_context: cell_reactivity: {cell_reactivity}")
+            cell_reactivity = reactivity_result.get("cell_reactivity", {})
 
             for cell in cells:
                 index = cell.get("index", "?")
@@ -2591,13 +2594,13 @@ class AgentHarness:
                         cell_lines.append(f"- WIDGET: {w_type} | {w_label} | {w_key}")
 
                 if tf_id is None:
-                    reactivity_meta = None
-                else:
-                    reactivity_meta = cell_reactivity.get(str(tf_id))
+                    continue
+
+                reactivity_meta = cell_reactivity.get(str(tf_id))
                 if reactivity_meta is not None:
-                    signals_defined = reactivity_meta.get("signals_defined") or []
-                    depends_on_signals = reactivity_meta.get("depends_on_signals") or []
-                    depends_on_cells = reactivity_meta.get("depends_on_cells") or []
+                    signals_defined = reactivity_meta.get("signals_defined", [])
+                    depends_on_signals = reactivity_meta.get("depends_on_signals", [])
+                    depends_on_cells = reactivity_meta.get("depends_on_cells", [])
 
                     cell_lines.append("\nREACTIVITY:")  # noqa: FURB113
                     cell_lines.append(

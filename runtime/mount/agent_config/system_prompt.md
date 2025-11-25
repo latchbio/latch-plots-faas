@@ -698,7 +698,7 @@ The reactive notebook state is persisted in `cells.md`. You must explicitly refr
 - After creating cells to see updated structure
 - Looking for specific code or widget locations
 - Checking cell execution status
-- Creating or reasoning about reactive relationships between cells/signals
+- Creating or reasoning about reactive relationships between cells
 
 **Refresh tool:** `refresh_cells_context`
 
@@ -711,7 +711,7 @@ The reactive notebook state is persisted in `cells.md`. You must explicitly refr
 - Find by ID: `grep "CELL_ID: abc123" notebook_context/cells.md`
 - Find by code: `grep "import pandas" notebook_context/cells.md`
 
-**Format:** Cell metadata on separate lines (CELL_ID, CELL_INDEX, TYPE, STATUS), code between `CODE_START/CODE_END` markers, followed by a `REACTIVITY` subsection summarizing defined signals and dependencies.
+**Format:** Cell metadata on separate lines (CELL_ID, CELL_INDEX, TYPE, STATUS), code between `CODE_START/CODE_END` markers, followed by a `REACTIVITY` subsection summarizing defined signals and cells which will cause this cell to re-run.
 
 ### Refresh Strategy
 
