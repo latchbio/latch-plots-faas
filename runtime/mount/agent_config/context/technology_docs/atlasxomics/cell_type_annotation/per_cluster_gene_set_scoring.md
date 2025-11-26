@@ -10,25 +10,36 @@ Identify cell types using fold change enrichment scoring: `FC = mean_in_cluster 
 
 ## Workflow
 
-1. **Define cell types** — Collect 10+ marker genes per type from CellGuide or literature
-   - **CRITICAL:** Never omit expected cell types. If CellGuide lacks markers, supplement from literature
+1. **Define cell types** — From your general knowledge, list expected major cell types. 
 
-2. **Check markers** — Verify ≥5 markers per cell type exist in `adata.var_names`
+2. **Collect canonical markers** 
+- For **each** expected cell type:
+   - Gather ≥10 canonical markers from CellGuide.
+   - If CellGuide is sparse or missing that cell type, supplement from literature and your general knowlegde.
+   - **NEVER drop or omit a major cell type**
 
-3. **Compute fold change** — For each cluster × cell type:
+3. **Validate cell type coverage**
+   - Confirm that your final cell type → marker panel includes every cell type from Step 1.
+   - Confirm that each cell type has a reasonable marker set (even if supplemented manually).
+   - If any cell type is missing or underrepresented because you accidentally omitted it, redo the panel until all expected types are represented.
+
+4. **Check markers** — Verify ≥5 markers per cell type exist in `adata.var_names`
+
+5. **Compute fold change** — For each cluster × cell type:
    ```python
    FC = mean_expression_in_cluster / mean_expression_in_non_cluster_cells
    ```
 
-4. **Assign cell types:**
+6. **Assign cell types:**
    - If max FC > threshold (default 1.01): assign that cell type
    - If max FC ≤ threshold: mark as "Unknown"
    - Store in `adata.obs['cell_type']`
+   - Visualize with `w_h5`
 
-5. **⚠️ CRITICAL: Evaluate your work** — Read `technology_docs/atlasxomics/cell_type_annotation/evals.md`
+7. **⚠️ CRITICAL: Evaluate your work** — Read `technology_docs/atlasxomics/cell_type_annotation/evals.md`
    - Compute ALL required metrics: proportions, purity, spatial coherence, marker enrichment, confidence, sample consistency, condition effects
 
-6. **Revise your work and add corrective steps** if results are weak
+8. **Revise your work (if needed)**: Use the eval metrics in step 7 to assign labels to low-confidence, ambiguous, or unknown cell types. 
 
 ---
 
