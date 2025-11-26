@@ -1,0 +1,190 @@
+# Gene Set Scoring — Complete Workflow Guide
+
+Gene set scoring is a **fast exploratory approach** for cell type annotation that evaluates how strongly each cell expresses curated marker gene panels. It works without requiring high-quality clustering and is ideal for initial annotation of spatial transcriptomics or ATAC-seq data.
+
+**Key advantages:** Fast (5-10 min), no clustering dependency, interpretable  
+**Key requirements:** Score normalization, balanced markers, proper thresholds
+
+---
+
+## Workflow Summary
+
+## Workflow Summary
+
+0. **Check dataset scale** — Inspect number of samples, cells, and file size.  
+   - **⚠️ CRITICAL**: Large datasets (>2 GiB) must be processed **one sample at a time**.  
+   - Workflow for multi-sample data:  
+     1) Subset to a single sample → 2) Run full workflow → 3) Validate → 4) Repeat per sample.
+
+1. **Select cell types** — Choose 5–10 major expected tissue cell types.
+
+2. **Curate markers** — Pull ~40–50 canonical genes per type from CellGuide.
+
+3. **Filter markers** — Keep only discriminatory, high–fold-change markers.
+
+4. **Balance markers** — Ensure each cell type has similar marker counts.
+
+5. **Normalize scores** — Apply z-score or min-max normalization **before** comparing cell types.
+
+6. **Assign & visualize** — Compute gene set scores, label by highest normalized score, and inspect spatial/UMAP patterns.
+
+7. **⚠️ CRITICAL: Evaluate your work** — Follow `technology_docs/atlasxomics/cell_type_annotation/evals.md`.  
+   Compute **all** required metrics:
+   - Cell type proportions  
+   - Cluster purity  
+   - Spatial coherence  
+   - Marker enrichment  
+   - Confidence scores  
+   - Sample consistency  
+   - Condition effects  
+
+8. **Revise** — If metrics fail or patterns look incorrect, first refine your workflow, or switch annotation approaches.
+
+**Presentation**: Generate visuals at EVERY step using `w_table`, `w_plot`, and markdown.
+
+---
+
+## Step 1: Select Expected Cell Types
+
+Choose **5-10 major cell types** realistic for your tissue and organism. Focus on broad categories rather than fine subtypes.
+
+If a cell type is not found in the CellGuide's per-tissue query, expand the query to "All Tissues". 
+
+---
+
+## Step 2: Curate Marker Panels from CellGuide
+
+Extract **40-50 top-ranked markers** per cell type from the CellGuide database.
+
+**Note**
+- CellGuide names may not match the cell type names you’re looking for exactly.
+- The database is comprehensive and includes broad categories, subtypes, and synonyms.
+- Prioritize biological equivalence over exact string matches when searching for cell types and markers. 
+
+**What if a cell type is not found?**
+- Use well-established canonical markers from public literature and include it in the analysis. **Never exclude an expected major cell type.**
+
+**Why 40-50?**
+- Expect 20-40% retention after discriminatory filtering
+- Ensures ≥5 markers remain per cell type after filtering
+- CellGuide ranks by marker strength — top markers are highest quality
+
+**Data source:** `latch:///cellguide_marker_gene_database_per_celltype.json` from Latch Data
+
+Filter to genes present in your dataset (`adata.var_names`)
+
+---
+
+## Step 3: Filter for Discriminatory Markers
+
+**⛔ STOP**: If the dataset exceeds 2 GiB, you must subset to a single sample before running this step.
+
+Evaluate each marker's ability to distinguish cell types by computing **median fold change** across all cluster pairs.
+
+### Recommended Thresholds by Assay Type
+
+| Assay Type | Threshold | Expected Retention | Rationale |
+|------------|-----------|-------------------|-----------|
+| **ATAC-seq gene activity** | **1.2×** | 20-40% | Lower dynamic range, sparser signal |
+| RNA-seq (scRNA/spatial) | 1.5-2.0× | 30-50% | Higher sensitivity and dynamic range |
+| Protein (CITE-seq) | 2.0-3.0× | 40-60% | High specificity required |
+
+**Key insight:** ATAC-seq gene activity scores are inherently sparser than RNA expression. **1.2× threshold** is recommended for ATAC-seq data.
+
+**Method:** For each marker, compute median expression per cluster, then calculate pairwise fold changes. Keep markers where median fold change across all pairs exceeds threshold.
+
+**Quality check:** 
+- After filtering, verify **each cell type retains ≥2 markers AND there are ≥3 cell types**. 
+- If a major cell type does not have any discriminatory marker, add **known canonical markers** from your general knowledge.
+
+---
+
+## Step 4: Balance Marker Counts (Target: 5 markers per cell type)
+
+### ⚠️ CRITICAL: Prevent Scoring Bias
+
+**Problem:** Unequal marker counts create systematic bias. A cell type with 20 markers will outscore one with 5 markers regardless of biological signal.
+
+**Solution:** Equalize marker counts across all cell types.
+
+**Method:**
+1. Calculate target count (median or minimum of filtered marker counts)
+2. Enforce minimum of 2 markers per cell type
+3. Take top 5 markers by fold change for each cell type
+4. If a cell type doesn't have discriminatory markers, use **canonical markers from general knowledge**. 
+
+**Result:** All cell types have equal "voting power" during scoring.
+
+---
+
+## Step 5: Compute Raw Gene Set Scores
+
+Calculate **mean expression** across each cell type's marker panel for every cell.
+
+**Formula:** For each cell and cell type, score = mean(expression of all markers for that cell type)
+
+This produces a score matrix: cells × cell types
+
+---
+
+## Step 6: ⚠️ CRITICAL — Normalize Scores
+
+### Why Normalization is Non-Negotiable
+
+**Raw mean scores are NOT comparable across cell types** due to:
+- Different baseline expression levels across marker sets
+- Varying dynamic ranges of marker expression
+- Technical biases in specific gene accessibility
+
+**Without normalization:** Cell types with high baseline marker expression will dominate predictions (typically 80-99% mis-classification to a single type).
+
+### Normalization Methods
+
+**Z-score normalization (RECOMMENDED for ATAC-seq):**
+- Centers each cell type at mean=0, std=1
+- Formula: `(score - mean) / std` for each cell type
+- Makes scores directly comparable across all cell types
+
+**Min-max scaling (alternative):**
+- Scales each cell type to 0-1 range
+- Formula: `(score - min) / (max - min)`
+- Useful when z-scores have outliers
+
+**Rank-based (conservative):**
+- Converts scores to percentile ranks
+- Most robust but loses magnitude information
+
+**For ATAC-seq data: Always use z-score normalization.**
+
+---
+
+## Step 7: Assign Cell Types
+
+After normalization:
+1. For each cell, identify the cell type with the **highest normalized score**
+2. Calculate **prediction confidence** = difference between top and second-highest score
+3. Add predictions and confidence to `adata.obs`
+4. Visualize predicted cell types.
+
+Higher confidence (>0.3) indicates clear cell type identity. Lower confidence (<0.15) suggests ambiguous or mixed populations.
+
+---
+
+## Step 8: Comprehensive Evaluation
+
+- Read `technology_docs/atlasxomics/cell_type_annotation/evals.md`
+
+---
+
+## Troubleshooting Common Issues
+
+| Symptom | Likely Cause | Solution |
+|---------|--------------|----------|
+| 99% cells = one type | Missing normalization | Add z-score normalization (Step 6) |
+| Only 2-3 types detected | Threshold too strict | Lower to 1.2× (ATAC) or 1.1× |
+| Cluster purity <40% | Gene activity ≠ clustering | Use cluster-based approach |
+| Rare types not detected | Insufficient markers | Increase initial markers to 50-60 |
+| One type dominates (70-80%) | Marker imbalance | Balance marker counts (Step 4) |
+| No spatial coherence | Poor quality predictions | Verify normalization and thresholds |
+| Low marker specificity | Markers not discriminatory | Lower threshold or use different markers |
+| Low overall confidence | Weak marker signal | Increase markers or try cluster-based |

@@ -1,13 +1,27 @@
-# Cell Type Annotation Guide 
+# Cell Type Annotation Guide
 
-## Critical Decision (MUST ASK)
-Ask user:
-1. "Are you confident in your current clustering quality?"
-2. "Do you prefer fast exploratory annotation or slower detailed annotation?"
+## Supported Methods
 
-**Choose approach:**
-- Unsatisfactory clusters OR want fast (~minutes per sample) → **Gene Set Scoring** (`technology_docs/cell_type_annotation/gene_set_scoring.md`)
-- Good clusters AND can wait >30 minutes → **Cluster-based** (`technology_docs/cell_type_annotation/cluster_based.md`)
+**Per-cluster Gene Set Scoring**  
+- Scores canonical marker sets per cluster and assigns one label per group.  
+Best when clusters are well separated and biologically meaningful.  
+- See `technology_docs/atlasxomics/cell_type_annotation/per_cluster_gene_set_scoring.md`
+
+**Per-cell Gene Set Scoring**  
+- Rapid, exploratory annotation at single-cell resolution.  
+- Useful for capturing heterogeneity or when clustering is preliminary.  
+- See `technology_docs/cell_type_annotation/per_cell_gene_set_scoring.md`
+
+**Unbiased Cluster-based Annotation (DE-driven)**  
+- Performs differential expression between clusters to identify defining markers, then matches them to known cell types using literature or databases.  
+- Helpful when expected cell types are unclear or curated marker sets are incomplete.
+- See `technology_docs/atlasxomics/cell_type_annotation/cluster_based_de.md`
+
+## When to Use Each Method
+
+- Clusters are reliable and you want concise, interpretable labels (one cell type label per cluster) → **Per-cluster scoring**
+- You want to capture heterogeneity within clusters or need rapid exploration → **Per-cell scoring**
+- Tissue composition is uncertain or marker sets are limited. Unbiased marker discovery by comparing between clusters (slow, 30+ minutes for large datasets) → **DE-driven**
 
 ## Input: `*_sm_ge.h5ad` (gene activity scores)
 
