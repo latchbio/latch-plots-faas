@@ -35,7 +35,7 @@
 
 **Analysis**: `/snap_outs/[project_name]/` or `.../Processed_Data/[project_name]`
 Key files for analysis:
-- `combined_sm_ge.h5ad`: **Gene activity scores** for all spots/cells across all samples
+- `combined_sm_ge.h5ad`: **Gene activity scores** for all spots/cells across all samples. **Recommended for analyses**
   - .X matrix: gene activity (imputed from chromatin accessibility)
   - Used for: gene expression analysis, cell type annotation
 - `combined_sm_motifs.h5ad`: **Motif enrichment scores** for all spots/cells

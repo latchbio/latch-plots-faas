@@ -26,6 +26,11 @@
 - `genome` (Enum): "hg38" or "mm10"
 
 ### Creating compare_config.json
+
+- Inspect the user’s input folder and automatically load any `combined_sm_ge.h5ad` file found into an AnnData object.
+
+- Visualize H5AD file with `w_h5`
+
 ```python
 import json
 from pathlib import Path
@@ -56,6 +61,12 @@ latch_path = LPath.upload(Path(local_path), remote_path)
 # Wrap as LatchFile for workflow input
 groupings_file = LatchFile(remote_path)
 ```
+
+### Formatting Correct Input to `archrproject`
+
+- When using `w_ldata_picker` to populate the `ArchRProject` path, always extract the LData path string via `widget.value.path` before passing it into LatchDir(...).
+
+- Automatically search the user’s input for the folder that ends with `_ArchRProject`. Only ask the user to specify it if you cannot find one.
 
 ### Launch Comparison and Wait for it to Complete
 ```python
