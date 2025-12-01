@@ -198,7 +198,7 @@ from lplots.widgets.workflow import w_workflow
 w = w_workflow(
     label="Convert SpaceRanger Outputs to H5AD",
     wf_name="wf.__init__.visium_spaceranger_to_h5ad_workflow",
-    version="0.0.0-7054ff",
+    version=None, # Uses latest version
     params={
       "input_file": LatchDir("latch://38438.account/visium/colon"),
       "bin_name": "square_008um",
