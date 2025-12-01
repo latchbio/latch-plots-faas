@@ -4,6 +4,8 @@
 
 *Goal: Remove off-tissue beads (from Curio Seeker data ONLY) to create an on-tissue mask for downstream analysis.*
 
+**CRITICAL: Detect subsampled data first.** Check if filename contains "subsample"/"subsampled"/"susampled" OR calculate median nearest-neighbor distance (if >40 units → subsampled). For **full-resolution data**, apply three-step filter: (1) UMI threshold (log10 counts ≥1.6, target 40-60% retention), (2) Neighborhood Density A (radius=40µm, ≥5 neighbors, target 30-50%), (3) Neighborhood Density B (radius=100µm, ≥10 neighbors, target 50-60% final). Show histograms for each step with adjustable widgets (t, m, n, p, q).
+
 Three-step filter (applied sequentially):
 
 1/ UMI threshold: keep beads with log10(UMI) ≥ t.
