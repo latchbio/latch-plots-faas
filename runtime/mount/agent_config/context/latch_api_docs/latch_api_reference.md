@@ -205,12 +205,12 @@ user_name = name.value  # Returns the entered text
 
 ### w_text_output
 
-**Import:** `from lplots.widgets.text import w_text_output`
+**Import:** `from lplots.widgets.text import w_text_output` (NOT `lplots.widgets.text_output`)
 
 **When to use:** Display text output to user with optional message box styling
 
 **Arguments:**
-- `content` (str, required): Text content to display
+- `content` (str, required): Text content to display (NOT `label` — this is an output widget)
 - `appearance` (TextOutputAppearance, optional): Styling with message_box option
 - `key` (str, optional): Unique widget identifier
 
