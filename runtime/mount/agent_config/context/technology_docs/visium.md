@@ -1,4 +1,4 @@
-# Visium 
+# Visium
 
 1. Identify which Visium assay and chemistry the user is working with.  
 
@@ -6,12 +6,29 @@
 
 3. Run `wf.__init__.visium_spaceranger_to_h5ad_workflow`, then load and visualize the resulting H5AD.  
 
-4. Inspect the AnnData object to determine which preprocessing steps Space Ranger has already performed and skip accordingly. 
+4. Inspect the AnnData object to determine which preprocessing steps Space Ranger has already performed and skip accordingly.  
 
-5. (Optional) For preprocessing steps - QC, normalization, PCA, integration, UMAP, clustering, and differential expression - you have **two options**: 
+5. Choose the preprocessing backend for QC, normalization, PCA, integration, UMAP, clustering, and differential expression:
 
-    - **IF** the data is small and `scanpy` operation can be run in few minutes → **THEN** use `scanpy` directly.
-    - **IF** the data is large and you expect raw `scanpy` operation to take >15 minutes → **THEN** launch the GPU-accelerated `wf.__init__.rapids_single-cell_preprocessing` workflow (See `technology_docs/rapids.md`)
+   **5.1. Assess dataset size**
+   - Read `adata.n_obs` (spots) and `adata.n_vars` (genes)
+   - Optionally check on-disk H5AD size
+
+   **5.2. Use standard `scanpy` when**
+   - `adata.n_obs ≤ 100,000`
+   - H5AD size < ~10 GiB
+   - Expected CPU preprocessing time is within tens of minutes
+   - User does not need to re-run preprocessing many times
+
+   **5.3. Use RAPIDS when**
+   - `adata.n_obs > 100,000` or H5AD ≥ ~10 GiB  
+   - CPU preprocessing is likely to be slow or already timing out
+   - User expects to iterate on parameters frequently and needs faster re-runs  
+   - Examples: multi-slide Visium integrations, Visium HD, large multi-sample projects
+
+   **If RAPIDS is selected**
+   - Run `wf.__init__.rapids_single-cell_preprocessing` on the H5AD (See `technology_docs/rapids.md`)
+   - Continue downstream analysis using the RAPIDS-processed H5AD  
 
 6. Perform cell type annotation.
 
