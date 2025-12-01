@@ -27,6 +27,33 @@
 - Spatial: `.../Raw_Data/[Run_ID]/spatial`
 
 ### Workflow Outputs
+
+All workflow outputs are stored under the root Latch Data directory (`latch://<account_id>.id/` or `latch:///`):
+
+**Differential Expresion** `/compare_outs/[project_name]/`
+- **`gene_results/`**
+  - Volcano plot  
+  - `all_genes.csv` — all gene-level test results  
+  - `marker_genes.csv` — significant genes after filtering  
+
+- **`peak_results/`**
+  - MA plot  
+  - `all_peaks.csv` — all peak-level test results  
+  - `marker_peaks.csv` — significant peaks after filtering  
+
+- **`motif_results/`**
+  - `[up/down]Regulated_motifs.csv` — motifs ranked by significance  
+  - `[up/down]_enrichment_plot` — motif enrichment scatter plot (`-log10(FDR)`)  
+  - `all_motifs.csv` — all motif-level test results  
+  - `marker_motifs.csv` — significant motifs after filtering  
+
+- **`coverages/`**
+  - BigWig coverage tracks for visualization  
+
+- **`[project_name]_ArchRProject/`**
+  - Updated ArchRProject with differential results attached  
+
+
 **Clustering**: `/snap_opts/[project_name]/`
 - `setN_*` folders: Each represents different parameter combinations. Contains:
   - `combined.h5ad`: AnnData with .X as tile matrix (genomic bins x cells)
