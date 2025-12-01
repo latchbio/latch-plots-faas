@@ -8,7 +8,7 @@
 
 4. Inspect the AnnData object to determine which preprocessing steps Space Ranger has already performed and skip accordingly.  
 
-5. Choose the preprocessing backend for QC, normalization, PCA, integration, UMAP, clustering, and differential expression:
+5. Choose the preprocessing backend for QC, normalization, PCA, integration, UMAP, clustering:
 
    **5.1. Assess dataset size**
    - Read `adata.n_obs` (spots) and `adata.n_vars` (genes)
@@ -30,7 +30,28 @@
    - Run `wf.__init__.rapids_single-cell_preprocessing` on the H5AD (See `technology_docs/rapids.md`)
    - Continue downstream analysis using the RAPIDS-processed H5AD  
 
-6. Perform cell type annotation.
+6. **Perform differential expression (1-vs-all):**
+   - **Use RAPIDS DE** when `adata.n_obs > 100,000`  
+   - **Use scanpy DE** when `adata.n_obs ≤ 100,000`  
+
+7. Perform cell type annotation.
+
+## Decision Tree: When to Use RAPIDS
+
+START: Do you have a Visium HD dataset?
+├─ YES, n_obs > 100K
+│  ├─ Is it raw SpaceRanger output (no PCA/UMAP)?
+│  │  └─ YES → RAPIDS full workflow
+│  │
+│  ├─ Is it already preprocessed (has PCA/UMAP/clustering)?
+│  │  ├─ Need differential expression? 
+│  │  │  └─ YES → RAPIDS with skip_qc, skip_normalization, skip_pca, skip_umap, skip_clustering=True
+│  │  │  └─ NO → Manual annotation, visualization only
+│  │  │
+│  │  └─ Rerun with different parameters?
+│  │     └─ YES → RAPIDS (iterate faster)
+│  
+└─ NO, n_obs ≤ 100K → Use standard scanpy
 
 ---
 
