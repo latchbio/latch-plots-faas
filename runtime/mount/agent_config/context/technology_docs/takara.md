@@ -4,15 +4,15 @@ Make sure you understand if the kit is Seeker 3x3, Seeker 10x10 or Trekker. If
 this information was not provided, ask the user before proceeding.
 
 <plan>
-1. **Data Loading**
-2. **Background Removal** (*Seeker only.*)
-3. **Quality Control + Filtering**
-5. **Normalization**
-6. **Feature Selection**
-7. **Dimensionality Reduction**
-8. **Clustering**
-9. **Differential Gene Expression (DGE)** 
-10. **Cell Type Annotation**
+1. **Data Loading** -> `takara/data_loading.md`
+2. **Background Removal** (*Seeker only.*) -> `takara/background_removal.md`
+3. **Quality Control + Filtering** -> `takara/qc.md`
+5. **Normalization** -> `takara/normalization.md`
+6. **Feature Selection** -> `takara/feature_selection.md`
+7. **Dimensionality Reduction** -> `takara/dimensionality_reduction.md`
+8. **Clustering** -> `takara/clustering.md`
+9. **Differential Gene Expression (DGE)** -> `takara/diff_gene_expression.md`
+10. **Cell Type Annotation** -> `takara/cell_typing.md`
 </plan>
 
 ## Launch Trekker Workflow
@@ -55,7 +55,7 @@ Use the code below as a template, that uses w_workflow. Always use the `automati
 
 Finally, you need to make sure to wait for the workflow to complete before proceeding. This is included in the code below.
 
-#### Example Implementation
+### Example Implementation
 
 ```python
 from lplots.widgets.workflow import w_workflow
