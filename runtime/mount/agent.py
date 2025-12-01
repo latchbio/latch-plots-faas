@@ -1388,12 +1388,12 @@ class AgentHarness:
         async def redeem_package(args: dict) -> dict:
             package_code = args.get("package_code")
             package_version_id = args.get("package_version_id")
-
-            if package_code is None or package_version_id is None:
+            redemption_reason = args.get("redemption_reason")
+            if package_code is None or package_version_id is None or redemption_reason is None:
                 return {
                     "tool_name": "redeem_package",
                     "success": False,
-                    "summary": "Package code and package version ID are required to redeem a package",
+                    "summary": "Package code, package version ID and redemption reason are required to redeem a package",
                 }
 
             package_code = str(package_code)
@@ -1412,6 +1412,7 @@ class AgentHarness:
                     "summary": f"Redeemed package {package_code} (version {package_version_id})",
                     "package_code": package_code,
                     "package_version_id": package_version_id,
+                    "redemption_reason": redemption_reason,
                 }
 
             return {
@@ -2074,9 +2075,13 @@ class AgentHarness:
                     "package_version_id": {
                         "type": "string",
                         "description": "Package version ID."
+                    },
+                    "redemption_reason": {
+                        "type": "string",
+                        "description": "Reason for redeeming the package to display in the agent history. (e.g., `Installed X Technology Tools into Workspace`)"
                     }
                 },
-                "required": ["package_code", "package_version_id"]
+                "required": ["package_code", "package_version_id", "redemption_reason"]
             }
         })
         self.tool_map["redeem_package"] = redeem_package
