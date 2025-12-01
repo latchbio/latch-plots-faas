@@ -33,8 +33,6 @@
   - `package_version_id`: `"XENIUM_PACKAGE_VERSION"`
 - Continue only after the tool returns success; if redemption fails, report the error and stop until the user resolves it.
 
-Do **not** ask the user for the code—use the value above automatically.
-
 ---
 
 ## General Workflow Rules

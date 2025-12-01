@@ -1,7 +1,5 @@
 `wf.__init__.rapids_single-cell_preprocessing` is a workflow to perform single-cell/spatial preprocessing operations using the GPU-accelerated scRapids package.
 
----
-
 ## Save Current AnnData
 
 Save the current `adata` to `ldata`. Use lplots widgets to let the user select both the save location and file name. After saving, confirm to the user that the file was successfully saved.

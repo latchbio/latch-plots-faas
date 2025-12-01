@@ -1396,24 +1396,21 @@ class AgentHarness:
                     "summary": "Package code and package version ID are required to redeem a package",
                 }
 
-            params = {
-                "package_code": str(package_code),
-                "package_version_id": str(package_version_id),
-            }
+            package_code = str(package_code)
+            package_version_id = str(package_version_id)
 
             print("[tool] redeem_package")
 
-            result = await self.atomic_operation("redeem_package", params)
+            result = await self.atomic_operation("redeem_package", {
+                "package_code": str(package_code),
+                "package_version_id": str(package_version_id),
+            })
             if result.get("status") == "success":
-                summary = (
-                    result.get("summary") if result.get("summary") is not None else f"Redeemed package {package_code} (version {package_version_id})"
-                )
                 return {
                     "tool_name": "redeem_package",
                     "success": True,
-                    "summary": summary,
+                    "summary": f"Redeemed package {package_code} (version {package_version_id})",
                     "package_code": package_code,
-                    "package_id": result.get("package_id"),
                     "package_version_id": package_version_id,
                 }
 
@@ -2066,17 +2063,17 @@ class AgentHarness:
 
         self.tools.append({
             "name": "redeem_package",
-            "description": "Redeem a multi-use invite code so the workspace gains access to technology-specific assets.",
+            "description": "Redeem a package so the workspace gains access to technology-specific assets.",
             "input_schema": {
                 "type": "object",
                 "properties": {
                     "package_code": {
                         "type": "string",
-                        "description": "Multi-use package invite code provided in the technology docs."
+                        "description": "Multi-use package invite code."
                     },
                     "package_version_id": {
                         "type": "string",
-                        "description": "Package version ID to redeem."
+                        "description": "Package version ID."
                     }
                 },
                 "required": ["package_code", "package_version_id"]
