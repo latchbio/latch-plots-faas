@@ -46,13 +46,14 @@ Always use this workflow instead of writing custom GPU preprocessing code.
      Check for differential expression results in `adata.uns`.  
      If present → set `skip_differential_expression = True`.
 
-3. **Choose output directory**  
+3. **Configure default output directory e.g. latch:///Rapids_Output**  
    - Workflow will write `preprocessed.h5ad` here
 
 4. **Configure optional settings**  
    - Batch correction, clustering resolutions, DE, etc.
 
 5. **Run the workflow and wait for the workflow to complete**  
+   - Display a summary that GPU scheduling can take from 5-15 minutes
    - Always `.wait()` and confirm success
 
 6. **Load `{output_directory}/{run_name}/preprocessed.h5ad`**  
