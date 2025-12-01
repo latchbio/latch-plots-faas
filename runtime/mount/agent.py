@@ -1385,6 +1385,44 @@ class AgentHarness:
                 "summary": f"Failed to {operation} observation column: {result.get('error', 'Unknown error')}",
             }
 
+        async def redeem_package(args: dict) -> dict:
+            package_code = args.get("package_code")
+            package_version_id = args.get("package_version_id")
+
+            if package_code is None or package_version_id is None:
+                return {
+                    "tool_name": "redeem_package",
+                    "success": False,
+                    "summary": "Package code and package version ID are required to redeem a package",
+                }
+
+            params = {
+                "package_code": str(package_code),
+                "package_version_id": str(package_version_id),
+            }
+
+            print("[tool] redeem_package")
+
+            result = await self.atomic_operation("redeem_package", params)
+            if result.get("status") == "success":
+                summary = (
+                    result.get("summary") if result.get("summary") is not None else f"Redeemed package {package_code} (version {package_version_id})"
+                )
+                return {
+                    "tool_name": "redeem_package",
+                    "success": True,
+                    "summary": summary,
+                    "package_code": package_code,
+                    "package_id": result.get("package_id"),
+                    "package_version_id": package_version_id,
+                }
+
+            return {
+                "tool_name": "redeem_package",
+                "success": False,
+                "summary": f"Failed to redeem package: {result.get('error', 'Unknown error')}",
+            }
+
         async def smart_ui_spotlight(args: dict) -> dict:
             keyword = args.get("keyword")
             widget_key = args.get("widget_key")
@@ -2025,6 +2063,26 @@ class AgentHarness:
             }
         })
         self.tool_map["h5_manage_obs"] = h5_manage_obs
+
+        self.tools.append({
+            "name": "redeem_package",
+            "description": "Redeem a multi-use invite code so the workspace gains access to technology-specific assets.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "package_code": {
+                        "type": "string",
+                        "description": "Multi-use package invite code provided in the technology docs."
+                    },
+                    "package_version_id": {
+                        "type": "string",
+                        "description": "Package version ID to redeem."
+                    }
+                },
+                "required": ["package_code", "package_version_id"]
+            }
+        })
+        self.tool_map["redeem_package"] = redeem_package
 
         self.tools.append({
             "name": "smart_ui_spotlight",

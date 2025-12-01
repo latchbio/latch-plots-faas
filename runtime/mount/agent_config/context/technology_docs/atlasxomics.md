@@ -13,6 +13,18 @@
 
 ---
 
+<atlasx_package_redemption>
+
+## Mandatory Package Redemption
+
+- Immediately after confirming the assay is **AtlasXomics**, redeem the AtlasXomics workspace package before Data Loading.
+- Invoke `redeem_package` with:
+  - `package_code`: `"ATLASXOMICS_PACKAGE_CODE"`
+  - `package_version_id`: `"ATLASXOMICS_PACKAGE_VERSION"`
+- Halt the workflow if redemption fails and inform the user; the downstream steps rely on the assets granted by this package.
+
+</atlasx_package_redemption>
+
 </atlasx_data_structure>
 
 ## Data Structure

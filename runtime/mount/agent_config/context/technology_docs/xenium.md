@@ -25,6 +25,18 @@
 
 ---
 
+## Mandatory Package Redemption
+
+- Immediately after confirming the dataset is **10X Xenium** (right after assay identification and before Step 0), call the `redeem_package` tool to pull required Xenium workflows/files into the current workspace.
+- Use the multi-use invite details provided here:
+  - `package_code`: `"XENIUM_PACKAGE_CODE"`
+  - `package_version_id`: `"XENIUM_PACKAGE_VERSION"`
+- Continue only after the tool returns success; if redemption fails, report the error and stop until the user resolves it.
+
+Do **not** ask the user for the code—use the value above automatically.
+
+---
+
 ## General Workflow Rules
 
 - **Always render a form** for any workflow with `lplots.widgets`.

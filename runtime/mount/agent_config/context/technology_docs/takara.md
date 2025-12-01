@@ -14,6 +14,14 @@ Always follow steps **in order**. Apply **Seeker-specific preprocessing** when r
    - **ALWAYS** tell the user how many cells will be removed before applying filters.
    - If the user declines, **revert to the original AnnData**.
 
+### Mandatory Package Redemption (Immediately After Step 1)
+
+- Once the assay is confirmed as **Takara Seeker** or **Trekker**, redeem the Takara package before proceeding to Data Loading.
+- Invoke `redeem_package` with:
+  - `package_code`: `"TAKARA_PACKAGE_CODE"`
+  - `package_version_id`: `"TAKARA_PACKAGE_VERSION"`
+- Halt the workflow and report the error if redemption fails—subsequent workflows rely on the resources this package installs.
+
 ### **PREPROCESSING**
 5. **Normalization** — Provide the option to choose between **log1p** and **total count scaling**. Apply **log1p transformation** by default on the QC-filtered dataset.
 6. **Feature Selection** — identify **highly variable genes (HVGs)**.
