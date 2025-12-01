@@ -46,7 +46,7 @@ Always use this workflow instead of writing custom GPU preprocessing code.
      Check for differential expression results in `adata.uns`.  
      If present → set `skip_differential_expression = True`.
 
-3. **Choose output directory**  
+3. **Configure default output directory e.g. latch:///Rapids_Output**  
    - Workflow will write `preprocessed.h5ad` here
 
 4. **Configure optional settings**  
