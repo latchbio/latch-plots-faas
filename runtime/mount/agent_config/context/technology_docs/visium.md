@@ -34,7 +34,7 @@
    - **Use RAPIDS DE** when `adata.n_obs > 100,000`  
    - **Use scanpy DE** when `adata.n_obs ≤ 100,000`  
 
-7. Perform cell type annotation.
+7. Annotate each cluster by evaluating its top DE marker genes and assigning the best-matching cell type.
 
 ## Decision Tree: When to Use RAPIDS
 

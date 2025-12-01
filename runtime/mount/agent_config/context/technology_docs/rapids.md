@@ -55,7 +55,7 @@ Always use this workflow instead of writing custom GPU preprocessing code.
 5. **Run the workflow and wait for the workflow to complete**  
    - Always `.wait()` and confirm success
 
-6. **Load `{output_directory}/preprocessed.h5ad`**  
+6. **Load `{output_directory}/{run_name}/preprocessed.h5ad`**  
    - Use this as the new working AnnData object
 
 ---
@@ -193,3 +193,4 @@ if execution:
             content="✓ RAPIDS workflow completed!",
             appearance={"message_box": "success"}
         )
+```
