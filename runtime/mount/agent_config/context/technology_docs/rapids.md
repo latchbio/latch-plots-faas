@@ -2,16 +2,6 @@
 
 ---
 
-## Mandatory Package Redemption
-
-- After confirming that the user needs the RAPIDS workflow (typically after identifying high-cell-count Vizgen/Vizium data), redeem the RAPIDS support package before running anything else.
-- Invoke `redeem_package` with:
-  - `package_code`: `"RAPIDS_PACKAGE_CODE"`
-  - `package_version_id`: `"RAPIDS_PACKAGE_VERSION"`
-- If the redemption fails, surface the error and pause; do not attempt to launch workflows without the package resources.
-
----
-
 ## Save Current AnnData
 
 Save the current `adata` to `ldata`. Use lplots widgets to let the user select both the save location and file name. After saving, confirm to the user that the file was successfully saved.
