@@ -1,110 +1,36 @@
 ## Takara Seeker and Trekker Analysis Workflow
 
-This is the **authoritative step-by-step pipeline** for **Takara Seeker** and **Trekker** experiments.
-Always follow steps **in order**. Apply **Seeker-specific preprocessing** when required.
+Make sure you understand if the kit is Seeker 3x3, Seeker 10x10 or Trekker. If
+this information was not provided, ask the user before proceeding.
 
-1. **Experiment Setup** — **ALWAYS** ask users to confirm whether their experiment is **Seeker** or **Trekker**, and whether their H5AD contains **one** or **multiple samples**. Spatial coordinates are typically found in **spatial** or **X_spatial**
-2. **Data Loading** — load data using **Scanpy**.  Ensure the input is a valid **AnnData (H5AD)** object.
-    - **ALWAYS** use ```w_h5``` for displaying anndata
-3. **Background Removal** — *Seeker only.*
-4. **Quality Control & Filtering** — use **Scanpy** to compute QC metrics.
-   - **ALWAYS** make histograms of the QC metrics.
-   - **ALWAYS** expose filtering parameters using widgets.
-   - **ALWAYS** create radio widget and confirm with the user before applying filters.
-   - **ALWAYS** tell the user how many cells will be removed before applying filters.
-   - If the user declines, **revert to the original AnnData**.
+<plan>
+1. **Data Loading** -> `takara/data_loading.md`
+2. **Background Removal** (*Seeker only.*) -> `takara/background_removal.md`
+3. **Quality Control + Filtering** -> `takara/qc.md`
+5. **Normalization** -> `takara/normalization.md`
+6. **Feature Selection** -> `takara/feature_selection.md`
+7. **Dimensionality Reduction** -> `takara/dimensionality_reduction.md`
+8. **Clustering** -> `takara/clustering.md`
+9. **Differential Gene Expression (DGE)** -> `takara/diff_gene_expression.md`
+10. **Cell Type Annotation** -> `takara/cell_typing.md`
+</plan>
 
-### Mandatory Package Redemption (Immediately After Step 1)
-
-- Once the assay is confirmed as **Takara Seeker** or **Trekker**, redeem the Takara package before proceeding to Data Loading.
-- Invoke `redeem_package` with:
-  - `package_code`: `"TAKARA_PACKAGE_CODE"`
-  - `package_version_id`: `"TAKARA_PACKAGE_VERSION"`
-- Halt the workflow and report the error if redemption fails—subsequent workflows rely on the resources this package installs.
-
-### **PREPROCESSING**
-5. **Normalization** — Provide the option to choose between **log1p** and **total count scaling**. Apply **log1p transformation** by default on the QC-filtered dataset.
-6. **Feature Selection** — identify **highly variable genes (HVGs)**.
-   - Use sc.pp.highly_variable_genes(..., subset=True) to subset the data to the selected HVGs.
-   - Allow the user to specify the number of HVGs to retain (default: 2,000 genes).
-   - Always generate diagnostic plots using Scanpy for visualization.
-7. **Dimensionality Reduction** —  Check if the anndata has PCA and UMAP, if so do not run these steps and give the user an option to rerun
-8. If the user wants to recompute PCA and UMAP, compute **PCA** first, then **UMAP** embeddings.
-   Expose parameters for:
-   - Number of PCs (**default: 10**)
-   - Number of neighbors (**default: 40**)
-9. Always visualize both PCA and UMAP with ```w_h5```.
-10. **Clustering** — compute neighbors if it doesn't exist, apply **Leiden clustering** (resolution = 0.05) on the neighborhood graph.  **Always** display clusters on the UMAP and spatial embedding using ```w_h5```.
-
-### **SECONDARY ANALYSIS**
-11. **Differential Gene Expression (DGE)** - identify **marker genes per cluster** using rank-based DGE tests:
-    - Default method: t-test_overestim_var (automatically selected in the widget unless the user specifies another method).
-    - Allow the user to choose alternative methods (e.g., wilcoxon, logreg).
-    - Report top marker genes for each cluster and Make dot plots with scanpy.
-12. **Cell Type Annotation** — assign **biological meaning** to clusters using marker-gene dictionaries or reference datasets.
-    Allow users to review or override annotations.
----
-
-✅ **General Rules**
-- **DO NOT** delete cells unless explicitly prompted by the user.
-- **DO NOT** create duplicated cells.
-- Always use markdown to summarize text output after each analysis step. **DO NOT** use ```print()```.
-- Always produce **visual outputs** at every stage. Use ```w_plot()``` and ```w_table()``` to display plots and tables on the UI
-- Always use ```w_h5``` for spatial embedding and UMAP. For all other plots, use Plotly instead.
-Do not use both w_h5 and Plotly for the same visualization to avoid redundancy.
-- Always pass a DataFrame object directly to the source argument of ```w_table```. Do not pass a method call or expression (e.g., df.head(), df.round(3), df.sort_values(...)) directly into ```w_table```.
-- Apply sensible defaults
-- Add well formatted markdown
-- Always maintain a clear distinction between **Seeker** and **Trekker** workflows.
-- Prioritize **transparency**, **reproducibility**, and **interactivity** throughout the analysis.
-
-Some pointers on steps.
-
-### Experiment Setup
-
-- You must ask users to confirm whether their experiment is Seeker 3x3, Seeker 10x10, or Trekker.
-- The user's answer will directly influence the code written for background removal.
-
-
-### Background Removal
-
-*Goal: Remove off-tissue beads (from Curio Seeker data ONLY) to create an on-tissue mask for downstream analysis.*
-
-Three-step filter (applied sequentially):
-
-1/ UMI threshold: keep beads with log10(UMI) ≥ t.
-- Pick t at the local minimum between the two modes in the log10(UMI) histogram.
-- Typical range: 1–2; expose as widget min_log10_UMI.
-
-2/ Neighborhood density A: square window m×m μm (default m=40).
-- Keep beads with count ≥ p (default p=5).
-
-3/ Neighborhood density B: square window n×n μm (default n=100).
-- Keep beads with count ≥ q (default q=10).
-
-
-UI & Plots to generate:
-
-- Histogram of log10(UMI) with adjustable t and vertical threshold line.
-- Histograms of neighborhood counts for steps 2 and 3; guide users to choose p and q at local minima.
-- Spatial scatter/overlay showing kept vs removed beads after each step.
-- Expose widgets for t, m, n, p, q; default to t=1.6, m=40, p=5, n=100, q=10.
-
-
-### Launch Trekker Workflow
+## Launch Trekker Workflow
 
 If user provides FastQ files for the Trekker experiment, launch the Trekker workflow using the `w_workflow` widget.
 The workflow requires precise user input because each field maps directly to workflow parameters in the code.
 You must **parse user answers**, **normalize them into the required formats**, and then construct the `params` dictionary exactly as shown in the example.
 
-#### FASTQ Files
+### FASTQ Files
+
 - Every Trekker sample has **two FASTQ files** (paired-end sequencing).
   - **Read 1** → maps to workflow param `fastq_cb`
   - **Read 2** → maps to workflow param `fastq_tags`
 
 These must be provided by the user and wrapped as `LatchFile(latch://...)`.
 
-#### Required User Inputs
+### Required User Inputs
+
 For each sample, you must ALWAYS **provide a form using latch widgets** for the following values. Each one has a clear mapping to a workflow parameter:
 
 - **Sample ID** → `sample_id`
@@ -129,7 +55,7 @@ Use the code below as a template, that uses w_workflow. Always use the `automati
 
 Finally, you need to make sure to wait for the workflow to complete before proceeding. This is included in the code below.
 
-#### Example Implementation
+### Example Implementation
 
 ```python
 from lplots.widgets.workflow import w_workflow
