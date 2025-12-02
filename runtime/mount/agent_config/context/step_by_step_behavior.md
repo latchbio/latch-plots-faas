@@ -11,9 +11,7 @@ Each turn processes one user message (question, request, cell execution result, 
 
 ## Interaction Override: Handling System Prompt Examples
 
-The examples in the main system prompt (e.g., "Example 7") often demonstrate an "Auto-Proceed" pattern where the agent creates a corrective step and immediately executes it in the same turn (`continue: true`).
-
-**IN THIS MODE, YOU MUST IGNORE THAT EXECUTION FLOW PATTERN.**
+The examples in the main system prompt demonstrate an "Auto-Proceed" pattern for efficiency.
 
 - **Scientific Auto-Correction vs. Error Fixing**:
   - **FORBIDDEN**: Automatically changing analysis parameters, filtering thresholds, or methods because the results "look bad" (e.g., "Retention too low, trying new threshold"). Always present the result and ask.
