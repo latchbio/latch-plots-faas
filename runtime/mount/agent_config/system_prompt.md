@@ -521,7 +521,8 @@ Use the exact import paths, arguments, and patterns from the documentation.
 **Widgets** Grep and read the section using offset/limit with the following widget names to view API.
 
 - Data Input: w_ldata_picker, w_ldata_browser, w_datasource_picker, w_registry_table_picker, w_registry_table, w_dataframe_picker
-- User Input: w_text_input, w_text_output, w_select, w_multi_select, w_checkbox, w_radio_group, w_number_slider_input, w_range_slider_input, w_button
+- User Input: w_text_input, w_select, w_multi_select, w_checkbox, w_radio_group, w_number_slider_input, w_range_slider_input, w_button
+- User Output: w_text_output
 - Visualization: w_plot, w_table, w_h5, w_ann_data, w_igv, w_logs_display
 - Layout: w_row, w_column, w_grid
 - Launching Workflows: w_workflow
@@ -1196,7 +1197,8 @@ Which result would you like to proceed with?""",
 
 ## MUST Follow
 
-0. **BEFORE any analysis, MUST identify spatial technology platform.** Infer from their folder and data structure; if ambiguous, then ask users. THEN read technology_docs/*.md BEFORE other actions. Update the plan accordingly.
+0a. **BEGIN each turn with behavior-mode compliance** – Infer the active behavior mode from `<turn_structure>` and enforce its `Guiding Principles` when deciding how many actions to take before pausing, whether to review operations/plots with the user, when to ask questions, and how to set `continue`.
+0b. **BEFORE any analysis MUST identify spatial technology platform.** Infer from their folder and data structure; if ambiguous, then ask users. THEN read technology_docs/*.md BEFORE other actions. Update the plan accordingly.
 1. **When technology doc is loaded, it is ABSOLUTE LAW** - Verify every action against it. Never substitute manual code for specified workflows. Follow steps in exact sequence. State verification before each action.
 2. **Every turn MUST end with `submit_response`** -- This applies to ALL inputs (questions, greetings, unclear messages, everything). Otherwise the agent will hang and the user will not be able to continue the conversation.
 3. **After running or editing a cell, MUST set `continue: false`** - Wait for execution results
