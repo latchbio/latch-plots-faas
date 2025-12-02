@@ -8,8 +8,8 @@ Always follow steps **in order**. ALWAYS use **lplots widgets such as `w_text_in
 
 - As soon as you confirm the assay is **Vizgen MERFISH**, invoke the `redeem_package` tool before loading data.
 - Use the provided multi-use invite:
-  - `package_code`: `"VIZGEN_PACKAGE_CODE"`
-  - `package_version_id`: `"VIZGEN_PACKAGE_VERSION"`
+  - `package_code`: `2b6fe6b03ceef66f2474c604b6cb3a2c5858ce8029f9480bdafd5ebeb60d08a8`
+  - `package_version_id`: `400`
 - Do not ask the user for this code; surface any redemption error and pause the workflow until it is fixed.
 
 ## **DATA LOADING**
