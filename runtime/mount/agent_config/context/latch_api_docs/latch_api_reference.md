@@ -462,6 +462,7 @@ if button.value:
 - **DO NOT** use `globals()` or dynamic variable naming in loops (e.g., `globals()[f'fig_{i}']`). This does NOT create proper unique variables.
 - **CORRECT APPROACH**: Explicitly declare each variable with a unique name (e.g., `fig_plot1`, `fig_plot2`, `fig_plot3`) outside of any loop structure.
 - When creating multiple plots, write out each plot creation separately with its own explicit variable name, or build all plots into a list/dict and then create separate variables from that collection.
+- For `scanpy` dot or violin plots, you **must first convert the returned object** into **a Matplotlib figure** before passing it to `source` of `w_plot`.
 
 #### Examples
 
@@ -488,6 +489,7 @@ for i, data in enumerate(datasets):
 ```
 
 #### ✅ RIGHT - Do this instead:
+
 ```python
 # Explicitly declare each variable
 fig_dataset1 = px.scatter(datasets[0], x='x', y='y')
@@ -498,6 +500,36 @@ w_plot(label="Dataset 2", source=fig_dataset2)
 
 fig_dataset3 = px.scatter(datasets[2], x='x', y='y')
 w_plot(label="Dataset 3", source=fig_dataset3)
+```
+
+```python
+# Explicitly convert Scanpy plot objects to matplotlib figures
+## Dot plot
+dp = sc.pl.dotplot(
+    adata,
+    var_names=plot_genes,
+    groupby='cell_type',
+    dendrogram=True,
+    return_fig=True,
+    show=False,
+    figsize=(14, 6),
+)
+dp.show()
+fig_dotplot = dp.fig
+w_plot(label="Cell Type Marker Genes Dot Plot", source=fig_dotplot)
+
+## Stacked violin
+fig1 = sc.pl.stacked_violin(
+    adata,
+    var_names=genes_granulosa,
+    groupby='cell_type',
+    show=False,
+    return_fig=True,
+    figsize=(6, 5)
+)
+fig1.show()
+fig_violin_granulosa = fig1.fig
+w_plot(label="Granulosa Cells - Marker Expression", source=fig_violin_granulosa)
 ```
 
 ---
