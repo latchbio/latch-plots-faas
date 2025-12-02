@@ -1,5 +1,9 @@
 # Visium
 
+0. Invoke the `redeem_package` tool to install the necessary Visium tools into the workspace.
+  - `package_code`: `<PLACEHOLDER/>`
+  - `package_version_id`: `<PLACEHOLDER/>`
+
 1. Identify which Visium assay and chemistry the user is working with.  
 
 2. Collect the appropriate Space Ranger output directory.  

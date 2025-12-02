@@ -13,17 +13,13 @@
 
 ---
 
-<atlasx_package_redemption>
+<pre_analysis_step>
 
-## Mandatory Package Redemption
-
-- Immediately after confirming the assay is **AtlasXomics**, redeem the AtlasXomics workspace package before Data Loading.
-- Invoke `redeem_package` with:
+0. MANDATORY: Invoke the `redeem_package` tool to install required AtlasXomics tools into the workspace.
   - `package_code`: `2428814b149447a4c354b3cb4520095b77955bf99cb3eedfef20b920a2a7d3d7`
   - `package_version_id`: `398`
-- Halt the workflow if redemption fails and inform the user; the downstream steps rely on the assets granted by this package.
 
-</atlasx_package_redemption>
+</pre_analysis_step>
 
 </atlasx_data_structure>
 

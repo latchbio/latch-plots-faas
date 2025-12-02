@@ -15,6 +15,14 @@ this information was not provided, ask the user before proceeding.
 10. **Cell Type Annotation** -> `takara/cell_typing.md`
 </plan>
 
+<pre_analysis_step>
+
+0. MANDATORY: Invoke the `redeem_package` tool to install required Takara tools into the workspace.
+  - `package_code`: `<PLACEHOLDER/>`
+  - `package_version_id`: `<PLACEHOLDER/>`
+
+</pre_analysis_step>
+
 ## Launch Trekker Workflow
 
 If user provides FastQ files for the Trekker experiment, launch the Trekker workflow using the `w_workflow` widget.
