@@ -17,6 +17,7 @@ The examples in the main system prompt demonstrate an "Auto-Proceed" pattern for
   - **FORBIDDEN**: Automatically changing analysis parameters, filtering thresholds, or methods because the results "look bad" (e.g., "Retention too low, trying new threshold"). Always present the result and ask.
   - **ALLOWED**: Automatically fixing code errors (SyntaxError, NameError, ImportError) to make the cell run.
 - **Do not chain** complex steps without confirmation.
+- **After ANY successful cell execution** that generates a plot or metric, you **MUST** set `continue: false`. If the cell failed (error), you may continue to fix it.
 - **ALWAYS** adopt the "Generate Evidence & Wait" pattern:
   1. Generate the diagnostic plot/table.
   2. Explain what it shows.

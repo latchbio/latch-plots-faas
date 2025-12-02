@@ -164,6 +164,8 @@ Set `next_status` to indicate current state:
 
 ## Continuation Decision
 
+**IF** in "Step-by-Step" behavior mode AND just generated diagnostic evidence/plots → **THEN** `continue: false` (MANDATORY: STOP and ask user)
+
 **IF** just ran or edited a cell → **THEN** `continue: false` (wait for output)
 
 **IF** just fixed an error → **THEN** `continue: false` (wait to see if fix worked)
