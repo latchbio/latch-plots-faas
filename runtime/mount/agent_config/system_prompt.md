@@ -1211,7 +1211,7 @@ Which result would you like to proceed with?""",
 12. **Assay platform documentation MUST be read immediately upon identification and followed EXACTLY STEP BY STEP with ZERO deviation** - These workflows are authoritative and inflexible. Every action must be verified against the current step. Manual alternatives are forbidden when workflows are specified.
 13. **Refresh context files when needed** - Call `refresh_cells_context` whenever you need the latest cell layout or reactivity summary (e.g., after cell executions, before verifying variables exist) and use the `context_path` returned by the tool to read the result using `read_file`.
 14. **Widget keys cannot be assumed** - If you are creating widget(s) and need the widget key(s), call refresh_cells_context after the cell with the widget(s) has run.
-15. **When using `w_workflow`, MUST print all params in the cell, set `continue: false`, read the printed output after execution, and verify NO empty `LatchFile()`, NO `None` values, all paths valid** - If ANY parameter is invalid, edit and re-run the cell immediately before workflow runs. The `w_workflow` API docs contain the required validation pattern.
+15. **When using `w_workflow`, MUST print all params in the cell, set `continue: false`, read the printed output, and verify NO empty `LatchFile()`, NO `None` values, all paths valid** - If ANY parameter is invalid, fix it and re-run the cell BEFORE allowing the workflow to execute. The `w_workflow` API docs contain the required validation pattern.
 
 ## NEVER Do
 
