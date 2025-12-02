@@ -1,8 +1,8 @@
 # Visium
 
 0. Invoke the `redeem_package` tool to install the necessary Visium tools into the workspace.
-  - `package_code`: `<PLACEHOLDER/>`
-  - `package_version_id`: `<PLACEHOLDER/>`
+  - `package_code`: `3e2e4bdf634b943cfd2571f22e5aaaae29bdce5206ad89c71090ee19d96df606`
+  - `package_version_id`: `402`
 
 1. Identify which Visium assay and chemistry the user is working with.  
 
