@@ -701,6 +701,17 @@ submit_widget_state()
 
 **Returns:** `Execution` object or None
 
+**Mandatory Param Validation**:
+
+- Before calling `w_workflow`, you must:
+  - Understand the workflow’s input schema (names, required/optional, types)
+  - Build a params dict that:
+    - Includes all required inputs
+    - Has no unknown keys
+    - Uses the correct types (LatchFile, LatchDir, LatchOutputDir, int, float, str, enums, etc.)
+    - **Log the params using print** so you (the agent) can inspect them via getting cell  in thinking mode.
+- Read the cell logs, compare the printed params against the workflow schema, and fix any mistakes in a follow-up edit.
+
 **Example:**
 ```python
 from lplots.widgets.workflow import w_workflow
@@ -711,8 +722,8 @@ workflow = w_workflow(
     key="my_analysis_workflow_run_1",
     wf_name="my_analysis_workflow",
     params={
-        "input_file": "latch://workspace/data/sample.fastq",
-        "output_dir": "latch://workspace/results/"
+        "input_file": LatchFile("latch://workspace/data/sample.fastq"),
+        "output_dir": LatchOutputDir("latch://workspace/results/")
     },
     version="v1.0"
 )
@@ -725,6 +736,84 @@ if execution is not None:
   if res is not None and res.status in {"SUCCEEDED", "FAILED", "ABORTED"}:
       # inspect workflow outputs for downstream analysis
       workflow_outputs = list(res.output.values())
+```
+
+### w_workflow
+
+**Import:** `from lplots.widgets.workflow import w_workflow`
+
+**When to use:** Launch a Latch Workflow directly from Plots
+
+**Arguments:**
+- `label` (str, required): Button label
+- `wf_name` (str, required): Name of the workflow to execute
+- `params` (dict, required): Dictionary of input parameters
+- `automatic` (bool, required): Launch workflow automatically. Should always be True.
+- `key` (str, required): Unique widget identifier
+- `version` (str, optional): Workflow version; defaults to latest
+- `readonly` (bool, optional): Disable button if True. Default: False
+
+**Returns:** `Execution` object or None
+
+#### Best Practice: Validate Parameters First
+
+**Always validate workflow parameters before launching** to catch errors early and avoid wasting compute resources.
+
+**Validation function structure:**
+
+```python
+def validate_workflow_params(params: dict) -> dict:
+    """
+    Validate workflow parameters before launching.
+    Returns: dict with 'valid' (bool), 'errors' (list), 'warnings' (list)
+    """
+    # Initialize results structure
+    # Iterate through parameters
+    # Check LPath parameters exist and are correct type (file vs dir)
+    # Check string parameters are not empty
+    # Check numeric parameters are in valid ranges
+    # Check list parameters are not empty when required
+    # Return validation results
+```
+
+**Usage pattern:**
+
+```python
+# 1. Define parameters dict with workflow inputs
+params = {
+    "input_file": ...,       # LPath to input file
+    "output_directory": ..., # LatchOutputDir for outputs
+    "run_name": ...,        # String identifier
+    # ... other params
+}
+
+# 2. Validate parameters before launching
+validation = validate_workflow_params(params)
+
+# 3. Check validation results and handle errors
+if not validation["valid"]:
+    # Display errors to user
+    # Raise exception to stop execution
+    raise ValueError("...")
+
+# 4. Launch workflow only if validation passes
+
+workflow = w_workflow(
+    label="...",
+    automatic=True,
+    key="...",           # Unique key for this run
+    wf_name="...",       # Workflow name
+    params=params
+)
+
+# 5. Wait for completion and handle results
+execution = workflow.value
+if execution is not None:
+    res = await execution.wait()
+
+    if res is not None and res.status in {"SUCCEEDED", "FAILED", "ABORTED"}:
+        # inspect workflow outputs for downstream analysis
+        workflow_outputs = list(res.output.values())
 ```
 
 ---
