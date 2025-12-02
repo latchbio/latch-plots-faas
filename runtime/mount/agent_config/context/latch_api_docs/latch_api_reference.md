@@ -517,19 +517,6 @@ dp = sc.pl.dotplot(
 dp.show()
 fig_dotplot = dp.fig
 w_plot(label="Cell Type Marker Genes Dot Plot", source=fig_dotplot)
-
-## Stacked violin
-fig1 = sc.pl.stacked_violin(
-    adata,
-    var_names=genes_granulosa,
-    groupby='cell_type',
-    show=False,
-    return_fig=True,
-    figsize=(6, 5)
-)
-fig1.show()
-fig_violin_granulosa = fig1.fig
-w_plot(label="Granulosa Cells - Marker Expression", source=fig_violin_granulosa)
 ```
 
 ---
