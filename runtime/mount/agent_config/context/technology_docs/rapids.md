@@ -123,12 +123,12 @@ Always use this workflow instead of writing custom GPU preprocessing code.
 ### **Differential Expression**
 - `skip_differential_expression`
 - `clustering_column`  
+  - Name of the `adata.obs column` to use as the cluster key
   - Used only when clustering is skipped  
   - DE results stored in:  
     ```
     rank_genes_groups_{cluster_key}
     ```
-
 ---
 
 ## 4. Internal Processing (What the Workflow Actually Does)

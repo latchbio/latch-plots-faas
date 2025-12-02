@@ -720,23 +720,37 @@ submit_widget_state()
 
 **Returns:** `Execution` object or None
 
-**Example:**
-```python
-from lplots.widgets.workflow import w_workflow
+**Critical Workflow Launch Requirements:**
 
-workflow = w_workflow(
-    label="Run Analysis",
+Every `w_workflow` call MUST follow this exact pattern:
+
+```python
+# 1. Build params dict
+params = {
+    "input_file": LatchFile(my_lpath.path),  # Use .path for LPath objects
+    "output_directory": LatchOutputDir("latch://..."),
+    # ... other params
+}
+
+# 2. REQUIRED: Print ALL parameters for validation
+print("WORKFLOW PARAMETERS:")
+for k, v in params.items():
+    print(f"  {k}: {v}")
+print("-" * 50)
+
+# 3. Launch workflow
+w = w_workflow(
+    label="...",
+    wf_name="...",
+    params=params,
     automatic=True,
-    key="my_analysis_workflow_run_1",
-    wf_name="my_analysis_workflow",
-    params={
-        "input_file": "latch://workspace/data/sample.fastq",
-        "output_dir": "latch://workspace/results/"
-    },
-    version="v1.0"
+    key="unique_key"
 )
 
-execution = workflow.value
+# 4. REQUIRED: Set continue=False to wait and read printed output
+
+# 5. Retrieve workflow outputs 
+execution = w.value
 
 if execution is not None:
   res = await execution.wait()
@@ -745,6 +759,18 @@ if execution is not None:
       # inspect workflow outputs for downstream analysis
       workflow_outputs = list(res.output.values())
 ```
+
+After cell runs, you MUST:
+
+- Read the printed parameters from cell output
+- Verify NO empty LatchFile(), NO None values, all paths valid
+- If ANY parameter is invalid → Edit cell immediately, stop, and re-run cell
+
+Common errors to check for:
+
+❌ LatchFile() with no argument
+❌ str(lpath_object) instead of lpath_object.path
+❌ Missing required parameters
 
 ---
 
