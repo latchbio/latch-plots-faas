@@ -1385,6 +1385,42 @@ class AgentHarness:
                 "summary": f"Failed to {operation} observation column: {result.get('error', 'Unknown error')}",
             }
 
+        async def redeem_package(args: dict) -> dict:
+            package_code = args.get("package_code")
+            package_version_id = args.get("package_version_id")
+            redemption_reason = args.get("redemption_reason")
+            if package_code is None or package_version_id is None or redemption_reason is None:
+                return {
+                    "tool_name": "redeem_package",
+                    "success": False,
+                    "summary": "Package code, package version ID and redemption reason are required to redeem a package",
+                }
+
+            package_code = str(package_code)
+            package_version_id = str(package_version_id)
+
+            print("[tool] redeem_package")
+
+            result = await self.atomic_operation("redeem_package", {
+                "package_code": str(package_code),
+                "package_version_id": str(package_version_id),
+            })
+            if result.get("status") == "success":
+                return {
+                    "tool_name": "redeem_package",
+                    "success": True,
+                    "summary": f"Redeemed package {package_code} (version {package_version_id})",
+                    "package_code": package_code,
+                    "package_version_id": package_version_id,
+                    "redemption_reason": redemption_reason,
+                }
+
+            return {
+                "tool_name": "redeem_package",
+                "success": False,
+                "summary": f"Failed to redeem package: {result.get('error', 'Unknown error')}",
+            }
+
         async def smart_ui_spotlight(args: dict) -> dict:
             keyword = args.get("keyword")
             widget_key = args.get("widget_key")
@@ -2025,6 +2061,30 @@ class AgentHarness:
             }
         })
         self.tool_map["h5_manage_obs"] = h5_manage_obs
+
+        self.tools.append({
+            "name": "redeem_package",
+            "description": "Redeem a package so the workspace gains access to technology-specific assets.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "package_code": {
+                        "type": "string",
+                        "description": "Multi-use package invite code."
+                    },
+                    "package_version_id": {
+                        "type": "string",
+                        "description": "Package version ID."
+                    },
+                    "redemption_reason": {
+                        "type": "string",
+                        "description": "Reason for redeeming the package to display in the agent history. (e.g., `Installed X Technology Tools into Workspace`)"
+                    }
+                },
+                "required": ["package_code", "package_version_id", "redemption_reason"]
+            }
+        })
+        self.tool_map["redeem_package"] = redeem_package
 
         self.tools.append({
             "name": "smart_ui_spotlight",

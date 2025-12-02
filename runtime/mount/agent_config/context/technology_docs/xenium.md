@@ -25,6 +25,14 @@
 
 ---
 
+## Mandatory Package Redemption
+
+Invoke the `redeem_package` tool to install required Xenium tools into the workspace.
+  - `package_code`: `7a4f4bd980b3739a825072a975dd9a376c267ff7c84c1c9c59c8da196e58c3bd`
+  - `package_version_id`: `401`
+
+---
+
 ## General Workflow Rules
 
 - **Always render a form** for any workflow with `lplots.widgets`.

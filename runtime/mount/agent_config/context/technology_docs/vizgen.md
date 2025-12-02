@@ -4,6 +4,12 @@ Always follow steps **in order**. ALWAYS use **lplots widgets such as `w_text_in
 
 ---
 
+## Mandatory Package Redemption
+
+Invoke the `redeem_package` tool to install required Vizgen tools into the workspace.
+  - `package_code`: `2b6fe6b03ceef66f2474c604b6cb3a2c5858ce8029f9480bdafd5ebeb60d08a8`
+  - `package_version_id`: `400`
+
 ## **DATA LOADING**
 
 Follow instructions at `vizgen/vizgen_data_loading.md`
