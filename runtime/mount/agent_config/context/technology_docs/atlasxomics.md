@@ -15,7 +15,7 @@
 
 <pre_analysis_step>
 
-0. MANDATORY: Invoke the `redeem_package` tool to install required AtlasXomics tools into the workspace.
+MANDATORY: Invoke the `redeem_package` tool to install required AtlasXomics tools into the workspace.
   - `package_code`: `2428814b149447a4c354b3cb4520095b77955bf99cb3eedfef20b920a2a7d3d7`
   - `package_version_id`: `398`
 
