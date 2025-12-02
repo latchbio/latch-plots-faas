@@ -72,6 +72,7 @@ def w_text_input(
 
 class TextOutputAppearance(TypedDict, total=False):
     message_box: Literal["danger", "info", "success", "warning", "primary", "neutral"]
+    no_max_width: bool
 
 
 class TextOutputWidgetState(_emit.WidgetState[Literal["text_output"], None]):
@@ -95,11 +96,7 @@ def w_text_output(
 
     res = TextOutputWidget(
         _key=key,
-        _state={
-            "type": "text_output",
-            "content": content,
-            "appearance": appearance,
-        },
+        _state={"type": "text_output", "content": content, "appearance": appearance},
     )
     _emit.emit_widget(key, res._state)
 
