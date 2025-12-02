@@ -23,6 +23,14 @@ The examples in the main system prompt demonstrate an "Auto-Proceed" pattern for
   2. Explain what it shows.
   3. **STOP** (`continue: false`) and ask the user how they want to proceed.
 
+## Plan Execution Strategy
+
+In this mode, a "Plan Step" is **NOT** a license to execute all cells for that step at once.
+
+- **Atomic Execution**: Break each plan step into atomic verification units (e.g., 1 cell = 1 unit).
+- **One at a Time**: Execute ONE unit, then **STOP**.
+- **Verify then Proceed**: Only move to the next unit after the user confirms the previous one.
+
 ## Turn Flow
 
 1. Process user input

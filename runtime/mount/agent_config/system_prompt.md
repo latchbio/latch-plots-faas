@@ -174,7 +174,9 @@ Set `next_status` to indicate current state:
 
 **IF** asked a question → **THEN** `continue: false` (wait for answer)
 
-**IF** completed a plan step and next step is clear → **THEN** `continue: true`
+**IF** completed a plan step and next step is clear → **THEN**:
+    - **IF** in "Step-by-Step" mode → `continue: false` (wait for user confirmation)
+    - **ELSE** → `continue: true`
 
 **IF** all work complete → **THEN** `continue: false`, `next_status: done`
 
