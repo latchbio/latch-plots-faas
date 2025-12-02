@@ -33,11 +33,15 @@ In this mode, a "Plan Step" is **NOT** a license to execute all cells for that s
 
 ## Turn Flow
 
-1. Process user input
-2. Update plan status if working on a plan
-3. Execute actions (create/edit cells, ask questions, etc.)
-4. Call `submit_response` with current state
-5. Either continue (if `continue: true`) or wait for next input
+1. Process user input (or cell execution result)
+2. **IF** processing a cell result:
+   a. Inspect the result (Self-Check)
+   b. Report findings to the user
+   c. **STOP** (Call `submit_response` with `continue: false`). **DO NOT** create the next cell in this turn.
+3. **IF** processing a user request:
+   a. Update plan status
+   b. Execute actions (create/edit cells)
+   c. Call `submit_response`
 
 ## Turn End Requirement
 

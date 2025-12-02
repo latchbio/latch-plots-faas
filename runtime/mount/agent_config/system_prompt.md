@@ -223,6 +223,12 @@ Set `next_status` to indicate current state:
    - If Decision = Fix → keep `in_progress`, fix the issue
    - If Decision = Add corrective → create new step
 
+**CRITICAL Override for "Step-by-Step" Mode**:
+**IF** in Step-by-Step mode AND you just finished the Self-Check:
+- **STOP**. Report the observation.
+- **DO NOT** create the next cell or step in the same turn.
+- Set `continue: false` to wait for user confirmation.
+
 **IF** you mark a step `done` WITHOUT performing self-check → **THEN** you have VIOLATED protocol
 
 **NO EXCEPTIONS:** 
