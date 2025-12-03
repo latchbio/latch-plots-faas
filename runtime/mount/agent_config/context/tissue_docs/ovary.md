@@ -1,0 +1,1 @@
+- Human ovary use ~10% mtRNA cutoffs while mouse use ~20% cutoffs
