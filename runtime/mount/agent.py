@@ -1625,7 +1625,7 @@ class AgentHarness:
                 "type": "object",
                 "properties": {
                     "plan": {"type": "array", "description": "List of plan items"},
-                    "plan_diff": {"type": "array", "description": "List of plan diff items"},
+                    "plan_diff": {"type": "array", "description": "List of plan diff items. Every change to plan MUST have a corresponding plan_diff entry. Empty array means no status changes this turn."},
                     "plan_update_overview": {"type": "string", "description": "Short title overview of what changed in the plan. Should follow the format like 'Added a new step.' or  `Completed step 2, step 3 now in progress.`"},
                     "summary": {"type": "string", "description": "Summary text to help the user. This can be a message to the user or a description of what was accomplished. Use markdown formatting with bullet points if needed."},
                     "questions": {"type": "string", "description": "Optional question text for the user."},
