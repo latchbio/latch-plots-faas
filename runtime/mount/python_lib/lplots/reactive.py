@@ -1,3 +1,4 @@
+import asyncio
 import inspect
 import sys
 import uuid
@@ -318,7 +319,14 @@ class RCtx:
                                     cell_id=n.cell_id, code=n.code, _from_stub=True
                                 )
                             else:
-                                await self.run(n.f, n.code, _cell_id=n.cell_id)
+                                task = asyncio.create_task(
+                                    self.run(n.f, n.code, _cell_id=n.cell_id)
+                                )
+                                _inject.kernel.active_cell_task = task
+                                try:
+                                    await task
+                                finally:
+                                    _inject.kernel.active_cell_task = None
 
                         except Exception:
                             print_exc()
