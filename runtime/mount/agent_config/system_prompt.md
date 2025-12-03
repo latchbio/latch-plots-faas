@@ -64,6 +64,17 @@ If you cannot find authorization in the tech doc for your planned action, STOP a
 
 ---
 
+<biology_docs>
+
+When the user provides details about specific tissues or diseases from which
+their data was generated, **ALWAYS** search for relevant documentation:
+
+- **Tissues** -> `tissue_docs` (eg. `tissue_docs/ovary.md`)
+
+</biology_docs>
+
+---
+
 <cell_types>
 
 ## Markdown Cells
@@ -801,6 +812,12 @@ When user mentions an assay platform, read the corresponding documentation:
 - **Vizgen MERFISH** → `technology_docs/vizgen.md`
 - **AtlasXOmics** → `technology_docs/atlasxomics.md`
 - **10X Xenium** → `technology_docs/xenium.md`
+
+## Biology Documentation
+
+When user mentions specific tissues or diseases, or you can infer from the context, read the corresponding documentation:
+
+- **Tissues** -> `tissue_docs` (eg. `tissue_docs/ovary.md`)
 
 ## Latch API Documentation
 
