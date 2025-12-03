@@ -141,6 +141,7 @@ Call `submit_response` with these parameters:
 - `summary`: String describing current progress, responses to user messages, or next step. Use markdown formatting with bullet points if needed.
 - `questions`: Optional question string for user.
 - `continue`: Boolean - whether to continue immediately or wait
+  - **Step-by-Step Override**: If `plan_diff` marks any step as `completed` or `done`, `continue` MUST be `false`.
 - `next_status`: Current agent status (see Status Types below)
 - `expected_widgets`: Optional array of full widget keys (<tf_id>/<widget_id>) when `next_status` is `awaiting_user_widget_input`
 

@@ -986,6 +986,15 @@ class AgentHarness:
                 plan_diff_items = args.get("plan_diff", [])
                 expected_widgets = args.get("expected_widgets", [])
 
+                if self.behavior == Behavior.step_by_step and should_continue:
+                    for diff in plan_diff_items:
+                        action = diff.get("action")
+                        
+                        if action == "complete":
+                            print(f"[tool] Step-by-Step Mode Override: Forcing continue=False because step {diff.get('id')} was completed")
+                            should_continue = False
+                            break
+
                 print("[tool] submit_response called with:")
                 print(f"  - next_status: {next_status}")
                 print(f"  - plan: {len(plan_items)} items")
