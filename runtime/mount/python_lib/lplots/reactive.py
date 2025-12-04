@@ -325,10 +325,14 @@ class RCtx:
                                 _inject.kernel.active_cell_task = task
                                 try:
                                     await task
+                                except asyncio.CancelledError:
+                                    if n.cell_id is not None:
+                                        _inject.kernel.cell_status[n.cell_id] = "error"
+                                        await _inject.kernel.send_cell_result(n.cell_id)
                                 finally:
                                     _inject.kernel.active_cell_task = None
 
-                        except (Exception, asyncio.CancelledError, KeyboardInterrupt):
+                        except Exception:
                             print_exc()
                         finally:
                             self.cur_comp = None
