@@ -1611,15 +1611,15 @@ class AgentHarness:
 
         self.tools.append({
             "name": "submit_response",
-            "description": "Submit the final response with plan, plan_diff, next_status, questions, and an optional summary. Call this at the end of every turn.",
+            "description": "Submit the final response with plan, plan_diff, next_status, and summary or questions. At least one of summary or questions is REQUIRED - this is how you communicate with the user. Call this at the end of every turn.",
             "input_schema": {
                 "type": "object",
                 "properties": {
                     "plan": {"type": "array", "description": "List of plan items"},
                     "plan_diff": {"type": "array", "description": "List of plan diff items"},
                     "plan_update_overview": {"type": "string", "description": "Short title overview of what changed in the plan. Should follow the format like 'Added a new step.' or  `Completed step 2, step 3 now in progress.`"},
-                    "summary": {"type": "string", "description": "Summary text to help the user. This can be a message to the user or a description of what was accomplished. Use markdown formatting with bullet points if needed. Omit if no summary needed."},
-                    "questions": {"type": "string", "description": "Optional question text for the user. Omit if no questions needed."},
+                    "summary": {"type": "string", "description": "Summary text to help the user. This can be a message to the user or a description of what was accomplished. Use markdown formatting with bullet points if needed."},
+                    "questions": {"type": "string", "description": "Question text for the user when clarification is needed."},
                     "next_status": {"type": "string", "description": "What the agent will do next", "enum": ["executing", "fixing", "thinking", "awaiting_user_response", "awaiting_cell_execution", "awaiting_user_widget_input", "done"]},
                     "expected_widgets": {
                         "type": "array",
