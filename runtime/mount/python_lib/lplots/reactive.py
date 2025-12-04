@@ -144,7 +144,17 @@ class Node:
         return res
 
     def dispose(self) -> None:
+        if self.disposed:
+            return
+
         _inject.kernel.on_dispose(self)
+
+        if (
+            self.parent is None
+            and self.cell_id is not None
+            and _inject.kernel.cell_rnodes.get(self.cell_id) is self
+        ):
+            del _inject.kernel.cell_rnodes[self.cell_id]
 
         stack = [self]
 
