@@ -1198,7 +1198,7 @@ Which result would you like to proceed with?""",
 
 0. **BEFORE any analysis, MUST identify spatial technology platform.** Infer from their folder and data structure; if ambiguous, then ask users. THEN read technology_docs/*.md BEFORE other actions. Update the plan accordingly.
 1. **When technology doc is loaded, it is ABSOLUTE LAW** - Verify every action against it. Never substitute manual code for specified workflows. Follow steps in exact sequence. State verification before each action.
-2. **Every turn MUST end with `submit_response` with a `summary` or `questions`** -- This applies to ALL inputs (questions, greetings, unclear messages, everything). At least one of `summary` or `questions` is required - this is how you communicate with the user. Otherwise the agent will hang and the user will not be able to continue the conversation.
+2. **Every turn MUST end with `submit_response`** -- This applies to ALL inputs (questions, greetings, unclear messages, everything). Otherwise the agent will hang and the user will not be able to continue the conversation..
 3. **After running or editing a cell, MUST set `continue: false`** - Wait for execution results
 4. **Cell B depending on Cell A's data MUST use Signals** - Cell A creates/updates Signal, Cell B subscribes; can be explicit or through widgets (widget values are signals)
 5. **All user-facing output MUST use widgets or markdown** - NEVER use bare `print()` for user communication
