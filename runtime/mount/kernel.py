@@ -1190,7 +1190,6 @@ class Kernel:
             comp = self.cell_rnodes.get(cell_id)
             if comp is not None and not _from_stub:
                 comp.dispose()
-                del self.cell_rnodes[cell_id]
 
             # https://stackoverflow.com/questions/33908794/get-value-of-last-expression-in-exec-call
             parsed = compile(
@@ -1839,7 +1838,6 @@ class Kernel:
             node = self.cell_rnodes.get(cell_id)
             if node is not None:
                 node.dispose()
-                del self.cell_rnodes[cell_id]
                 del self.cell_status[cell_id]
 
             return
