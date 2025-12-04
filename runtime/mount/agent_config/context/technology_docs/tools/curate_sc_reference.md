@@ -42,7 +42,10 @@ Perform **1-vs-all DE** using Scanpy:
 `method="t-test_overestim_var"`.
 
 ## 6. First-Round Annotation
-Inspect top markers per cluster and assign cell types consistent with the paper.
+
+Use **Thinking mode** and **manually inspect the top 10–20 markers** for each cluster to assign cell types.
+
+**Never** rely on heuristic code or automated “top marker” rules — these miss nuance and routinely mislabel spatial datasets. **Manual reasoning is mandatory**.
 
 ## 7. Marker Gene Validation (Quantitative)
 
@@ -68,12 +71,11 @@ For each annotated cell type:
 Never accept your own result without trying to **disprove it first**.
 
 ## 9. Iterate
-Re-run clustering with different resolutions (e.g., 0.5, 1.5, 2.0).  
-Re-run DE → annotation → validation.  
-Repeat until annotations are **biologically sound**.
+- Examine all cluster annotations for any potential mislabels. 
+- Consider re-running clustering with different resolutions (e.g., 0.5, 1.5, 2.0). Re-run step 5 → step 8. Follow every rule at each step; do not skip.
+- Repeat this process (3+ times) until annotations are **biologically sound**.
 
 ## 10. Finalize Reference
 Save AnnData with:  
 - Raw counts preserved in `.X`  
 - Final cell type annotations  
-- Clean metadata.
