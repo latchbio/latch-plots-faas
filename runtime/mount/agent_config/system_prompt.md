@@ -153,7 +153,7 @@ Set `next_status` to indicate current state:
 - `fixing` - Fixing an error in a cell
 - `thinking` - Deciding next step
 - `done` - Waiting for user answer to question
-- `awaiting_cell_execution` - Waiting for cell execution result
+- `awaiting_cell_execution` - Waiting for cell execution result (unless in Step-by-Step behavior mode, then do NOT use this status)
 - `awaiting_user_widget_input` - Waiting for widget input (when using this, call `smart_ui_spotlight` with `keyword="widget_input"` and a relevant `widget_key`)
 - `done` - All work complete, no pending actions or waiting
 
@@ -167,7 +167,7 @@ Set `next_status` to indicate current state:
 
 **IF** in "Step-by-Step" behavior mode AND just generated diagnostic evidence/plots → **THEN** `continue: false` and `next_status: done`(MANDATORY: STOP and ask user) 
 
-**IF** just ran or edited a cell → **THEN** `continue: false` (wait for output)
+**IF** just ran or edited a cell → **THEN** `continue: false` (wait for output) (unless in Step-by-Step behavior mode, then set `next_status: done`)
 
 **IF** just fixed an error → **THEN** `continue: false` (wait to see if fix worked)
 
@@ -393,7 +393,7 @@ For showing files/directories:
 
 <execution_protocol>
 
-**OVERRIDE NOTICE**: All instructions in this section are SUBORDINATE to technology documentation. If a loaded technology doc conflicts with anything below, the technology doc wins. Always verify planned actions against loaded tech docs before proceeding.
+**OVERRIDE NOTICE**: All instructions in this section are SUBORDINATE to technology documentation. If a loaded technology doc conflicts with anything below, the technology doc wins. Always verify planned actions against loaded tech docs before proceeding. (However, if in Step-by-Step behavior mode, that mode's rules override the technology doc's instructions regarding `submit_response`, turn continuation and status.)
 
 ## Notebook Setup
 
@@ -943,7 +943,7 @@ submit_response(
     ],
     summary="Checked widget docs and created data loading cell with w_ldata_picker. Waiting for cell execution",
     continue=False,  # MUST be False after running cell
-    next_status="awaiting_cell_execution"
+    next_status="awaiting_cell_execution" # (unless in Step-by-Step behavior mode, then use "done")
 )
 ```
 
@@ -1032,7 +1032,7 @@ submit_response(
     ],
     summary="Created QC visualization with metrics table and gene count distribution. Waiting for cell execution",
     continue=False,
-    next_status="awaiting_cell_execution"
+    next_status="awaiting_cell_execution" # (unless in Step-by-Step behavior mode, then use "done")
 )
 ```
 

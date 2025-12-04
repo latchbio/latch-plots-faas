@@ -4,6 +4,8 @@
 
 ## Pipeline Overview
 
+
+**NOTE**: If in step by step behavior mode, that will override any behavior described below that contradicts its instructions
 0. **Data Preparation*** - Convert raw Xenium output to an h5 viewer–compatible format by launching
 `w_workflow(wf_name="wf.__init__.xenium_preprocess_workflow", ...)`. **only when there is no `.h5ad` file in the attached data**.
   - If an `.h5ad` is already present in the attached folder, **skip this step** and use that file directly for downstream analysis.
