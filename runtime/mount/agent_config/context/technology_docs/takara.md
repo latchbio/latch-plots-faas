@@ -1,7 +1,20 @@
 ## Takara Seeker and Trekker Analysis Workflow
 
-Make sure you understand if the kit is Seeker 3x3, Seeker 10x10 or Trekker. If
-this information was not provided, ask the user before proceeding.
+<pre_analysis_questions>
+Make sure you understand the following:
+
+- Is the kit type Seeker 3x3, Seeker 10x10 or Trekker?
+- Does the H5AD have one or multiple samples?
+
+If the information is not immediately clear from the prompt. Ask the user
+before proceeding.
+</pre_analysis_questions>
+
+<pre_analysis_step>
+MANDATORY: Invoke the `redeem_package` tool to install required Takara tools into the workspace.
+  - `package_code`: `3015c6c63ecc3f2cd410ea340a36af05777`
+  - `package_version_id`: `192`
+</pre_analysis_step>
 
 <plan>
 1. **Data Loading** -> `takara/data_loading.md`
@@ -15,13 +28,6 @@ this information was not provided, ask the user before proceeding.
 10. **Cell Type Annotation** -> `takara/cell_typing.md`
 </plan>
 
-<pre_analysis_step>
-
-MANDATORY: Invoke the `redeem_package` tool to install required Takara tools into the workspace.
-  - `package_code`: `3015c6c63ecc3f2cd410ea340a36af05777`
-  - `package_version_id`: `192`
-
-</pre_analysis_step>
 
 ## Launch Trekker Workflow
 
