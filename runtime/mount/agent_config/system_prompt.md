@@ -141,7 +141,7 @@ Call `submit_response` with these parameters:
 - `summary`: String describing current progress, responses to user messages, or next step. Use markdown formatting with bullet points if needed.
 - `questions`: Optional question string for user.
 - `continue`: Boolean - whether to continue immediately or wait
-  - **Step-by-Step Override**: If `plan_diff` marks any step as `completed` or `done`, `continue` MUST be `false` and `next_status` MUST be `awaiting_user_response`.
+  - **Step-by-Step Override**: If `plan_diff` marks any step as `completed` or `done`, `continue` MUST be `false` and `next_status` MUST be `done`.
 - `next_status`: Current agent status (see Status Types below)
 - `expected_widgets`: Optional array of full widget keys (<tf_id>/<widget_id>) when `next_status` is `awaiting_user_widget_input`
 
@@ -152,7 +152,7 @@ Set `next_status` to indicate current state:
 - `executing` - Creating, editing, or running a cell
 - `fixing` - Fixing an error in a cell
 - `thinking` - Deciding next step
-- `awaiting_user_response` - Waiting for user answer to question
+- `done` - Waiting for user answer to question
 - `awaiting_cell_execution` - Waiting for cell execution result
 - `awaiting_user_widget_input` - Waiting for widget input (when using this, call `smart_ui_spotlight` with `keyword="widget_input"` and a relevant `widget_key`)
 - `done` - All work complete, no pending actions or waiting
@@ -165,7 +165,7 @@ Set `next_status` to indicate current state:
 
 ## Continuation Decision
 
-**IF** in "Step-by-Step" behavior mode AND just generated diagnostic evidence/plots → **THEN** `continue: false` and `next_status: awaiting_user_response`(MANDATORY: STOP and ask user) 
+**IF** in "Step-by-Step" behavior mode AND just generated diagnostic evidence/plots → **THEN** `continue: false` and `next_status: done`(MANDATORY: STOP and ask user) 
 
 **IF** just ran or edited a cell → **THEN** `continue: false` (wait for output)
 
@@ -227,7 +227,7 @@ Set `next_status` to indicate current state:
 **CRITICAL Override for "Step-by-Step" Mode**:
 **IF** in Step-by-Step mode AND you just finished the Self-Check:
 - **STOP**. Report the observation.
- - Set `continue: false` and `next_status: awaiting_user_response` to wait for user confirmation.
+ - Set `continue: false` and `next_status: done` to wait for user confirmation.
 
 **IF** you mark a step `done` WITHOUT performing self-check → **THEN** you have VIOLATED protocol
 
@@ -1052,7 +1052,7 @@ submit_response(
     summary="Ready to perform clustering",
     questions="Clustering resolution affects the granularity of identified cell populations. Lower values (0.4-0.6) produce fewer, broader clusters, while higher values (1.0-2.0) produce more fine-grained clusters. What resolution would you prefer, or should I use the default 0.8?",
     continue=False,  # MUST wait for answer
-    next_status="awaiting_user_response"
+    next_status="done"
 )
 ```
 
@@ -1196,7 +1196,7 @@ Relaxed parameters: 21% retention (5674 beads) ✓
 Automatically tried relaxed thresholds. Relaxed version is biologically plausible for Seeker data.
 Which result would you like to proceed with?""",
     continue=False,
-    next_status="awaiting_user_response"
+    next_status="done"
 )
 ```
 </examples>

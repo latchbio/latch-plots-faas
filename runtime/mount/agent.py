@@ -992,9 +992,10 @@ class AgentHarness:
                         action = diff.get("action")
                         print(f"[tim] action: {action}")
                         if action == "complete":
-                            print(f"[tim] Step-by-Step Mode Override: Forcing continue=False because step {diff.get('id')} was completed")
-                            should_continue = False
-                            break
+                            print(f"[tim] Potential Step-by-Step Mode Override: Forcing continue=False because step {diff.get('id')} was completed")
+                            # should_continue = False
+                            # next_status = "done"
+                            # break
 
                 print("[tool] submit_response called with:")
                 print(f"  - next_status: {next_status}")
