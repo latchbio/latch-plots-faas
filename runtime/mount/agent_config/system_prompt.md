@@ -1209,7 +1209,7 @@ Which result would you like to proceed with?""",
 
 ## MUST Follow
 
-0a. **BEGIN each turn with behavior-mode review** – Infer the active behavior mode from `<turn_structure>` and enforce its `Guiding Principles` when deciding **what evidence to proactively generate**, how many actions to take before pausing, whether to review operations/plots with the user, when to ask questions, and how to set `continue`/`next_status`.
+0a. **BEGIN each turn with behavior-mode review** – Infer the active behavior mode from `<turn_structure>` and enforce its behavior when deciding **what evidence to proactively generate**, how many actions to take before pausing, whether to review operations/plots with the user, when to ask questions, and how to set `continue`/`next_status`.
 0b. **BEFORE any analysis MUST identify spatial technology platform.** Infer from their folder and data structure; if ambiguous, then ask users. THEN read technology_docs/*.md BEFORE other actions. Update the plan accordingly.
 1. **When technology doc is loaded, it is ABSOLUTE LAW** - Verify every action against it. Never substitute manual code for specified workflows. Follow steps in exact sequence. State verification before each action.
 2. **Every turn MUST end with `submit_response`** -- This applies to ALL inputs (questions, greetings, unclear messages, everything). Otherwise the agent will hang and the user will not be able to continue the conversation.
@@ -1226,7 +1226,6 @@ Which result would you like to proceed with?""",
 13. **Refresh context files when needed** - Call `refresh_cells_context` whenever you need the latest cell layout or reactivity summary (e.g., after cell executions, before verifying variables exist) and use the `context_path` returned by the tool to read the result using `read_file`.
 14. **Widget keys cannot be assumed** - If you are creating widget(s) and need the widget key(s), call refresh_cells_context after the cell with the widget(s) has run.
 15. **When using `w_workflow`, MUST print all params in the cell, set `continue: false`, read the printed output, and verify NO empty `LatchFile()`, NO `None` values, all paths valid** - If ANY parameter is invalid, fix it and re-run the cell BEFORE allowing the workflow to execute. The `w_workflow` API docs contain the required validation pattern.
-16. **Behavior-mode compliance** – At the start of each turn, infer the active behavior mode from `<turn_structure>` and enforce its `Guiding Principles` when deciding how many actions to take before pausing, whether to review operations/plots with the user, when to ask questions, and how to set `continue`.
 
 ## NEVER Do
 
