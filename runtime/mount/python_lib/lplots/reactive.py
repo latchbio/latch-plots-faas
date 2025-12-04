@@ -328,12 +328,16 @@ class RCtx:
                                 finally:
                                     _inject.kernel.active_cell_task = None
 
-                        except Exception:
+                        except (Exception, asyncio.CancelledError, KeyboardInterrupt):
                             print_exc()
                         finally:
                             self.cur_comp = None
 
+                        if _inject.kernel.cancellation_requested:
+                            break
+
         finally:
+            _inject.kernel.cancellation_requested = False
             await _inject.kernel.on_tick_finished(tick_updated_signals)
             self.prev_updated_signals = {}
             for sig in live_signals.values():

@@ -615,6 +615,7 @@ class Kernel:
 
     active_cell: str | None = None
     active_cell_task: asyncio.Task[Any] | None = None
+    cancellation_requested: bool = False
 
     widget_signals: dict[str, Signal[Any]] = field(default_factory=dict)
     nodes_with_widgets: dict[str, Node] = field(default_factory=dict)
@@ -658,6 +659,7 @@ class Kernel:
                 return
 
             if self.active_cell_task is not None and not self.active_cell_task.done():
+                self.cancellation_requested = True
                 self.active_cell_task.cancel()
 
                 if asyncio.current_task() == self.active_cell_task:
@@ -1174,6 +1176,9 @@ class Kernel:
 
     async def exec(self, *, cell_id: str, code: str, _from_stub: bool = False) -> None:
         filename = f"<cell {cell_id}>"
+
+        if not _from_stub:
+            self.cancellation_requested = False
 
         try:
             if not _from_stub:
