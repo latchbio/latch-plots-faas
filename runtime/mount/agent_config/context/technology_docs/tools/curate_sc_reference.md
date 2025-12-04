@@ -12,18 +12,21 @@
   Check the current behavior mode is `"<turn_structure></turn_structure>"` and confirm this internally before continuing.
 
 - **Step-by-step:**  
-  After *each step*, STOP and ask the user for feedback before proceeding.
+  After *each step*, the agent must **STOP** and explicitly ask the user for feedback or approval before continuing.
 
 - **Proactive / Default:**  
-  Execute the entire workflow end-to-end without pauses unless a critical error occurs.
+  First, **review the full plan** and request **all missing inputs or clarifications upfront**.  
+  Once inputs are confirmed, execute the **entire workflow end-to-end** without pausing unless a critical error occurs.
 
 ---
 
 ## 1. Paper Input
-Ask the user to upload a **text file** or paste the paper text. PDFs are not accepted.
+Request that the user upload a **text file** or paste the paper text.  
+(**PDFs are not accepted.**)
 
 ## 2. Extract Cell Types
-Parse the text to extract **author-defined cell types** and any marker/cluster descriptions.
+Parse the text to extract **author-defined cell types** and any described markers or clusters.  
+Ask the user to confirm whether these are the exact cell types they want annotated in the curated reference.
 
 ## 3. Preprocessing
 Load raw data.  
@@ -41,13 +44,28 @@ Perform **1-vs-all DE** using Scanpy:
 ## 6. First-Round Annotation
 Inspect top markers per cluster and assign cell types consistent with the paper.
 
-## 7. Marker Gene Validation
-Validate annotations using canonical marker genes (e.g., violin plots).  
-Assess whether markers cleanly separate expected cell types.
+## 7. Marker Gene Validation (Quantitative)
 
-## 8. Self-Evaluation
-Reflect on whether clusters and markers match expected biology.  
-If validation fails, clustering is insufficient.
+Compute marker expression **in code** and judge quality using numbers:
+
+For each marker × cell type:
+- Mean/median expression per cluster  
+- Fraction of cells > 0  
+- Relative enrichment (fold-change or z-score) vs all other clusters  
+
+Validation passes **only if** the expected cluster has **clear, strong enrichment** and off-target clusters do not.
+
+## 8. Critical Self-Evaluation (Be Skeptical)
+Your default stance is **critical, not confirmatory**.
+
+For each annotated cell type:
+- **Evidence FOR:** List specific markers + quantitative stats.  
+- **Evidence AGAINST:** List any conflicting markers, weak signals, or multi-cluster expression.  
+- **Verdict:**  
+  - **Pass** only if evidence is strong and unambiguous.  
+  - Otherwise mark **Needs Revision** and redo clustering/annotation.
+
+Never accept your own result without trying to **disprove it first**.
 
 ## 9. Iterate
 Re-run clustering with different resolutions (e.g., 0.5, 1.5, 2.0).  
