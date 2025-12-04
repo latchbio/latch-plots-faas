@@ -10,7 +10,7 @@
 
 ### Determining Kit Type
 
-- Use `'TEN_BY_TEN'` or `'THREE_BY_THREE'` depending on the
+- Use `'10x10'` or `'3x3'` depending on the
   information provided in the data loading step. Ask the user if you still
   don't know and forgot to ask earlier.
 
@@ -28,7 +28,7 @@ params = {
     "input_file": LatchFile("latch:///seeker_data/sample.h5ad"),
     "output_directory": LatchOutputDir("latch:///seeker_data/background_removed/"),
     "sample_id": "my_sample",
-    "kit_type": 'TEN_BY_TEN',
+    "kit_type": '10x10',
     "min_log10_umi": 1.4,  # Adjust based on histogram
     "m": 40,
     "n": 100,
@@ -39,7 +39,7 @@ params = {
 w = w_workflow(
     wf_name="wf.__init__.seeker_background_removal",
     key="background_removal_run_1",
-    version="0.1.0-385af1",
+    version="0.1.0-671d5a-wip-ba9dc8",
     params=params,
     automatic=True,
     label="Launch Background Removal"
