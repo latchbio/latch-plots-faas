@@ -20,7 +20,6 @@ from collections import defaultdict
 from contextlib import redirect_stderr, redirect_stdout
 from copy import copy, deepcopy
 from dataclasses import asdict, dataclass, field, fields
-from datetime import datetime, timezone
 from io import TextIOWrapper
 from pathlib import Path
 from traceback import format_exc
@@ -1409,16 +1408,16 @@ class Kernel:
         assert len(key_fields) == 1
 
         if isinstance(res, BaseFigure):
-            await self.send(
-                {
-                    "type": "output_value",
-                    **(id_fields),
-                    **(key_fields),
-                    "plotly_json": orjson.dumps(
-                        serialize_plotly_figure(res), option=orjson.OPT_SERIALIZE_NUMPY
-                    ).decode(),
-                }
-            )
+            await self.send({
+                "type": "output_value",
+                **(id_fields),
+                **(key_fields),
+                "plotly_json": orjson.dumps(
+                    serialize_plotly_figure(res),
+                    option=orjson.OPT_SERIALIZE_NUMPY,
+                    default=orjson_encoder,
+                ).decode(),
+            })
             return
 
         if hasattr(res, "iloc"):
