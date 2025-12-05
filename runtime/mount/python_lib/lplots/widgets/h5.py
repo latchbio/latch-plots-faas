@@ -29,6 +29,17 @@ class ColorByVar(TypedDict, total=False):
 class CellMarkers(TypedDict, total=False):
     default_size: int | None
     default_opacity: float | None
+    hidden_by_default: bool | None
+
+
+class Transcripts(TypedDict, total=False):
+    default_size: int | None
+    hidden_by_default: bool | None
+    genes_of_interest: list[str] | None
+
+
+class CellBoundaries(TypedDict, total=False):
+    hidden_by_default: bool | None
 
 
 class ViewerPreset(TypedDict, total=False):
@@ -36,6 +47,8 @@ class ViewerPreset(TypedDict, total=False):
     default_color_by: ColorByObs | ColorByVar | None
     default_obsm_key: str | None
     cell_markers: CellMarkers | None
+    transcripts: Transcripts | None
+    cell_boundaries: CellBoundaries | None
     categorical_color_palette: list[str] | None
     continuous_color_palette: list[str] | None
 
