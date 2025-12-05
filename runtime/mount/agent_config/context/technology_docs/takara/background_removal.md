@@ -1,4 +1,4 @@
-## Curio Seeker Background Removal
+## Seeker Background Removal
 
 Remove off-tissue background beads from Curio Seeker spatial transcriptomics data.
 
