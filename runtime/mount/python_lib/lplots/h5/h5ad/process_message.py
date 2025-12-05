@@ -43,6 +43,7 @@ async def process_h5ad_request(
     ctx = contexts.get(obj_id)
     if ctx is None:
         ctx = Context(id=obj_id)
+        contexts[obj_id] = ctx
     adata = ctx.adata
 
     @overload
