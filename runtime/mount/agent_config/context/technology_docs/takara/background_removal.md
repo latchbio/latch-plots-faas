@@ -1,59 +1,66 @@
-## Seeker Background Removal Workflow
+## Curio Seeker Background Removal
 
-`seeker_background_removal` removes off-tissue background beads using a three-step density-based filtering algorithm.
+Remove off-tissue background beads from Curio Seeker spatial transcriptomics data.
 
-*IMPORTANT*: Only use for Curio Seeker data.
+ONLY use if the data is from Seeker (not Trekker).
 
-### Determining the `min_log10_umi` Threshold
-
-- Plot a histogram of `log10(UMI)` to identify the local minimum between background and tissue signal peaks.
-
-### Determining Kit Type
-
-- Use `'10x10'` or `'3x3'` depending on the
-  information provided in the data loading step. Ask the user if you still
-  don't know and forgot to ask earlier.
-
-### Launch Background Removal and Wait for Completion
+### Setup
 
 ```python
-from latch.types.file import LatchFile
-from latch.types.directory import LatchOutputDir
+import sys
+sys.path.insert(0, "/opt/latch/plots-faas/runtime/mount/agent_config/lib")
 
-local_path = "sample.h5ad"
-remote_path = "latch:///seeker_data/sample.h5ad"
-latch_path = LPath.upload(Path(local_path), remote_path)
-
-params = {
-    "input_file": LatchFile("latch:///seeker_data/sample.h5ad"),
-    "output_directory": LatchOutputDir("latch:///seeker_data/background_removed/"),
-    "sample_id": "my_sample",
-    "kit_type": '10x10',
-    "min_log10_umi": 1.4,  # Adjust based on histogram
-    "m": 40,
-    "n": 100,
-    "p": 5,
-    "q": 10,
-}
-
-w = w_workflow(
-    wf_name="wf.__init__.seeker_background_removal",
-    key="background_removal_run_1",
-    version="0.1.0-671d5a-wip-ba9dc8",
-    params=params,
-    automatic=True,
-    label="Launch Background Removal"
-)
-
-execution = w.value
-
-if execution is not None:
-    res = await execution.wait()
-
-    if res is not None and res.status in {"SUCCEEDED", "FAILED", "ABORTED"}:
-        workflow_outputs = list(res.output.values())
+from takara import remove_background, KitType
 ```
 
-### Outputs
+### Usage
 
-Look for the `{sample_id}*_background_removed.h5ad` in the output directory.
+```python
+result = remove_background(
+    adata,
+    kit_type=KitType.TEN_BY_TEN,  # or KitType.THREE_BY_THREE
+    min_log10_umi=1.4,  # adjust based on UMI histogram
+)
+
+# Final filtered data
+adata_filtered = result.adata_filtered
+```
+
+### Parameters
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `kit_type` | - | `KitType.TEN_BY_TEN` (10mm) or `KitType.THREE_BY_THREE` (3mm) |
+| `min_log10_umi` | 1.4 | log10(UMI) threshold - set at histogram valley |
+| `m` | 40 | Step 2 neighborhood size (µm) |
+| `n` | 100 | Step 3 neighborhood size (µm) |
+| `p` | 5 | Min beads per m×m region |
+| `q` | 10 | Min beads per n×n region |
+
+### Inspecting Results
+
+```python
+# Bead counts at each step
+print(f"Original: {adata.n_obs}")
+print(f"After UMI filter: {result.step1_mask.sum()}")
+print(f"After step 2: {result.step2_mask.sum()}")
+print(f"After step 3: {result.step3_mask.sum()}")
+
+# Plot density histogram to verify p/q thresholds
+result.step2_density["count"].hist(bins=30, density=True)
+
+# Spatial visualization
+coords = adata.obsm["spatial"]
+plt.scatter(coords[~result.step3_mask, 0], coords[~result.step3_mask, 1], s=1, c="gray", alpha=0.3)
+plt.scatter(coords[result.step3_mask, 0], coords[result.step3_mask, 1], s=1, c="red")
+```
+
+### Choosing min_log10_umi
+
+Plot UMI distribution and pick threshold at valley between background and tissue peaks:
+
+```python
+import numpy as np
+log10_umi = np.log10(adata.obs["total_counts"] + 1)
+log10_umi.hist(bins=100)
+```
