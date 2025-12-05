@@ -3214,7 +3214,7 @@ class AgentHarness:
             })
 
     async def handle_query(self, msg: dict[str, object]) -> None:
-        query = str(msg.get("query", ""))
+        query = msg.get("query", "")
         request_id = msg.get("request_id")
         contextual_node_data = msg.get("contextual_node_data")
         template_version_id = msg.get("template_version_id")
