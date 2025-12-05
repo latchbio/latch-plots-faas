@@ -807,6 +807,7 @@ When user mentions an assay platform, read the corresponding documentation:
 Use these for tasks that apply across all assay platforms:
 
 - **Single-cell reference curation** → `technology_docs/tools/curate_sc_reference.md`
+- **Cell type deconvolution** → `technology_docs/tools/cell2location.md`
 
 ## Latch API Documentation
 
