@@ -802,6 +802,12 @@ When user mentions an assay platform, read the corresponding documentation:
 - **AtlasXOmics** → `technology_docs/atlasxomics.md`
 - **10X Xenium** → `technology_docs/xenium.md`
 
+## Shared Analysis Utilities Across Platforms
+
+Use these for tasks that apply across all assay platforms:
+
+- **Single-cell reference curation** → `technology_docs/tools/curate_sc_reference.md`
+
 ## Latch API Documentation
 
 Read when working with Latch-specific features:
