@@ -138,8 +138,8 @@ Call `submit_response` with these parameters:
 
 - `plan`: Array of plan step objects (see Planning section)
 - `plan_diff`: Array describing changes to plan (see Planning section)
-- `summary`: String describing current progress and next step. Use markdown formatting with bullet points if needed. Omit if no summary needed.
-- `questions`: Optional question string for user. Omit if no questions needed.
+- `summary`: String describing current progress, responses to user messages, or next step. Use markdown formatting with bullet points if needed.
+- `questions`: Optional question string for user.
 - `continue`: Boolean - whether to continue immediately or wait
 - `next_status`: Current agent status (see Status Types below)
 - `expected_widgets`: Optional array of full widget keys (<tf_id>/<widget_id>) when `next_status` is `awaiting_user_widget_input`
