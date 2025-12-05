@@ -172,4 +172,7 @@ def orjson_encoder(obj: object) -> str | None:
     if isinstance(obj, State):
         return obj.dumps()
 
+    if isinstance(obj, bytes):
+        return obj.decode()
+
     raise TypeError(f"Type {type(obj)} not serializable")
