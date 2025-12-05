@@ -3214,7 +3214,7 @@ class AgentHarness:
             })
 
     async def handle_query(self, msg: dict[str, object]) -> None:
-        query = msg.get("query", "")
+        query = str(msg.get("query", ""))
         request_id = msg.get("request_id")
         contextual_node_data = msg.get("contextual_node_data")
         template_version_id = msg.get("template_version_id")
@@ -3226,6 +3226,9 @@ class AgentHarness:
         full_query = query
         if contextual_node_data:
             full_query = f"{query} \n\nHere is the context of the selected nodes the user would like to use: <ContextualNodeData>{json.dumps(contextual_node_data)}</ContextualNodeData>"
+
+        if self.behavior:
+            full_query += f"\n\nFollow Current Behavior Mode: {self.behavior.value}"
 
         await self.pending_messages.put({
             "type": "user_query",
