@@ -1,13 +1,8 @@
 ## QC
 
-### Pre-check
+Identify filtering thresholds for "genes per bead", "mitochondrial percentage" and "total UMIs". Start with "genes per bead" and go one at a time.
 
-Always verify if AnnData is pre-processed: check `adata.obs` for existing QC metrics.
-
-Use **Scanpy** to compute QC metrics.
-
-- **ALWAYS** make histograms of the QC metrics.
-- **ALWAYS** expose filtering parameters using widgets.
-- **ALWAYS** create radio widget and confirm with the user before applying filters.
-- **ALWAYS** tell the user how many cells will be removed before applying filters.
-- If the user declines, **revert to the original AnnData**.
+1/ Make histograms of this metric
+2/ Plot spatial coordinates for a reasonable range of metrics so the user can identify effects on morphology 
+3/ Expose a widget where the user can modify this value
+4/ Tell the user how many beads will be removed after applying this value
