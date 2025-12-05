@@ -180,7 +180,7 @@ params = {
 }
 
 w = w_workflow(
-    wf_name="wf.__init__.cell2location",
+    wf_name="wf.__init__.cell2location_workflow",
     version=None,
     params=params,
     automatic=True,
