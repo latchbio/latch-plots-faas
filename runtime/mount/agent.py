@@ -69,6 +69,7 @@ class AgentHarness:
     current_request_id: str | None = None
     should_auto_continue: bool = False
     pending_auto_continue: bool = False
+    manually_cancelled: bool = False
     pending_tool_calls: set[str] = field(default_factory=set)
 
     pending_messages: asyncio.Queue = field(default_factory=asyncio.Queue)
@@ -3192,7 +3193,7 @@ class AgentHarness:
                 else:
                     print(f"[agent] Reconnected with status '{next_status}', staying idle")
 
-            if len(messages) > 0 and messages[-1].get("role") == "user":
+            if len(messages) > 0 and messages[-1].get("role") == "user" and not self.manually_cancelled:
                 print("[agent] Incomplete turn detected, auto-resuming")
                 await self.pending_messages.put({"type": "resume"})
         except Exception as e:
@@ -3208,6 +3209,8 @@ class AgentHarness:
         contextual_node_data = msg.get("contextual_node_data")
         template_version_id = msg.get("template_version_id")
         behavior = msg.get("behavior")
+
+        self.manually_cancelled = False
 
         if behavior is not None:
             self.behavior = Behavior(behavior)
@@ -3234,6 +3237,7 @@ class AgentHarness:
         self.current_request_id = None
         self.should_auto_continue = False
         self.pending_auto_continue = False
+        self.manually_cancelled = True
         self.executing_cells.clear()
 
         await self._clear_running_state()
