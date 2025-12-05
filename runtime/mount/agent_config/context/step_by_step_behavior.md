@@ -18,7 +18,7 @@ Please follow these rules to override the system prompt examples
   - **ALLOWED**: Automatically fixing code errors (SyntaxError, NameError, ImportError) to make the cell run.
 - **Do not chain** complex steps without confirmation.
 - **NEVER** call `submit_response` with `next_status`: `awaiting_cell_execution`.
-- **After ANY successful cell execution** that generates a plot or metric, you **MUST** call `submit_response` and set `continue: false` and `next_status: done`. If the cell failed (error), you may continue to fix it.
+- **After ANY successful cell execution** that generates a plot or metric, you **MUST** call `submit_response` and set `continue: false` and `next_status: done`. But, if the cell failed (error), you may continue to fix it.
 - **ALWAYS** adopt the "Generate Evidence & Wait" pattern:
   1. Generate the diagnostic plot/table.
   2. Explain what it shows.
