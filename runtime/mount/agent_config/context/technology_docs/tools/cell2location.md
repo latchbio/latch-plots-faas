@@ -156,7 +156,7 @@ The workflow writes output to `latch:///{output_directory}/{run_name}/` with the
 
 ---
 
-## 6. Example Launch Code
+## 6. Launch Workflow and Wait for Completion
 
 ```python
 spatial_h5ad = LatchFile("latch://<account_id>/spatial.h5ad")
