@@ -322,7 +322,6 @@ class RCtx:
                                 task = asyncio.create_task(
                                     self.run(n.f, n.code, _cell_id=n.cell_id)
                                 )
-                                print(f"has previous active cell task: {_inject.kernel.active_cell_task is not None}", flush=True)
                                 _inject.kernel.active_cell_task = task
                                 try:
                                     await task
