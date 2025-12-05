@@ -50,7 +50,7 @@ Always use this workflow instead of writing custom cell2location code for spatia
 
 8. **Load `{output_directory}/{run_name}/sp_query.h5ad`**  
    - Contains spatial data with cell type proportions per spot
-   - Use this as the new working AnnData object
+   - Visualize results with w_h5
 
 ---
 
