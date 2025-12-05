@@ -6,20 +6,6 @@
 
 ---
 
-## Behavior Modes
-
-- **Mode Check (ALWAYS FIRST):**  
-  Check the current behavior mode is `"<turn_structure></turn_structure>"` and confirm this internally before continuing.
-
-- **Step-by-step:**  
-  After *each step*, the agent must **STOP** and explicitly ask the user for feedback or approval before continuing.
-
-- **Proactive / Default:**  
-  First, **review the full plan** and request **all missing inputs or clarifications upfront**.  
-  Once inputs are confirmed, execute the **entire workflow end-to-end** without pausing unless a critical error occurs.
-
----
-
 ## 1. Download data using GSE ID 
 
 **SKIP** if the user already provided raw data; otherwise continue. 
@@ -107,6 +93,9 @@ Never accept your own result without trying to **disprove it first**.
 - Repeat this process (3+ times) until annotations are **biologically sound**.
 
 ## 11. Finalize Reference
-Save AnnData with:  
-- Raw counts preserved in `.X`  
-- Final cell type annotations  
+- Create a very concise markdown of reasoning for each cluster annotation
+
+- Save AnnData with:  
+  - Raw counts preserved in `.X`  
+  - Final cell type annotations  
+
