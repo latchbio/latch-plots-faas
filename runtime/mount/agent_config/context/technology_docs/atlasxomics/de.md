@@ -46,6 +46,9 @@ groupings_file = LatchFile(remote_path)
 - Automatically search the user’s input for the folder that ends with `_ArchRProject`. Only ask the user to specify it if you cannot find one.
 
 ### Launch Comparison and Wait for it to Complete
+
+**Workflow Duration**: 30 minutes - 1+ hour
+
 ```python
 params = {
     "project_name": "my_comparison",
