@@ -88,19 +88,29 @@ if execution is not None:
 
 ## Step 1 — Data Loading
 
-**Assumption:** Each sample already has a single, ready-to-use `.h5ad` containing counts, metadata, and spatial coordinates (either adata.obsm[Spatial] or adata.obsm[X_spatial]) generated from Step 0.
+**Assumption:** Each sample has a ready-to-use `.h5ad` with counts, metadata, and spatial coordinates stored in `adata.obsm` under a key that:
+- contains the word “spatial”, and
+- is a numeric array with shape (n_cells, 2–3).
 
-- Load the .h5ad file and render it with w_h5(adata, spatial_dir), where spatial_dir is the directory containing the .pmtiles files (should be the same directory as the .h5ad).
-- If embeddings or clusters already exist in adata, do not run preprocessing yet. Ask for confirmation in **Step 2** before recomputing.
-- If multiple samples are provided
-  - Merge the .h5ad files into a single AnnData object and add adata.obs["batch_key"] to preserve sample information.
-  - Create adata.obsm["Offset"] as a shifted spatial embedding where each sample’s coordinates are translated by a sample-specific offset so they appear side by side in a shared space instead of overlapping.
+- Load the `.h5ad` and render with `w_h5(adata, spatial_dir)`, where `spatial_dir` is the folder containing the `.pmtiles` (usually the same as the `.h5ad` directory).
+
+- Before preprocessing, *auto-detect* existing results:
+  - Treat any `adata.obsm` entry as an embedding if it is a numeric 2D array with shape (n_cells, k) where k is small (for example, 2–50).
+  - Treat any `adata.obs` column as a cluster label if it is categorical or low-cardinality (discrete groups).
+  - If such embeddings or clusters are found, assume they are valid and **do not** recompute yet; ask for confirmation in **Step 2** before overwriting.
+
+- If multiple samples are provided:
+  - Merge `.h5ad` files into a single `AnnData` and add `adata.obs["batch_key"]` to track sample of origin.
+  - Create `adata.obsm["Offset"]` by shifting each sample’s spatial coordinates by a sample-specific offset so they appear side-by-side instead of overlapping.
+
 
 ---
 
 ## Step 2 — Preprocessing (run only if the user confirms)
 
 **Goal:** Create a clean, integrated embedding and clusters ready for DGE and annotation.
+
+**ALWAYS** check If `adata.n_obs > 100_000`, if TRUE, you **MUST** use RAPIDS for preprocessing by following `technology_docs/rapids.md`. Otherwise, use Scanpy as outlined below.
 
 - **Quality control**
   - Compute standard QC metrics (genes per cell, counts per cell, mitochondrial fraction if available).
@@ -336,4 +346,3 @@ w = w_workflow(
 execution = w.value
 ```
 
----
