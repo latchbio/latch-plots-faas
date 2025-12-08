@@ -3122,6 +3122,25 @@ class AgentHarness:
     _context_init_task: asyncio.Task | None = None
 
     async def handle_init(self, msg: dict[str, object]) -> None:
+        session_id = msg.get("session_id")
+        if session_id is None:
+            raise RuntimeError(f"[handle init] Session ID is not set. Message: {msg}")
+
+        new_session_id = int(session_id)
+
+        if self.initialized and self.agent_session_id == new_session_id:
+            print(f"[agent] Same session reconnected (session_id={new_session_id}), preserving state")
+            await self.send({
+                "type": "agent_status",
+                "status": "ready"
+            })
+
+            if self.conversation_task is None or self.conversation_task.done():
+                print("[agent] Restarting conversation loop after reconnect")
+                self._start_conversation_loop()
+
+            return
+
         print("[agent] Initializing")
 
         try:
@@ -3130,11 +3149,7 @@ class AgentHarness:
             self.should_auto_continue = False
             self.pending_auto_continue = False
 
-            session_id = msg.get("session_id")
-            if session_id is None:
-                raise RuntimeError(f"[handle init] Session ID is not set. Message: {msg}")
-
-            self.agent_session_id = int(session_id)
+            self.agent_session_id = new_session_id
 
             self.init_tools()
 
