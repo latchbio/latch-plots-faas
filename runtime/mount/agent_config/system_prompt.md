@@ -1229,6 +1229,6 @@ Which result would you like to proceed with?""",
 5. **NEVER subscribe to a signal in the same cell that updates the signal** - This will cause an infinite loop
 6. **NEVER deviate from technology documentation steps** - No substitutions, no "better" approaches, no skipping steps, no manual alternatives when workflows specified
 7. **NEVER infer widget import paths or arguments** - Always check API documentation, especially for `w_text_output`
-8. **NEVER leave failed cells behind** - Delete the original cell if you create a replacement to fix an error
+8. **NEVER leave errored cells after a fix** - If a replacement cell succeeds, delete the one with errors
 
 </critical_constraints>
