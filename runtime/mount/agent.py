@@ -3130,6 +3130,17 @@ class AgentHarness:
 
         if self.initialized and self.agent_session_id == new_session_id:
             print(f"[agent] Same session reconnected (session_id={new_session_id}), preserving state")
+
+            if len(self.pending_operations) > 0:
+                print(f"[agent] Failing {len(self.pending_operations)} pending operations for retry")
+                for tx_id, future in list(self.pending_operations.items()):
+                    if not future.done():
+                        future.set_result({
+                            "status": "error",
+                            "error": "Connection was reset during operation. Please retry.",
+                        })
+                self.pending_operations.clear()
+
             await self.send({
                 "type": "agent_status",
                 "status": "ready"

@@ -9,6 +9,7 @@ from latch_o11y.o11y import trace_app_function_with_span
 from opentelemetry.trace import Span
 
 import runtime.mount.entrypoint as entrypoint_module
+
 from ..entrypoint import a_proc, pod_id, pod_session_id, start_agent_proc
 
 connection_idx = 0
@@ -35,7 +36,9 @@ async def agent(s: Span, ctx: Context) -> HandlerResult:
 
     conn_a = a_proc.conn_a
     if conn_a is None:
-        entrypoint_module.current_agent_ctx = None
+        # On reconnect, initial conn should not wipe global ctx on cleanup
+        if entrypoint_module.current_agent_ctx is ctx:
+            entrypoint_module.current_agent_ctx = None
         await ctx.send_message(
             orjson.dumps({
                 "type": "agent_error",
@@ -52,6 +55,7 @@ async def agent(s: Span, ctx: Context) -> HandlerResult:
             msg = await receive_json(ctx.receive)
             await conn_a.send(msg)
     finally:
-        entrypoint_module.current_agent_ctx = None
+        if entrypoint_module.current_agent_ctx is ctx:
+            entrypoint_module.current_agent_ctx = None
 
     return "Ok"
