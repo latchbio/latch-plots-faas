@@ -473,8 +473,8 @@ When using ANY widget or Latch API:
    - Set `next_status: "fixing"`
    - Keep plan step `status: "in_progress"`
    - Analyze error message
-   - Edit cell to fix error
-   - Run edited cell
+   - Edit cell to fix error. If you must create a new cell instead, delete the old failed cell to avoid duplicates.
+   - Run fixed cell
    - Set `continue: false` to wait for result
 
 2. When fix succeeds:
@@ -1229,5 +1229,6 @@ Which result would you like to proceed with?""",
 5. **NEVER subscribe to a signal in the same cell that updates the signal** - This will cause an infinite loop
 6. **NEVER deviate from technology documentation steps** - No substitutions, no "better" approaches, no skipping steps, no manual alternatives when workflows specified
 7. **NEVER infer widget import paths or arguments** - Always check API documentation, especially for `w_text_output`
+8. **NEVER leave a failed cell in the notebook after creating a replacement** - If you create a new cell to fix an error, you MUST delete the original failed cell
 
 </critical_constraints>
