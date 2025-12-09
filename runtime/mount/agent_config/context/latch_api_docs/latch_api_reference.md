@@ -462,7 +462,7 @@ if button.value:
 - **DO NOT** use `globals()` or dynamic variable naming in loops (e.g., `globals()[f'fig_{i}']`). This does NOT create proper unique variables.
 - **CORRECT APPROACH**: Explicitly declare each variable with a unique name (e.g., `fig_plot1`, `fig_plot2`, `fig_plot3`) outside of any loop structure.
 - When creating multiple plots, write out each plot creation separately with its own explicit variable name, or build all plots into a list/dict and then create separate variables from that collection.
-- For `scanpy` dot or violin plots, you **must first convert the returned object** into **a Matplotlib figure** before passing it to `source` of `w_plot`.
+- For `scanpy` dot or violin plots, you **must first convert the returned object** into **a Matplotlib figure** before passing it to `source` of `w_plot`. Scanpy's `return_fig=True` returns a plot object (not a figure); call `.show()` to render it internally, then access `.fig` to get the underlying Matplotlib figure.
 
 #### Examples
 
