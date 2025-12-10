@@ -602,7 +602,7 @@ class AgentHarness:
                 cell_id = result.get("cell_id", "unknown")
                 tf_id = result.get("tf_id", "unknown")
                 msg = f"Created cell at position {position} (cell_id: {cell_id}, tf_id: {tf_id}, title: {title})"
-                print(f"[tool] create_cell -> {msg}")  
+                print(f"[tool] create_cell -> {msg}")
                 return {
                     "tool_name": "create_cell",
                     "summary": msg,
@@ -905,7 +905,7 @@ class AgentHarness:
             template_version_id = args.get("template_version_id")
             print(f"[tool] restore_checkpoint template_version_id={template_version_id}")
             params = {"template_version_id": template_version_id}
-            
+
             result = await self.atomic_operation("restore_checkpoint", params)
             if result.get("status") == "success":
                 return {
@@ -2723,6 +2723,7 @@ class AgentHarness:
         content_blocks: list[dict] = []
         current_block_index = -1
         usage_data = None
+        thinking_buffers: dict[int, str] = {}
 
         try:
             stream_ctx = self.client.beta.messages.stream(**kwargs) if use_beta_api else self.client.messages.stream(**kwargs)
@@ -2785,6 +2786,18 @@ class AgentHarness:
                                 "delta": delta.thinking,
                             })
 
+                            if block_index not in thinking_buffers:
+                                thinking_buffers[block_index] = ""
+                            thinking_buffers[block_index] += delta.thinking
+
+                            if "\n\n" in thinking_buffers[block_index]:
+                                parts = thinking_buffers[block_index].split("\n\n")
+                                to_summarize = "\n\n".join(parts[:-1])
+                                thinking_buffers[block_index] = parts[-1]
+
+                                if to_summarize.strip():
+                                    asyncio.create_task(self._summarize_and_send_chunk(to_summarize, block_index))
+
                         elif delta.type == "input_json_delta":
                             partial_json = delta.partial_json
                             await self.send({
@@ -2796,6 +2809,11 @@ class AgentHarness:
 
                     elif event_type == "content_block_stop":
                         block_index = event.index
+
+                        if block_index in thinking_buffers and thinking_buffers[block_index].strip():
+                            asyncio.create_task(self._summarize_and_send_chunk(thinking_buffers[block_index], block_index))
+                            del thinking_buffers[block_index]
+
                         await self.send({
                             "type": "agent_stream_block_stop",
                             "block_index": block_index,
@@ -2842,6 +2860,32 @@ class AgentHarness:
             })
 
             raise
+
+    async def _summarize_thinking(self, thinking_text: str) -> str:
+        try:
+            # use a faster/cheaper model for summarization
+            summary_msg = await self.client.messages.create(
+                model="claude-3-haiku-20240307",
+                max_tokens=1000,
+                messages=[{
+                    "role": "user",
+                    "content": f"Summarize the following reasoning process concisely in a few words, later paragraphs are more important:\n\n{thinking_text}"
+                }]
+            )
+            return summary_msg.content[0].text
+        except Exception as e:
+            print(f"[agent] Failed to summarize thinking: {e}")
+            return ""
+
+    async def _summarize_and_send_chunk(self, text: str, block_index: int) -> None:
+        summary = await self._summarize_thinking(text)
+        if summary:
+            await self.send({
+                "type": "agent_stream_delta",
+                "block_index": block_index,
+                "block_type": "thinking_summary",
+                "delta": summary + "\n",
+            })
 
     async def run_agent_loop(self) -> None:
         assert self.client is not None, "Client not initialized"
