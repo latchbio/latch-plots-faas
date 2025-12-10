@@ -2992,8 +2992,23 @@ class AgentHarness:
                 print(f"[agent] Skipping empty assistant message (stop_reason={response.stop_reason})")
 
             if response.stop_reason == "end_turn":
-                print("[agent] Turn ended without submit_response; completing turn")
-                await self._complete_turn()
+                last_block_is_thinking = False
+                if response_content is not None and len(response_content) > 0:
+                    last_block = response_content[-1]
+                    last_block_type = last_block.get("type") if isinstance(last_block, dict) else last_block.type
+                    last_block_is_thinking = last_block_type in {"thinking", "redacted_thinking"}
+                
+                if last_block_is_thinking:
+                    print("[agent] Turn ended after thinking; sending hidden message to enforce response")
+                    await self.pending_messages.put({
+                        "type": "user_query",
+                        "content": "Please provide a response.",
+                        "request_id": self.current_request_id,
+                        "hidden": True,
+                    })
+                else:
+                    print("[agent] Turn ended without submit_response; completing turn")
+                    await self._complete_turn()
             elif response.stop_reason == "tool_use":
                 tool_results = []
                 called_submit_response = False
