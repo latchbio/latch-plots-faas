@@ -2874,15 +2874,19 @@ class AgentHarness:
 
             raise
 
-    async def _summarize_thinking(self, thinking_text: str) -> str:
+    async def _summarize_thinking(self, thinking_text: str, is_final: bool = False) -> str:
         try:
-            # use a faster/cheaper model for summarization
+            if is_final:
+                prompt = f"Summarize the reasoning process in a concise past-tense sentence (2-6 words). Focus on the key decisions or conclusions reached. Examples: 'Analyzed error logs and identified the root cause', 'Refined the search query to improve results'.\n\n{thinking_text}"
+            else:
+                prompt = f"Summarize the most recent thoughts in this reasoning process into a brief, active phrase (2-6 words). Focus on what is currently being pondered or analyzed. Examples: 'Evaluating error handling', 'Checking authentication logic', 'Refining the search query'.\n\n{thinking_text}"
+
             summary_msg = await self.client.messages.create(
                 model="claude-3-haiku-20240307",
                 max_tokens=1000,
                 messages=[{
                     "role": "user",
-                    "content": f"Summarize the following reasoning process concisely in 3 to 6 words, later paragraphs are more important:\n\n{thinking_text}"
+                    "content": prompt
                 }]
             )
             return summary_msg.content[0].text
@@ -2891,7 +2895,7 @@ class AgentHarness:
             return ""
 
     async def _summarize_and_send_chunk(self, text: str, block_index: int) -> None:
-        summary = await self._summarize_thinking(text)
+        summary = await self._summarize_thinking(text, is_final=False)
         if summary:
             await self.send({
                 "type": "agent_stream_delta",
@@ -3049,7 +3053,7 @@ class AgentHarness:
                                 response_text = block.get("text", "")
 
                     if thinking_text:
-                        summary = await self._summarize_thinking(f"Thinking:\n{thinking_text}\n\nResponse:\n{response_text}")
+                        summary = await self._summarize_thinking(f"Thinking:\n{thinking_text}\n\nResponse:\n{response_text}", is_final=True)
                         response_content.append({
                             "type": "thinking_summary",
                             "summary": summary
