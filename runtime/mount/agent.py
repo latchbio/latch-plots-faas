@@ -277,10 +277,7 @@ class AgentHarness:
                 if isinstance(content, list):
                     cleaned_content = []
                     for block in content:
-                        if isinstance(block, dict) and block.get("type") == "thinking":
-                            block = block.copy()
-                            block.pop("thinking_summary", None)
-                            cleaned_content.append(block)
+                        if isinstance(block, dict) and block.get("type") == "thinking_summary":
                             continue
 
                         if isinstance(block, dict) and block.get("type") == "tool_result":
@@ -2730,9 +2727,23 @@ class AgentHarness:
         current_block_index = -1
         usage_data = None
         thinking_buffers: dict[int, str] = {}
+        text_buffers: dict[int, str] = {}
 
         try:
             stream_ctx = self.client.beta.messages.stream(**kwargs) if use_beta_api else self.client.messages.stream(**kwargs)
+
+            def _process_buffer(buffer_dict: dict[int, str], index: int, text: str) -> None:
+                if index not in buffer_dict:
+                    buffer_dict[index] = ""
+                buffer_dict[index] += text
+
+                if "\n\n" in buffer_dict[index]:
+                    parts = buffer_dict[index].split("\n\n")
+                    to_summarize = "\n\n".join(parts[:-1])
+                    buffer_dict[index] = parts[-1]
+
+                    if to_summarize.strip():
+                        asyncio.create_task(self._summarize_and_send_chunk(to_summarize, index))
 
             async with stream_ctx as stream:
                 async for event in stream:
@@ -2783,6 +2794,8 @@ class AgentHarness:
                                 "delta": delta.text,
                             })
 
+                            _process_buffer(text_buffers, block_index, delta.text)
+
                         elif delta.type == "thinking_delta":
                             content_blocks[block_index]["thinking"] += delta.thinking
                             await self.send({
@@ -2792,17 +2805,7 @@ class AgentHarness:
                                 "delta": delta.thinking,
                             })
 
-                            if block_index not in thinking_buffers:
-                                thinking_buffers[block_index] = ""
-                            thinking_buffers[block_index] += delta.thinking
-
-                            if "\n\n" in thinking_buffers[block_index]:
-                                parts = thinking_buffers[block_index].split("\n\n")
-                                to_summarize = "\n\n".join(parts[:-1])
-                                thinking_buffers[block_index] = parts[-1]
-
-                                if to_summarize.strip():
-                                    asyncio.create_task(self._summarize_and_send_chunk(to_summarize, block_index))
+                            _process_buffer(thinking_buffers, block_index, delta.thinking)
 
                         elif delta.type == "input_json_delta":
                             partial_json = delta.partial_json
@@ -2819,6 +2822,10 @@ class AgentHarness:
                         if block_index in thinking_buffers and thinking_buffers[block_index].strip():
                             asyncio.create_task(self._summarize_and_send_chunk(thinking_buffers[block_index], block_index))
                             del thinking_buffers[block_index]
+
+                        if block_index in text_buffers and text_buffers[block_index].strip():
+                            asyncio.create_task(self._summarize_and_send_chunk(text_buffers[block_index], block_index))
+                            del text_buffers[block_index]
 
                         await self.send({
                             "type": "agent_stream_block_stop",
@@ -3032,11 +3039,21 @@ class AgentHarness:
             response_content = response.model_dump()["content"]
             if response_content is not None and (not isinstance(response_content, list) or len(response_content) > 0):
                 if isinstance(response_content, list):
+                    thinking_text = ""
+                    response_text = ""
                     for block in response_content:
-                        if isinstance(block, dict) and block.get("type") == "thinking":
-                            thinking_text = block.get("thinking", "")
-                            summary = await self._summarize_thinking(thinking_text)
-                            block["thinking_summary"] = summary
+                        if isinstance(block, dict):
+                            if block.get("type") == "thinking":
+                                thinking_text = block.get("thinking", "")
+                            elif block.get("type") == "text":
+                                response_text = block.get("text", "")
+
+                    if thinking_text:
+                        summary = await self._summarize_thinking(f"Thinking:\n{thinking_text}\n\nResponse:\n{response_text}")
+                        response_content.append({
+                            "type": "thinking_summary",
+                            "summary": summary
+                        })
 
                 await self._insert_history(
                     role="assistant",
