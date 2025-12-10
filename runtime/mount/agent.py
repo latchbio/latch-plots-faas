@@ -277,6 +277,12 @@ class AgentHarness:
                 if isinstance(content, list):
                     cleaned_content = []
                     for block in content:
+                        if isinstance(block, dict) and block.get("type") == "thinking":
+                            block = block.copy()
+                            block.pop("thinking_summary", None)
+                            cleaned_content.append(block)
+                            continue
+
                         if isinstance(block, dict) and block.get("type") == "tool_result":
                             block = block.copy()
                             result = json.loads(block.get("content", "{}"))
@@ -2869,7 +2875,7 @@ class AgentHarness:
                 max_tokens=1000,
                 messages=[{
                     "role": "user",
-                    "content": f"Summarize the following reasoning process concisely in a few words, later paragraphs are more important:\n\n{thinking_text}"
+                    "content": f"Summarize the following reasoning process concisely in 3 to 6 words, later paragraphs are more important:\n\n{thinking_text}"
                 }]
             )
             return summary_msg.content[0].text
@@ -3025,6 +3031,13 @@ class AgentHarness:
 
             response_content = response.model_dump()["content"]
             if response_content is not None and (not isinstance(response_content, list) or len(response_content) > 0):
+                if isinstance(response_content, list):
+                    for block in response_content:
+                        if isinstance(block, dict) and block.get("type") == "thinking":
+                            thinking_text = block.get("thinking", "")
+                            summary = await self._summarize_thinking(thinking_text)
+                            block["thinking_summary"] = summary
+
                 await self._insert_history(
                     role="assistant",
                     payload={
