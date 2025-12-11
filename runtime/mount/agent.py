@@ -827,7 +827,7 @@ class AgentHarness:
 
             print(f"[tool] edit_cell id={cell_id}")
 
-            original_code = None
+            original_code = ""
 
             cells = self.latest_notebook_context.get("cells", [])
 
