@@ -1,10 +1,8 @@
 import asyncio
-from base64 import urlsafe_b64encode
+from base64 import b64encode
 from collections.abc import Awaitable, Callable
 from typing import Any, overload
-
-import numpy as np
-from numpy.typing import NDArray
+from urllib.parse import quote_plus
 
 from ..utils import auto_install
 from ..utils.align import align_image
@@ -543,7 +541,7 @@ async def process_h5ad_request(
                 else None,
             )
             return make_response(
-                data={"image": f"image/png;base64,{urlsafe_b64encode(img)}"}
+                data={"image": f"image/png;base64,{quote_plus(b64encode(img))}"}
             )
 
         case _:
