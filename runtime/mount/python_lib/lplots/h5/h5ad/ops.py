@@ -1,7 +1,7 @@
 import base64
 from dataclasses import dataclass
 from io import BytesIO
-from typing import Any, Literal
+from typing import Any
 
 import aiohttp
 import numpy as np
@@ -9,8 +9,6 @@ import pandas as pd
 from matplotlib.path import Path
 from numpy.typing import NDArray
 from PIL import Image
-
-from runtime.mount.python_lib.lplots.widgets.h5 import ColorByObs
 
 from ... import _inject
 from ..utils import auto_install
