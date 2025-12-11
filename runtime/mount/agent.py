@@ -2901,7 +2901,7 @@ class AgentHarness:
                 "type": "agent_stream_delta",
                 "block_index": block_index,
                 "block_type": "thinking_summary",
-                "delta": summary + "\n",
+                "delta": summary,
             })
 
     async def run_agent_loop(self) -> None:
