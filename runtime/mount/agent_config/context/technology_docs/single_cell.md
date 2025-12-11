@@ -135,7 +135,7 @@ Before moving on, explicitly ask the user if they would like to further explore 
 - Use CellGuide per-gene database to propose raw cell types per cluster.
 - **NEVER** use placeholder or vague labels such as `cluster_0`, `Cell_Population_1`, `celltype_placeholder_0`, `label_1`, `unknown`, `other`, `neuron associated cell`.
 - For each cluster, store the final label, confidence, key markers and supporting CellGuide types in `adata.uns["cell_type_annotation"]`, and write labels to `adata.obs["cell_type"]`.
-- Visualize annotated cell types in both the spatial embedding and the UMAP embedding subplots.
+- Visualize annotated cell types in the UMAP embedding plot.
 - Verify that `adata.obs["cell_type"]` contains no missing values and the labels make sense. If it is missing or contains nulls, correct this before proceeding.
 
 </cell_type_annotation>
