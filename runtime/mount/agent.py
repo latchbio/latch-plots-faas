@@ -670,7 +670,7 @@ class AgentHarness:
 
             print(f"[tool] edit_cell id={cell_id}")
 
-            original_code = None
+            original_code = ""
 
             # ensure self.latest_notebook_context is up to date
             await self.tool_map.get("refresh_cells_context")({})

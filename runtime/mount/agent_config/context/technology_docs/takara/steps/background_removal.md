@@ -73,4 +73,5 @@ log10_umi.hist(bins=100)
 </library>
 
 <self_eval_criteria>
+- Difficult to check without understanding what portion of slide covered with tissue
 </self_eval_criteria>
