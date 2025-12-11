@@ -1,7 +1,8 @@
-## Cell Typing
+<goal>
+Identify cell types in each cluster.
+</goal>
 
-### Workflow
-
+<method>
 1. **Extract top 20 marker genes per cluster** (not just 5 - critical markers often appear in positions 6-20)
 
 2. **Analyze and interpret each cluster**: Consider gene function, biological role, and tissue context. Write out your reasoning.
@@ -17,3 +18,13 @@
    - Create summary table with counts and percentages
    - Generate dot plot of top markers
    - Create one violin plot per cell type, comparing its enriched markers to other cell types. 
+</method>
+
+<workflows>
+</workflows>
+
+<library>
+</library>
+
+<self_eval_criteria>
+</self_eval_criteria>
