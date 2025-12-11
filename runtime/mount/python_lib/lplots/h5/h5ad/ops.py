@@ -49,9 +49,11 @@ class ObsData:
     min: np.int64 | None
     max: np.int64 | None
 
+
 class ColorPalettes(TypedDict):
     continuous: list[str]
     categorical: list[str]
+
 
 @dataclass(kw_only=True)
 class Context:
@@ -181,7 +183,7 @@ class Context:
         data: list[dict[str, Any]],
         layout: object,
         color_palettes: ColorPalettes,
-        color_by: tuple[Literal["obs"], str] | tuple[Literal["var"], list[str]],
+        color_by: tuple[Literal["obs"], str] | tuple[Literal["var"], list[str]] | None,
     ) -> bytes:
         import plotly.graph_objects as go
 

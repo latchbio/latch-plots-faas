@@ -520,21 +520,27 @@ async def process_h5ad_request(
 
         case "export_png":
             # color_palettes: {"categorical": list[str], "continuous": list[str]}
-            # color_by: {"type": "obs", "key": str} | {"type": "var", "keys": list[str]}
+            # color_by: {"type": "obs", "key": str} | {"type": "var", "keys": list[str]} | None
             for k in ["obsm_key", "data", "layout", "color_palettes", "color_by"]:
                 if k in msg:
                     continue
 
                 return make_response(error=f"`{k}` key missing from message")
 
+            color_by = msg["color_by"]
+
             img = ctx.export_png(
                 obsm_key=msg["obsm_key"],
                 data=msg["data"],
                 layout=msg["layout"],
                 color_palettes=msg["color_palettes"],
-                color_by=("obs", msg["key"])
-                if msg["type"] == "obs"
-                else ("var", msg["keys"]),
+                color_by=(
+                    ("obs", color_by["key"])
+                    if color_by["type"] == "obs"
+                    else ("var", color_by["keys"])
+                )
+                if color_by is not None
+                else None,
             )
             return make_response(
                 data={"image": f"image/png;base64,{urlsafe_b64encode(img)}"}
