@@ -1,4 +1,5 @@
 import asyncio
+from base64 import urlsafe_b64encode
 from collections.abc import Awaitable, Callable
 from typing import Any, overload
 
@@ -516,6 +517,28 @@ async def process_h5ad_request(
             adata.uns["latch_views"] = msg["views"]
 
             return make_response(data={"stored_views": adata.uns["latch_views"]})
+
+        case "export_png":
+            # color_palettes: {"categorical": list[str], "continuous": list[str]}
+            # color_by: {"type": "obs", "key": str} | {"type": "var", "keys": list[str]}
+            for k in ["obsm_key", "data", "layout", "color_palettes", "color_by"]:
+                if k in msg:
+                    continue
+
+                return make_response(error=f"`{k}` key missing from message")
+
+            img = ctx.export_png(
+                obsm_key=msg["obsm_key"],
+                data=msg["data"],
+                layout=msg["layout"],
+                color_palettes=msg["color_palettes"],
+                color_by=("obs", msg["key"])
+                if msg["type"] == "obs"
+                else ("var", msg["keys"]),
+            )
+            return make_response(
+                data={"image": f"image/png;base64,{urlsafe_b64encode(img)}"}
+            )
 
         case _:
             return make_response(error=f"Invalid operation: {op}")

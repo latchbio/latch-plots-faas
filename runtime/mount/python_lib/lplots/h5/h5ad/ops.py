@@ -1,7 +1,7 @@
 import base64
 from dataclasses import dataclass
 from io import BytesIO
-from typing import Any
+from typing import Any, Literal, TypedDict
 
 import aiohttp
 import numpy as np
@@ -49,6 +49,9 @@ class ObsData:
     min: np.int64 | None
     max: np.int64 | None
 
+class ColorPalettes(TypedDict):
+    continuous: list[str]
+    categorical: list[str]
 
 @dataclass(kw_only=True)
 class Context:
@@ -170,6 +173,24 @@ class Context:
         means = np.mean(measures, axis=1)
         p0, p100 = np.quantile(means, [0, 1])
         return p0, p100
+
+    def export_png(
+        self,
+        *,
+        obsm_key: str,
+        data: list[dict[str, Any]],
+        layout: object,
+        color_palettes: ColorPalettes,
+        color_by: tuple[Literal["obs"], str] | tuple[Literal["var"], list[str]],
+    ) -> bytes:
+        import plotly.graph_objects as go
+
+        df = self.adata.obsm[obsm_key][self.index]
+        data[0]["x"] = df[:, 0]
+        data[0]["y"] = df[:, 1]
+
+        fig = go.Figure(data=data, layout=layout)
+        return fig.to_image(format="png")
 
 
 rng = np.random.default_rng()
