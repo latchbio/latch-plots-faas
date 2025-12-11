@@ -346,6 +346,7 @@ Use BOTH when needed:
 
 ## Template & Lookup
 When user mentions an assay platform, read the corresponding documentation:
+
 - **Takara Seeker/Trekker** → `technology_docs/takara/main.md`
 - **Vizgen MERFISH** → `technology_docs/vizgen/main.md`
 - **AtlasXOmics** → `technology_docs/atlasxomics/main.md`
