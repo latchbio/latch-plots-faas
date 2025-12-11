@@ -1,7 +1,7 @@
 import base64
 from dataclasses import dataclass
 from io import BytesIO
-from typing import Any
+from typing import Any, Literal
 
 import aiohttp
 import numpy as np
@@ -9,6 +9,8 @@ import pandas as pd
 from matplotlib.path import Path
 from numpy.typing import NDArray
 from PIL import Image
+
+from runtime.mount.python_lib.lplots.widgets.h5 import ColorByObs
 
 from ... import _inject
 from ..utils import auto_install
@@ -39,12 +41,15 @@ class ObsmData:
 
 @dataclass(kw_only=True)
 class ObsData:
-    data: NDArray[np.str_]
+    data: NDArray[np.str_ | np.int64]
 
-    top_values: NDArray[np.str_]
+    top_values: NDArray[np.str_ | np.int64]
     top_value_counts: NDArray[np.int64]
 
     total_unique: int
+
+    min: np.int64 | None
+    max: np.int64 | None
 
 
 @dataclass(kw_only=True)
@@ -125,11 +130,18 @@ class Context:
             top = top[sorted_indices]
             counts = counts[sorted_indices]
 
+        p0 = None
+        p100 = None
+        if pd.api.types.is_numeric_dtype(obs.dtype):
+            p0, p100 = np.quantile(obs, [0, 1])
+
         return ObsData(
             data=obs[self.index],
             top_values=top,
             top_value_counts=counts,
             total_unique=len(unique_obs),
+            min=p0,
+            max=p100,
         )
 
     def get_obs_vector(self, var: str) -> NDArray[np.int64] | None:
@@ -140,6 +152,26 @@ class Context:
         return np.asarray(
             self.adata[self.index, var].to_df().iloc[:, 0:].values.ravel()  # noqa: PD011
         )
+
+    def get_vars_range(self, keys: list[str]) -> tuple[int, int] | None:
+        data: list[NDArray[np.int64]] = []
+        for k in keys:
+            if k not in self.adata.var_names:
+                continue
+
+            datum = self.adata[:, k].X
+            if datum is None:
+                continue
+
+            data.append(datum)
+
+        if len(data) == 0:
+            return None
+
+        measures = np.hstack(data)
+        means = np.mean(measures, axis=1)
+        p0, p100 = np.quantile(means, [0, 1])
+        return p0, p100
 
 
 rng = np.random.default_rng()

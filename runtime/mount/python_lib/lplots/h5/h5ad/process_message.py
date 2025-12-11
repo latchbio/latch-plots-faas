@@ -47,16 +47,26 @@ async def process_h5ad_request(
     adata = ctx.adata
 
     @overload
-    def make_response(*, data: Any) -> dict[str, Any]: ...
-    @overload
-    def make_response(*, error: str) -> dict[str, Any]: ...
     def make_response(
-        *, data: Any | None = None, error: str | None = None
+        *, data: Any, op_override: str | None = None
+    ) -> dict[str, Any]: ...
+    @overload
+    def make_response(
+        *, error: str, op_override: str | None = None
+    ) -> dict[str, Any]: ...
+    def make_response(
+        *,
+        data: Any | None = None,
+        error: str | None = None,
+        op_override: str | None = None,
     ) -> dict[str, Any]:
+        if op_override is None:
+            op_override = op
+
         value = {"data": data} if data is not None else {"error": error}
         return {
             "type": "h5",
-            "op": op,
+            "op": op_override,
             "data_type": "h5ad",
             "key": widget_session_key,
             "value": value,
@@ -152,6 +162,9 @@ async def process_h5ad_request(
                     "init_obs_nrof_values": obs.total_unique
                     if obs is not None
                     else None,
+                    "init_obs_endpoints": [obs.min, obs.max]
+                    if obs is not None
+                    else None,
                     # var info
                     "init_var_index": var_index.tolist(),
                     "init_var_names": (
@@ -178,57 +191,61 @@ async def process_h5ad_request(
             if "obsm_key" not in msg:
                 return make_response(error="`obsm_key` key missing from message")
 
+            res = {
+                "fetched_for_key": msg["obsm_key"],
+                "color_by_endpoints": None,
+                # color by obs
+                "fetched_for_obs_key": None,
+                "values": None,
+                "unique_values": None,
+                "counts": None,
+                "nrof_values": None,
+                # color by vars
+                "fetched_for_var_keys": None,
+                "var_values": None,
+            }
+
             filters = msg.get("filters")
-            recomputed_index = ctx.compute_index(filters=filters, max_cells=max_cells)
+            res["fetched_for_filters"] = filters
+            res["recomputed_index"] = ctx.compute_index(
+                filters=filters, max_cells=max_cells
+            )
 
             obsm = ctx.get_obsm(msg["obsm_key"])
             if obsm is None:
                 return make_response(error="Obsm not found")
 
-            obs = None
-            fetched_for_obs_key = None
-            gene_columns: list[NDArray[np.int64]] | None = None
-            fetched_for_var_keys: list[str] | None = None
+            res["obsm"] = obsm.data.tolist()
+            res["index"] = obsm.index.tolist()
+
             if "colored_by_type" in msg and "colored_by_key" in msg:
                 if msg["colored_by_type"] == "obs":
                     obs = ctx.get_obs(msg["colored_by_key"], max_cells=max_cells)
 
                     if obs is not None:
-                        fetched_for_obs_key = msg["colored_by_key"]
-                elif msg["colored_by_type"] == "var":
-                    fetched_for_var_keys = [
-                        x for x in msg["colored_by_key"] if x in adata.var_names
-                    ]
+                        res["fetched_for_obs_key"] = msg["colored_by_key"]
+                        res["values"] = obs.data.tolist()
+                        res["unique_values"] = obs.top_values.tolist()
+                        res["counts"] = obs.top_value_counts.tolist()
+                        res["nrof_values"] = obs.total_unique
 
-                    gene_columns = []
-                    for x in fetched_for_var_keys:
+                        res["color_by_endpoints"] = [obs.min, obs.max]
+                elif msg["colored_by_type"] == "var":
+                    keys = [x for x in msg["colored_by_key"] if x in adata.var_names]
+                    res["fetched_for_var_keys"] = keys
+
+                    res["var_values"] = []
+                    for x in keys:
                         cur = ctx.get_obs_vector(x)
                         assert cur is not None
 
-                        gene_columns.append(cur)
+                        res["var_values"].append(cur.tolist())
 
-            return make_response(
-                data={
-                    "fetched_for_key": msg["obsm_key"],
-                    "obsm": obsm.data.tolist(),
-                    "index": obsm.index.tolist(),
-                    "recomputed_index": recomputed_index,
-                    "fetched_for_obs_key": fetched_for_obs_key,
-                    "fetched_for_var_keys": fetched_for_var_keys,
-                    "fetched_for_filters": filters,
-                    "values": obs.data.tolist() if obs is not None else None,
-                    "unique_values": (
-                        obs.top_values.tolist() if obs is not None else None
-                    ),
-                    "counts": obs.top_value_counts.tolist()
-                    if obs is not None
-                    else None,
-                    "nrof_values": obs.total_unique if obs is not None else None,
-                    "var_values": [col.tolist() for col in gene_columns]
-                    if gene_columns is not None
-                    else None,
-                }
-            )
+                    endpoints = ctx.get_vars_range(keys)
+                    if endpoints is not None:
+                        res["color_by_endpoints"] = list(endpoints)
+
+            return make_response(data=res)
 
         case "get_obs_options":
             return make_response(data=list(adata.obs.keys()))
@@ -248,6 +265,7 @@ async def process_h5ad_request(
                     "unique_values": obs.top_values.tolist(),
                     "counts": obs.top_value_counts.tolist(),
                     "nrof_values": obs.total_unique,
+                    "endpoints": [obs.min, obs.max],
                 }
             )
 
@@ -264,6 +282,18 @@ async def process_h5ad_request(
                     "fetched_for_key": msg["var_index"],
                     "values": gene_column.tolist(),
                 }
+            )
+
+        case "get_vars_range":
+            if "keys" not in msg:
+                return make_response(error="`keys` key missing from message")
+
+            data = ctx.get_vars_range(msg["keys"])
+            if data is None:
+                return make_response(error="None of the provided variables were found")
+
+            return make_response(
+                data={"fetched_for_keys": msg["keys"], "endpoints": list(data)}
             )
 
         case "mutate_obs":
@@ -329,7 +359,9 @@ async def process_h5ad_request(
                         if obs_key in adata.obs
                         else None
                     ),
-                }
+                    "endpoints": [obs.min, obs.max],
+                },
+                op_override="get_obs",
             )
 
         case "drop_obs":
