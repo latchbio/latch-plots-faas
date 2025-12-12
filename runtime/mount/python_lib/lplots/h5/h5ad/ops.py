@@ -202,20 +202,20 @@ class Context:
 
         if color_by is not None:
             xs = None
-            color_scheme_type = "continuous"
             if color_by[0] == "obs" and color_by[1] in self.adata.obs:
                 xs = self.adata.obs[color_by[1]]
-
-                override = color_palettes["obs_type_overrides"].get(color_by[1])
-                if override is not None:
-                    color_scheme_type = override
 
                 if pd.api.types.is_numeric_dtype(xs.dtype):
                     data[0].setdefault("marker", {})["color"] = xs
                 else:
+                    color_scheme_type = "categorical"
+                    override = color_palettes["obs_type_overrides"].get(color_by[1])
+                    if override is not None:
+                        color_scheme_type = override
+
                     palette = color_palettes[color_scheme_type]
 
-                    color_idx_map: dict[int, int] = {}
+                    color_idx_map: dict[str, int] = {}
                     values, counts = np.unique(xs, return_counts=True)
                     for i, x in enumerate(values[np.argsort(-counts)]):
                         color_idx_map[x] = i % len(palette)
