@@ -9,7 +9,7 @@ import sys
 import time
 import traceback
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
@@ -304,6 +304,115 @@ class AgentHarness:
         print(f"[agent] Built {len(anthropic_messages)} messages from DB")
 
         return anthropic_messages
+
+    async def refresh_cells_context(self) -> str:
+        context_result, reactivity_result = await asyncio.gather(
+            self.atomic_operation("get_context"),
+            self.atomic_operation("request_reactivity_summary"),
+        )
+
+        if context_result.get("status") != "success" or reactivity_result.get("status") != "success":
+            return "Failed to refresh cells context"
+
+        context = context_result.get("context", {})
+        self.latest_notebook_context = context
+
+        notebook_name = context.get("notebook_name")
+        cell_count = context.get("cell_count", 0)
+        cells = context.get("cells", [])
+
+        cell_lines = [f"# Notebook Cells for {notebook_name}, Total cells: {cell_count}\n"]
+
+        default_tab_name = context.get("default_tab_name", "Tab 1")
+
+        cell_lines.append("\n## Tab Marker [DEFAULT]")  # noqa: FURB113
+        cell_lines.append(f"TAB_NAME: {default_tab_name}")
+        cell_lines.append("TAB_ID: DEFAULT")
+        cell_lines.append("TYPE: Default Tab Marker")
+        cell_lines.append("---")
+
+        current_tab_name = default_tab_name
+
+        for cell in cells:
+            index = cell.get("index", "?")
+            cell_id = cell.get("cell_id", "?")
+            cell_type = cell.get("cell_type", "unknown")
+            source = cell.get("source")
+            status = cell.get("status", "idle")
+            tf_id = cell.get("tf_id", None)
+
+            if cell_type == "tabMarker":
+                if source:
+                    current_tab_name = source.strip() or f"Tab {index}"
+                else:
+                    current_tab_name = f"Tab {index}"
+
+                cell_lines.append(f"\n## Tab Marker [{index}]")  # noqa: FURB113
+                cell_lines.append(f"TAB_NAME: {current_tab_name}")
+                cell_lines.append(f"TAB_ID: {cell_id}")
+                cell_lines.append(f"CELL_INDEX: {index}")
+                cell_lines.append("TYPE: Tab Marker")
+                cell_lines.append("---")
+                continue
+
+            cell_lines.append(f"\n## Cell [{index}] (in {current_tab_name})")  # noqa: FURB113
+            cell_lines.append(f"BELONGS_TO_TAB: {current_tab_name}")
+            cell_lines.append(f"CELL_ID: {cell_id}")
+            cell_lines.append(f"CELL_INDEX: {index}")
+            cell_lines.append(f"TYPE: {cell_type}")
+            cell_lines.append(f"STATUS: {status}")
+            if tf_id is not None:
+                cell_lines.append(f"CODE_CELL_ID: {tf_id}")
+
+            if source is not None:
+                cell_lines.append("CODE_START")  # noqa: FURB113
+                cell_lines.append(source)
+                cell_lines.append("CODE_END")
+
+            widgets = cell.get("widgets")
+            if widgets is not None:
+                cell_lines.append("\nWIDGETS:")
+                for w in widgets:
+                    w_type = w.get("type", "unknown")
+                    w_key = w.get("key", "")
+                    w_label = w.get("label", "")
+                    cell_lines.append(f"- WIDGET: {w_type} | {w_label} | {w_key}")
+
+            if tf_id is None:
+                continue
+
+            cell_reactivity: dict[str, dict[str, Iterable[str]]] = reactivity_result.get("cell_reactivity", {})
+            reactivity_meta = cell_reactivity.get(str(tf_id))
+            is_reactivity_ready = status in reactivity_ready_statuses
+
+            cell_lines.append("\nREACTIVITY:")
+
+            if not is_reactivity_ready:
+                cell_lines.append("- Not available: run this cell to establish reactive dependencies.")
+                continue
+
+            if reactivity_meta is None:
+                cell_lines.append("- Reactivity data missing for this cell.")
+                continue
+
+            signals_defined = reactivity_meta.get("signals_defined", [])
+            depends_on_signals = reactivity_meta.get("depends_on_signals", [])
+            depends_on_cells = reactivity_meta.get("depends_on_cells", [])
+
+            cell_lines.append(  # noqa: FURB113
+                "- Signals defined: "
+                + (", ".join(signals_defined) if signals_defined else "None")
+            )
+            cell_lines.append(
+                "- Depends on signals: "
+                + (", ".join(depends_on_signals) if depends_on_signals else "None")
+            )
+            cell_lines.append(
+                "- Depends on cells: "
+                + (", ".join(depends_on_cells) if depends_on_cells else "None")
+            )
+
+        return "\n".join(cell_lines)
 
     async def _extract_last_request_id(self) -> str | None:
         history = await self._fetch_history_from_db()
@@ -679,8 +788,6 @@ class AgentHarness:
 
             original_code = None
 
-            # ensure self.latest_notebook_context is up to date
-            await self.tool_map.get("refresh_cells_context")({})
             cells = self.latest_notebook_context.get("cells", [])
 
             for cell in cells:
@@ -2574,148 +2681,6 @@ class AgentHarness:
         })
         self.tool_map["get_global_info"] = get_global_info
 
-        async def refresh_cells_context(_args: dict) -> dict:
-            context_result, reactivity_result = await asyncio.gather(
-                self.atomic_operation("get_context"),
-                self.atomic_operation("request_reactivity_summary"),
-            )
-
-            if context_result.get("status") != "success":
-                return {
-                    "tool_name": "refresh_cells_context",
-                    "success": False,
-                    "summary": f"Failed to refresh cells: {context_result.get('error', 'Unknown error')}"
-                }
-
-            if reactivity_result.get("status") != "success":
-                print(f"[tool] refresh_cells_context: failed to get reactivity summary: {reactivity_result.get('error', 'Unknown error')}")
-                return {
-                    "tool_name": "refresh_cells_context",
-                    "success": False,
-                    "summary": f"Failed to get reactivity summary: {reactivity_result.get('error', 'Unknown error')}"
-                }
-
-            context = context_result.get("context", {})
-            self.latest_notebook_context = context
-
-            notebook_name = context.get("notebook_name")
-            cell_count = context.get("cell_count", 0)
-            cells = context.get("cells", [])
-
-            cell_lines = [f"# Notebook Cells for {notebook_name}, Total cells: {cell_count}\n"]
-
-            default_tab_name = context.get("default_tab_name", "Tab 1")
-
-            cell_lines.append("\n## Tab Marker [DEFAULT]")  # noqa: FURB113
-            cell_lines.append(f"TAB_NAME: {default_tab_name}")
-            cell_lines.append("TAB_ID: DEFAULT")
-            cell_lines.append("TYPE: Default Tab Marker")
-            cell_lines.append("---")
-
-            current_tab_name = default_tab_name
-
-            cell_reactivity: dict[str, dict[str, object]] = reactivity_result.get("cell_reactivity", {})
-
-            for cell in cells:
-                index = cell.get("index", "?")
-                cell_id = cell.get("cell_id", "?")
-                cell_type = cell.get("cell_type", "unknown")
-                source = cell.get("source")
-                status = cell.get("status", "idle")
-                tf_id = cell.get("tf_id", None)
-
-                if cell_type == "tabMarker":
-                    if source:
-                        current_tab_name = source.strip() or f"Tab {index}"
-                    else:
-                        current_tab_name = f"Tab {index}"
-
-                    cell_lines.append(f"\n## Tab Marker [{index}]")  # noqa: FURB113
-                    cell_lines.append(f"TAB_NAME: {current_tab_name}")
-                    cell_lines.append(f"TAB_ID: {cell_id}")
-                    cell_lines.append(f"CELL_INDEX: {index}")
-                    cell_lines.append("TYPE: Tab Marker")
-                    cell_lines.append("---")
-                    continue
-
-                cell_lines.append(f"\n## Cell [{index}] (in {current_tab_name})")  # noqa: FURB113
-                cell_lines.append(f"BELONGS_TO_TAB: {current_tab_name}")
-                cell_lines.append(f"CELL_ID: {cell_id}")
-                cell_lines.append(f"CELL_INDEX: {index}")
-                cell_lines.append(f"TYPE: {cell_type}")
-                cell_lines.append(f"STATUS: {status}")
-                if tf_id is not None:
-                    cell_lines.append(f"CODE_CELL_ID: {tf_id}")
-
-                if source is not None:
-                    cell_lines.append("CODE_START")  # noqa: FURB113
-                    cell_lines.append(source)
-                    cell_lines.append("CODE_END")
-
-                widgets = cell.get("widgets")
-                if widgets is not None:
-                    cell_lines.append("\nWIDGETS:")
-                    for w in widgets:
-                        w_type = w.get("type", "unknown")
-                        w_key = w.get("key", "")
-                        w_label = w.get("label", "")
-                        cell_lines.append(f"- WIDGET: {w_type} | {w_label} | {w_key}")
-
-                if tf_id is None:
-                    continue
-
-                reactivity_meta = cell_reactivity.get(str(tf_id))
-                is_reactivity_ready = status in reactivity_ready_statuses
-
-                cell_lines.append("\nREACTIVITY:")
-
-                if not is_reactivity_ready:
-                    cell_lines.append("- Not available: run this cell to establish reactive dependencies.")
-                    continue
-
-                if reactivity_meta is None:
-                    cell_lines.append("- Reactivity data missing for this cell.")
-                    continue
-
-                signals_defined = reactivity_meta.get("signals_defined", [])
-                depends_on_signals = reactivity_meta.get("depends_on_signals", [])
-                depends_on_cells = reactivity_meta.get("depends_on_cells", [])
-
-                cell_lines.append(  # noqa: FURB113
-                    "- Signals defined: "
-                    + (", ".join(signals_defined) if signals_defined else "None")
-                )
-                cell_lines.append(
-                    "- Depends on signals: "
-                    + (", ".join(depends_on_signals) if depends_on_signals else "None")
-                )
-                cell_lines.append(
-                    "- Depends on cells: "
-                    + (", ".join(depends_on_cells) if depends_on_cells else "None")
-                )
-
-            context_dir = context_root / "notebook_context"
-            context_dir.mkdir(parents=True, exist_ok=True)
-            (context_dir / "cells.md").write_text("\n".join(cell_lines))
-
-            return {
-                "tool_name": "refresh_cells_context",
-                "success": True,
-                "summary": f"Refreshed reactive notebook context for {cell_count} cells and stored result in notebook_context/cells.md",
-                "cell_count": cell_count,
-                "context_path": "notebook_context/cells.md"
-            }
-
-        self.tools.append({
-            "name": "refresh_cells_context",
-            "description": "Refresh the cells.md context file with current reactive notebook structure and contents.",
-            "input_schema": {
-                "type": "object",
-                "properties": {},
-            },
-        })
-        self.tool_map["refresh_cells_context"] = refresh_cells_context
-
         if len(self.tools) > 0:
             self.tools[-1]["cache_control"] = {"type": "ephemeral"}
 
@@ -2874,6 +2839,25 @@ class AgentHarness:
             if not api_messages or api_messages[-1].get("role") != "user":
                 print("[agent] run_agent_loop: skipping (no messages or last message not user)")
                 continue
+
+            notebook_state = await self.refresh_cells_context()
+            notebook_state_block = {
+                "type": "text",
+                "text": f"<current_notebook_state>\n{notebook_state}\n</current_notebook_state>",
+            }
+
+            last_user_msg = api_messages[-1]
+            last_content = last_user_msg.get("content")
+            if isinstance(last_content, str):
+                api_messages[-1] = {  # pyright: ignore[reportArgumentType, reportCallIssue]
+                    "role": "user",
+                    "content": [notebook_state_block, {"type": "text", "text": last_content}],
+                }
+            elif isinstance(last_content, list):
+                api_messages[-1] = {  # pyright: ignore[reportArgumentType, reportCallIssue]
+                    "role": "user",
+                    "content": [notebook_state_block, *last_content],
+                }
 
             turn += 1
             print(f"[agent] run_agent_loop: starting turn {turn}")
