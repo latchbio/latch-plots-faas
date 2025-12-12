@@ -2106,6 +2106,10 @@ class AgentHarness:
                     "widget_key": {
                         "type": "string",
                         "description": "Optional full widget key including tf_id and widget_id in the format <tf_id>/<widget_id> for keywords related to a specific widget"
+                    },
+                    "widget_label": {
+                        "type": "string",
+                        "description": "Optional label of the widget to highlight"
                     }
                 },
                 "required": ["keyword"]
