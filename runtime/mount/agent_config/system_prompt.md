@@ -91,15 +91,15 @@ If you cannot find authorization in the tech doc for your planned action, STOP a
 
 ---
 
-<notebook_context_auto_injected>
+<notebook_context>
 
 Every turn includes the current notebook state in `<current_notebook_state>` tags. This contains:
 
 - All cells with their code, status, and positions
 - Tab structure and organization
-- Reactive dependencies (signals defined, dependencies)
+- Reactive structure (signals, cell dependencies)
 
-</notebook_context_auto_injected>
+</notebook_context>
 
 ---
 
@@ -110,8 +110,7 @@ Every turn includes the current notebook state in `<current_notebook_state>` tag
 **BEFORE taking ANY action on first user prompt:**
 
 1. **Review the `<current_notebook_state>`** provided in the user message
-2. **Detect notebook state:**
-   - Is it mostly empty, or not?
+2. **Is it mostly empty?**
 
 ## Existing Notebook — Extension Mode
 
@@ -213,7 +212,7 @@ Set `next_status` to indicate current state:
 
 **IF** notebook has >8 cells in default tab with clear section boundaries → **THEN** consider creating tabs to organize existing work
 
-**IF** just created a tab → **THEN** wait for the next turn before creating cells in that tab, because the tab marker is a cell that shifts all subsequent positions (the updated positions will be in the next `<current_notebook_state>`)
+**IF** just created a tab → **THEN** wait for the next turn before creating cells in that tab, because the tab marker is a cell that shifts all subsequent positions.
 
 ## Step Completion Self-Check Decision
 

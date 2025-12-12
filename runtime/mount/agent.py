@@ -141,7 +141,6 @@ class AgentHarness:
                 block_type = block.get("type")
 
                 if block_type in {"thinking", "redacted_thinking"}:
-                    truncated_blocks.append(block)
                     continue
 
                 if block_type == "tool_result":
@@ -155,6 +154,12 @@ class AgentHarness:
                         result = {k: v for k, v in result.items() if k not in {"code", "original_code"}}
                     elif tool_name == "shell_command":
                         result = {k: v for k, v in result.items() if k != "output"}
+                    elif tool_name == "execute_code":
+                        result = {k: v for k, v in result.items() if k != "code"}
+                        if "stdout" in result and isinstance(result.get("stdout"), str) and len(result["stdout"]) > 1500:
+                            result["stdout"] = "...[truncated]\n" + result["stdout"][-1500:]
+                        if "stderr" in result and isinstance(result.get("stderr"), str) and len(result["stderr"]) > 1500:
+                            result["stderr"] = "...[truncated]\n" + result["stderr"][-1500:]
 
                     truncated_blocks.append({
                         "type": "tool_result",
