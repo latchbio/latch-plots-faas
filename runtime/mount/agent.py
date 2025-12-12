@@ -2851,12 +2851,12 @@ class AgentHarness:
             if isinstance(last_content, str):
                 api_messages[-1] = {  # pyright: ignore[reportArgumentType, reportCallIssue]
                     "role": "user",
-                    "content": [notebook_state_block, {"type": "text", "text": last_content}],
+                    "content": [{"type": "text", "text": last_content}, notebook_state_block],
                 }
             elif isinstance(last_content, list):
                 api_messages[-1] = {  # pyright: ignore[reportArgumentType, reportCallIssue]
                     "role": "user",
-                    "content": [notebook_state_block, *last_content],
+                    "content": [*last_content, notebook_state_block],
                 }
 
             turn += 1
