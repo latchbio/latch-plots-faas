@@ -80,6 +80,7 @@ class AgentHarness:
     current_status: str | None = None
     expected_widgets: dict[str, object | None] = field(default_factory=dict)
     behavior: Behavior | None = None
+    buffer: list[str] = field(default_factory=list)
 
     mode_config: dict[Mode, tuple[str, int | None]] = field(default_factory=lambda: {
         Mode.planning: ("claude-opus-4-5-20251101", 4096),
@@ -2726,29 +2727,19 @@ class AgentHarness:
         content_blocks: list[dict] = []
         current_block_index = -1
         usage_data = None
-        thinking_buffers: dict[int, str] = {}
-        text_buffers: dict[int, str] = {}
 
         try:
             stream_ctx = self.client.beta.messages.stream(**kwargs) if use_beta_api else self.client.messages.stream(**kwargs)
 
-            def _process_buffer(buffer_dict: dict[int, str], index: int, text: str) -> None:
-                if index not in buffer_dict:
-                    buffer_dict[index] = ""
-                buffer_dict[index] += text
+            def _process_buffer(index: int, text: str) -> None:
+                self.buffer.append(text)
 
-                if "\n\n" in buffer_dict[index]:
-                    parts = buffer_dict[index].split("\n\n")
-                    to_summarize = "\n\n".join(parts[:-1])
-                    buffer_dict[index] = parts[-1]
-
-                    if to_summarize.strip():
-                        asyncio.create_task(self._summarize_and_send_chunk(to_summarize, index))
+                if "\n\n" in text:
+                        asyncio.create_task(self._summarize_and_send_chunk("".join(self.buffer), index))
 
             async with stream_ctx as stream:
                 async for event in stream:
                     event_type = event.type
-
                     if event_type == "message_start":
                         message_data = event.message
                         if hasattr(message_data, "usage") and message_data.usage:
@@ -2794,7 +2785,7 @@ class AgentHarness:
                                 "delta": delta.text,
                             })
 
-                            _process_buffer(text_buffers, block_index, delta.text)
+                            _process_buffer(block_index, delta.text)
 
                         elif delta.type == "thinking_delta":
                             content_blocks[block_index]["thinking"] += delta.thinking
@@ -2805,7 +2796,7 @@ class AgentHarness:
                                 "delta": delta.thinking,
                             })
 
-                            _process_buffer(thinking_buffers, block_index, delta.thinking)
+                            _process_buffer(block_index, delta.thinking)
 
                         elif delta.type == "input_json_delta":
                             partial_json = delta.partial_json
@@ -2819,13 +2810,11 @@ class AgentHarness:
                     elif event_type == "content_block_stop":
                         block_index = event.index
 
-                        if block_index in thinking_buffers and thinking_buffers[block_index].strip():
-                            asyncio.create_task(self._summarize_and_send_chunk(thinking_buffers[block_index], block_index))
-                            del thinking_buffers[block_index]
+                        buffer_text = "".join(self.buffer)
 
-                        if block_index in text_buffers and text_buffers[block_index].strip():
-                            asyncio.create_task(self._summarize_and_send_chunk(text_buffers[block_index], block_index))
-                            del text_buffers[block_index]
+                        if buffer_text.strip() != "":
+                            asyncio.create_task(self._summarize_and_send_chunk(buffer_text, block_index))
+                            self.buffer = []
 
                         await self.send({
                             "type": "agent_stream_block_stop",
@@ -2874,28 +2863,42 @@ class AgentHarness:
 
             raise
 
-    async def _summarize_thinking(self, thinking_text: str, is_final: bool = False) -> str:
-        try:
-            if is_final:
-                prompt = f"Summarize the reasoning process in a concise past-tense sentence (2-6 words). Focus on the key decisions or conclusions reached. Examples: 'Analyzed error logs and identified the root cause', 'Refined the search query to improve results'.\n\n{thinking_text}"
-            else:
-                prompt = f"Summarize the most recent thoughts in this reasoning process into a brief, active phrase (2-6 words). Focus on what is currently being pondered or analyzed. Examples: 'Evaluating error handling', 'Checking authentication logic', 'Refining the search query'.\n\n{thinking_text}"
+    async def _run_quick_inference(self, prompt: str) -> str:
+        messages = [{
+            "role": "user",
+            "content": prompt
+        }]
 
-            summary_msg = await self.client.messages.create(
-                model="claude-3-haiku-20240307",
-                max_tokens=1000,
-                messages=[{
-                    "role": "user",
-                    "content": prompt
-                }]
+        try:
+            msg = await self.client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=100,
+                messages=messages
             )
-            return summary_msg.content[0].text
+            return msg.content[0].text
+
         except Exception as e:
             print(f"[agent] Failed to summarize thinking: {e}")
+
+            print(f"[agent] API call failed with {len(messages)} messages")
+            for i, msg in enumerate(messages):
+                role = msg.get("role", "?")
+                content = msg.get("content", [])
+                if isinstance(content, str):
+                    print(f"  Message {i} ({role}): string content, length={len(content)}")
+                elif isinstance(content, list):
+                    print(f"  Message {i} ({role}): {len(content)} blocks")
+                    for j, block in enumerate(content):
+                        block_type = block.get("type") if isinstance(block, dict) else getattr(block, "type", "?")
+                        print(f"    Block {j}: {block_type}")
+                else:
+                    print(f"  Message {i} ({role}): unknown content type={type(content)}")
+
             return ""
 
     async def _summarize_and_send_chunk(self, text: str, block_index: int) -> None:
-        summary = await self._summarize_thinking(text, is_final=False)
+        prompt = f"Summarize the reasoning process in a concise past-tense sentence (2-6 words). Focus on the key decisions or conclusions reached. Examples: 'Analyzed error logs and identified the root cause', 'Refined the search query to improve results'.\n\n{text}"
+        summary = await self._run_quick_inference(prompt)
         if summary:
             await self.send({
                 "type": "agent_stream_delta",
@@ -3043,17 +3046,23 @@ class AgentHarness:
             response_content = response.model_dump()["content"]
             if response_content is not None and (not isinstance(response_content, list) or len(response_content) > 0):
                 if isinstance(response_content, list):
-                    thinking_text = ""
-                    response_text = ""
+                    thinking_text = None
+                    response_text = None
                     for block in response_content:
                         if isinstance(block, dict):
                             if block.get("type") == "thinking":
-                                thinking_text = block.get("thinking", "")
+                                thinking_text = block.get("thinking", None)
                             elif block.get("type") == "text":
-                                response_text = block.get("text", "")
+                                response_text = block.get("text", None)
 
-                    if thinking_text:
-                        summary = await self._summarize_thinking(f"Thinking:\n{thinking_text}\n\nResponse:\n{response_text}", is_final=True)
+                    if thinking_text is not None or response_text is not None:
+
+                        thinking_text_str = f"Thinking:\n{thinking_text}\n\n" if thinking_text is not None else ""
+                        response_text_str = f"Response:\n{response_text}\n\n" if response_text is not None else ""
+
+                        prompt = f"Summarize the reasoning process in a concise past-tense sentence (2-6 words). Focus on the key decisions or conclusions reached. Examples: 'Analyzed error logs and identified the root cause', 'Refined the search query to improve results'.\n\n{thinking_text_str}{response_text_str}"
+
+                        summary = await self._run_quick_inference(prompt)
                         response_content.append({
                             "type": "thinking_summary",
                             "summary": summary
