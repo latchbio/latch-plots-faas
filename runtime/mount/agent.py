@@ -2897,7 +2897,7 @@ class AgentHarness:
             return ""
 
     async def _summarize_and_send_chunk(self, text: str, block_index: int) -> None:
-        prompt = f"Summarize the reasoning process in a concise past-tense sentence (2-6 words). Focus on the key decisions or conclusions reached. Examples: 'Analyzed error logs and identified the root cause', 'Refined the search query to improve results'.\n\n{text}"
+                        prompt = f"Summarize the most recent thoughts in this reasoning process into a brief, active phrase (2-6 words). Focus on spatial analysis tasks, protocol verification, or scientific reasoning currently being analyzed. Examples: 'Verifying widget parameters', 'Analyzing QC metrics', 'Checking protocol compliance'.\n\n{thinking_text_str}{response_text_str}"
         summary = await self._run_quick_inference(prompt)
         if summary:
             await self.send({
@@ -3060,7 +3060,7 @@ class AgentHarness:
                         thinking_text_str = f"Thinking:\n{thinking_text}\n\n" if thinking_text is not None else ""
                         response_text_str = f"Response:\n{response_text}\n\n" if response_text is not None else ""
 
-                        prompt = f"Summarize the reasoning process in a concise past-tense sentence (2-6 words). Focus on the key decisions or conclusions reached. Examples: 'Analyzed error logs and identified the root cause', 'Refined the search query to improve results'.\n\n{thinking_text_str}{response_text_str}"
+                        prompt = f"Summarize the reasoning process in a concise past-tense sentence (2-6 words). Focus on analysis tasks, protocol verification, or scientific conclusions reached. Examples: 'Verified widget parameters', 'Analyzed QC metrics', 'Checked protocol compliance'.\n\n{thinking_text_str}{response_text_str}"
 
                         summary = await self._run_quick_inference(prompt)
                         response_content.append({
