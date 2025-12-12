@@ -80,6 +80,7 @@ class AgentHarness:
     current_status: str | None = None
     expected_widgets: dict[str, object | None] = field(default_factory=dict)
     behavior: Behavior | None = None
+    latest_notebook_state: str | None = None
 
     mode_config: dict[Mode, tuple[str, int | None]] = field(default_factory=lambda: {
         Mode.planning: ("claude-opus-4-5-20251101", 4096),
@@ -2850,6 +2851,7 @@ class AgentHarness:
                 continue
 
             notebook_state = await self.refresh_cells_context()
+            self.latest_notebook_state = notebook_state
             notebook_state_block = {
                 "type": "text",
                 "text": f"<current_notebook_state>\n{notebook_state}\n</current_notebook_state>",
@@ -3290,16 +3292,6 @@ class AgentHarness:
     async def get_full_prompt(self) -> dict:
         messages = await self._build_messages_from_db()
 
-        context_dir = context_root / "notebook_context"
-
-        def read_context_file(filename: str) -> str:
-            file_path = context_dir / filename
-            if file_path.exists():
-                return file_path.read_text()
-            return f"# {filename}\n\nFile not yet generated."
-
-        cells_content = await self.refresh_cells_context()
-
         def build_tree(path: Path, prefix: str = "") -> list[str]:
             lines = []
             entries = sorted(path.iterdir(), key=lambda p: (not p.is_dir(), p.name))
@@ -3323,7 +3315,7 @@ class AgentHarness:
             "messages": messages,
             "truncated_messages": truncated_messages,
             "model": self.mode_config.get(self.mode, ("claude-opus-4-5-20251101", 1024))[0],
-            "cells": cells_content,
+            "cells": self.latest_notebook_state if self.latest_notebook_state is not None else "Interact with agent to populate notebook state.",
             "tree": tree_content,
         }
 
