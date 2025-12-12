@@ -541,7 +541,7 @@ async def process_h5ad_request(
                 else None,
             )
             return make_response(
-                data={"image": f"image/png;base64,{quote_plus(b64encode(img))}"}
+                data={"image": f"data:image/png;base64,{quote_plus(b64encode(img))}"}
             )
 
         case _:

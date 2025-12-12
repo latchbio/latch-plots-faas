@@ -53,6 +53,8 @@ class ObsData:
 class ColorPalettes(TypedDict):
     continuous: list[str]
     categorical: list[str]
+    default_color: str
+    obs_type_overrides: dict[str, Literal["categorical", "continuous"]]
 
 
 @dataclass(kw_only=True)
@@ -156,7 +158,7 @@ class Context:
             self.adata[self.index, var].to_df().iloc[:, 0:].values.ravel()  # noqa: PD011
         )
 
-    def get_vars_range(self, keys: list[str]) -> tuple[int, int] | None:
+    def get_vars_color_values(self, keys: list[str]) -> NDArray[np.int64] | None:
         data: list[NDArray[np.int64]] = []
         for k in keys:
             if k not in self.adata.var_names:
@@ -173,6 +175,10 @@ class Context:
 
         measures = np.hstack(data)
         means = np.mean(measures, axis=1)
+        return means
+
+    def get_vars_range(self, keys: list[str]) -> tuple[int, int] | None:
+        means = self.get_vars_color_values(keys)
         p0, p100 = np.quantile(means, [0, 1])
         return p0, p100
 
@@ -190,6 +196,35 @@ class Context:
         df = self.adata.obsm[obsm_key][self.index]
         data[0]["x"] = df[:, 0]
         data[0]["y"] = df[:, 1]
+
+        if color_by is not None:
+            xs = None
+            color_scheme_type = "continuous"
+            if color_by[0] == "obs" and color_by[1] in self.adata.obs:
+                xs = self.adata.obs[color_by[1]]
+
+                override = color_palettes["obs_type_overrides"].get(color_by[1])
+                if override is not None:
+                    color_scheme_type = override
+
+                if pd.api.types.is_numeric_dtype(xs.dtype):
+                    data[0].setdefault("marker", {})["color"] = xs
+                else:
+                    palette = color_palettes[color_scheme_type]
+
+                    color_idx_map: dict[int, int] = {}
+                    values, counts = np.unique_counts(xs)
+                    for i, x in enumerate(values[np.argsort(-counts)]):
+                        color_idx_map[x] = i % len(palette)
+
+                    # todo(maximsmol): there might be a better way of doing this
+                    # using just numpy arrays
+                    data[0].setdefault("marker", {})["color"] = [
+                        palette[color_idx_map[x]] for x in xs
+                    ]
+            elif color_by[0] == "var":
+                xs = self.get_vars_color_values(color_by[1])
+                data[0].setdefault("marker", {})["color"] = xs
 
         fig = go.Figure(data=data, layout=layout)
         return fig.to_image(format="png")
