@@ -215,8 +215,9 @@ class Context:
     ) -> bytes:
         import plotly.graph_objects as go
 
-        df = self.adata.obsm[obsm_key][self.index]
-        viewport_mask = None
+        df = self.adata.obsm[obsm_key]
+
+        idx = self.index
         if viewport is not None:
             viewport_mask = (viewport["x"][0] < df[:, 0]) & (
                 df[:, 0] < viewport["x"][1]
@@ -224,19 +225,14 @@ class Context:
             viewport_mask &= (viewport["y"][0] < df[:, 1]) & (
                 df[:, 1] < viewport["y"][1]
             )
+            idx = np.where(self.index_entry.mask & viewport_mask)[0]
 
-        if viewport_mask is not None:
-            df = df[np.where(viewport_mask)[0], :]
+        df = df[idx]
 
         data[0]["x"] = df[:, 0]
         data[0]["y"] = df[:, 1]
 
         if color_by is not None:
-            if viewport_mask is None:
-                idx = self.index
-            else:
-                idx = np.where(self.index_entry.mask & viewport_mask)[0]
-
             if color_by[0] == "obs" and color_by[1] in self.adata.obs:
                 xs = self.adata.obs[color_by[1]][idx]
 
