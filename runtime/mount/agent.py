@@ -153,7 +153,7 @@ class AgentHarness:
                         result = {k: v for k, v in result.items() if k != "code"}
                     elif tool_name == "edit_cell":
                         result = {k: v for k, v in result.items() if k not in {"code", "original_code"}}
-                    elif tool_name == "shell_command":
+                    elif tool_name == "bash":
                         result = {k: v for k, v in result.items() if k != "output"}
                     elif tool_name == "execute_code":
                         result = {k: v for k, v in result.items() if k != "code"}
