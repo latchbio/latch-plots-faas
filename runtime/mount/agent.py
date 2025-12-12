@@ -1600,7 +1600,7 @@ class AgentHarness:
 
         self.tools.append({
             "name": "restore_checkpoint",
-            "description": "Restore the notebook to a specific template version checkpoint. If this notebook has no existing checkpoints, do not call this tool. Require confirmation from the user before restoring.",
+            "description": "Restore the notebook to a specific template version checkpoint. If the notebook is empty or has no existing checkpoints, do not call this tool. Require confirmation from the user before restoring.",
             "input_schema": {
                 "type": "object",
                 "properties": {
