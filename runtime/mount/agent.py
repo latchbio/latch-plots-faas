@@ -2814,7 +2814,8 @@ class AgentHarness:
 
                         if buffer_text.strip() != "":
                             asyncio.create_task(self._summarize_and_send_chunk(buffer_text, block_index))
-                            self.buffer = []
+
+                        self.buffer = []
 
                         await self.send({
                             "type": "agent_stream_block_stop",
@@ -2878,21 +2879,7 @@ class AgentHarness:
             return msg.content[0].text
 
         except Exception as e:
-            print(f"[agent] Failed to summarize thinking: {e}")
-
-            print(f"[agent] API call failed with {len(messages)} messages")
-            for i, msg in enumerate(messages):
-                role = msg.get("role", "?")
-                content = msg.get("content", [])
-                if isinstance(content, str):
-                    print(f"  Message {i} ({role}): string content, length={len(content)}")
-                elif isinstance(content, list):
-                    print(f"  Message {i} ({role}): {len(content)} blocks")
-                    for j, block in enumerate(content):
-                        block_type = block.get("type") if isinstance(block, dict) else getattr(block, "type", "?")
-                        print(f"    Block {j}: {block_type}")
-                else:
-                    print(f"  Message {i} ({role}): unknown content type={type(content)}")
+            print(f"[agent] Failed to run quick inference: {e}")
 
             return ""
 
