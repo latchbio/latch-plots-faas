@@ -216,7 +216,7 @@ class Context:
                     palette = color_palettes[color_scheme_type]
 
                     color_idx_map: dict[int, int] = {}
-                    values, counts = np.unique(xs, return_counts=True, sorted=True)
+                    values, counts = np.unique(xs, return_counts=True)
                     for i, x in enumerate(values[np.argsort(-counts)]):
                         color_idx_map[x] = i % len(palette)
 
