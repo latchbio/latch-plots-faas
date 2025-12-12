@@ -2897,15 +2897,29 @@ class AgentHarness:
             return ""
 
     async def _summarize_and_send_chunk(self, text: str, block_index: int) -> None:
-                        prompt = f"Summarize the most recent thoughts in this reasoning process into a brief, active phrase (2-6 words). Focus on spatial analysis tasks, protocol verification, or scientific reasoning currently being analyzed. Examples: 'Verifying widget parameters', 'Analyzing QC metrics', 'Checking protocol compliance'.\n\n{thinking_text_str}{response_text_str}"
+        prompt = f"Summarize the most recent thoughts in this reasoning process into a brief, active phrase (2-6 words). Focus on spatial analysis tasks, protocol verification, or scientific reasoning currently being analyzed. Examples: 'Verifying widget parameters', 'Analyzing QC metrics', 'Checking protocol compliance'.\n\nThinking:\n{text}"
         summary = await self._run_quick_inference(prompt)
-        if summary:
+
+        if summary.strip() != "":
             await self.send({
                 "type": "agent_stream_delta",
                 "block_index": block_index,
                 "block_type": "thinking_summary",
                 "delta": summary,
             })
+
+    async def _record_thinking_summary(self, prompt: str) -> None:
+        summary = await self._run_quick_inference(prompt)
+        if summary.strip():
+            await self._insert_history(
+                role="assistant",
+                payload={
+                    "content": [{
+                        "type": "thinking_summary",
+                        "summary": summary
+                    }]
+                }
+            )
 
     async def run_agent_loop(self) -> None:
         assert self.client is not None, "Client not initialized"
@@ -3062,11 +3076,7 @@ class AgentHarness:
 
                         prompt = f"Summarize the reasoning process in a concise past-tense sentence (2-6 words). Focus on analysis tasks, protocol verification, or scientific conclusions reached. Examples: 'Verified widget parameters', 'Analyzed QC metrics', 'Checked protocol compliance'.\n\n{thinking_text_str}{response_text_str}"
 
-                        summary = await self._run_quick_inference(prompt)
-                        response_content.append({
-                            "type": "thinking_summary",
-                            "summary": summary
-                        })
+                        asyncio.create_task(self._record_thinking_summary(prompt))
 
                 await self._insert_history(
                     role="assistant",
