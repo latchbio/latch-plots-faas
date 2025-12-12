@@ -312,7 +312,7 @@ class AgentHarness:
         )
 
         if context_result.get("status") != "success" or reactivity_result.get("status") != "success":
-            return "Failed to refresh cells context"
+            raise RuntimeError("Failed to refresh cells context", context_result, reactivity_result)
 
         context = context_result.get("context", {})
         self.latest_notebook_context = context
