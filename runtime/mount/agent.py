@@ -2908,19 +2908,6 @@ class AgentHarness:
                 "delta": summary,
             })
 
-    async def _record_thinking_summary(self, prompt: str) -> None:
-        summary = await self._run_quick_inference(prompt)
-        if summary.strip():
-            await self._insert_history(
-                role="assistant",
-                payload={
-                    "content": [{
-                        "type": "thinking_summary",
-                        "summary": summary
-                    }]
-                }
-            )
-
     async def run_agent_loop(self) -> None:
         assert self.client is not None, "Client not initialized"
 
@@ -3076,7 +3063,13 @@ class AgentHarness:
 
                         prompt = f"Summarize the reasoning process in a concise past-tense sentence (2-6 words). Focus on analysis tasks, protocol verification, or scientific conclusions reached. Examples: 'Verified widget parameters', 'Analyzed QC metrics', 'Checked protocol compliance'.\n\n{thinking_text_str}{response_text_str}"
 
-                        asyncio.create_task(self._record_thinking_summary(prompt))
+                        summary = await self._run_quick_inference(prompt)
+
+                        if summary.strip() != "":
+                            response_content.append({
+                                "type": "thinking_summary",
+                                "summary": summary
+                            })
 
                 await self._insert_history(
                     role="assistant",
