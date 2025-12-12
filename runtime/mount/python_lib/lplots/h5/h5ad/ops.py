@@ -22,7 +22,7 @@ ad = auto_install.ad
 class IndexEntry:
     max_cells: int
     mask: NDArray[np.bool_]
-    index: NDArray[np.int64]
+    index: NDArray[np.intp]
 
 
 @dataclass(kw_only=True)
@@ -57,6 +57,11 @@ class ColorPalettes(TypedDict):
     obs_type_overrides: dict[str, Literal["categorical", "continuous"]]
 
 
+class PlotViewport(TypedDict):
+    x: tuple[float, float]
+    y: tuple[float, float]
+
+
 @dataclass(kw_only=True)
 class Context:
     id: str
@@ -69,11 +74,15 @@ class Context:
         return _inject.kernel.ann_data_objects[self.id]
 
     @property
-    def index(self) -> NDArray[np.int64]:
+    def index_entry(self) -> IndexEntry:
         assert self._index is not None, (
             f"h5 not initialized correctly: no index calculated (id={self.id!r})"
         )
-        return self._index.index
+        return self._index
+
+    @property
+    def index(self) -> NDArray[np.intp]:
+        return self.index_entry.index
 
     def compute_index(
         self, *, filters: list[dict[str, Any]] | None = None, max_cells: int
@@ -87,7 +96,7 @@ class Context:
         if (
             cached is not None
             and np.array_equal(cached.mask, mask)
-            and cached.max_cells != max_cells
+            and cached.max_cells == max_cells
         ):
             return False
 
@@ -158,13 +167,19 @@ class Context:
             self.adata[self.index, var].to_df().iloc[:, 0:].values.ravel()  # noqa: PD011
         )
 
-    def get_vars_color_values(self, keys: list[str]) -> NDArray[np.int64] | None:
+    def get_vars_color_values(
+        self, keys: list[str], *, index: NDArray[np.intp] | None = None
+    ) -> NDArray[np.int64] | None:
         data: list[NDArray[np.int64]] = []
         for k in keys:
             if k not in self.adata.var_names:
                 continue
 
-            datum = self.adata[:, k].X
+            if index is not None:
+                datum = self.adata[index, k].X
+            else:
+                datum = self.adata[:, k].X
+
             if datum is None:
                 continue
 
@@ -177,8 +192,11 @@ class Context:
         means = np.mean(measures, axis=1)
         return means
 
-    def get_vars_range(self, keys: list[str]) -> tuple[int, int] | None:
+    def get_vars_range(self, keys: list[str]) -> tuple[float, float] | None:
         means = self.get_vars_color_values(keys)
+        if means is None:
+            return None
+
         p0, p100 = np.quantile(means, [0, 1])
         return p0, p100
 
@@ -193,10 +211,23 @@ class Context:
         scale: float,
         width: int,
         height: int,
+        viewport: PlotViewport | None,
     ) -> bytes:
         import plotly.graph_objects as go
 
         df = self.adata.obsm[obsm_key][self.index]
+        viewport_mask = None
+        if viewport is not None:
+            viewport_mask = (viewport["x"][0] < df[:, 0]) & (
+                df[:, 0] < viewport["x"][1]
+            )
+            viewport_mask &= (viewport["y"][0] < df[:, 1]) & (
+                df[:, 1] < viewport["y"][1]
+            )
+
+        if viewport_mask is not None:
+            df = df[np.where(viewport_mask)[0], :]
+
         data[0]["x"] = df[:, 0]
         data[0]["y"] = df[:, 1]
 
@@ -226,7 +257,13 @@ class Context:
                         palette[color_idx_map[x]] for x in xs
                     ]
             elif color_by[0] == "var":
-                xs = self.get_vars_color_values(color_by[1])
+                if viewport_mask is None:
+                    idx = self.index
+                else:
+                    idx = np.where(self.index_entry.mask & viewport_mask)[0]
+
+                xs = self.get_vars_color_values(color_by[1], index=idx)
+
                 data[0].setdefault("marker", {})["color"] = xs
 
         layout.setdefault("template", {})

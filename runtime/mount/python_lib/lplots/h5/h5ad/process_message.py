@@ -369,13 +369,7 @@ async def process_h5ad_request(
 
             obs_key = msg["obs_key"]
             if obs_key not in adata.obs:
-                return {
-                    "type": "h5",
-                    "op": op,
-                    "data_type": "h5ad",
-                    "key": widget_session_key,
-                    "value": {"error": "Observation key not found"},
-                }
+                return make_response(error="Observation key not found")
 
             adata.obs = adata.obs.drop(columns=[obs_key])
 
@@ -391,13 +385,7 @@ async def process_h5ad_request(
             new_obs_key = msg["new_obs_key"]
 
             if old_obs_key not in adata.obs:
-                return {
-                    "type": "h5",
-                    "op": op,
-                    "data_type": "h5ad",
-                    "key": widget_session_key,
-                    "value": {"error": "Observation key not found"},
-                }
+                return make_response(error="Observation key not found")
 
             adata.obs = adata.obs.rename(columns={old_obs_key: new_obs_key})
 
@@ -519,6 +507,7 @@ async def process_h5ad_request(
         case "export_png":
             # color_palettes: {"categorical": list[str], "continuous": list[str]}
             # color_by: {"type": "obs", "key": str} | {"type": "var", "keys": list[str]} | None
+            # viewport: {x: tuple[float, float], y: tuple[float, float]} | None
             for k in [
                 "obsm_key",
                 "data",
@@ -528,6 +517,7 @@ async def process_h5ad_request(
                 "scale",
                 "width",
                 "height",
+                "viewport"
             ]:
                 if k in msg:
                     continue
@@ -551,6 +541,7 @@ async def process_h5ad_request(
                 scale=msg["scale"],
                 width=msg["width"],
                 height=msg["height"],
+                viewport=viewport
             )
             return make_response(
                 data={"image": f"data:image/png;base64,{quote_plus(b64encode(img))}"}
