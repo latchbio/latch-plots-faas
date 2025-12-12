@@ -80,6 +80,7 @@ class AgentHarness:
     current_status: str | None = None
     expected_widgets: dict[str, object | None] = field(default_factory=dict)
     behavior: Behavior | None = None
+    buffer: list[str] = field(default_factory=list)
 
     mode_config: dict[Mode, tuple[str, int | None]] = field(default_factory=lambda: {
         Mode.planning: ("claude-opus-4-5-20251101", 4096),
@@ -277,6 +278,9 @@ class AgentHarness:
                 if isinstance(content, list):
                     cleaned_content = []
                     for block in content:
+                        if isinstance(block, dict) and block.get("type") == "thinking_summary":
+                            continue
+
                         if isinstance(block, dict) and block.get("type") == "tool_result":
                             block = block.copy()
                             result = json.loads(block.get("content", "{}"))
@@ -602,7 +606,7 @@ class AgentHarness:
                 cell_id = result.get("cell_id", "unknown")
                 tf_id = result.get("tf_id", "unknown")
                 msg = f"Created cell at position {position} (cell_id: {cell_id}, tf_id: {tf_id}, title: {title})"
-                print(f"[tool] create_cell -> {msg}")  
+                print(f"[tool] create_cell -> {msg}")
                 return {
                     "tool_name": "create_cell",
                     "summary": msg,
@@ -905,7 +909,7 @@ class AgentHarness:
             template_version_id = args.get("template_version_id")
             print(f"[tool] restore_checkpoint template_version_id={template_version_id}")
             params = {"template_version_id": template_version_id}
-            
+
             result = await self.atomic_operation("restore_checkpoint", params)
             if result.get("status") == "success":
                 return {
@@ -2727,10 +2731,15 @@ class AgentHarness:
         try:
             stream_ctx = self.client.beta.messages.stream(**kwargs) if use_beta_api else self.client.messages.stream(**kwargs)
 
+            def _process_buffer(index: int, text: str) -> None:
+                self.buffer.append(text)
+
+                if "\n\n" in text:
+                        asyncio.create_task(self._summarize_and_send_chunk("".join(self.buffer), index))
+
             async with stream_ctx as stream:
                 async for event in stream:
                     event_type = event.type
-
                     if event_type == "message_start":
                         message_data = event.message
                         if hasattr(message_data, "usage") and message_data.usage:
@@ -2776,6 +2785,8 @@ class AgentHarness:
                                 "delta": delta.text,
                             })
 
+                            _process_buffer(block_index, delta.text)
+
                         elif delta.type == "thinking_delta":
                             content_blocks[block_index]["thinking"] += delta.thinking
                             await self.send({
@@ -2784,6 +2795,8 @@ class AgentHarness:
                                 "block_type": "thinking",
                                 "delta": delta.thinking,
                             })
+
+                            _process_buffer(block_index, delta.thinking)
 
                         elif delta.type == "input_json_delta":
                             partial_json = delta.partial_json
@@ -2796,6 +2809,14 @@ class AgentHarness:
 
                     elif event_type == "content_block_stop":
                         block_index = event.index
+
+                        buffer_text = "".join(self.buffer)
+
+                        if buffer_text.strip() != "":
+                            asyncio.create_task(self._summarize_and_send_chunk(buffer_text, block_index))
+
+                        self.buffer = []
+
                         await self.send({
                             "type": "agent_stream_block_stop",
                             "block_index": block_index,
@@ -2842,6 +2863,37 @@ class AgentHarness:
             })
 
             raise
+
+    async def _run_quick_inference(self, prompt: str) -> str:
+        messages = [{
+            "role": "user",
+            "content": prompt + "\n\nDo not use any markdown formatting."
+        }]
+
+        try:
+            msg = await self.client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=100,
+                messages=messages
+            )
+            return msg.content[0].text
+
+        except Exception as e:
+            print(f"[agent] Failed to run quick inference: {e}")
+
+            return ""
+
+    async def _summarize_and_send_chunk(self, text: str, block_index: int) -> None:
+        prompt = f"Summarize the most recent thoughts in this reasoning process into a brief, active phrase (2-6 words). Focus on spatial analysis tasks, protocol verification, or scientific reasoning currently being analyzed. Examples: 'Verifying widget parameters', 'Analyzing QC metrics', 'Checking protocol compliance'.\n\nThinking:\n{text}"
+        summary = await self._run_quick_inference(prompt)
+
+        if summary.strip() != "":
+            await self.send({
+                "type": "agent_stream_delta",
+                "block_index": block_index,
+                "block_type": "thinking_summary",
+                "delta": summary,
+            })
 
     async def run_agent_loop(self) -> None:
         assert self.client is not None, "Client not initialized"
@@ -2981,6 +3033,31 @@ class AgentHarness:
 
             response_content = response.model_dump()["content"]
             if response_content is not None and (not isinstance(response_content, list) or len(response_content) > 0):
+                if isinstance(response_content, list):
+                    thinking_text = None
+                    response_text = None
+                    for block in response_content:
+                        if isinstance(block, dict):
+                            if block.get("type") == "thinking":
+                                thinking_text = block.get("thinking", None)
+                            elif block.get("type") == "text":
+                                response_text = block.get("text", None)
+
+                    if thinking_text is not None or response_text is not None:
+
+                        thinking_text_str = f"Thinking:\n{thinking_text}\n\n" if thinking_text is not None else ""
+                        response_text_str = f"Response:\n{response_text}\n\n" if response_text is not None else ""
+
+                        prompt = f"Summarize the reasoning process in a concise past-tense sentence (2-6 words). Focus on analysis tasks, protocol verification, or scientific conclusions reached. Examples: 'Verified widget parameters', 'Analyzed QC metrics', 'Checked protocol compliance'.\n\n{thinking_text_str}{response_text_str}"
+
+                        summary = await self._run_quick_inference(prompt)
+
+                        if summary.strip() != "":
+                            response_content.append({
+                                "type": "thinking_summary",
+                                "summary": summary
+                            })
+
                 await self._insert_history(
                     role="assistant",
                     payload={
