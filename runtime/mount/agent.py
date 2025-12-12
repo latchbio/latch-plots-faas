@@ -308,11 +308,16 @@ class AgentHarness:
     async def refresh_cells_context(self) -> str:
         context_result, reactivity_result = await asyncio.gather(
             self.atomic_operation("get_context"),
-            self.atomic_operation("request_reactivity_summary"),
+            self.atomic_operation("request_reactivity_summary", timeout=1.0),
         )
 
-        if context_result.get("status") != "success" or reactivity_result.get("status") != "success":
-            raise RuntimeError("Failed to refresh cells context", context_result, reactivity_result)
+        if context_result.get("status") != "success":
+            print(f"[agent] Failed to get notebook context: {context_result}")
+            return "Latch Plots is unable to provide context for this notebook due to an unknown error. Please inform the user that Latch Plots is having an issue and they should report it to support."
+
+        reactivity_available: bool = reactivity_result.get("status") == "success"
+        if not reactivity_available:
+            print(f"[agent] Reactivity summary unavailable (cell likely running): {reactivity_result.get('error', 'unknown')}")
 
         context = context_result.get("context", {})
         self.latest_notebook_context = context
@@ -381,11 +386,15 @@ class AgentHarness:
             if tf_id is None:
                 continue
 
+            cell_lines.append("\nREACTIVITY:")
+
+            if not reactivity_available:
+                cell_lines.append("- Not available: kernel busy (cell likely executing).")
+                continue
+
             cell_reactivity: dict[str, dict[str, Iterable[str]]] = reactivity_result.get("cell_reactivity", {})
             reactivity_meta = cell_reactivity.get(str(tf_id))
             is_reactivity_ready = status in reactivity_ready_statuses
-
-            cell_lines.append("\nREACTIVITY:")
 
             if not is_reactivity_ready:
                 cell_lines.append("- Not available: run this cell to establish reactive dependencies.")
@@ -523,7 +532,7 @@ class AgentHarness:
 
         print("[agent] Cleared running state")
 
-    async def atomic_operation(self, action: str, params: dict | None = None) -> dict:
+    async def atomic_operation(self, action: str, params: dict | None = None, timeout: float = 10.0) -> dict:
         if params is None:
             params: dict = {}
 
@@ -546,7 +555,7 @@ class AgentHarness:
             return {"status": "error", "error": f"Send failed: {e!s}"}
 
         try:
-            return await asyncio.wait_for(response_future, timeout=10.0)
+            return await asyncio.wait_for(response_future, timeout=timeout)
         except asyncio.CancelledError:
             print(f"[agent] Operation cancelled (session reinitialized): action={action}, tx_id={tx_id}")
             return {"status": "error", "error": f"OPERATION FAILED: '{action}' was interrupted because the session was reinitialized. This operation did NOT complete. You must retry or inform the user."}
