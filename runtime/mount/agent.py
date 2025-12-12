@@ -146,32 +146,39 @@ class AgentHarness:
                 if block_type == "tool_result":
                     result_str = block.get("content", "{}")
                     result = json.loads(result_str)
-
                     tool_name = result.get("tool_name")
-                    if tool_name in {"read_file", "grep"}:
-                        truncated_blocks.append(block)
-                        continue
 
-                    truncated_result = {
-                        "tool_name": tool_name,
-                        "success": result.get("success"),
-                        "summary": result.get("summary"),
-                    }
+                    if tool_name in {"create_cell", "create_markdown_cell"}:
+                        result = {k: v for k, v in result.items() if k != "code"}
+                    elif tool_name == "edit_cell":
+                        result = {k: v for k, v in result.items() if k not in {"code", "original_code"}}
+                    elif tool_name == "shell_command":
+                        result = {k: v for k, v in result.items() if k != "output"}
+
                     truncated_blocks.append({
                         "type": "tool_result",
                         "tool_use_id": block.get("tool_use_id"),
-                        "content": json.dumps(truncated_result)
+                        "content": json.dumps(result)
                     })
                     continue
 
                 if block_type == "tool_use":
-                    truncated_block = block.copy()
-                    if "input" in truncated_block:
-                        inp = truncated_block["input"]
-                        if isinstance(inp, dict) and "code" in inp and isinstance(inp["code"], str) and len(inp["code"]) > 1000:
-                            truncated_block["input"] = {**inp, "code": inp["code"][:200] + "...[truncated]"}
+                    tool_name = block.get("name")
+                    inp = block.get("input")
+                    truncated_inp = inp
 
-                    truncated_blocks.append(truncated_block)
+                    if isinstance(inp, dict) and tool_name is not None:
+                        if tool_name in {"create_cell", "create_markdown_cell"}:
+                            truncated_inp = {k: v for k, v in inp.items() if k != "code"}
+                        elif tool_name == "edit_cell":
+                            truncated_inp = {k: v for k, v in inp.items() if k != "new_code"}
+
+                    truncated_blocks.append({
+                        "type": "tool_use",
+                        "id": block.get("id"),
+                        "name": tool_name,
+                        "input": truncated_inp,
+                    })
                     continue
 
                 if block_type == "text":
