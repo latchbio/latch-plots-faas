@@ -232,9 +232,13 @@ class Context:
         data[0]["y"] = df[:, 1]
 
         if color_by is not None:
-            xs = None
+            if viewport_mask is None:
+                idx = self.index
+            else:
+                idx = np.where(self.index_entry.mask & viewport_mask)[0]
+
             if color_by[0] == "obs" and color_by[1] in self.adata.obs:
-                xs = self.adata.obs[color_by[1]]
+                xs = self.adata.obs[color_by[1]][idx]
 
                 if pd.api.types.is_numeric_dtype(xs.dtype):
                     data[0].setdefault("marker", {})["color"] = xs
@@ -257,11 +261,6 @@ class Context:
                         palette[color_idx_map[x]] for x in xs
                     ]
             elif color_by[0] == "var":
-                if viewport_mask is None:
-                    idx = self.index
-                else:
-                    idx = np.where(self.index_entry.mask & viewport_mask)[0]
-
                 xs = self.get_vars_color_values(color_by[1], index=idx)
 
                 data[0].setdefault("marker", {})["color"] = xs
