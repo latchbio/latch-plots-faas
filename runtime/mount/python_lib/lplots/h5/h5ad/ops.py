@@ -187,9 +187,12 @@ class Context:
         *,
         obsm_key: str,
         data: list[dict[str, Any]],
-        layout: object,
+        layout: dict[str, Any],
         color_palettes: ColorPalettes,
         color_by: tuple[Literal["obs"], str] | tuple[Literal["var"], list[str]] | None,
+        scale: float,
+        width: int,
+        height: int,
     ) -> bytes:
         import plotly.graph_objects as go
 
@@ -213,7 +216,7 @@ class Context:
                     palette = color_palettes[color_scheme_type]
 
                     color_idx_map: dict[int, int] = {}
-                    values, counts = np.unique_counts(xs)
+                    values, counts = np.unique(xs, return_counts=True, sorted=True)
                     for i, x in enumerate(values[np.argsort(-counts)]):
                         color_idx_map[x] = i % len(palette)
 
@@ -226,8 +229,9 @@ class Context:
                 xs = self.get_vars_color_values(color_by[1])
                 data[0].setdefault("marker", {})["color"] = xs
 
+        layout.setdefault("template", {})
         fig = go.Figure(data=data, layout=layout)
-        return fig.to_image(format="png")
+        return fig.to_image(format="png", scale=scale, width=width, height=height)
 
 
 rng = np.random.default_rng()

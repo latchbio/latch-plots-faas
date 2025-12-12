@@ -519,7 +519,16 @@ async def process_h5ad_request(
         case "export_png":
             # color_palettes: {"categorical": list[str], "continuous": list[str]}
             # color_by: {"type": "obs", "key": str} | {"type": "var", "keys": list[str]} | None
-            for k in ["obsm_key", "data", "layout", "color_palettes", "color_by"]:
+            for k in [
+                "obsm_key",
+                "data",
+                "layout",
+                "color_palettes",
+                "color_by",
+                "scale",
+                "width",
+                "height",
+            ]:
                 if k in msg:
                     continue
 
@@ -539,6 +548,9 @@ async def process_h5ad_request(
                 )
                 if color_by is not None
                 else None,
+                scale=msg["scale"],
+                width=msg["width"],
+                height=msg["height"],
             )
             return make_response(
                 data={"image": f"data:image/png;base64,{quote_plus(b64encode(img))}"}
