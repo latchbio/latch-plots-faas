@@ -1691,7 +1691,7 @@ class AgentHarness:
 
         self.tools.append({
             "name": "create_tab",
-            "description": "Create a new tab marker cell at specified position to organize cells. IMPORTANT: This inserts a new cell, shifting all subsequent cell positions down by 1. Always call refresh_cells_context after creating a tab to get updated positions before creating cells in that tab.",
+            "description": "Create a new tab marker cell at specified position to organize cells. IMPORTANT: This inserts a new cell, shifting all subsequent cell positions down by 1.",
             "input_schema": {
                 "type": "object",
                 "properties": {
@@ -3298,7 +3298,7 @@ class AgentHarness:
                 return file_path.read_text()
             return f"# {filename}\n\nFile not yet generated."
 
-        cells_content = read_context_file("cells.md")
+        cells_content = await self.refresh_cells_context()
 
         def build_tree(path: Path, prefix: str = "") -> list[str]:
             lines = []
