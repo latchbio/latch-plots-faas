@@ -517,7 +517,7 @@ async def process_h5ad_request(
                 "scale",
                 "width",
                 "height",
-                "viewport"
+                "viewport",
             ]:
                 if k in msg:
                     continue
@@ -541,7 +541,7 @@ async def process_h5ad_request(
                 scale=msg["scale"],
                 width=msg["width"],
                 height=msg["height"],
-                viewport=viewport
+                viewport=msg["viewport"],
             )
             return make_response(
                 data={"image": f"data:image/png;base64,{quote_plus(b64encode(img))}"}
