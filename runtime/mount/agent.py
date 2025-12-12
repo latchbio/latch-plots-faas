@@ -2866,7 +2866,7 @@ class AgentHarness:
     async def _run_quick_inference(self, prompt: str) -> str:
         messages = [{
             "role": "user",
-            "content": prompt
+            "content": prompt + "\n\nDo not use any markdown formatting."
         }]
 
         try:
