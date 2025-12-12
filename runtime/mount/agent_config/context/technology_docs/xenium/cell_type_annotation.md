@@ -1,99 +1,54 @@
-# Cell Type Annotation (CellGuide-Based)
+# Step 3 — Cell Type Annotation (CellGuide-Based)
 
+<goal>
+Assign biologically meaningful cell-type labels to clusters using DGE markers and CellGuide, then (optionally) map them into a controlled vocabulary.
+</goal>
+
+<method>
 This step assigns cell types to clusters by:
 1. Using precomputed **cluster-level marker genes** (from DGE).
 2. Matching markers to **CellGuide**.
-3. Writing the final labels back into `adata.obs`.
+3. Aggregating evidence per cluster with helper functions from a shared library.
+4. Writing the final labels (or raw summaries) back into `adata.obs` / `adata.uns`.
+
+---
+
+## 0. Setup (import shared helpers)
+
+```python
+sys.path.insert(0, "/opt/latch/plots-faas/runtime/mount/agent_config/lib")
+
+from xenium.xenium_cell_type import (
+    load_json_lpath,
+    load_vocab_index,
+    load_cell_type_vocab_config,
+    lookup_cellguide_celltypes,
+    summarize_clusters,
+)
+````
 
 ---
 
 ## 1. High-Level Flow
 
 1. Pick the **cluster column** in `adata.obs` and the matching **DGE key** in `adata.uns`.
-2. Convert the DGE result to a tidy DataFrame of markers per cluster.
-3. For each cluster, take the top markers and query CellGuide.
-4. Aggregate evidence across markers and pick the most supported cell type(s).
-5. Store cell-type labels in a new column in `adata.obs`.
+2. Use `scanpy.get.rank_genes_groups_df` to obtain a tidy marker table.
+3. Use `summarize_clusters(...)` to aggregate CellGuide evidence per cluster.
+4. Optionally load a vocab config via `load_vocab_index` / `load_cell_type_vocab_config`.
+5. Write final labels to `adata.obs["cell_type"]` and a structured summary to `adata.uns["cell_type_annotation"]`.
 
 ---
 
 ## 2. CellGuide Databases
 
-CellGuide provides curated mappings between genes, cell types, tissues, and organisms. We use:
+CellGuide provides curated mappings between genes, cell types, tissues, and organisms. The library helpers expect / use:
 
 - A **per-gene** database to ask “which cell types does this gene mark?”
 - A **per-cell-type** database to ask “which genes mark this cell type?”
 - A **tissue metadata** file to constrain queries to the correct organism/tissue.
+- A **central vocab index** + per-tissue vocab configs for controlled labels.
 
-### 2.1 Per-Gene Database
-
-**File:** `cellguide_marker_gene_database_per_gene.json`
-Answers: *“Which cell types is this gene a marker for?”*
-
-```python
-marker_db_per_gene["Gad1"]["Mus musculus"]["brain"]
-```
-
-- Used for automated annotation (main engine of this step).
-- Cell types are ordered by marker strength per gene.
-
-### 2.2 Per-Cell-Type Database
-
-**File:** `cellguide_marker_gene_database_per_celltype.json`
-Answers: *“What are the marker genes for this cell type?”*
-
-```python
-marker_db_per_celltype["Mus musculus"]["brain"]["inhibitory neuron"]
-```
-
-- Used for validation, manual review, and marker rationales.
-
-### 2.3 Tissue Options
-
-**File:** `tissues_per_organism.json`
-Answers: *“What tissues are available for this organism?”*
-
-```python
-tissues_per_organism["Mus musculus"]
-```
-
-- Used for validating organism/tissue choices and populating UI dropdowns.
-
-### 2.4 Loading from Latch
-
-```python
-import json
-from latch.ldata.path import LPath
-from pathlib import Path
-
-def load_json_lpath(uri: str):
-    lp = LPath(uri)
-    local = Path(f"{lp.node_id()}.json")
-    lp.download(local, cache=True)
-    with local.open() as f:
-        return json.load(f)
-
-marker_db_per_gene = load_json_lpath(
-    "latch:///cellguide_marker_gene_database_per_gene.json"
-)
-marker_db_per_celltype = load_json_lpath(
-    "latch:///cellguide_marker_gene_database_per_celltype.json"
-)
-tissues_per_organism = load_json_lpath(
-    "latch:///tissues_per_organism.json"
-)
-```
-
----
-
-## 2.5 Central Cell-Type Vocabulary Configs
-
-We keep **one vocab config per organism+tissue(+panel)** and a **central index** that points to them.
-
-- The **central index** is what the agent / notebook loads first.
-- The **per-tissue vocab configs** (for example brain and kidney) live as separate JSONs in the same docs directory.
-
-A typical layout:
+Typical layout on disk:
 
 ```text
 /opt/latch/plots-faas/runtime/mount/agent_config/context/technology_docs/
@@ -104,107 +59,18 @@ A typical layout:
     cell_type_vocab_mus_musculus_kidney.json
 ```
 
-### 2.5.1 Central index structure
+Helper functions:
 
-The central index file `cell_type_vocab_index.json` lists all available vocab configs:
-
-```json
-{
-  "configs": [
-    {
-      "organism": "Mus musculus",
-      "tissue": "brain",
-      "panel_name": "xenium_full_brain",
-      "path": "cell_type_vocab_mus_musculus_brain.json"
-    }
-  ]
-}
-```
-
-Each entry:
-
-- `organism`: e.g. `"Mus musculus"`
-- `tissue`: e.g. `"brain"`, `"kidney"`
-- `panel_name`: panel or dataset name (optional)
-- `path`: relative filename of the per-tissue vocab JSON in the docs directory
-
-> `panel_name` is optional and primarily used by the agent to disambiguate between multiple vocab configs for the same organism and tissue. Users are not expected to know or set this.
-
-### 2.5.2 Loading the central index and vocab configs (local files)
-
-```python
-import json
-from pathlib import Path
-
-# Relative path from context directory
-DOCS_DIR = Path(__file__).resolve().parent
-VOCAB_INDEX_PATH = DOCS_DIR / "cell_type_vocab_index.json"
-
-
-def load_vocab_index() -> dict:
-    with VOCAB_INDEX_PATH.open() as f:
-        return json.load(f)
-
-
-def load_cell_type_vocab_config(
-    organism: str,
-    tissue: str,
-    panel_name: str | None = None,
-) -> dict:
-    """
-    Look up the vocab config for a given (organism, tissue[, panel_name])
-    using the central index, then load and return that JSON.
-
-    If panel_name is None, use the first config that matches (organism, tissue).
-    """
-    index = load_vocab_index()
-
-    # First try exact triple match, if panel_name is provided.
-    if panel_name is not None:
-        for cfg in index.get("configs", []):
-            if (
-                cfg.get("organism") == organism
-                and cfg.get("tissue") == tissue
-                and cfg.get("panel_name") == panel_name
-            ):
-                vocab_path = DOCS_DIR / cfg["path"]
-                with vocab_path.open() as f:
-                    return json.load(f)
-
-    # Fallback: any config matching organism + tissue.
-    for cfg in index.get("configs", []):
-        if (
-            cfg.get("organism") == organism
-            and cfg.get("tissue") == tissue
-        ):
-            vocab_path = DOCS_DIR / cfg["path"]
-            with vocab_path.open() as f:
-                return json.load(f)
-
-    raise ValueError(
-        f"No vocab config found for organism={organism}, tissue={tissue}, "
-        f"panel_name={panel_name!r}"
-    )
-
-```
-
-### 2.5.3 Usage in the annotation flow
-
-After summarizing clusters with CellGuide, load the appropriate vocab config:
-
-```python
-vocab_config = load_cell_type_vocab_config(
-    organism="Mus musculus",
-    tissue="brain",
-)
-```
-
-The returned `vocab_config` contains:
-
-- `allowed_vocab`: controlled labels for that panel
-- `mapping_rules`: regex rules to map raw CellGuide names into the controlled vocabulary
-
-These fields are then used downstream to convert raw CellGuide labels into the final `adata.obs["cell_type"]` labels.
+-`load_json_lpath(uri: str)`
+  Download + parse JSON from an `latch:///...` URI.
+- `load_vocab_index()`
+  Load `cell_type_vocab_index.json` from the docs directory.
+- `load_cell_type_vocab_config(organism, tissue, panel_name=None)`
+  Use the central index to find and load the correct vocab config.
+- `lookup_cellguide_celltypes(genes, organism, tissue, db_path)`
+  Map a list of genes → CellGuide cell types for the given organism+tissue.
+- `summarize_clusters(ranked_df, db_path, organism, tissue, ...)`
+  Use top markers per cluster + CellGuide to produce per-cluster summaries.
 
 ---
 
@@ -216,30 +82,30 @@ Your `AnnData` must include:
   A column in `adata.obs` whose name follows
   `clustering_{clustering_algorithm}_{clustering_resolution}`
   Examples:
+
   - `clustering_leiden_0.4`
   - `clustering_louvain_1.0`
 
 - **Expression matrix**
-  Expression values available in `adata.X` or an appropriate `adata.layers[...]`
+  Expression values in `adata.X` or an appropriate `adata.layers[...]`
   (already used for DGE upstream).
+
+- **DGE results**
+  A `rank_genes_groups` entry in `adata.uns`, e.g.
+  `rank_genes_groups_clustering_leiden_0.4`.
 
 Additional inputs:
 
-- **CellGuide per-gene database**
-  `db[gene][organism][tissue] -> list of candidate cell-type names`
-- **Organism and tissue**, for example:
+- Organism + tissue strings, e.g.:
+
   - `organism = "Mus musculus"`
   - `tissue   = "brain"`
 
-> Tip: Always inspect `adata.obs.columns` and `adata.uns.keys()` before assuming cluster or DGE key names.
+> Tip: Inspect `adata.obs.columns` and `adata.uns.keys()` before assuming names.
 
 ---
 
 ## 4. Select Clustering and Retrieve Marker Genes
-
-1. Choose a clustering column in `adata.obs` whose name starts with `clustering_`.
-2. Choose the matching DGE key in `adata.uns` whose name starts with `rank_genes_groups_clustering_`.
-3. Extract marker genes per cluster into a DataFrame.
 
 ```python
 import scanpy as sc
@@ -257,142 +123,88 @@ ranked_df = sc.get.rank_genes_groups_df(
 )
 ```
 
+`ranked_df` is a long-form DataFrame with columns like:
+
+- `group` (cluster ID)
+- `names` (gene)
+- `scores`, `pvals_adj`, etc.
+
 ---
 
-## 5. Lookup Cell Types in CellGuide
+## 5. Lookup Cell Types & Summarize Clusters (via library)
 
-For a list of genes, return CellGuide cell types for the given organism/tissue.
-
-This step operates in **raw CellGuide label space** only. The final labels may
-later be normalized into a controlled vocabulary using the vocab configs
-described in Section 2.5 (if available).
+### 5.1 Load CellGuide marker database
 
 ```python
-import json
-from pathlib import Path
-
-def lookup_cellguide_celltypes(genes, organism, tissue, db_path):
-    db_path = Path(db_path)
-    with db_path.open() as f:
-        db = json.load(f)
-
-    results = {}
-    for g in genes:
-        org_entry = db.get(g, {}).get(organism, {})
-        cts = org_entry.get(tissue) or org_entry.get("All Tissues")
-        if cts:
-            results[g] = cts
-    return results
+db_path = "latch:///cellguide_marker_gene_database_per_gene.json"
+marker_db = load_json_lpath(db_path)
 ```
 
-## 6. Summarize Cluster Annotations
-
-Use the top markers per cluster to vote on the most likely cell type(s).
+### 5.2 Summarize clusters
 
 ```python
-from collections import Counter
-import json
-from pathlib import Path
-
-def summarize_clusters(
-    ranked_df,
-    db_path,
+cluster_summary = summarize_clusters(
+    ranked_df=ranked_df,
+    db_path=db_path,
     organism="Mus musculus",
     tissue="brain",
     min_markers=3,
     n_core=10,
-):
-    db_path = Path(db_path)
-    with db_path.open() as f:
-        db = json.load(f)
-
-    def _lookup_cellguide_celltypes(genes):
-        results = {}
-        for g in genes:
-            org_entry = db.get(g, {}).get(organism, {})
-            cts = org_entry.get(tissue) or org_entry.get("All Tissues")
-            if cts:
-                results[g] = cts
-        return results
-
-    summary = {}
-
-    # Iterate over clusters that actually have DGE results
-    for c in sorted(ranked_df["group"].unique()):
-        g = ranked_df[ranked_df["group"] == c]
-        if g.empty:
-            summary[c] = {
-                "core_markers": [],
-                "most_common_cell_type": [],
-                "cell_type_counts": {},
-                "markers_for_most_common_cell_type": [],
-            }
-            continue
-
-        # Use top n_core markers per cluster
-        g = g.sort_values("rank")
-        core_markers = g["names"].head(n_core).tolist()
-
-        lookup = _lookup_cellguide_celltypes(core_markers)
-
-        # If none of the core markers exist in CellGuide
-        if not lookup:
-            summary[c] = {
-                "core_markers": core_markers,
-                "most_common_cell_type": [],
-                "cell_type_counts": {},
-                "markers_for_most_common_cell_type": [],
-            }
-            continue
-
-        # Count how many core markers support each cell type
-        counter = Counter(ct for v in lookup.values() for ct in v)
-
-        # Only consider cell types supported by at least min_markers core markers
-        eligible = {ct: n for ct, n in counter.items() if n >= min_markers}
-        if not eligible:
-            summary[c] = {
-                "core_markers": core_markers,
-                "most_common_cell_type": [],
-                "cell_type_counts": dict(counter),  # keep raw counts for debugging
-                "markers_for_most_common_cell_type": [],
-            }
-            continue
-
-        max_support = max(eligible.values())
-        top_cts = [ct for ct, n in eligible.items() if n == max_support]
-
-        # Markers that support at least one of the top cell types
-        top_markers = [
-            gene
-            for gene, cts in lookup.items()
-            if any(ct in top_cts for ct in cts)
-        ]
-
-        summary[c] = {
-            "core_markers": core_markers,
-            "most_common_cell_type": top_cts,
-            "cell_type_counts": dict(counter),
-            "markers_for_most_common_cell_type": top_markers,
-        }
-
-    return summary
+)
 ```
 
-**Per-cluster outputs:**
+`cluster_summary` (dict keyed by cluster ID) typically contains:
 
 - `core_markers`: Top marker genes used for CellGuide matching.
-- `most_common_cell_type`: Predicted identity as a list to allow ties or mixed signatures.
-- `cell_type_counts`: Number of core markers that support each candidate cell type.
-- `markers_for_most_common_cell_type`: Subset of core markers that support at least one top cell type.
+- `most_common_cell_type`: List of candidate cell types supported by ≥ min markers.
+- `cell_type_counts`: Number of core markers supporting each candidate cell type.
+- `markers_for_most_common_cell_type`: Subset of markers supporting the top call(s).
 
-These raw CellGuide labels are the **input** to the final labeling step described in cell_type_annotation.md (mapping to `allowed_vocab` when a vocab config is available, or using cleaned CellGuide names otherwise).
+Store this in the AnnData object:
+
+```python
+adata.uns["cell_type_annotation_raw"] = cluster_summary
+```
 
 ---
 
-## Best Practices and Troubleshooting
+## 6. Apply Controlled Vocabulary
 
-| Issue | Likely Cause | Recommendation |
-|------|--------------|----------------|
-| No CellGuide matches | Tissue or organism mismatch | Verify correct organism/tissue keys |
-| Missing cluster column | Dataset not clustered | Run UMAP + Leiden/Louvain before annotation |
+If a vocabulary config exists for this organism+tissue, load it and map raw CellGuide names → controlled labels.
+
+Use `load_vocab_index` and `load_cell_type_vocab_config` to load the appropriate vocab config (for example, for `"Mus musculus"` brain). The returned `vocab_config` contains:
+
+- `allowed_vocab`: the controlled set of labels for that panel.
+- `mapping_rules`: regex or string rules to map raw CellGuide names into the controlled vocabulary.
+
+These fields are then used **downstream** to convert the raw `most_common_cell_type` entries in `cluster_summary` into final labels for `adata.obs["cell_type"]`. The full per-cluster summary and the vocab config should be stored in `adata.uns["cell_type_annotation"]` for transparency and reproducibility.
+
+---
+
+</method>
+
+<workflows>
+</workflows>
+
+<library>
+- `scanpy`
+- `json`
+- `pathlib`
+- `xenium_cell_type` (helpers:
+  - `load_json_lpath`
+  - `load_vocab_index`
+  - `load_cell_type_vocab_config`
+  - `lookup_cellguide_celltypes`
+  - `summarize_clusters`
+  )
+- CellGuide marker databases and vocab JSONs under
+  `/opt/latch/plots-faas/runtime/mount/agent_config/context/technology_docs/xenium/`
+</library>
+
+<self_eval_criteria>
+
+- A valid clustering column and matching DGE key were found and used.
+- `cluster_summary` contains interpretable `most_common_cell_type` entries and supporting `core_markers`.
+- If a vocab config is available, final labels in `adata.obs["cell_type"]` are restricted to `allowed_vocab`.
+- Spatial and UMAP views of `adata.obs["cell_type"]` show biologically plausible patterns without placeholder categories.
+</self_eval_criteria>
