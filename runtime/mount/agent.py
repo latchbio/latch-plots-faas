@@ -161,6 +161,8 @@ class AgentHarness:
                             result["stdout"] = "...[truncated]\n" + result["stdout"][-1500:]
                         if "stderr" in result and isinstance(result.get("stderr"), str) and len(result["stderr"]) > 1500:
                             result["stderr"] = "...[truncated]\n" + result["stderr"][-1500:]
+                        if "exception" in result and isinstance(result.get("exception"), str) and len(result["exception"]) > 1500:
+                            result["exception"] = "...[truncated]\n" + result["exception"][-1500:]
 
                     truncated_blocks.append({
                         "type": "tool_result",
