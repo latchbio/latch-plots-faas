@@ -1445,6 +1445,7 @@ class AgentHarness:
                     "success": True,
                     "summary": f"Highlighted UI element: {keyword}",
                     "keyword": keyword,
+                    "widget_key": widget_key,
                 }
 
             return {
