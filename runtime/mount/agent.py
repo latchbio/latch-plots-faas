@@ -142,6 +142,73 @@ class AgentHarness:
                 block_type = block.get("type")
 
                 if block_type in {"thinking", "redacted_thinking"}:
+                    truncated_blocks.append(block)
+                    continue
+
+                if block_type == "tool_result":
+                    result_str = block.get("content", "{}")
+                    result = json.loads(result_str)
+
+                    tool_name = result.get("tool_name")
+                    if tool_name in {"read_file", "grep"}:
+                        truncated_blocks.append(block)
+                        continue
+
+                    truncated_result = {
+                        "tool_name": tool_name,
+                        "success": result.get("success"),
+                        "summary": result.get("summary"),
+                    }
+                    truncated_blocks.append({
+                        "type": "tool_result",
+                        "tool_use_id": block.get("tool_use_id"),
+                        "content": json.dumps(truncated_result)
+                    })
+                    continue
+
+                if block_type == "tool_use":
+                    truncated_block = block.copy()
+                    if "input" in truncated_block:
+                        inp = truncated_block["input"]
+                        if isinstance(inp, dict) and "code" in inp and isinstance(inp["code"], str) and len(inp["code"]) > 1000:
+                            truncated_block["input"] = {**inp, "code": inp["code"][:200] + "...[truncated]"}
+
+                    truncated_blocks.append(truncated_block)
+                    continue
+
+                if block_type == "text":
+                    text = block.get("text", "")
+                    if len(text) > 1000:
+                        truncated_blocks.append({"type": "text", "text": text[:1000] + "...[truncated]"})
+                    else:
+                        truncated_blocks.append(block)
+                    continue
+
+                truncated_blocks.append(block)
+
+            return {"role": msg["role"], "content": truncated_blocks}
+
+        return msg
+
+    @staticmethod
+    def _truncate_message_content_v2(msg: MessageParam) -> MessageParam:
+        content = msg.get("content")
+
+        if isinstance(content, str):
+            if len(content) > 500:
+                return {"role": msg["role"], "content": content[:500] + "...[truncated]"}
+            return msg
+
+        if isinstance(content, list):
+            truncated_blocks = []
+            for block in content:
+                if not isinstance(block, dict):
+                    truncated_blocks.append(block)
+                    continue
+
+                block_type = block.get("type")
+
+                if block_type in {"thinking", "redacted_thinking"}:
                     continue
 
                 if block_type == "tool_result":
