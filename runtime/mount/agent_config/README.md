@@ -22,9 +22,7 @@ agent_config/
 │   │       ├── custom-plots.mdx
 │   │       ├── reactivity.mdx
 │   │       └── widget-types.mdx
-│   ├── agent_scratch/            # Agent-created notes and state
-│   └── notebook_context/
-│       └── cells.md              # Populated by the agent via refresh_cells_context
+│   └── agent_scratch/            # Agent-created notes and state
 └── README.md                     # This file
 ```
 
