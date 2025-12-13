@@ -292,7 +292,7 @@ class AgentHarness:
 
                 template_version_id = item.get("template_version_id")
                 if role == "user" and template_version_id is not None:
-                    checkpoint_content = f"[auto generated metadata] template_version_id={template_version_id}"
+                    checkpoint_content = f"[auto-generated metadata] template_version_id={template_version_id}"
                     anthropic_messages.append({"role": "user", "content": checkpoint_content})
 
                 if role in {"user", "assistant"} and (isinstance(content, (str, list))):
