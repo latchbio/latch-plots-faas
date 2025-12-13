@@ -3,7 +3,9 @@ Normalize data.
 </goal>
 
 <method>
-Provide option between *log1p* and *total count scaling*. Apply *log1p* by default on QC-filtered dataset.
+'Normalization' two sequential steps:
+- Scale total counts per bead to 10k
+- Use log+1 transform
 </method>
 
 <workflows>
@@ -13,4 +15,5 @@ Provide option between *log1p* and *total count scaling*. Apply *log1p* by defau
 </library>
 
 <self_eval_criteria>
+- Check that counts were first scaled to 10k then log+1 transformed.
 </self_eval_criteria>

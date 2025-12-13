@@ -3,9 +3,20 @@ Identify highly variable genes
 </goal>
 
 <method>
-- Use sc.pp.highly_variable_genes(..., subset=True) to subset the data to the selected HVGs.
-- Allow the user to specify the number of HVGs to retain (default: 2,000 genes).
-- Always generate diagnostic plots using Scanpy for visualization.
+
+- use raw counts + seurat_v3
+- do not scale before (we care about spatial structure more than rare genes)
+- default to 2k genes
+
+```
+sc.pp.highly_variable_genes(
+    adata_filtered,
+    n_top_genes=2000,
+    flavor='seurat_v3',
+    layer='raw_counts',
+    subset=False
+)
+```
 </method>
 
 <workflows>
@@ -15,4 +26,5 @@ Identify highly variable genes
 </library>
 
 <self_eval_criteria>
+- ensure biologically meaningful genes, dependent on your tissue / disease context, show up immediately in the HVGs ranked by variance
 </self_eval_criteria>

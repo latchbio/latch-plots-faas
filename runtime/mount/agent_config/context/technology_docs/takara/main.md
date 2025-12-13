@@ -42,6 +42,7 @@ Finally, you need to make sure to wait for the workflow to complete before proce
 ---
 
 <pre_analysis_questions>
+- What tissue and disease conditions describe your data?
 - Is the kit type Seeker 3x3, Seeker 10x10 or Trekker?
 - Does the H5AD have one or multiple samples?
 </pre_analysis_questions>
