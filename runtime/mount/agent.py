@@ -1600,7 +1600,7 @@ class AgentHarness:
 
         self.tools.append({
             "name": "restore_checkpoint",
-            "description": "Restore this notebook to one of its own previously-created checkpoints (template_version_id). Only call when the user explicitly asks to restore/revert/rollback/undo the notebook state. Never for requests to reproduce an analysis, rerun/regenerate, or create notebook cells. Confirm before restoring.",
+            "description": "Restore this notebook to one of its own previously-created checkpoints (template_version_id). Only call when the user explicitly asks to restore/revert/rollback/undo the notebook state. Confirm before restoring.",
             "input_schema": {
                 "type": "object",
                 "properties": {
