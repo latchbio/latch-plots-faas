@@ -292,7 +292,7 @@ class AgentHarness:
 
                 template_version_id = item.get("template_version_id")
                 if role == "user" and template_version_id is not None:
-                    checkpoint_content = f"Checkpoint created with template_version_id={template_version_id}"
+                    checkpoint_content = f"[auto generated metadata] template_version_id={template_version_id}"
                     anthropic_messages.append({"role": "user", "content": checkpoint_content})
 
                 if role in {"user", "assistant"} and (isinstance(content, (str, list))):
@@ -1600,7 +1600,7 @@ class AgentHarness:
 
         self.tools.append({
             "name": "restore_checkpoint",
-            "description": "Reset an existing notebook to a specific template version checkpoint that this notebook previously created. Do not call this on the first turn. Require confirmation from the user before restoring.",
+            "description": "Restore this notebook to one of its own previously-created checkpoints (template_version_id). Only call when the user explicitly asks to restore/revert/rollback/undo the notebook state. Never for requests to reproduce an analysis, rerun/regenerate, or create notebook cells. Confirm before restoring.",
             "input_schema": {
                 "type": "object",
                 "properties": {
