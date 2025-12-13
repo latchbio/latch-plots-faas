@@ -1429,6 +1429,7 @@ class AgentHarness:
         async def smart_ui_spotlight(args: dict) -> dict:
             keyword = args.get("keyword")
             widget_key = args.get("widget_key")
+            widget_label = args.get("widget_label")
 
             print(f"[tool] smart_ui_spotlight keyword={keyword}, widget_key={widget_key}")
 
@@ -1440,13 +1441,18 @@ class AgentHarness:
 
             result = await self.atomic_operation("smart_ui_spotlight", params)
             if result.get("status") == "success":
-                return {
+                res = {
                     "tool_name": "smart_ui_spotlight",
                     "success": True,
                     "summary": f"Highlighted UI element: {keyword}",
                     "keyword": keyword,
-                    "widget_key": widget_key,
                 }
+
+                if widget_key is not None:
+                    res["widget_key"] = widget_key
+                if widget_label is not None:
+                    res["widget_label"] = widget_label
+                return res
 
             return {
                 "tool_name": "smart_ui_spotlight",
