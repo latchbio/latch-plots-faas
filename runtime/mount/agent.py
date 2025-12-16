@@ -3179,6 +3179,20 @@ class AgentHarness:
                                     image_data: str = result.get("image", "")
                                     image_data = image_data.removeprefix("data:image/png;base64,")
 
+                                    # Write image to disk for review
+                                    try:
+                                        import base64
+                                        from pathlib import Path
+                                        review_dir = Path("/tmp/images_to_review")
+                                        review_dir.mkdir(parents=True, exist_ok=True)
+                                        timestamp = int(time.time() * 1000)
+                                        widget_key = result.get("widget_key", "unknown").replace("/", "_")
+                                        image_path = review_dir / f"{timestamp}_{widget_key}.png"
+                                        image_path.write_bytes(base64.b64decode(image_data))
+                                        print(f"[agent] Saved widget image to {image_path}")
+                                    except Exception as e:
+                                        print(f"[agent] Failed to save widget image: {e}")
+
                                     result_without_image = {k: v for k, v in result.items() if k != "image"}
 
                                     tool_results.append({
