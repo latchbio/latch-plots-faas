@@ -703,6 +703,23 @@ class AgentHarness:
                 },
             )
 
+        elif msg_type == "seed_plan_from_history":
+            plan_path = Path(__file__).parent / "agent_config/context/notebook_context/plan.json"
+
+            if not plan_path.exists():
+                plan = msg.get("plan", {"goal": "", "steps": []})
+                with open(plan_path, "w") as f:
+                    json.dump(plan, f, indent=2)
+                print(f"[agent] Seeded plan from history: {plan.get('goal', '')}")
+
+            with open(plan_path) as f:
+                current_plan = json.load(f)
+
+            await self.send({
+                "type": "agent_plan_update",
+                "plan": current_plan,
+            })
+
     async def _complete_turn(self) -> None:
         if self.current_request_id is None:
             return
@@ -1115,6 +1132,54 @@ class AgentHarness:
                 "success": False,
             }
 
+        def update_plan(args: dict) -> dict:
+            try:
+                steps = args.get("steps", [])
+                is_new = args.get("new", False)
+                overview = args.get("overview", "")
+
+                plan_path = Path(__file__).parent / "agent_config/context/notebook_context/plan.json"
+
+                if is_new:
+                    plan = {"goal": overview, "steps": steps}
+                else:
+                    if plan_path.exists():
+                        with open(plan_path) as f:
+                            plan = json.load(f)
+                    else:
+                        plan = {"goal": "", "steps": []}
+
+                    existing = {s["id"]: s for s in plan["steps"]}
+                    for step in steps:
+                        step_id = step.get("id")
+                        if step_id:
+                            existing[step_id] = {**existing.get(step_id, {}), **step}
+                    plan["steps"] = list(existing.values())
+
+                    if overview:
+                        plan["goal"] = overview
+
+                with open(plan_path, "w") as f:
+                    json.dump(plan, f, indent=2)
+
+                print(f"[tool] update_plan: new={is_new}, overview={overview}, steps={len(steps)}")
+                for step in steps:
+                    print(f"    - [{step.get('status')}] {step.get('id')}: {step.get('description')}")
+
+                return {
+                    "tool_name": "update_plan",
+                    "success": True,
+                    "summary": f"Plan updated: {overview}" if overview else "Plan updated",
+                }
+            except Exception as e:
+                print(f"[tool] update_plan error: {e}")
+                traceback.print_exc()
+                return {
+                    "tool_name": "update_plan",
+                    "success": False,
+                    "summary": f"Error updating plan: {e!s}",
+                }
+
         def submit_response(args: dict) -> dict:
             try:
                 summary = args.get("summary")
@@ -1136,19 +1201,10 @@ class AgentHarness:
 
                 should_continue = args.get("continue", False)
 
-                plan_items = args.get("plan", [])
-                plan_diff_items = args.get("plan_diff", [])
                 expected_widgets = args.get("expected_widgets", [])
 
                 print("[tool] submit_response called with:")
                 print(f"  - next_status: {next_status}")
-                print(f"  - plan: {len(plan_items)} items")
-                print(f"  - plan_update_overview: {args.get('plan_update_overview')}")
-                for item in plan_items:
-                    print(f"    - [{item.get('status')}] {item.get('id')}: {item.get('description')}")
-                print(f"  - plan_diff: {len(plan_diff_items)} items")
-                for diff in plan_diff_items:
-                    print(f"    - [{diff.get('action')}] {diff.get('id')}: {diff.get('description')}")
                 print(f"  - summary: {summary}")
                 print(f"  - questions: {questions}")
                 print(f"  - continue: {should_continue}")
@@ -1771,14 +1827,45 @@ class AgentHarness:
         self.tool_map["restore_checkpoint"] = restore_checkpoint
 
         self.tools.append({
-            "name": "submit_response",
-            "description": "Submit the final response with plan, plan_diff, next_status, questions, and summary. At least one of summary or questions is REQUIRED. Call this at the end of every turn.",
+            "name": "update_plan",
+            "description": "Update the agent's plan. Use new=true when creating a fresh plan, new=false when updating existing steps. Always include overview describing what changed.",
             "input_schema": {
                 "type": "object",
                 "properties": {
-                    "plan": {"type": "array", "description": "List of plan items"},
-                    "plan_diff": {"type": "array", "description": "List of plan diff items"},
-                    "plan_update_overview": {"type": "string", "description": "Short title overview of what changed in the plan. Should follow the format like 'Added a new step.' or  `Completed step 2, step 3 now in progress.`"},
+                    "steps": {
+                        "type": "array",
+                        "description": "List of plan steps. Each step has id, description, and status (todo/in_progress/done).",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "id": {"type": "string", "description": "Unique step identifier"},
+                                "description": {"type": "string", "description": "What this step does"},
+                                "status": {"type": "string", "enum": ["todo", "in_progress", "done"], "description": "Current status"}
+                            },
+                            "required": ["id", "description", "status"]
+                        }
+                    },
+                    "new": {
+                        "type": "boolean",
+                        "description": "true = create new plan (replaces all steps), false = merge/update existing steps by id",
+                        "default": False
+                    },
+                    "overview": {
+                        "type": "string",
+                        "description": "Short title overview of what changed. E.g. 'Added QC steps' or 'Completed step 2, step 3 now in progress'"
+                    }
+                },
+                "required": ["steps", "overview"]
+            }
+        })
+        self.tool_map["update_plan"] = update_plan
+
+        self.tools.append({
+            "name": "submit_response",
+            "description": "Submit the final response with next_status, questions, and summary. At least one of summary or questions is REQUIRED. Call this at the end of every turn.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
                     "summary": {"type": "string", "description": "Summary text to help the user. This can be a message to the user or a description of what was accomplished. Use markdown formatting with bullet points if needed."},
                     "questions": {"type": "string", "description": "Optional question text for the user."},
                     "next_status": {"type": "string", "description": "What the agent will do next", "enum": ["executing", "fixing", "thinking", "awaiting_user_response", "awaiting_cell_execution", "awaiting_user_widget_input", "done"]},
@@ -1793,7 +1880,7 @@ class AgentHarness:
                         "default": False
                     },
                 },
-                "required": ["plan", "plan_diff", "next_status", "plan_update_overview"],
+                "required": ["next_status"],
             },
         })
         self.tool_map["submit_response"] = submit_response
