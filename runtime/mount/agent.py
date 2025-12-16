@@ -1132,7 +1132,7 @@ class AgentHarness:
                 "success": False,
             }
 
-        def update_plan(args: dict) -> dict:
+        async def update_plan(args: dict) -> dict:
             try:
                 steps = args.get("steps", [])
                 is_new = args.get("new", False)
@@ -1149,9 +1149,9 @@ class AgentHarness:
                     else:
                         plan = {"goal": "", "steps": []}
 
-                    existing = {s["id"]: s for s in plan["steps"]}
+                    existing = {s["id"]: s for s in plan.get("steps", []) if isinstance(s, dict) and s.get("id")}
                     for step in steps:
-                        step_id = step.get("id")
+                        step_id = step.get("id") if isinstance(step, dict) else None
                         if step_id:
                             existing[step_id] = {**existing.get(step_id, {}), **step}
                     plan["steps"] = list(existing.values())
@@ -1162,14 +1162,22 @@ class AgentHarness:
                 with open(plan_path, "w") as f:
                     json.dump(plan, f, indent=2)
 
+                # Push plan to the frontend so it can render immediately.
+                await self.send({
+                    "type": "agent_plan_update",
+                    "plan": plan,
+                })
+
                 print(f"[tool] update_plan: new={is_new}, overview={overview}, steps={len(steps)}")
                 for step in steps:
-                    print(f"    - [{step.get('status')}] {step.get('id')}: {step.get('description')}")
+                    if isinstance(step, dict):
+                        print(f"    - [{step.get('status')}] {step.get('id')}: {step.get('description')}")
 
                 return {
                     "tool_name": "update_plan",
                     "success": True,
                     "summary": f"Plan updated: {overview}" if overview else "Plan updated",
+                    "plan": plan,
                 }
             except Exception as e:
                 print(f"[tool] update_plan error: {e}")
@@ -3424,6 +3432,21 @@ class AgentHarness:
                 "status": "ready"
             })
 
+            # Always re-send the current plan on reconnect so the frontend can render it.
+            try:
+                plan_path = Path(__file__).parent / "agent_config/context/notebook_context/plan.json"
+                if plan_path.exists():
+                    with open(plan_path) as f:
+                        current_plan = json.load(f)
+                else:
+                    current_plan = {"goal": "", "steps": []}
+                await self.send({
+                    "type": "agent_plan_update",
+                    "plan": current_plan,
+                })
+            except Exception as e:
+                print(f"[agent] Failed to send plan on reconnect: {e}")
+
             if self.conversation_task is None or self.conversation_task.done():
                 print("[agent] Restarting conversation loop after reconnect")
                 self._start_conversation_loop()
@@ -3463,6 +3486,21 @@ class AgentHarness:
                 "type": "agent_status",
                 "status": "ready"
             })
+            # Send current plan on initial connect so the frontend can render it immediately.
+            try:
+                plan_path = Path(__file__).parent / "agent_config/context/notebook_context/plan.json"
+                if plan_path.exists():
+                    with open(plan_path) as f:
+                        current_plan = json.load(f)
+                else:
+                    current_plan = {"goal": "", "steps": []}
+                await self.send({
+                    "type": "agent_plan_update",
+                    "plan": current_plan,
+                })
+            except Exception as e:
+                print(f"[agent] Failed to send plan on init: {e}")
+
             print("[agent] Initialization complete")
 
             print("[agent] Starting conversation loop")
