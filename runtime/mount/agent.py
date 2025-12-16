@@ -3601,6 +3601,16 @@ class AgentHarness:
     async def handle_clear_history(self) -> None:
         await self._clear_running_state()
         await self._mark_all_history_removed()
+
+        plan_path = Path(__file__).parent / "agent_config/context/notebook_context/plan.json"
+        empty_plan = {"goal": "", "steps": []}
+        with open(plan_path, "w") as f:
+            json.dump(empty_plan, f, indent=2)
+        await self.send({
+            "type": "agent_plan_update",
+            "plan": empty_plan,
+        })
+
         self._start_conversation_loop()
 
     async def get_full_prompt(self) -> dict:
