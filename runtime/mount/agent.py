@@ -299,10 +299,12 @@ class AgentHarness:
 
                         if isinstance(block, dict) and block.get("type") == "tool_result":
                             block = block.copy()
-                            result = json.loads(block.get("content", "{}"))
-                            if "original_code" in result:
-                                result.pop("original_code")
-                                block["content"] = json.dumps(result, sort_keys=True)
+                            block_content = block.get("content", "{}")
+                            if isinstance(block_content, str):
+                                result = json.loads(block_content)
+                                if "original_code" in result:
+                                    result.pop("original_code")
+                                    block["content"] = json.dumps(result, sort_keys=True)
                         cleaned_content.append(block)
                     content = cleaned_content
 
