@@ -146,7 +146,25 @@ class AgentHarness:
                     continue
 
                 if block_type == "tool_result":
-                    result_str = block.get("content", "{}")
+                    block_content = block.get("content", "{}")
+
+                    # Handle multimodal tool results (e.g., capture_widget_image with images)
+                    # Remove images from history when truncating - they're not needed after initial processing
+                    if isinstance(block_content, list):
+                        text_blocks = [b for b in block_content if isinstance(b, dict) and b.get("type") == "text"]
+                        if text_blocks:
+                            # Extract the text content and parse as JSON
+                            result_str = text_blocks[0].get("text", "{}")
+                            result = json.loads(result_str)
+                            result["_note"] = "image removed during truncation"
+                            truncated_blocks.append({
+                                "type": "tool_result",
+                                "tool_use_id": block.get("tool_use_id"),
+                                "content": json.dumps(result)
+                            })
+                        continue
+
+                    result_str = block_content
                     result = json.loads(result_str)
                     tool_name = result.get("tool_name")
 
