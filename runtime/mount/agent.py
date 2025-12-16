@@ -148,12 +148,9 @@ class AgentHarness:
                 if block_type == "tool_result":
                     block_content = block.get("content", "{}")
 
-                    # Handle multimodal tool results (e.g., capture_widget_image with images)
-                    # Remove images from history when truncating - they're not needed after initial processing
                     if isinstance(block_content, list):
                         text_blocks = [b for b in block_content if isinstance(b, dict) and b.get("type") == "text"]
-                        if text_blocks:
-                            # Extract the text content and parse as JSON
+                        if len(text_blocks) > 0:
                             result_str = text_blocks[0].get("text", "{}")
                             result = json.loads(result_str)
                             result["_note"] = "image removed during truncation"
@@ -3196,21 +3193,6 @@ class AgentHarness:
                                 if tool_name == "capture_widget_image" and result.get("success") and result.get("image"):
                                     image_data: str = result.get("image", "")
                                     image_data = image_data.removeprefix("data:image/png;base64,")
-
-                                    # Write image to disk for review
-                                    try:
-                                        import base64
-                                        from pathlib import Path
-                                        review_dir = Path("/tmp/images_to_review")
-                                        review_dir.mkdir(parents=True, exist_ok=True)
-                                        timestamp = int(time.time() * 1000)
-                                        widget_key = result.get("widget_key", "unknown").replace("/", "_")
-                                        image_path = review_dir / f"{timestamp}_{widget_key}.png"
-                                        image_path.write_bytes(base64.b64decode(image_data))
-                                        print(f"[agent] Saved widget image to {image_path}")
-                                    except Exception as e:
-                                        print(f"[agent] Failed to save widget image: {e}")
-
                                     result_without_image = {k: v for k, v in result.items() if k != "image"}
 
                                     tool_results.append({
