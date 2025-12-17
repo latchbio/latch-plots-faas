@@ -197,6 +197,8 @@ class AgentHarness:
                             truncated_inp = {k: v for k, v in inp.items() if k != "code"}
                         elif tool_name == "edit_cell":
                             truncated_inp = {k: v for k, v in inp.items() if k != "new_code"}
+                        elif tool_name == "update_plan":
+                            truncated_inp = {k: v for k, v in inp.items() if k not in {"plan", "plan_diff"}}
 
                     truncated_blocks.append({
                         "type": "tool_use",
@@ -704,13 +706,18 @@ class AgentHarness:
             )
 
         elif msg_type == "seed_plan_from_history":
-            plan_path = Path(__file__).parent / "agent_config/context/notebook_context/plan.json"
+            print(f"[agent] seed_plan_from_history received: {msg}")
+            plan = msg.get("plan")
+            steps = plan.get("steps") if plan else None
+            if not plan or not steps:
+                print(f"[agent] seed_plan_from_history: empty plan or steps, skipping")
+                return
 
+            plan_path = Path(__file__).parent / "agent_config/context/notebook_context/plan.json"
             if not plan_path.exists():
-                plan = msg.get("plan", {"steps": []})
                 with open(plan_path, "w") as f:
                     json.dump(plan, f, indent=2)
-                print(f"[agent] Seeded plan from history: {len(plan.get('steps', []))} steps")
+                print(f"[agent] Seeded plan from history: {len(steps)} steps")
 
 
     async def _complete_turn(self) -> None:
