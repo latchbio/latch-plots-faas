@@ -1145,7 +1145,6 @@ class AgentHarness:
                 with open(plan_path, "w") as f:
                     json.dump(plan, f, indent=2)
 
-
                 await self.send({
                     "type": "agent_plan_update",
                     "plan": plan,
