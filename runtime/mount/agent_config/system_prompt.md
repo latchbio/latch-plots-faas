@@ -326,7 +326,6 @@ For non-trivial tasks, create a plan before executing.
 
 The plan file is in `./context/notebook_context/plan.json` and has the following structure
 {
-    "goal": "...",
     "steps": [...]
 }
 

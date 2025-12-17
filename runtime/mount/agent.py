@@ -707,10 +707,10 @@ class AgentHarness:
             plan_path = Path(__file__).parent / "agent_config/context/notebook_context/plan.json"
 
             if not plan_path.exists():
-                plan = msg.get("plan", {"goal": "", "steps": []})
+                plan = msg.get("plan", {"steps": []})
                 with open(plan_path, "w") as f:
                     json.dump(plan, f, indent=2)
-                print(f"[agent] Updated plan from history: {plan.get('goal', '')}")
+                print(f"[agent] Seeded plan from history: {len(plan.get('steps', []))} steps")
 
 
     async def _complete_turn(self) -> None:
@@ -1133,7 +1133,7 @@ class AgentHarness:
 
                 plan_path = Path(__file__).parent / "agent_config/context/notebook_context/plan.json"
 
-                plan = {"goal": plan_update_overview, "steps": plan_items}
+                plan = {"steps": plan_items}
 
                 with open(plan_path, "w") as f:
                     json.dump(plan, f, indent=2)
@@ -1147,7 +1147,7 @@ class AgentHarness:
                 return {
                     "tool_name": "update_plan",
                     "success": True,
-                    "summary": f"Plan updated: {plan_update_overview}" if plan_update_overview else "Plan updated",
+                    "summary": plan_update_overview if plan_update_overview else "Plan updated",
                 }
             except Exception as e:
                 print(f"[tool] update_plan error: {e}")
@@ -3550,7 +3550,7 @@ class AgentHarness:
         await self._mark_all_history_removed()
 
         plan_path = Path(__file__).parent / "agent_config/context/notebook_context/plan.json"
-        empty_plan = {"goal": "", "steps": []}
+        empty_plan = {"steps": []}
         with open(plan_path, "w") as f:
             json.dump(empty_plan, f, indent=2)
 
