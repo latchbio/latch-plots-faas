@@ -1145,11 +1145,6 @@ class AgentHarness:
                 with open(plan_path, "w") as f:
                     json.dump(plan, f, indent=2)
 
-                await self._insert_history(
-                    event_type="plan_snapshot",
-                    role="system",
-                    payload={"plan": plan},
-                )
 
                 await self.send({
                     "type": "agent_plan_update",
@@ -1158,10 +1153,11 @@ class AgentHarness:
                     "plan_update_overview": plan_update_overview,
                 })
 
-                print(f"[tool] update_plan: overview={plan_update_overview}, steps={len(plan_items)}, diff={len(plan_diff)}")
-                for step in plan_diff:
-                    if isinstance(step, dict):
-                        print(f"    - [{step.get('status')}] {step.get('id')}: {step.get('description')}")
+                print(f"[tool] update_plan: {plan_update_overview}")
+                for item in plan_items:
+                    print(f"  [{item.get('status')}] {item.get('id')}: {item.get('description')}")
+                for diff in plan_diff:
+                    print(f"  diff: [{diff.get('action')}] {diff.get('id')}")
 
                 return {
                     "tool_name": "update_plan",
@@ -1857,7 +1853,7 @@ class AgentHarness:
                     },
                     "plan_update_overview": {
                         "type": "string",
-                        "description": "Short title overview of what changed in the plan. Should follow the format like 'Added a new step.' or 'Completed step 2, step 3 now in progress.'"
+                        "description": "Short title overview of what changed. E.g. 'Added QC steps' or 'Completed step 2, step 3 now in progress'"                    
                     }
                 },
                 "required": ["plan", "plan_diff", "plan_update_overview"]
