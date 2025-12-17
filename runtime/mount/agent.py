@@ -1134,49 +1134,39 @@ class AgentHarness:
 
         async def update_plan(args: dict) -> dict:
             try:
-                steps = args.get("steps", [])
-                is_new = args.get("new", False)
-                overview = args.get("overview", "")
+                plan_items = args.get("plan", [])
+                plan_diff = args.get("plan_diff", [])
+                plan_update_overview = args.get("plan_update_overview", "")
 
                 plan_path = Path(__file__).parent / "agent_config/context/notebook_context/plan.json"
 
-                if is_new:
-                    plan = {"goal": overview, "steps": steps}
-                else:
-                    if plan_path.exists():
-                        with open(plan_path) as f:
-                            plan = json.load(f)
-                    else:
-                        plan = {"goal": "", "steps": []}
-
-                    existing = {s["id"]: s for s in plan.get("steps", []) if isinstance(s, dict) and s.get("id")}
-                    for step in steps:
-                        step_id = step.get("id") if isinstance(step, dict) else None
-                        if step_id:
-                            existing[step_id] = {**existing.get(step_id, {}), **step}
-                    plan["steps"] = list(existing.values())
-
-                    if overview:
-                        plan["goal"] = overview
+                plan = {"goal": plan_update_overview, "steps": plan_items}
 
                 with open(plan_path, "w") as f:
                     json.dump(plan, f, indent=2)
 
-                # Push plan to the frontend so it can render immediately.
+                await self._insert_history(
+                    event_type="plan_snapshot",
+                    role="system",
+                    payload={"plan": plan},
+                )
+
                 await self.send({
                     "type": "agent_plan_update",
                     "plan": plan,
+                    "plan_diff": plan_diff,
+                    "plan_update_overview": plan_update_overview,
                 })
 
-                print(f"[tool] update_plan: new={is_new}, overview={overview}, steps={len(steps)}")
-                for step in steps:
+                print(f"[tool] update_plan: overview={plan_update_overview}, steps={len(plan_items)}, diff={len(plan_diff)}")
+                for step in plan_diff:
                     if isinstance(step, dict):
                         print(f"    - [{step.get('status')}] {step.get('id')}: {step.get('description')}")
 
                 return {
                     "tool_name": "update_plan",
                     "success": True,
-                    "summary": f"Plan updated: {overview}" if overview else "Plan updated",
+                    "summary": f"Plan updated: {plan_update_overview}" if plan_update_overview else "Plan updated",
                     "plan": plan,
                 }
             except Exception as e:
@@ -1836,13 +1826,13 @@ class AgentHarness:
 
         self.tools.append({
             "name": "update_plan",
-            "description": "Update the agent's plan. Use new=true when creating a fresh plan, new=false when updating existing steps. Always include overview describing what changed.",
+            "description": "Update the agent's plan. Provide the complete current plan, what changed (diff), and a short overview of the changes.",
             "input_schema": {
                 "type": "object",
                 "properties": {
-                    "steps": {
+                    "plan": {
                         "type": "array",
-                        "description": "List of plan steps. Each step has id, description, and status (todo/in_progress/done).",
+                        "description": "List of plan items. This should be the complete current plan state.",
                         "items": {
                             "type": "object",
                             "properties": {
@@ -1853,17 +1843,25 @@ class AgentHarness:
                             "required": ["id", "description", "status"]
                         }
                     },
-                    "new": {
-                        "type": "boolean",
-                        "description": "true = create new plan (replaces all steps), false = merge/update existing steps by id",
-                        "default": False
+                    "plan_diff": {
+                        "type": "array",
+                        "description": "List of plan diff items - only the steps that changed in this update.",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "id": {"type": "string", "description": "Unique step identifier"},
+                                "description": {"type": "string", "description": "What this step does"},
+                                "status": {"type": "string", "enum": ["todo", "in_progress", "done"], "description": "Current status"}
+                            },
+                            "required": ["id", "description", "status"]
+                        }
                     },
-                    "overview": {
+                    "plan_update_overview": {
                         "type": "string",
-                        "description": "Short title overview of what changed. E.g. 'Added QC steps' or 'Completed step 2, step 3 now in progress'"
+                        "description": "Short title overview of what changed in the plan. Should follow the format like 'Added a new step.' or 'Completed step 2, step 3 now in progress.'"
                     }
                 },
-                "required": ["steps", "overview"]
+                "required": ["plan", "plan_diff", "plan_update_overview"]
             }
         })
         self.tool_map["update_plan"] = update_plan
@@ -3606,6 +3604,13 @@ class AgentHarness:
         empty_plan = {"goal": "", "steps": []}
         with open(plan_path, "w") as f:
             json.dump(empty_plan, f, indent=2)
+
+        await self._insert_history(
+            event_type="plan_snapshot",
+            role="system",
+            payload={"plan": empty_plan},
+        )
+
         await self.send({
             "type": "agent_plan_update",
             "plan": empty_plan,

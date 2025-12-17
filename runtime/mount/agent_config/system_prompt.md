@@ -342,6 +342,8 @@ Each plan step looks like this:
 
 ## Plan Updates
 
+Before calling `update_plan`, use `read_file` on `./context/notebook_context/plan.json` to get the current state.
+
 Before calling `submit_response`, update plan status:
 
 - Mark current step as `in_progress` when starting
@@ -854,13 +856,17 @@ If assay platform is unclear from data, ask user which platform generated the da
 
 ```python
 update_plan(
-    steps=[
+    plan=[
         {"id": "load", "description": "Load spatial data", "status": "todo"},
         {"id": "qc", "description": "Run quality control", "status": "todo"},
         {"id": "viz", "description": "Visualize QC metrics", "status": "todo"}
     ],
-    new=True,
-    overview="Created analysis plan with 3 steps"
+    plan_diff=[
+        {"id": "load", "description": "Load spatial data", "status": "todo"},
+        {"id": "qc", "description": "Run quality control", "status": "todo"},
+        {"id": "viz", "description": "Visualize QC metrics", "status": "todo"}
+    ],
+    plan_update_overview="Created analysis plan with 3 steps."
 )
 
 submit_response(
@@ -899,9 +905,13 @@ if h5ad_file.value is not None:
 
 ```python
 update_plan(
-    steps=[{"id": "load", "description": "Load spatial data", "status": "in_progress"}],
-    new=False,
-    overview="Started loading data"
+    plan=[
+        {"id": "load", "description": "Load spatial data", "status": "in_progress"},
+        {"id": "qc", "description": "Run quality control", "status": "todo"},
+        {"id": "viz", "description": "Visualize QC metrics", "status": "todo"}
+    ],
+    plan_diff=[{"id": "load", "description": "Load spatial data", "status": "in_progress"}],
+    plan_update_overview="Started loading data."
 )
 
 submit_response(
@@ -936,9 +946,13 @@ submit_response(
 
 ```python
 update_plan(
-    steps=[{"id": "load", "description": "Load spatial data", "status": "done"}],
-    new=False,
-    overview="Completed data loading"
+    plan=[
+        {"id": "load", "description": "Load spatial data", "status": "done"},
+        {"id": "qc", "description": "Run quality control", "status": "todo"},
+        {"id": "viz", "description": "Visualize QC metrics", "status": "todo"}
+    ],
+    plan_diff=[{"id": "load", "description": "Load spatial data", "status": "done"}],
+    plan_update_overview="Completed data loading."
 )
 
 submit_response(
@@ -977,12 +991,16 @@ w_plot(fig, label="Gene Count Distribution")
 
 ```python
 update_plan(
-    steps=[
+    plan=[
+        {"id": "load", "description": "Load spatial data", "status": "done"},
         {"id": "qc", "description": "Run quality control", "status": "in_progress"},
         {"id": "viz", "description": "Visualize QC metrics", "status": "in_progress"}
     ],
-    new=False,
-    overview="Started QC and visualization steps"
+    plan_diff=[
+        {"id": "qc", "description": "Run quality control", "status": "in_progress"},
+        {"id": "viz", "description": "Visualize QC metrics", "status": "in_progress"}
+    ],
+    plan_update_overview="Started QC and visualization steps."
 )
 
 submit_response(
@@ -1000,9 +1018,9 @@ submit_response(
 
 ```python
 update_plan(
-    steps=[{"id": "cluster", "description": "Perform clustering", "status": "in_progress"}],
-    new=False,
-    overview="Started clustering step"
+    plan=[{"id": "cluster", "description": "Perform clustering", "status": "in_progress"}],
+    plan_diff=[{"id": "cluster", "description": "Perform clustering", "status": "in_progress"}],
+    plan_update_overview="Started clustering step."
 )
 
 submit_response(
@@ -1066,9 +1084,9 @@ print(f"Largest cluster: {adata.obs['leiden'].value_counts().max()}")
 
 ```python
 update_plan(
-    steps=[{"id": "clustering", "description": "Perform clustering", "status": "done"}],
-    new=False,
-    overview="Completed clustering step"
+    plan=[{"id": "clustering", "description": "Perform clustering", "status": "done"}],
+    plan_diff=[{"id": "clustering", "description": "Perform clustering", "status": "done"}],
+    plan_update_overview="Completed clustering step."
 )
 
 submit_response(
@@ -1119,9 +1137,9 @@ w_table(source=comparison_df, label="Parameter Comparison")
 
 ```python
 update_plan(
-    steps=[{"id": "background_removal", "description": "Remove background beads", "status": "done"}],
-    new=False,
-    overview="Completed background removal after parameter correction"
+    plan=[{"id": "background_removal", "description": "Remove background beads", "status": "done"}],
+    plan_diff=[{"id": "background_removal", "description": "Remove background beads", "status": "done"}],
+    plan_update_overview="Completed background removal after parameter correction."
 )
 
 submit_response(
