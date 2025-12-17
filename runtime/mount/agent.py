@@ -703,7 +703,7 @@ class AgentHarness:
                 },
             )
 
-        elif msg_type == "update_plan_from_history":
+        elif msg_type == "seed_plan_from_history":
             plan_path = Path(__file__).parent / "agent_config/context/notebook_context/plan.json"
 
             if not plan_path.exists():
