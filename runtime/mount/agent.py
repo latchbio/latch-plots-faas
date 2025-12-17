@@ -703,22 +703,15 @@ class AgentHarness:
                 },
             )
 
-        elif msg_type == "seed_plan_from_history":
+        elif msg_type == "update_plan_from_history":
             plan_path = Path(__file__).parent / "agent_config/context/notebook_context/plan.json"
 
             if not plan_path.exists():
                 plan = msg.get("plan", {"goal": "", "steps": []})
                 with open(plan_path, "w") as f:
                     json.dump(plan, f, indent=2)
-                print(f"[agent] Seeded plan from history: {plan.get('goal', '')}")
+                print(f"[agent] Updated plan from history: {plan.get('goal', '')}")
 
-            with open(plan_path) as f:
-                current_plan = json.load(f)
-
-            await self.send({
-                "type": "agent_plan_update",
-                "plan": current_plan,
-            })
 
     async def _complete_turn(self) -> None:
         if self.current_request_id is None:
@@ -1145,13 +1138,6 @@ class AgentHarness:
                 with open(plan_path, "w") as f:
                     json.dump(plan, f, indent=2)
 
-                await self.send({
-                    "type": "agent_plan_update",
-                    "plan": plan,
-                    "plan_diff": plan_diff,
-                    "plan_update_overview": plan_update_overview,
-                })
-
                 print(f"[tool] update_plan: {plan_update_overview}")
                 for item in plan_items:
                     print(f"  [{item.get('status')}] {item.get('id')}: {item.get('description')}")
@@ -1162,7 +1148,6 @@ class AgentHarness:
                     "tool_name": "update_plan",
                     "success": True,
                     "summary": f"Plan updated: {plan_update_overview}" if plan_update_overview else "Plan updated",
-                    "plan": plan,
                 }
             except Exception as e:
                 print(f"[tool] update_plan error: {e}")
@@ -3424,21 +3409,6 @@ class AgentHarness:
                 "status": "ready"
             })
 
-            # Always re-send the current plan on reconnect so the frontend can render it.
-            try:
-                plan_path = Path(__file__).parent / "agent_config/context/notebook_context/plan.json"
-                if plan_path.exists():
-                    with open(plan_path) as f:
-                        current_plan = json.load(f)
-                else:
-                    current_plan = {"goal": "", "steps": []}
-                await self.send({
-                    "type": "agent_plan_update",
-                    "plan": current_plan,
-                })
-            except Exception as e:
-                print(f"[agent] Failed to send plan on reconnect: {e}")
-
             if self.conversation_task is None or self.conversation_task.done():
                 print("[agent] Restarting conversation loop after reconnect")
                 self._start_conversation_loop()
@@ -3477,22 +3447,7 @@ class AgentHarness:
             await self.send({
                 "type": "agent_status",
                 "status": "ready"
-            })
-            # Send current plan on initial connect so the frontend can render it immediately.
-            try:
-                plan_path = Path(__file__).parent / "agent_config/context/notebook_context/plan.json"
-                if plan_path.exists():
-                    with open(plan_path) as f:
-                        current_plan = json.load(f)
-                else:
-                    current_plan = {"goal": "", "steps": []}
-                await self.send({
-                    "type": "agent_plan_update",
-                    "plan": current_plan,
-                })
-            except Exception as e:
-                print(f"[agent] Failed to send plan on init: {e}")
-
+            })           
             print("[agent] Initialization complete")
 
             print("[agent] Starting conversation loop")
@@ -3598,17 +3553,6 @@ class AgentHarness:
         empty_plan = {"goal": "", "steps": []}
         with open(plan_path, "w") as f:
             json.dump(empty_plan, f, indent=2)
-
-        await self._insert_history(
-            event_type="plan_snapshot",
-            role="system",
-            payload={"plan": empty_plan},
-        )
-
-        await self.send({
-            "type": "agent_plan_update",
-            "plan": empty_plan,
-        })
 
         self._start_conversation_loop()
 
