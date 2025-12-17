@@ -82,6 +82,7 @@ class AgentHarness:
     behavior: Behavior | None = None
     latest_notebook_state: str | None = None
     buffer: list[str] = field(default_factory=list)
+    summarize_tasks: set[asyncio.Task] = field(default_factory=set)
 
     mode_config: dict[Mode, tuple[str, int | None]] = field(default_factory=lambda: {
         Mode.planning: ("claude-opus-4-5-20251101", 4096),
@@ -145,7 +146,22 @@ class AgentHarness:
                     continue
 
                 if block_type == "tool_result":
-                    result_str = block.get("content", "{}")
+                    block_content = block.get("content", "{}")
+
+                    if isinstance(block_content, list):
+                        text_blocks = [b for b in block_content if isinstance(b, dict) and b.get("type") == "text"]
+                        if len(text_blocks) > 0:
+                            result_str = text_blocks[0].get("text", "{}")
+                            result = json.loads(result_str)
+                            result["_note"] = "image removed during truncation"
+                            truncated_blocks.append({
+                                "type": "tool_result",
+                                "tool_use_id": block.get("tool_use_id"),
+                                "content": json.dumps(result)
+                            })
+                        continue
+
+                    result_str = block_content
                     result = json.loads(result_str)
                     tool_name = result.get("tool_name")
 
@@ -298,10 +314,12 @@ class AgentHarness:
 
                         if isinstance(block, dict) and block.get("type") == "tool_result":
                             block = block.copy()
-                            result = json.loads(block.get("content", "{}"))
-                            if "original_code" in result:
-                                result.pop("original_code")
-                                block["content"] = json.dumps(result, sort_keys=True)
+                            block_content = block.get("content", "{}")
+                            if isinstance(block_content, str):
+                                result = json.loads(block_content)
+                                if "original_code" in result:
+                                    result.pop("original_code")
+                                    block["content"] = json.dumps(result, sort_keys=True)
                         cleaned_content.append(block)
                     content = cleaned_content
 
@@ -2713,6 +2731,56 @@ class AgentHarness:
         })
         self.tool_map["get_global_info"] = get_global_info
 
+        async def capture_widget_image(args: dict) -> dict:
+            widget_key = args.get("widget_key")
+            if widget_key is None:
+                return {
+                    "tool_name": "capture_widget_image",
+                    "success": False,
+                    "summary": "No widget_key provided"
+                }
+
+            print(f"[tool] capture_widget_image: {widget_key}")
+
+            result = await self.atomic_operation("capture_widget_image", {"widget_key": widget_key})
+
+            if result.get("status") == "success":
+                widget_type = result.get("widget_type", "unknown")
+                metadata = result.get("metadata", {})
+                image = result.get("image")
+
+                return {
+                    "tool_name": "capture_widget_image",
+                    "success": True,
+                    "summary": f"Captured image from {widget_type} widget '{widget_key}'",
+                    "widget_key": widget_key,
+                    "widget_type": widget_type,
+                    "image": image,
+                    "metadata": metadata,
+                }
+
+            return {
+                "tool_name": "capture_widget_image",
+                "success": False,
+                "summary": f"Failed to capture widget image: {result.get('error', 'Unknown error')}"
+            }
+
+        self.tools.append({
+            "name": "capture_widget_image",
+            "description": "Capture a visual screenshot of an h5/AnnData or plot widget displayed in the notebook. Returns a base64-encoded PNG image and metadata about the current visualization state (such as color_by settings, filters, and cell counts for h5 widgets). Use this to visually inspect plots, clustering results, or any Plotly-based visualization the user is seeing.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "widget_key": {
+                        "type": "string",
+                        "description": "Full widget key in format <tf_id>/<widget_id>"
+                    },
+                },
+                "required": ["widget_key"],
+            },
+        })
+        self.tool_map["capture_widget_image"] = capture_widget_image
+
         if len(self.tools) > 0:
             self.tools[-1]["cache_control"] = {"type": "ephemeral"}
 
@@ -2735,7 +2803,9 @@ class AgentHarness:
                 self.buffer.append(text)
 
                 if "\n\n" in text:
-                        asyncio.create_task(self._summarize_and_send_chunk("".join(self.buffer), index))
+                    t = asyncio.create_task(self._summarize_and_send_chunk("".join(self.buffer), index))
+                    self.summarize_tasks.add(t)
+                    t.add_done_callback(lambda _: self.summarize_tasks.discard(t))
 
             async with stream_ctx as stream:
                 async for event in stream:
@@ -3120,11 +3190,35 @@ class AgentHarness:
                                 if asyncio.iscoroutine(result):
                                     result = await result
 
-                                tool_results.append({
-                                    "type": "tool_result",
-                                    "tool_use_id": tool_id,
-                                    "content": json.dumps(result),
-                                })
+                                if tool_name == "capture_widget_image" and result.get("success") and result.get("image"):
+                                    image_data: str = result.get("image", "")
+                                    image_data = image_data.removeprefix("data:image/png;base64,")
+                                    result_without_image = {k: v for k, v in result.items() if k != "image"}
+
+                                    tool_results.append({
+                                        "type": "tool_result",
+                                        "tool_use_id": tool_id,
+                                        "content": [
+                                            {
+                                                "type": "text",
+                                                "text": json.dumps(result_without_image),
+                                            },
+                                            {
+                                                "type": "image",
+                                                "source": {
+                                                    "type": "base64",
+                                                    "media_type": "image/png",
+                                                    "data": image_data,
+                                                },
+                                            },
+                                        ],
+                                    })
+                                else:
+                                    tool_results.append({
+                                        "type": "tool_result",
+                                        "tool_use_id": tool_id,
+                                        "content": json.dumps(result),
+                                    })
                             except Exception as e:
                                 print(f"[agent] Tool error: {tool_name}: {e}")
                                 traceback.print_exc()

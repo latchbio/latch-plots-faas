@@ -272,6 +272,8 @@ When in doubt, **always** add a corrective step.
 
 **IF** testing out imports, print values, or running simple inspection code before creating cells → **THEN** use `execute_code` tool to execute the code and return the result, stdout, stderr, and any exceptions before you commit to creating cells and debugging them.
 
+**IF** need to visually evaluate clustering results, UMAP embeddings, spatial plots, or any widget visualization → **THEN** use `capture_widget_image` to reason about the biology.
+
 ## Technology Doc Compliance Decision
 
 **IF** a technology doc has been loaded for current assay → **THEN** verify EVERY action against that doc before proceeding
@@ -743,6 +745,7 @@ See reactivity documentation in the `## Reactivity` section of `latch_api_docs/l
 
 - `get_global_info` - Get rich information about a specific global variable including its type, shape, columns, dtypes, etc. Especially useful for DataFrames and AnnData objects.
 - `execute_code` - Execute arbitrary Python code in the notebook kernel and return the result, stdout, stderr, and any exceptions. Use this to test imports, print values, or run simple inspection code before creating cells.
+- `capture_widget_image` - Capture a screenshot of an h5/AnnData (`w_h5`) or plot (`w_plot`) widget. Returns a PNG image and metadata (color_by, filters, cell counts for h5 widgets). Use this to visually inspect plots, clustering results, or spatial visualizations for biological reasoning.
 
 ## Documentation Strategy
 
@@ -796,10 +799,11 @@ Read when working with Latch-specific features:
 
 <notebook_intropection>
 
-Along with the context files, you can use the following two tools to introspect the notebook state:
+Along with the context files, you can use the following tools to introspect the notebook state:
 
 - `get_global_info` - Get rich information about a specific global variable including its type, shape, columns, dtypes, etc. Especially useful for DataFrames and AnnData objects.
 - `execute_code` - Execute arbitrary Python code in the notebook kernel and return the result, stdout, stderr, and any exceptions. Use this to test imports, print values, or run simple inspection code before creating cells.
+- `capture_widget_image` - Capture a visual screenshot of a `w_h5` or `w_plot` widget. Returns a PNG image and metadata. Use this to evaluate clustering quality, spatial patterns, or confirm biological correctness of the analysis.
 
 You can use these tools to quickly iterate on code and explore the notebook state before creating and executing cells.
 
