@@ -350,6 +350,14 @@ Before calling `submit_response`, update plan status:
 - Mark a step `done` only after primary cells execute successfully **and** it passes the step-level self-check
 - Keep `in_progress` while fixing errors
 
+Use `plan_diff` to communicate changes:
+
+```
+{
+  "action": "add" | "update" | "complete" | "remove",
+  "id": "step_id",
+  "description": "Updated description if changed"
+}
 
 ## Planning Rules
 
@@ -862,9 +870,9 @@ update_plan(
         {"id": "viz", "description": "Visualize QC metrics", "status": "todo"}
     ],
     plan_diff=[
-        {"id": "load", "description": "Load spatial data", "status": "todo"},
-        {"id": "qc", "description": "Run quality control", "status": "todo"},
-        {"id": "viz", "description": "Visualize QC metrics", "status": "todo"}
+        {"id": "load", "action": "add"},
+        {"id": "qc", "action": "add"},
+        {"id": "viz", "action": "add"}
     ],
     plan_update_overview="Created analysis plan with 3 steps."
 )
@@ -910,7 +918,7 @@ update_plan(
         {"id": "qc", "description": "Run quality control", "status": "todo"},
         {"id": "viz", "description": "Visualize QC metrics", "status": "todo"}
     ],
-    plan_diff=[{"id": "load", "description": "Load spatial data", "status": "in_progress"}],
+    plan_diff=[{"id": "load", "action": "update"}],
     plan_update_overview="Started loading data."
 )
 
@@ -951,7 +959,7 @@ update_plan(
         {"id": "qc", "description": "Run quality control", "status": "todo"},
         {"id": "viz", "description": "Visualize QC metrics", "status": "todo"}
     ],
-    plan_diff=[{"id": "load", "description": "Load spatial data", "status": "done"}],
+    plan_diff=[{"id": "load", "action": "complete"}],
     plan_update_overview="Completed data loading."
 )
 
@@ -997,8 +1005,8 @@ update_plan(
         {"id": "viz", "description": "Visualize QC metrics", "status": "in_progress"}
     ],
     plan_diff=[
-        {"id": "qc", "description": "Run quality control", "status": "in_progress"},
-        {"id": "viz", "description": "Visualize QC metrics", "status": "in_progress"}
+        {"id": "qc", "action": "update"},
+        {"id": "viz", "action": "update"}
     ],
     plan_update_overview="Started QC and visualization steps."
 )
@@ -1019,7 +1027,7 @@ submit_response(
 ```python
 update_plan(
     plan=[{"id": "cluster", "description": "Perform clustering", "status": "in_progress"}],
-    plan_diff=[{"id": "cluster", "description": "Perform clustering", "status": "in_progress"}],
+    plan_diff=[{"id": "cluster", "action": "update"}],
     plan_update_overview="Started clustering step."
 )
 
@@ -1085,7 +1093,7 @@ print(f"Largest cluster: {adata.obs['leiden'].value_counts().max()}")
 ```python
 update_plan(
     plan=[{"id": "clustering", "description": "Perform clustering", "status": "done"}],
-    plan_diff=[{"id": "clustering", "description": "Perform clustering", "status": "done"}],
+    plan_diff=[{"id": "clustering", "action": "complete"}],
     plan_update_overview="Completed clustering step."
 )
 
@@ -1138,7 +1146,7 @@ w_table(source=comparison_df, label="Parameter Comparison")
 ```python
 update_plan(
     plan=[{"id": "background_removal", "description": "Remove background beads", "status": "done"}],
-    plan_diff=[{"id": "background_removal", "description": "Remove background beads", "status": "done"}],
+    plan_diff=[{"id": "background_removal", "action": "complete"}],
     plan_update_overview="Completed background removal after parameter correction."
 )
 

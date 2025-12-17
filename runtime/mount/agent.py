@@ -1850,10 +1850,9 @@ class AgentHarness:
                             "type": "object",
                             "properties": {
                                 "id": {"type": "string", "description": "Unique step identifier"},
-                                "description": {"type": "string", "description": "What this step does"},
-                                "status": {"type": "string", "enum": ["todo", "in_progress", "done"], "description": "Current status"}
+                                "action": {"type": "string", "enum": ["add", "update", "complete", "remove"], "description": "What action was taken on this step"}
                             },
-                            "required": ["id", "description", "status"]
+                            "required": ["id", "action"]
                         }
                     },
                     "plan_update_overview": {
