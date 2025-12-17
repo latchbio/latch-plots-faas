@@ -2805,7 +2805,7 @@ class AgentHarness:
                 if "\n\n" in text:
                     t = asyncio.create_task(self._summarize_and_send_chunk("".join(self.buffer), index))
                     self.summarize_tasks.add(t)
-                    t.add_done_callback(self.summarize_tasks.discard(t))
+                    t.add_done_callback(lambda _: self.summarize_tasks.discard(t))
 
             async with stream_ctx as stream:
                 async for event in stream:
