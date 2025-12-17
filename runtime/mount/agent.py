@@ -3550,9 +3550,8 @@ class AgentHarness:
         await self._mark_all_history_removed()
 
         plan_path = Path(__file__).parent / "agent_config/context/notebook_context/plan.json"
-        empty_plan = {"steps": []}
-        with open(plan_path, "w") as f:
-            json.dump(empty_plan, f, indent=2)
+        if plan_path.exists():
+            plan_path.unlink()
 
         self._start_conversation_loop()
 
