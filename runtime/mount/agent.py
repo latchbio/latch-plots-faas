@@ -50,7 +50,6 @@ class Mode(Enum):
     debugging = "debugging"
 
 class Behavior(Enum):
-    default = "default"
     proactive = "proactive"
     step_by_step = "step_by_step"
 
@@ -79,7 +78,7 @@ class AgentHarness:
     latest_notebook_context: dict = field(default_factory=dict)
     current_status: str | None = None
     expected_widgets: dict[str, object | None] = field(default_factory=dict)
-    behavior: Behavior | None = None
+    behavior: Behavior = Behavior.step_by_step
     latest_notebook_state: str | None = None
     current_plan: dict | None = None
     buffer: list[str] = field(default_factory=list)
@@ -3122,17 +3121,23 @@ class AgentHarness:
 
             assert self.system_prompt is not None
 
-            if self.behavior == Behavior.proactive:
-                behavior_file = "proactive_behavior.md"
-            elif self.behavior == Behavior.step_by_step:
-                behavior_file = "step_by_step_behavior.md"
+            if self.behavior == Behavior.step_by_step:
+                behavior_file = "step_by_step.md"
             else:
-                behavior_file = "default_behavior.md"
-            behavior_instructions = (context_root / behavior_file).read_text()
+                behavior_file = "proactive.md"
+            
+            turn_behavior_content = (context_root / "turn_behavior" / behavior_file).read_text()
             final_system_prompt = re.sub(
-                r"<turn_structure>.*?</turn_structure>",
-                f"<turn_structure>\n{behavior_instructions}\n</turn_structure>",
+                r"<turn_behavior></turn_behavior>",
+                f"<turn_behavior>\n{turn_behavior_content}\n</turn_behavior>",
                 self.system_prompt,
+            )
+            
+            examples_content = (context_root / "examples" / behavior_file).read_text()
+            final_system_prompt = re.sub(
+                r"<examples></examples>",
+                f"<examples>\n{examples_content}\n</examples>",
+                final_system_prompt,
             )
 
             system_blocks = [
@@ -3536,7 +3541,11 @@ class AgentHarness:
         self.manually_cancelled = False
 
         if behavior is not None:
-            self.behavior = Behavior(behavior)
+            try:
+                self.behavior = Behavior(behavior)
+            except ValueError:
+                print(f"[agent] Unknown behavior '{behavior}', defaulting to proactive")
+                self.behavior = Behavior.proactive
 
         full_query = query
         if contextual_node_data:
