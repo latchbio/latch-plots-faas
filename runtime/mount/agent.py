@@ -1811,7 +1811,7 @@ class AgentHarness:
                             "properties": {
                                 "id": {"type": "string", "description": "Unique step identifier"},
                                 "description": {"type": "string", "description": "What this step does"},
-                                "status": {"type": "string", "enum": ["todo", "in_progress", "done"], "description": "Current status"}
+                                "status": {"type": "string", "enum": ["todo", "in_progress", "done", "cancelled"], "description": "Current status"}
                             },
                             "required": ["id", "description", "status"]
                         }
@@ -3440,7 +3440,7 @@ class AgentHarness:
             await self.send({
                 "type": "agent_status",
                 "status": "ready"
-            })           
+            })
             print("[agent] Initialization complete")
 
             print("[agent] Starting conversation loop")

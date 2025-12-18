@@ -324,7 +324,7 @@ For non-trivial tasks, create a plan before executing.
 
 ## Plan Structure
 
-The plan file is in `./context/notebook_context/plan.json` and has the following structure
+The plan file is in `notebook_context/plan.json` and has the following structure
 {
     "steps": [...]
 }
@@ -341,7 +341,7 @@ Each plan step looks like this:
 
 ## Plan Updates
 
-Before calling `update_plan`, use `read_file` on `./context/notebook_context/plan.json` to get the current state.
+Before calling `update_plan`, use `read_file` on `notebook_context/plan.json` to get the current state.
 
 Before calling `submit_response`, update plan status:
 
@@ -354,9 +354,9 @@ Use `plan_diff` to communicate changes:
 ```
 {
   "action": "add" | "update" | "complete" | "remove",
-  "id": "step_id",
-  "description": "Updated description if changed"
+  "id": "step_id"
 }
+```
 
 ## Planning Rules
 
@@ -939,7 +939,7 @@ submit_response(
 3. Run edited cell
 4. Call `submit_response` with `continue: false`
 
-````python
+```python
 # No plan update needed - step stays in_progress
 
 submit_response(
