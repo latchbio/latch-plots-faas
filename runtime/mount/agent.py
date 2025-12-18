@@ -3699,20 +3699,17 @@ class AgentHarness:
                 **result
             })
         elif msg_type == "seed_plan_from_history":
-            print(f"[agent] seed_plan_from_history received: {msg}")
+            print(f"[agent] seed_plan_from_history received")
             plan = msg.get("plan")
-            steps = plan.get("steps") if plan else None
-            if not plan or not steps:
-                print(f"[agent] seed_plan_from_history: empty plan or steps, skipping")
+            if plan is None or plan.get("steps") is None:
+                print(f"[agent] Invalid plan received")
                 return
 
             plan_path = Path(__file__).parent / "agent_config/context/notebook_context/plan.json"
             if not plan_path.exists():
                 with open(plan_path, "w") as f:
                     json.dump(plan, f, indent=2)
-                print(f"[agent] Seeded plan from history: {len(steps)} steps")
-            else:
-                print(f"[agent] seed_plan_from_history: plan.json already exists, skipping")
+                print(f"[agent] Seeded plan from history: {len(plan['steps'])} steps")
         else:
             print(f"[agent] Unknown message type: {msg_type}")
 
