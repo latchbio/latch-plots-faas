@@ -1143,7 +1143,6 @@ class AgentHarness:
                 }
             except Exception as e:
                 print(f"[tool] update_plan error: {e}")
-                traceback.print_exc()
                 return {
                     "tool_name": "update_plan",
                     "success": False,
