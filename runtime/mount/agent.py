@@ -705,7 +705,6 @@ class AgentHarness:
                 },
             )
 
-
     async def _complete_turn(self) -> None:
         if self.current_request_id is None:
             return
@@ -1799,7 +1798,7 @@ class AgentHarness:
 
         self.tools.append({
             "name": "update_plan",
-            "description": "Update the agent's plan. Provide the complete current plan, what changed (diff), and a short overview of the changes.",
+            "description": "Update the agent's plan.",
             "input_schema": {
                 "type": "object",
                 "properties": {
