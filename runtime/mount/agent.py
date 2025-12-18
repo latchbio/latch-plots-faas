@@ -42,6 +42,7 @@ if sandbox_root:
 
 
 context_root = Path(__file__).parent / "agent_config" / "context"
+plan_path = context_root / "notebook_context" / "plan.json"
 
 
 class Mode(Enum):
@@ -1122,8 +1123,6 @@ class AgentHarness:
                 plan_items = args.get("plan", [])
                 plan_diff = args.get("plan_diff", [])
                 plan_update_overview = args.get("plan_update_overview", "")
-
-                plan_path = Path(__file__).parent / "agent_config/context/notebook_context/plan.json"
 
                 plan = {"steps": plan_items}
 
@@ -3540,7 +3539,6 @@ class AgentHarness:
         await self._clear_running_state()
         await self._mark_all_history_removed()
 
-        plan_path = Path(__file__).parent / "agent_config/context/notebook_context/plan.json"
         if plan_path.exists():
             plan_path.unlink()
 
@@ -3703,7 +3701,6 @@ class AgentHarness:
                 print(f"[agent] Invalid plan received")
                 return
 
-            plan_path = Path(__file__).parent / "agent_config/context/notebook_context/plan.json"
             if not plan_path.exists():
                 with open(plan_path, "w") as f:
                     json.dump(plan, f, indent=2)
