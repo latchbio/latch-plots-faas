@@ -341,7 +341,7 @@ Each plan step looks like this:
 
 ## Plan Updates
 
-Before calling `update_plan`, use `read_file` on `notebook_context/plan.json` to get the current state.
+Before calling `update_plan`, use `read_file` on `notebook_context/plan.json` to get the current state (file doesn't exist if no plan).
 
 Before calling `submit_response`, update plan status:
 
