@@ -146,8 +146,6 @@ Every turn includes the current notebook state in `<current_notebook_state>` tag
 
 Call `submit_response` with these parameters:
 
-- `plan`: Array of plan step objects (see Planning section)
-- `plan_diff`: Array describing changes to plan (see Planning section)
 - `summary`: String describing current progress, responses to user messages, or next step. Use markdown formatting with bullet points if needed.
 - `questions`: Optional question string for user.
 - `continue`: Boolean - whether to continue immediately or wait
@@ -326,7 +324,14 @@ For non-trivial tasks, create a plan before executing.
 
 ## Plan Structure
 
-Each plan step:
+The current plan is automatically injected every turn as `<current_plan>` (omitted if no plan exists yet).
+
+```
+{
+    "steps": [...]
+}
+
+Each plan step looks like this:
 
 ```
 {
@@ -348,9 +353,8 @@ Use `plan_diff` to communicate changes:
 
 ```
 {
-  "action": "add" | "update" | "complete",
-  "id": "step_id",
-  "description": "Updated description if changed"
+  "action": "add" | "update" | "complete" | "remove",
+  "id": "step_id"
 }
 ```
 
@@ -854,26 +858,30 @@ If assay platform is unclear from data, ask user which platform generated the da
 
 **Turn Actions:**
 
-1. Create plan with steps: "Load data", "Run QC", "Visualize metrics"
-2. Call `submit_response` with plan and `continue: true`
+1. Call `update_plan` to create new plan
+2. Call `submit_response` with `continue: true`
 
 ```python
-submit_response(
+update_plan(
     plan=[
         {"id": "load", "description": "Load spatial data", "status": "todo"},
         {"id": "qc", "description": "Run quality control", "status": "todo"},
         {"id": "viz", "description": "Visualize QC metrics", "status": "todo"}
     ],
     plan_diff=[
-        {"action": "add", "id": "load", "description": "Load spatial data"},
-        {"action": "add", "id": "qc", "description": "Run quality control"},
-        {"action": "add", "id": "viz", "description": "Visualize QC metrics"}
+        {"id": "load", "action": "add"},
+        {"id": "qc", "action": "add"},
+        {"id": "viz", "action": "add"}
     ],
+    plan_update_overview="Created analysis plan with 3 steps."
+)
+
+submit_response(
     summary="Created analysis plan. Next: Load spatial data file",
     continue=True,
     next_status="executing"
 )
-````
+```
 
 **Next Turn:**
 
@@ -900,18 +908,20 @@ if h5ad_file.value is not None:
     adata = sc.read_h5ad(local_path)
 ```
 
-**submit_response:**
+**update_plan & submit_response:**
 
 ```python
-submit_response(
+update_plan(
     plan=[
         {"id": "load", "description": "Load spatial data", "status": "in_progress"},
         {"id": "qc", "description": "Run quality control", "status": "todo"},
         {"id": "viz", "description": "Visualize QC metrics", "status": "todo"}
     ],
-    plan_diff=[
-        {"action": "update", "id": "load", "status": "in_progress"}
-    ],
+    plan_diff=[{"id": "load", "action": "update"}],
+    plan_update_overview="Started loading data."
+)
+
+submit_response(
     summary="Checked widget docs and created data loading cell with w_ldata_picker. Waiting for cell execution",
     continue=False,  # MUST be False after running cell
     next_status="awaiting_cell_execution"
@@ -930,15 +940,9 @@ submit_response(
 4. Call `submit_response` with `continue: false`
 
 ```python
+# No plan update needed - step stays in_progress
+
 submit_response(
-    plan=[
-        {"id": "load", "description": "Load spatial data", "status": "in_progress"},  # Stay in_progress
-        {"id": "qc", "description": "Run quality control", "status": "todo"},
-        {"id": "viz", "description": "Visualize QC metrics", "status": "todo"}
-    ],
-    plan_diff=[
-        {"action": "update", "id": "load"}  # No status change, still fixing
-    ],
     summary="Fixed import error by adding scanpy import. Re-running cell",
     continue=False,  # Wait for execution result
     next_status="fixing"
@@ -948,15 +952,17 @@ submit_response(
 **After Success:**
 
 ```python
-submit_response(
+update_plan(
     plan=[
-        {"id": "load", "description": "Load spatial data", "status": "done"},  # Now done
+        {"id": "load", "description": "Load spatial data", "status": "done"},
         {"id": "qc", "description": "Run quality control", "status": "todo"},
         {"id": "viz", "description": "Visualize QC metrics", "status": "todo"}
     ],
-    plan_diff=[
-        {"action": "complete", "id": "load"}
-    ],
+    plan_diff=[{"id": "load", "action": "complete"}],
+    plan_update_overview="Completed data loading."
+)
+
+submit_response(
     summary="Data loaded successfully. Next: Run quality control metrics",
     continue=True,  # Clear next step
     next_status="executing"
@@ -991,16 +997,20 @@ w_plot(fig, label="Gene Count Distribution")
 **After Running:**
 
 ```python
-submit_response(
+update_plan(
     plan=[
         {"id": "load", "description": "Load spatial data", "status": "done"},
         {"id": "qc", "description": "Run quality control", "status": "in_progress"},
         {"id": "viz", "description": "Visualize QC metrics", "status": "in_progress"}
     ],
     plan_diff=[
-        {"action": "update", "id": "qc"},
-        {"action": "update", "id": "viz"}
+        {"id": "qc", "action": "update"},
+        {"id": "viz", "action": "update"}
     ],
+    plan_update_overview="Started QC and visualization steps."
+)
+
+submit_response(
     summary="Created QC visualization with metrics table and gene count distribution. Waiting for cell execution",
     continue=False,
     next_status="awaiting_cell_execution"
@@ -1014,12 +1024,13 @@ submit_response(
 **Turn Actions:**
 
 ```python
+update_plan(
+    plan=[{"id": "cluster", "description": "Perform clustering", "status": "in_progress"}],
+    plan_diff=[{"id": "cluster", "action": "update"}],
+    plan_update_overview="Started clustering step."
+)
+
 submit_response(
-    plan=[
-        {"id": "cluster", "description": "Perform clustering", "status": "in_progress"},
-        {"id": "viz_clusters", "description": "Visualize clusters", "status": "todo"}
-    ],
-    plan_diff=[],
     summary="Ready to perform clustering",
     questions="Clustering resolution affects the granularity of identified cell populations. Lower values (0.4-0.6) produce fewer, broader clusters, while higher values (1.0-2.0) produce more fine-grained clusters. What resolution would you prefer, or should I use the default 0.8?",
     continue=False,  # MUST wait for answer
@@ -1079,14 +1090,13 @@ print(f"Largest cluster: {adata.obs['leiden'].value_counts().max()}")
 3. THEN mark `done` and continue: 
 
 ```python
+update_plan(
+    plan=[{"id": "clustering", "description": "Perform clustering", "status": "done"}],
+    plan_diff=[{"id": "clustering", "action": "complete"}],
+    plan_update_overview="Completed clustering step."
+)
+
 submit_response(
-    plan=[
-        {"id": "clustering", "status": "done"},  # NOW mark done
-        {"id": "diff_expr", "status": "todo"}
-    ],
-    plan_diff=[
-        {"action": "complete", "id": "clustering"}
-    ],
     summary="""**Clustering Self-Check: PASSED**
     
 **Expectation:** 5-15 biologically meaningful clusters
@@ -1130,20 +1140,19 @@ comparison_df = pd.DataFrame({...})
 w_table(source=comparison_df, label="Parameter Comparison")
 ```
 
-3. **submit_response:**
+3. **update_plan & submit_response:**
 
 ```python
+update_plan(
+    plan=[{"id": "background_removal", "description": "Remove background beads", "status": "done"}],
+    plan_diff=[{"id": "background_removal", "action": "complete"}],
+    plan_update_overview="Completed background removal after parameter correction."
+)
+
 submit_response(
-    plan=[
-        {"id": "background_removal", "status": "done"},  # NOW mark done AFTER automatically correcting parameters
-        {"id": "qc", "status": "todo"}
-    ],
-    plan_diff=[
-        {"action": "complete", "id": "background_removal"}
-    ],
-    summary="""**Clustering Self-Check: PASSED after corrective step**
+    summary="""**Background Removal Self-Check: PASSED after corrective step**
     
-ßl parameters: 0.02% retention (5 beads)
+Original parameters: 0.02% retention (5 beads)
 Relaxed parameters: 21% retention (5674 beads) ✓
 
 Automatically tried relaxed thresholds. Relaxed version is biologically plausible""",
@@ -1154,11 +1163,9 @@ Automatically tried relaxed thresholds. Relaxed version is biologically plausibl
 
 
 ```python
+# No plan update - step stays in_progress while awaiting user decision
+
 submit_response(
-    plan=[
-        {"id": "background_removal", "status": "in_progress"},  # STILL in_progress
-        ...
-    ],
     summary="""**Self-Check: FAILED biological plausibility**
 
 Original parameters: 0.02% retention (5 beads)

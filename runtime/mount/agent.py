@@ -81,6 +81,7 @@ class AgentHarness:
     expected_widgets: dict[str, object | None] = field(default_factory=dict)
     behavior: Behavior | None = None
     latest_notebook_state: str | None = None
+    current_plan: dict | None = None
     buffer: list[str] = field(default_factory=list)
     summarize_tasks: set[asyncio.Task] = field(default_factory=set)
 
@@ -197,6 +198,8 @@ class AgentHarness:
                             truncated_inp = {k: v for k, v in inp.items() if k != "code"}
                         elif tool_name == "edit_cell":
                             truncated_inp = {k: v for k, v in inp.items() if k != "new_code"}
+                        elif tool_name == "update_plan":
+                            truncated_inp = {k: v for k, v in inp.items() if k not in {"plan", "plan_diff"}}
 
                     truncated_blocks.append({
                         "type": "tool_use",
@@ -1115,6 +1118,34 @@ class AgentHarness:
                 "success": False,
             }
 
+        async def update_plan(args: dict) -> dict:
+            try:
+                plan_items = args.get("plan", [])
+                plan_diff = args.get("plan_diff", [])
+                plan_update_overview = args.get("plan_update_overview", "")
+
+                plan = {"steps": plan_items}
+                self.current_plan = plan
+
+                print(f"[tool] update_plan: {plan_update_overview}")
+                for item in plan_items:
+                    print(f"  [{item.get('status')}] {item.get('id')}: {item.get('description')}")
+                for diff in plan_diff:
+                    print(f"  diff: [{diff.get('action')}] {diff.get('id')}")
+
+                return {
+                    "tool_name": "update_plan",
+                    "success": True,
+                    "summary": plan_update_overview if plan_update_overview else "Plan updated",
+                }
+            except Exception as e:
+                print(f"[tool] update_plan error: {e}")
+                return {
+                    "tool_name": "update_plan",
+                    "success": False,
+                    "summary": f"Error updating plan: {e!s}",
+                }
+
         def submit_response(args: dict) -> dict:
             try:
                 summary = args.get("summary")
@@ -1136,19 +1167,10 @@ class AgentHarness:
 
                 should_continue = args.get("continue", False)
 
-                plan_items = args.get("plan", [])
-                plan_diff_items = args.get("plan_diff", [])
                 expected_widgets = args.get("expected_widgets", [])
 
                 print("[tool] submit_response called with:")
                 print(f"  - next_status: {next_status}")
-                print(f"  - plan: {len(plan_items)} items")
-                print(f"  - plan_update_overview: {args.get('plan_update_overview')}")
-                for item in plan_items:
-                    print(f"    - [{item.get('status')}] {item.get('id')}: {item.get('description')}")
-                print(f"  - plan_diff: {len(plan_diff_items)} items")
-                for diff in plan_diff_items:
-                    print(f"    - [{diff.get('action')}] {diff.get('id')}: {diff.get('description')}")
                 print(f"  - summary: {summary}")
                 print(f"  - questions: {questions}")
                 print(f"  - continue: {should_continue}")
@@ -1771,14 +1793,52 @@ class AgentHarness:
         self.tool_map["restore_checkpoint"] = restore_checkpoint
 
         self.tools.append({
-            "name": "submit_response",
-            "description": "Submit the final response with plan, plan_diff, next_status, questions, and summary. At least one of summary or questions is REQUIRED. Call this at the end of every turn.",
+            "name": "update_plan",
+            "description": "Update the agent's plan.",
             "input_schema": {
                 "type": "object",
                 "properties": {
-                    "plan": {"type": "array", "description": "List of plan items"},
-                    "plan_diff": {"type": "array", "description": "List of plan diff items"},
-                    "plan_update_overview": {"type": "string", "description": "Short title overview of what changed in the plan. Should follow the format like 'Added a new step.' or  `Completed step 2, step 3 now in progress.`"},
+                    "plan": {
+                        "type": "array",
+                        "description": "List of plan items. This should be the complete current plan state.",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "id": {"type": "string", "description": "Unique step identifier"},
+                                "description": {"type": "string", "description": "What this step does"},
+                                "status": {"type": "string", "enum": ["todo", "in_progress", "done", "cancelled"], "description": "Current status"}
+                            },
+                            "required": ["id", "description", "status"]
+                        }
+                    },
+                    "plan_diff": {
+                        "type": "array",
+                        "description": "List of plan diff items - only the steps that changed in this update.",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "id": {"type": "string", "description": "Unique step identifier"},
+                                "action": {"type": "string", "enum": ["add", "update", "complete", "remove"], "description": "What action was taken on this step"}
+                            },
+                            "required": ["id", "action"]
+                        }
+                    },
+                    "plan_update_overview": {
+                        "type": "string",
+                        "description": "Short title overview of what changed. E.g. 'Added QC steps' or 'Completed step 2, step 3 now in progress'"                    
+                    }
+                },
+                "required": ["plan", "plan_diff", "plan_update_overview"]
+            }
+        })
+        self.tool_map["update_plan"] = update_plan
+
+        self.tools.append({
+            "name": "submit_response",
+            "description": "Submit the final response with next_status, questions, and summary. At least one of summary or questions is REQUIRED. Call this at the end of every turn.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
                     "summary": {"type": "string", "description": "Summary text to help the user. This can be a message to the user or a description of what was accomplished. Use markdown formatting with bullet points if needed."},
                     "questions": {"type": "string", "description": "Optional question text for the user."},
                     "next_status": {"type": "string", "description": "What the agent will do next", "enum": ["executing", "fixing", "thinking", "awaiting_user_response", "awaiting_cell_execution", "awaiting_user_widget_input", "done"]},
@@ -1793,7 +1853,7 @@ class AgentHarness:
                         "default": False
                     },
                 },
-                "required": ["plan", "plan_diff", "next_status", "plan_update_overview"],
+                "required": ["next_status"],
             },
         })
         self.tool_map["submit_response"] = submit_response
@@ -2997,17 +3057,25 @@ class AgentHarness:
                 "text": f"<current_notebook_state>\n{notebook_state}\n</current_notebook_state>",
             }
 
+            context_blocks = [notebook_state_block]
+            if self.current_plan is not None:
+                plan_content = json.dumps(self.current_plan, indent=2)
+                context_blocks.append({
+                    "type": "text",
+                    "text": f"<current_plan>\n{plan_content}\n</current_plan>",
+                })
+
             last_user_msg = api_messages[-1]
             last_content = last_user_msg.get("content")
             if isinstance(last_content, str):
                 api_messages[-1] = {  # pyright: ignore[reportArgumentType, reportCallIssue]
                     "role": "user",
-                    "content": [{"type": "text", "text": last_content}, notebook_state_block],
+                    "content": [{"type": "text", "text": last_content}, *context_blocks],
                 }
             elif isinstance(last_content, list):
                 api_messages[-1] = {  # pyright: ignore[reportArgumentType, reportCallIssue]
                     "role": "user",
-                    "content": [*last_content, notebook_state_block],
+                    "content": [*last_content, *context_blocks],
                 }
 
             turn += 1
@@ -3382,20 +3450,52 @@ class AgentHarness:
             self._start_conversation_loop()
             print("[agent] Conversation loop started")
 
-            most_recent_submit_response = None
+            latest_submit_response = None
+            latest_update_plan = None
+            latest_submit_response_with_plan = None
+            
             for history_msg in reversed(messages):
-                if history_msg.get("role") == "assistant":
-                    content = history_msg.get("content")
-                    if isinstance(content, list):
-                        for block in content:
-                            if isinstance(block, dict) and block.get("type") == "tool_use" and block.get("name") == "submit_response":
-                                most_recent_submit_response = block.get("input", {})
-                                break
-                    if most_recent_submit_response is not None:
+                if history_msg.get("role") != "assistant":
+                    continue
+                content = history_msg.get("content")
+                if not isinstance(content, list):
+                    continue
+                
+                for block in reversed(content):
+                    if not isinstance(block, dict) or block.get("type") != "tool_use":
+                        continue
+                    
+                    tool_name = block.get("name")
+                    tool_input = block.get("input", {})
+                    
+                    if tool_name == "submit_response":
+                        if latest_submit_response is None:
+                            latest_submit_response = tool_input
+                        if latest_submit_response_with_plan is None and tool_input.get("plan"):
+                            latest_submit_response_with_plan = tool_input
+                    
+                    if tool_name == "update_plan" and latest_update_plan is None:
+                        plan_items = tool_input.get("plan", [])
+                        if plan_items:
+                            latest_update_plan = tool_input
+                    
+                    if latest_submit_response is not None and latest_update_plan is not None:
                         break
+                
+                if latest_submit_response is not None and latest_update_plan is not None:
+                    break
+            
+            if latest_update_plan is not None:
+                plan_items = latest_update_plan.get("plan", [])
+                self.current_plan = {"steps": plan_items}
+                print(f"[agent] Seeded plan from update_plan: {len(plan_items)} steps")
+            elif latest_submit_response_with_plan is not None:
+                plan_items = latest_submit_response_with_plan.get("plan", [])
+                self.current_plan = {"steps": plan_items}
+                print(f"[agent] Seeded plan from submit_response: {len(plan_items)} steps")
 
-            if most_recent_submit_response is not None:
-                next_status = most_recent_submit_response.get("next_status")
+            if latest_submit_response is not None:
+                next_status = latest_submit_response.get("next_status")
                 waiting_states = {"awaiting_cell_execution", "awaiting_user_widget_input"}
 
                 if next_status in waiting_states:
@@ -3476,6 +3576,9 @@ class AgentHarness:
     async def handle_clear_history(self) -> None:
         await self._clear_running_state()
         await self._mark_all_history_removed()
+
+        self.current_plan = None
+
         self._start_conversation_loop()
 
     async def get_full_prompt(self) -> dict:
@@ -3628,6 +3731,16 @@ class AgentHarness:
                 "tx_id": tx_id,
                 **result
             })
+        elif msg_type == "seed_plan_from_history":
+            print(f"[agent] seed_plan_from_history received")
+            plan = msg.get("plan")
+            if plan is None or plan.get("steps") is None:
+                print(f"[agent] Invalid plan received")
+                return
+
+            if self.current_plan is None:
+                self.current_plan = plan
+                print(f"[agent] Seeded plan from history: {len(plan['steps'])} steps")
         else:
             print(f"[agent] Unknown message type: {msg_type}")
 
