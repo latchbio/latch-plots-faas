@@ -324,7 +324,9 @@ For non-trivial tasks, create a plan before executing.
 
 ## Plan Structure
 
-The plan file is in `notebook_context/plan.json` and has the following structure
+The current plan is automatically injected every turn as `<current_plan>` (omitted if no plan exists yet).
+
+```
 {
     "steps": [...]
 }
@@ -340,8 +342,6 @@ Each plan step looks like this:
 ```
 
 ## Plan Updates
-
-Before calling `update_plan`, use `read_file` on `notebook_context/plan.json` to get the current state (file doesn't exist if no plan).
 
 Before calling `submit_response`, update plan status:
 

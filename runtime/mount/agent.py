@@ -42,7 +42,6 @@ if sandbox_root:
 
 
 context_root = Path(__file__).parent / "agent_config" / "context"
-plan_path = context_root / "notebook_context" / "plan.json"
 
 
 class Mode(Enum):
@@ -82,6 +81,7 @@ class AgentHarness:
     expected_widgets: dict[str, object | None] = field(default_factory=dict)
     behavior: Behavior | None = None
     latest_notebook_state: str | None = None
+    current_plan: dict | None = None
     buffer: list[str] = field(default_factory=list)
     summarize_tasks: set[asyncio.Task] = field(default_factory=set)
 
@@ -1125,9 +1125,7 @@ class AgentHarness:
                 plan_update_overview = args.get("plan_update_overview", "")
 
                 plan = {"steps": plan_items}
-
-                with open(plan_path, "w") as f:
-                    json.dump(plan, f, indent=2)
+                self.current_plan = plan
 
                 print(f"[tool] update_plan: {plan_update_overview}")
                 for item in plan_items:
@@ -3059,17 +3057,25 @@ class AgentHarness:
                 "text": f"<current_notebook_state>\n{notebook_state}\n</current_notebook_state>",
             }
 
+            context_blocks = [notebook_state_block]
+            if self.current_plan is not None:
+                plan_content = json.dumps(self.current_plan, indent=2)
+                context_blocks.append({
+                    "type": "text",
+                    "text": f"<current_plan>\n{plan_content}\n</current_plan>",
+                })
+
             last_user_msg = api_messages[-1]
             last_content = last_user_msg.get("content")
             if isinstance(last_content, str):
                 api_messages[-1] = {  # pyright: ignore[reportArgumentType, reportCallIssue]
                     "role": "user",
-                    "content": [{"type": "text", "text": last_content}, notebook_state_block],
+                    "content": [{"type": "text", "text": last_content}, *context_blocks],
                 }
             elif isinstance(last_content, list):
                 api_messages[-1] = {  # pyright: ignore[reportArgumentType, reportCallIssue]
                     "role": "user",
-                    "content": [*last_content, notebook_state_block],
+                    "content": [*last_content, *context_blocks],
                 }
 
             turn += 1
@@ -3444,20 +3450,52 @@ class AgentHarness:
             self._start_conversation_loop()
             print("[agent] Conversation loop started")
 
-            most_recent_submit_response = None
+            latest_submit_response = None
+            latest_update_plan = None
+            latest_submit_response_with_plan = None
+            
             for history_msg in reversed(messages):
-                if history_msg.get("role") == "assistant":
-                    content = history_msg.get("content")
-                    if isinstance(content, list):
-                        for block in content:
-                            if isinstance(block, dict) and block.get("type") == "tool_use" and block.get("name") == "submit_response":
-                                most_recent_submit_response = block.get("input", {})
-                                break
-                    if most_recent_submit_response is not None:
+                if history_msg.get("role") != "assistant":
+                    continue
+                content = history_msg.get("content")
+                if not isinstance(content, list):
+                    continue
+                
+                for block in reversed(content):
+                    if not isinstance(block, dict) or block.get("type") != "tool_use":
+                        continue
+                    
+                    tool_name = block.get("name")
+                    tool_input = block.get("input", {})
+                    
+                    if tool_name == "submit_response":
+                        if latest_submit_response is None:
+                            latest_submit_response = tool_input
+                        if latest_submit_response_with_plan is None and tool_input.get("plan"):
+                            latest_submit_response_with_plan = tool_input
+                    
+                    if tool_name == "update_plan" and latest_update_plan is None:
+                        plan_items = tool_input.get("plan", [])
+                        if plan_items:
+                            latest_update_plan = tool_input
+                    
+                    if latest_submit_response is not None and latest_update_plan is not None:
                         break
+                
+                if latest_submit_response is not None and latest_update_plan is not None:
+                    break
+            
+            if latest_update_plan is not None:
+                plan_items = latest_update_plan.get("plan", [])
+                self.current_plan = {"steps": plan_items}
+                print(f"[agent] Seeded plan from update_plan: {len(plan_items)} steps")
+            elif latest_submit_response_with_plan is not None:
+                plan_items = latest_submit_response_with_plan.get("plan", [])
+                self.current_plan = {"steps": plan_items}
+                print(f"[agent] Seeded plan from submit_response: {len(plan_items)} steps")
 
-            if most_recent_submit_response is not None:
-                next_status = most_recent_submit_response.get("next_status")
+            if latest_submit_response is not None:
+                next_status = latest_submit_response.get("next_status")
                 waiting_states = {"awaiting_cell_execution", "awaiting_user_widget_input"}
 
                 if next_status in waiting_states:
@@ -3539,8 +3577,7 @@ class AgentHarness:
         await self._clear_running_state()
         await self._mark_all_history_removed()
 
-        if plan_path.exists():
-            plan_path.unlink()
+        self.current_plan = None
 
         self._start_conversation_loop()
 
@@ -3701,9 +3738,8 @@ class AgentHarness:
                 print(f"[agent] Invalid plan received")
                 return
 
-            if not plan_path.exists():
-                with open(plan_path, "w") as f:
-                    json.dump(plan, f, indent=2)
+            if self.current_plan is None:
+                self.current_plan = plan
                 print(f"[agent] Seeded plan from history: {len(plan['steps'])} steps")
         else:
             print(f"[agent] Unknown message type: {msg_type}")
