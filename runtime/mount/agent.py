@@ -3190,9 +3190,15 @@ class AgentHarness:
                                 if asyncio.iscoroutine(result):
                                     result = await result
 
-                                if tool_name == "capture_widget_image" and result.get("success") and result.get("image"):
+                                if tool_name == "capture_widget_image" and result.get("success") and result.get("image") is not None:
                                     image_data: str = result.get("image", "")
-                                    image_data = image_data.removeprefix("data:image/png;base64,")
+                                    if not image_data.startswith("data:"):
+                                        raise ValueError("Image data is not a data URL")
+
+                                    header, base64_data = image_data.split(",", 1)
+                                    media_type = header.split(";")[0].removeprefix("data:")
+                                    image_data = base64_data
+
                                     result_without_image = {k: v for k, v in result.items() if k != "image"}
 
                                     tool_results.append({
@@ -3207,7 +3213,7 @@ class AgentHarness:
                                                 "type": "image",
                                                 "source": {
                                                     "type": "base64",
-                                                    "media_type": "image/png",
+                                                    "media_type": media_type,
                                                     "data": image_data,
                                                 },
                                             },
