@@ -1858,24 +1858,24 @@ class AgentHarness:
         self.tool_map["submit_response"] = submit_response
 
         self.tools.append({
-                    "name": "set_widget",
-                    "description": "Set a single widget value by widget key.",
-                    "input_schema": {
-                        "type": "object",
-                        "properties": {
-                            "key": {
-                                "type": "string",
-                                "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
-                            },
-                            "value": {
-                                "description": "JSON-serializable value"
-                            },
-                            "action_summary": {"type": "string", "description": "Summary of the purpose of the set_widget."},
-                            "label": {"type": "string", "description": "Label of the widget to set"},
-                        },
-                        "required": ["key", "value", "action_summary", "label"],
+            "name": "set_widget",
+            "description": "Set a single widget value by widget key.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "key": {
+                        "type": "string",
+                        "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
                     },
-                })
+                    "value": {
+                        "description": "JSON-serializable value"
+                    },
+                    "action_summary": {"type": "string", "description": "Summary of the purpose of the set_widget."},
+                    "label": {"type": "string", "description": "Label of the widget to set"},
+                },
+                "required": ["key", "value", "action_summary", "label"],
+            },
+        })
         self.tool_map["set_widget"] = set_widget
 
         self.tools.append({
@@ -3121,10 +3121,10 @@ class AgentHarness:
 
             assert self.system_prompt is not None
 
-            if self.behavior == Behavior.step_by_step:
-                behavior_file = "step_by_step.md"
-            else:
+            if self.behavior == Behavior.proactive:
                 behavior_file = "proactive.md"
+            else:
+                behavior_file = "step_by_step.md"
             
             turn_behavior_content = (context_root / "turn_behavior" / behavior_file).read_text()
             final_system_prompt = re.sub(
@@ -3538,8 +3538,8 @@ class AgentHarness:
             try:
                 self.behavior = Behavior(behavior)
             except ValueError:
-                print(f"[agent] Unknown behavior '{behavior}', defaulting to proactive")
-                self.behavior = Behavior.proactive
+                print(f"[agent] Unknown behavior '{behavior}', defaulting to step by step")
+                self.behavior = Behavior.step_by_step
 
         full_query = query
         if contextual_node_data:
