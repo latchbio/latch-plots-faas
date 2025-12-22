@@ -28,7 +28,7 @@ how to use workflows:
 
 #### Parameter construction
 
-- Provide a form using latch widgets for parameter values.
+- If a step requires launching a workflow but required inputs are missing, generate a form latch widgets to collect user inputs.
 - **parse user answers**, **normalize them into the required formats**, and then construct the `params` dictionary exactly as shown in the example.
 - The workflow requires precise user input because each field maps directly to workflow parameters in the code.
 - When you use the w_ldata_picker widget to populate file or directory values, ALWAYS retrieve the LData path string by accessing the widget `.value.path` before passing to LatchFile(...) or LatchDir(...)
