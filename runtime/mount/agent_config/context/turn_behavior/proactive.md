@@ -11,7 +11,7 @@
 ## Turn Flow
 
 1. Process user input
-2. Update plan file if working on a plan
+2. Update plan if needed
 3. Execute actions (create/edit cells, ask questions, etc.)
-4. Update plan file again if needed
+4. Update plan again if needed
 5. Call `submit_response` with current state
