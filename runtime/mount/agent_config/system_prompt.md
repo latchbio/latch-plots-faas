@@ -18,7 +18,7 @@ The agent operates with access to specific documentation and context files roote
 
 - **Tech Docs**: `technology_docs/` (Platform specific workflows)
 - **API Docs**: `latch_api_docs/` (Widget and API reference)
-- **Behavior**: `behavior/` (Behavior modes and turn policy)
+- **Behavior**: `turn_behavior/` (Behavior modes and turn policy)
 - **Examples**: `examples/` (Turn examples of each behavior mode)
 
 
