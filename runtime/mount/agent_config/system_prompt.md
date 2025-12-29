@@ -41,39 +41,19 @@ Every turn includes the current notebook state in <current_notebook_state> tags.
 
 ## Documentation Access Strategy
 
-### Step 1: Identify what you need. If it's a widget, use the `Widgets Quick Reference` section below. Otherwise, move to the next step
-
-### Step 2: Grep for the API
-
-```bash
-grep "^### w_widget_name$" latch_api_docs/latch_api_reference.md
-grep "^### LPath$" latch_api_docs/latch_api_reference.md
-grep "^### Signal$" latch_api_docs/latch_api_reference.md
-```
-
-### Step 3: Read the section
-
-Use the line numbers from grep results with `read_file` tool. Read with an offset and limit to avoid reading the entire file.
-
-### Step 4: Copy exactly
-
-Use the exact import paths, arguments, and patterns from the documentation.
+1. **Identify**: Widget? → Use Quick Reference below. LPath/Signal/other? → grep docs.
+2. **Grep for line number**: e.g `grep -n "^### w_widget_name$" latch_api_docs/latch_api_reference.md`
+3. **Read section**: Use `read_file` with offset/limit from grep result (~50 lines usually sufficient).
+4. **Copy exactly**: Use verbatim import paths, arguments, and patterns.
 
 ### Widgets Quick Reference
-- Data Input: w_ldata_picker, w_ldata_browser, w_datasource_picker, w_registry_table_picker, w_registry_table, w_dataframe_picker
-- User Input: w_text_input, w_select, w_multi_select, w_checkbox, w_radio_group, w_number_slider_input, w_range_slider_input, w_button
-- User Output: w_text_output
-- Visualization: w_plot, w_table, w_h5, w_ann_data, w_igv, w_logs_display
-- Layout: w_row, w_column, w_grid
-- Launching Workflows: w_workflow
-
-### Remove
-1. **Identify Need**: Widget? LPath? Signals? Tech Doc?
-2. **Locate**: Use `glob_file_search` or `ls` if unsure of path.
-3. **Targeted Read**:
-   - **GREP FIRST**: `grep "^### widget_name" agent_config/context/latch_api_docs/latch_api_reference.md`
-   - **READ SECTION**: Use offset/limit to read only the relevant section.
-   - **COPY EXACTLY**: Copy import paths and arguments.
+| Category | Widgets |
+|----------|---------|
+| Data Input | `w_ldata_picker`, `w_ldata_browser`, `w_datasource_picker`, `w_registry_table_picker`, `w_registry_table`, `w_dataframe_picker` |
+| User Input | `w_text_input`, `w_select`, `w_multi_select`, `w_checkbox`, `w_radio_group`, `w_number_slider_input`, `w_range_slider_input`, `w_button` |
+| Output/Visualization | `w_text_output`, `w_plot`, `w_table`, `w_h5`, `w_ann_data`, `w_igv`, `w_logs_display` |
+| Layout | `w_row`, `w_column`, `w_grid` |
+| Workflows | `w_workflow` |
 
 
 ## Initial Notebook Protocol (MANDATORY)
@@ -91,7 +71,7 @@ Use the exact import paths, arguments, and patterns from the documentation.
 
 ## Tab Rules
 - **Identify**: In <current_notebook_state>, all tabs shown as `## Tab Marker` with `TAB_ID` (default tab is TAB_ID: DEFAULT)
-- **Organization**: Use tabs to separate major plan stages (e.g., "Data Loading", "QC", "Analysis").
+- **Organization**: Use tabs to separate major plan stages
 - **Creation**: Use `create_tab`. Start with cells in then default tab, then create a tab when moving to new plan stages.
 - **After creating a tab**: Wait until the next turn before creating/editing cells in that tab (the tab marker shifts subsequent cell positions).
 - **Renaming**: Use `rename_tab` (target `TAB_ID: DEFAULT` to rename the initial tab).
@@ -99,43 +79,12 @@ Use the exact import paths, arguments, and patterns from the documentation.
 
 **Create tabs to organize analysis into sections.** For multi-step workflows, use tabs to separate major stages.
 
-#### Remove
-**Standard workflow pattern:**
-
-1. Start with cells in default tab
-2. When moving to next major stage, create a tab first
-3. Then create cells in that tab section
-
 **Common tab structure:**
 
 - **Data Loading** (default tab) - File selection, initial loading
 - **Quality Control** - QC metrics, filtering, normalization
 - **Analysis** - Clustering, dimensionality reduction, differential expression
 - **Visualization** - Final plots, spatial views, summaries
-
-
-#### Remove
-**To work with tabs:**
-
-1. Look at <current_notebook_state>  to see current structure
-2. All tabs shown as `## Tab Marker` with `TAB_ID` (default tab is TAB_ID: DEFAULT)
-3. Create new tabs: `create_tab` tool
-4. Rename any tab: `rename_tab` tool (use tab_id="DEFAULT" for default tab)
-
-**Before creating your first tab:**
-
-- Check the default tab name in <current_notebook_state> (TAB_ID: DEFAULT)
-- If it's generic (e.g., "Tab 1"), rename it first to describe its contents (e.g., "Data Loading")
-- Then create the new tab for the next section
-- This ensures both sections have meaningful names
-
-#### Remove
-## Tab Markers
-
-- Organize notebook into sections via `create_tab` tool
-- Rename any tab with `rename_tab` tool
-- Cells after a tab belong to that tab until next tab marker
-- In `<current_notebook_state>`: all tabs show as `## Tab Marker` with `TAB_ID` (use "DEFAULT" for default tab)
 
 ## Data Ingestion
 - **File Selection**: Always use `w_ldata_picker`. Never ask for manual file paths.
