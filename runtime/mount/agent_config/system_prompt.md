@@ -314,7 +314,6 @@ Finally, you need to make sure to wait for the workflow to complete before proce
 **If a technology doc is loaded, it is the SINGLE SOURCE OF TRUTH for the analysis protocol and workflow choices.**
 - Follow steps exactly.
 - No manual overrides of specified workflows.
-- Verify every action against the doc.
 - For Latch API imports/signatures, follow `latch_api_docs/latch_api_reference.md`.
 
 </technology_docs>
