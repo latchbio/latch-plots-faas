@@ -34,5 +34,5 @@ Load databases from Latch Data:
 <self_eval_criteria>
 - Cell type proportions are biologically plausible
 - Use capture image tool and check whether spatial location of cell types make sense
-- Canonical markers show enrichment for the predicted cell type versus all others
+- Inspect violin plots and verify that canonical markers show enrichment for the predicted cell type versus all others
 </self_eval_criteria>
