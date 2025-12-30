@@ -3,6 +3,8 @@ Generate clustering results by systematically exploring parameter combinations u
 </goal>
 
 <method>
+- **MANDATORY: Use opt_workflow**. Manual Leiden produces inferior results for epigenomic data.
+- **If user only provides h5ad:** you MUST ask for raw data directory (fragments + spatial). 
 </method>
 
 <workflows>
