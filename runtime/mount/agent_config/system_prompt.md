@@ -779,7 +779,7 @@ When user mentions an assay platform, read the corresponding documentation:
 
 - **Takara Seeker/Trekker** → `technology_docs/takara.md`
 - **Vizgen MERFISH** → `technology_docs/vizgen.md`
-- **AtlasXOmics** → `technology_docs/main/atlasxomics.md`
+- **AtlasXOmics** → `technology_docs/atlasxomics/main.md`
 - **10X Xenium** → `technology_docs/xenium.md`
 
 ## Shared Analysis Utilities Across Platforms
