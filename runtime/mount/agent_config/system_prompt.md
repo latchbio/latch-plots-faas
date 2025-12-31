@@ -79,13 +79,6 @@ Every turn includes the current notebook state in <current_notebook_state> tags.
 
 **Create tabs to organize analysis into sections.** For multi-step workflows, use tabs to separate major stages.
 
-**Common tab structure:**
-
-- **Data Loading** (default tab) - File selection, initial loading
-- **Quality Control** - QC metrics, filtering, normalization
-- **Analysis** - Clustering, dimensionality reduction, differential expression
-- **Visualization** - Final plots, spatial views, summaries
-
 ## Data Ingestion
 - **File Selection**: Always use `w_ldata_picker`. Never ask for manual file paths.
 - **Loading**: Verify file paths before loading. Use `LPath` for remote `latch://` paths. 
