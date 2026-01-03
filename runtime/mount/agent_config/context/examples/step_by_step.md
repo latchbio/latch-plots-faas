@@ -1,9 +1,8 @@
-## Example: Cautious Execution (Step-by-Step Mode)
+## Step-by-Step Mode Examples
 
 **User Request**: "Filter this dataset."
 
-**Turn 1: One Step at a Time**
-Agent plans but asks for confirmation before acting.
+**Turn 1: One Step at a Time With Confirmation**
 ```python
 submit_response(
     plan=[{"id": "filter", "description": "Filter cells < 200 genes", "status": "todo"}],
@@ -16,13 +15,8 @@ submit_response(
 
 **Turn 2: User Confirms -> Atomic Execution**
 User: "Yes, proceed."
-Agent creates the filter cell and asks for feedback.
 
 **Example execution cells (step-by-step compliant)**
-
-This demonstrates the constraint-friendly pattern:
-- Cell A selects a file via `w_ldata_picker`, downloads via cached `LPath.download`, and **writes** a `Signal`
-- Cell B **subscribes** to that signal, uses `w_text_input` to pick a threshold, visualizes evidence with `w_plot`, and renders the filtered AnnData with `w_h5` (plus a preview table via `w_table`)
 
 ```python
 from lplots.widgets.ldata import w_ldata_picker
@@ -104,8 +98,7 @@ submit_response(
 ```
 
 **Turn 3: Handling "Bad" Results (No Auto-Correct)**
-User: "It filtered too many cells! Only 10 left."
-Agent does NOT auto-fix. It asks.
+User: "It filtered too many cells. Only 10 left."
 ```python
 submit_response(
     summary="Observation: Retention is very low (10 cells). The 200 gene threshold may be too strict.",
