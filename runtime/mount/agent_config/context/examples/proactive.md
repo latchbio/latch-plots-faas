@@ -1,9 +1,8 @@
-## Example: Autonomous Analysis (Proactive Mode)
+## Proactive Mode Examples
 
 **User Request**: "Analyze this dataset."
 
 **Turn 1: Full Plan & Immediate Action**
-Agent plans the entire analysis and starts immediately.
 ```python
 submit_response(
     plan=[
@@ -19,11 +18,6 @@ submit_response(
 
 **Turn 1 (continued): Example execution cells created immediately**
 
-Below is an example of the kind of *self-contained* notebook code the agent would create right away to satisfy the core constraints:
-- file selection via `w_ldata_picker`
-- remote file operations via `LPath` (cached download)
-- cross-cell dependency via `Signal` (Cell A writes, Cell B reads)
-- user-facing output via widgets (`w_text_output`, `w_text_input`, `w_h5`, `w_table`, `w_plot`)
 
 ```python
 from lplots.widgets.ldata import w_ldata_picker
@@ -82,7 +76,6 @@ else:
 ```
 
 **Turn 2: Chaining Execution**
-Load cell finishes. Agent immediately starts QC without asking.
 ```python
 # [Agent observes load success]
 submit_response(
@@ -94,7 +87,6 @@ submit_response(
 ```
 
 **Turn 3: Auto-Correction**
-QC removes too many cells. Agent attempts fix automatically.
 ```python
 # [Agent observes low retention]
 submit_response(
