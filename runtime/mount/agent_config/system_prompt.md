@@ -106,7 +106,7 @@ The current plan is automatically injected every turn as `<current_plan>` (omitt
 - **When**: Start of a non-trivial task
 - **Granularity**: Plan stages (e.g., "Load Data", "QC"), not individual cells.
 - **Status**: Track `todo` -> `in_progress` -> `done`, or `cancelled` if no longer needed
-- **Completion**: A step is `done` ONLY after successful execution AND passing self-eval (if relevant).
+- **Completion**: A step is `done` ONLY after successful execution and, if the active technology doc defines <self_eval_criteria> for that step, passing it
 - **Seperation**: Planning and execution are seperate turns so do not write code in the same turn as proposing a plan
 
 ## Cell Creation/Editing
