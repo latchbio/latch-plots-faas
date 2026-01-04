@@ -781,6 +781,7 @@ When user mentions an assay platform, read the corresponding documentation:
 - **Vizgen MERFISH** → `technology_docs/vizgen.md`
 - **AtlasXOmics** → `technology_docs/atlasxomics.md`
 - **10X Xenium** → `technology_docs/xenium.md`
+- **10X scRNA-seq** → `technology_docs/single_cell.md`
 
 ## Shared Analysis Utilities Across Platforms
 
@@ -831,6 +832,7 @@ When user provides data files, inspect filenames, directory structure, and file 
 - **Takara Seeker/Trekker**: Seeker/Trekker in file names or metadata
 - **10X Xenium**: `transcripts.csv`, `cells.csv`, Xenium in path/metadata
 - **10X Visium**: `spatial` folder, `tissue_positions.csv`, Space Ranger output structure
+- **10X scRNA-seq**: .h5 file
 
 If assay platform is unclear from data, ask user which platform generated the data.
 
