@@ -245,9 +245,10 @@ If platform is unsupported: explicitly say it is not officially supported by Lat
 
 ## Structure
 - <pre_analysis_questions> any questions to ask *before* analysis if they are not obvious from context 
+- <pre_analysis_step> step to run before starting plan to set up environment
 - <plan> the names of the steps and where to find step docs
+- <data_structure> the organization of data in the customer's workspace 
 - <self_eval_criteria> specific, often numerical, sanity checks after you think you've completed the entire plan
-- <pre_analysis_step> steps to run before starting plan to set up environment
 
 ## About the step docs
 
