@@ -18,6 +18,15 @@ User: "Yes, proceed."
 
 **Example execution cells (step-by-step compliant)**
 
+**Before creating Cell 1 (required docs lookup)**
+
+Doc lookup (grep → read section → copy exact signature/patterns):
+- `grep -n "^### w_ldata_picker$" latch_api_docs/latch_api_reference.md`
+- `grep -n "^### w_text_output$" latch_api_docs/latch_api_reference.md`
+- `grep -n "^## LPath" latch_api_docs/latch_api_reference.md`
+- `grep -n "^## Reactivity" latch_api_docs/latch_api_reference.md`
+- Then use `read_file` on `latch_api_docs/latch_api_reference.md` around each match (offset/limit typically ~50–80 lines) and copy import paths/params exactly.
+
 ```python
 from lplots.widgets.ldata import w_ldata_picker
 from lplots.widgets.text import w_text_output
@@ -43,6 +52,16 @@ else:
         local_h5ad_path(local_p.as_posix())  # write-only in this cell
         w_text_output(content=f"Cached download: `{local_p}`", appearance={"message_box": "success"})
 ```
+
+**Before creating Cell 2 (required docs lookup)**
+
+Doc lookup (grep → read section → copy exact signature/patterns):
+- `grep -n "^### w_h5$" latch_api_docs/latch_api_reference.md`
+- `grep -n "^### w_text_input$" latch_api_docs/latch_api_reference.md`
+- `grep -n "^### w_table$" latch_api_docs/latch_api_reference.md`
+- `grep -n "^### w_plot$" latch_api_docs/latch_api_reference.md`
+- `grep -n "^## Reactivity" latch_api_docs/latch_api_reference.md`
+- Then use `read_file` on `latch_api_docs/latch_api_reference.md` around each match (offset/limit ~50–80 lines) and copy import paths/params exactly.
 
 ```python
 from lplots.widgets.h5 import w_h5
