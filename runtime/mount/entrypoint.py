@@ -16,6 +16,7 @@ from latch_data_validation.data_validation import validate
 from runtime.mount.plots_context_manager import PlotsContextManager
 
 from .socketio import SocketIo
+from .headless_browser import HeadlessBrowser
 from .utils import (
     KernelSnapshotStatus,
     PlotConfig,
@@ -93,6 +94,9 @@ class AgentProc:
 
 
 a_proc = AgentProc()
+
+# Headless browser for running notebook frontend without user browser
+headless_browser: HeadlessBrowser | None = None
 
 
 # todo(maximsmol): typing
@@ -690,9 +694,74 @@ async def stop_agent_proc() -> None:
         a_proc.log_file.close()
 
 
+async def start_headless_browser_if_enabled(notebook_id: str) -> None:
+    """Check if headless mode is enabled and spawn browser if so."""
+    global headless_browser
+
+    # Query notebook info to check headless_mode
+    try:
+        resp = await gql_query(
+            auth=auth_token_sdk,
+            query="""
+                query GetNotebookHeadlessMode($podId: BigInt!) {
+                    podInfos(filter: {id: {equalTo: $podId}}) {
+                        nodes {
+                            plotNotebookId
+                            plotNotebookInfo {
+                                id
+                                headlessMode
+                            }
+                        }
+                    }
+                }
+            """,
+            variables={"podId": pod_id},
+        )
+
+        nodes = resp.get("data", {}).get("podInfos", {}).get("nodes", [])
+        if not nodes:
+            print("[entrypoint] No pod info found, skipping headless check")
+            return
+
+        notebook_info = nodes[0].get("plotNotebookInfo", {})
+        headless_mode = notebook_info.get("headlessMode", False)
+
+        if not headless_mode:
+            print("[entrypoint] Headless mode not enabled")
+            return
+
+        # Construct URL with auth token for headless browser
+        # The frontend is served from console.latch.bio, not the pod
+        notebook_url = f"https://console.latch.bio/plots/{notebook_id}?headless=true&sdk-token={sdk_token}"
+
+        print(f"[entrypoint] Starting headless browser for notebook {notebook_id}")
+        headless_browser = HeadlessBrowser()
+        await headless_browser.start(notebook_url)
+        await headless_browser.wait_for_agent_ready()
+        print(f"[entrypoint] Headless browser ready for notebook {notebook_id}")
+
+    except Exception as e:
+        print(f"[entrypoint] Error starting headless browser: {e}")
+        traceback.print_exc()
+
+
+async def stop_headless_browser() -> None:
+    """Stop the headless browser if running."""
+    global headless_browser
+
+    if headless_browser is not None:
+        print("[entrypoint] Stopping headless browser")
+        try:
+            await headless_browser.stop()
+        except Exception as e:
+            print(f"[entrypoint] Error stopping headless browser: {e}")
+        headless_browser = None
+
+
 async def shutdown() -> None:
     await stop_kernel_proc()
     await stop_agent_proc()
+    await stop_headless_browser()
 
     with contextlib.suppress(Exception):
         sock_k.close()

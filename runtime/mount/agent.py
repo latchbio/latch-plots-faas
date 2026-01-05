@@ -105,6 +105,28 @@ class AgentHarness:
             **({"request_id": request_id} if request_id else {}),
         })
 
+    async def _notify_headless_status(
+        self,
+        status: str,
+        *,
+        notebook_id: str | None = None,
+        error: str | None = None,
+    ) -> None:
+        """Push headless session status updates to connected clients.
+
+        Args:
+            status: One of 'starting', 'running', 'completed', 'error'.
+            notebook_id: The notebook ID for the headless session.
+            error: Optional error message if status is 'error'.
+        """
+        await self.send({
+            "type": "headless_status",
+            "status": status,
+            "session_id": str(self.agent_session_id) if self.agent_session_id is not None else None,
+            **({"notebook_id": notebook_id} if notebook_id else {}),
+            **({"error": error} if error else {}),
+        })
+
     async def _fetch_history_from_db(self) -> list[dict]:
         assert self.agent_session_id is not None
         resp = await gql_query(
