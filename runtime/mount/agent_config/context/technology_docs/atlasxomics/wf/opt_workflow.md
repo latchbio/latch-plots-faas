@@ -1,35 +1,8 @@
-# Clustering Workflow
+<goal>
+Assess DBiT-seq epigenomic experiment quality and systematically explore clustering parameter combinations. Generate multiple H5AD outputs—each clustered with different parameter settings—along with summary statistics to guide downstream analysis.
+</goal>
 
-`optimize_snap` is the LatchBio Workflow for assessing DBiT-seq epigenomic experiment quality and systematically exploring clustering parameter combinations. It generates multiple H5AD outputs—each clustered with different parameter settings—along with summary statistics to guide downstream analysis.
-
-**ABSOLUTE RULE**: The Workflow contains **rigorously tested, gold-standard SnapATAC2 code internally and should ALWAYS be ysed OVER writing code from scratch.**
-
----
-
-### Input Data & Decision Logic
-
-**The clustering workflow ALWAYS requires raw data folders (for the `runs` parameter).**
-
-**User scenarios:**
-
-1. **Provides raw data only** → Standard clustering
-   - Validate: Each sample needs `chromap_output/fragments.tsv.gz` + `spatial/`
-   - Launch workflow with validated samples
-
-2. **Has AnnData subset** → Subset clustering  
-   - Save: `adata_subset.to_h5ad("subset.h5ad")`
-   - Ask: "Where are the raw data folders?"
-   - Launch with subset file + raw data paths
-
-3. **Has clustered H5AD** → Clarify intent
-   - Ask: "Keep current clustering or re-cluster?"
-   - If re-cluster → Ask: "Where are the raw data folders?"
-   - Launch with raw data paths
-
-**Key: Raw data is mandatory - the workflow cannot run without fragment files and spatial folders.**
----
-
-### Parameters
+<parameters>
 **Required**:
 - `project_name` (str)
 - `genome` (Enum): "hg38", "mm10", "rnor6"
@@ -53,14 +26,26 @@
 - `min_frags` (int): Minimum fragments per cell
 - `pt_size` (int or None): Point size for spatial plots
 - `qc_pt_size` (int or None): Point size for QC plots
+</parameters>
 
-### Implementation Template for Collecting User Inputs
+<outputs>
+Output directory: `/snap_opts/[project_name]/`
+- `setN_*` folders: Each represents different parameter combinations. Contains:
+  - `combined.h5ad`: AnnData with .X as tile matrix (genomic bins x cells)
+- `figures/`: QC and clustering plots as PDFs to guide parameter selection
+- `medians.csv`: QC metrics summary for all samples
+</outputs>
+
+<example>
 ```python
 from dataclasses import dataclass
+from enum import Enum
 from latch.types import LatchFile, LatchDir
 from latch.ldata.path import LPath
 from lplots.widgets.ldata import w_ldata_picker
 from lplots.widgets.text import w_text_output, w_text_input
+from lplots.widgets.select import w_select
+from lplots.widgets.workflow import w_workflow
 
 class Genome(Enum):
     mm10 = "mm10"
@@ -121,11 +106,7 @@ resolution = w_text_input(label="Resolution(s)", default="0.5")
 
 def to_list_of_floats(text: str):
     return [float(x.strip()) for x in text.split(",") if x.strip()]
-```
 
-### Implementation Template for Launching the Workflow and Waiting for it to Complete
-
-```python
 params = {
      "runs": runs, 
      "adata_subsetted_file": LatchFile("latch:///adata_subset.h5ad"),  # optional
@@ -161,17 +142,5 @@ if execution is not None:
       # inspect workflow outputs for downstream analysis
       workflow_outputs = list(res.output.values())
 ```
+</example>
 
----
-
-### Self-evaluation Checklist
-
-Before launching the workflow, evaluate your work:
-
-- Create widgets: w_ldata_picker, w_text_input, w_select with defaults shown
-- Verify all LatchFile/LatchDir paths exist on Latch
-- Resolution ≥ 0.5
-- For every sample, validate the following file/ folder exists: 
-    - Fragment files: /[sample]/chromap_output/fragments.tsv.gz
-    - Spatial dirs: /[sample]/spatial/
-- If there is AnnData object in notebook, confirm samples match between adata and raw data
