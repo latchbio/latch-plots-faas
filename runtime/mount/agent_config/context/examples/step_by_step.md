@@ -30,6 +30,7 @@ if "local_h5ad_path" not in locals():
 picked = w_ldata_picker(label="Dataset (.h5ad) in Latch Data", file_type="file")
 lp = picked.value
 if lp is None:
+    # w_text_output doesn't support a `label` param, use `content` (+ optional `appearance`/`key`).
     w_text_output(content="Pick an .h5ad file to continue.", appearance={"message_box": "info"})
 else:
     lp: LPath = lp

@@ -18,7 +18,6 @@ submit_response(
 
 **Turn 1 (continued): Example execution cells created immediately**
 
-
 ```python
 from lplots.widgets.ldata import w_ldata_picker
 from lplots.widgets.text import w_text_output
@@ -31,6 +30,7 @@ if "local_h5ad_path" not in locals():
 picked = w_ldata_picker(label="H5AD in Latch Data", file_type="file")
 lp = picked.value
 if lp is None:
+      # w_text_output doesn't support a `label` param, use `content` (+ optional `appearance`/`key`).
     w_text_output(content="Pick an .h5ad file to continue.", appearance={"message_box": "info"})
 else:
     lp: LPath = lp

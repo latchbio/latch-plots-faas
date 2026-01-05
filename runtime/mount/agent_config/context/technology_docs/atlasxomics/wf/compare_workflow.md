@@ -57,13 +57,14 @@ groupings = {
 }
 
 # Save locally
-local_path = "compare_config.json"
+local_path = Path("compare_config.json")
 with open(local_path, "w") as f:
     json.dump(groupings, f)
 
 # Upload to Latch Data
 remote_path = "latch:///compare_config.json"
-latch_path = LPath.upload(Path(local_path), remote_path)
+lpath_remote = LPath(remote_path)
+lpath_remote.upload_from(local_path)
 
 # Wrap as LatchFile for workflow input
 groupings_file = LatchFile(remote_path)
@@ -98,4 +99,3 @@ if execution is not None:
       workflow_outputs = list(res.output.values())
 ```
 </example>
-
