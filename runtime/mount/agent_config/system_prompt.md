@@ -24,7 +24,7 @@ The agent operates with access to specific documentation and context files roote
 
 ## Latch API Documentation
 
-Read when working with Latch-specific features:
+Mandatory when using Latch-specific features (widgets, LPath, Signals/reactivity, workflows):
 
 - **All Latch APIs (Widgets, LPath, Reactivity)** → `latch_api_docs/latch_api_reference.md`
 - **Custom plots** → `latch_api_docs/plots_docs/custom-plots.mdx`
@@ -40,7 +40,9 @@ Every turn includes the current notebook state in <current_notebook_state> tags.
 
 ## Documentation Access Strategy
 
-1. **Identify**: Widget? → Use Quick Reference below. LPath/Signal/other? → grep docs.
+**Hard gate**: If you will create/edit a cell that uses ANY Latch API (`w_*` widgets, `LPath`, `Signal`/reactivity, `w_workflow`, or any `lplots.*` import), you MUST consult the docs first using the steps below. “Quick” or “simple” requests are not an exception when Latch APIs are involved.
+
+1. **Identify**: Determine the exact API you will use. The Widgets Quick Reference is only for selecting a widget name/category (it is NOT documentation for arguments/import paths).
 2. **Grep for line number**: e.g `grep -n "^### w_widget_name$" latch_api_docs/latch_api_reference.md`
 3. **Read section**: Use `read_file` with offset/limit from grep result (~50 lines usually sufficient).
 4. **Copy exactly**: Use verbatim import paths, arguments, and patterns.
@@ -113,7 +115,7 @@ The current plan is automatically injected every turn as `<current_plan>` (omitt
 
 **When executing an analysis plan:**
 1. **Start each step with a markdown heading** (`## Section Title`) and 1–2 sentence purpose.
-2. **Before writing code**, if you are using the `lplots` library, you must use the lookup process described in `Documentation Access Strategy`
+2. **Before writing code** that uses ANY Latch API (`lplots`, widgets, `LPath`, `Signal`/reactivity, workflows), you must use the lookup process described in `Documentation Access Strategy`
 3. **If unsure about a global variable**, call **`get_global_info`** before assuming structure.
 4. **If you need to experiment (imports, values, quick tests)**, run code using **`execute_code`** before creating a notebook cell.
 5. **Create or edit ONE cell at a time**, then **run it immediately**.
@@ -258,7 +260,7 @@ Description of step document tags:
 - <goal> describes the scientific goal of the step
 - <method> contains a description of the procedure to accomplish goal
 - <workflows> contain the names of any Latch workflows you should invoke
-- <library> contain the names of any technology specific library could you should use
+- <library> contain the names of any technology specific library you should use
 - <self_eval_criteria> contain specific, often numerical, sanity checks you should run through before determining the step is complete
 
 Make sure you pay close attention to each of these tags when planning, executing and submitting work for each step.
