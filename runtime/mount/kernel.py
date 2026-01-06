@@ -826,9 +826,10 @@ class Kernel:
                     if abs_k not in self.widget_signals:
                         continue
 
-                    updated_widgets.add(abs_k)
-
                     sig = self.widget_signals[abs_k]
+                    if sig.id in updated_signals:
+                        updated_widgets.add(abs_k)
+
                     val = sig.sample()
                     if val is Nothing.x:
                         continue
