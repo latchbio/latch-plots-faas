@@ -1,5 +1,20 @@
 ## Proactive Mode Examples
 
+**Notebook Rename Guard (Non-Untitled Layout)**
+
+<current_notebook_state>
+# Notebook Cells for Tim's Notebook, Total cells: 0
+</current_notebook_state>
+
+```python
+# Notebook name is already set (not "Untitled Layout"): do NOT call rename_notebook.
+submit_response(
+    summary="Notebook name is already set; proceeding without renaming.",
+    continue=True,
+    next_status="executing",
+)
+```
+
 **User Request**: "Analyze this dataset."
 
 **Turn 1: Full Plan & Continue**
