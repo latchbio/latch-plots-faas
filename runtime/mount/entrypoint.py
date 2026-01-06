@@ -549,13 +549,33 @@ async def handle_agent_messages(conn_a: SocketIo) -> None:
             continue
 
         if current_agent_ctx is None:
-            print("[entrypoint] No websocket client connected, skipping message")
+            print(f"[entrypoint] No websocket client connected, skipping message: {msg_type}")
+            # Send error response so agent doesn't hang
+            if msg_type == "agent_action":
+                await conn_a.send({
+                    "type": "agent_action_response",
+                    "tx_id": msg.get("tx_id"),
+                    "status": "error",
+                    "error": "No browser connected to handle action"
+                })
             continue
 
         try:
+            action = msg.get("action", "unknown") if msg_type == "agent_action" else "n/a"
+            tx_id = msg.get("tx_id", "none")
+            print(f"[entrypoint] Forwarding to browser: {msg_type} action={action} tx_id={tx_id}")
             await current_agent_ctx.send_message(orjson.dumps(msg).decode())
+            print(f"[entrypoint] Forwarded successfully: tx_id={tx_id}")
         except Exception as e:
             print(f"[entrypoint] Error forwarding message: {e}")
+            # Send error response so agent doesn't hang
+            if msg_type == "agent_action":
+                await conn_a.send({
+                    "type": "agent_action_response",
+                    "tx_id": msg.get("tx_id"),
+                    "status": "error",
+                    "error": f"Failed to forward to browser: {e}"
+                })
 
 
 async def start_kernel_proc() -> None:
@@ -663,7 +683,12 @@ async def start_kernel_proc() -> None:
     # This provides the agent with a consistent frontend view
     if notebook_id is not None:
         print(f"[entrypoint] Starting headless browser for notebook {notebook_id}")
-        await start_headless_browser(notebook_id)
+        try:
+            await start_headless_browser(notebook_id)
+            print(f"[entrypoint] Headless browser started, current_agent_ctx={current_agent_ctx is not None}")
+        except Exception as e:
+            print(f"[entrypoint] Failed to start headless browser: {e}")
+            traceback.print_exc()
     else:
         print("[entrypoint] No notebook_id, skipping headless browser")
 
