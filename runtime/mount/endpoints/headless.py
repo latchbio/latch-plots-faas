@@ -6,14 +6,17 @@ from latch_asgi.context.http import Context, HandlerResult
 from ..entrypoint import (
     headless_browser,
     plots_ctx_manager,
-    start_headless_browser_if_enabled,
+    start_headless_browser,
 )
 
 
 async def spawn_headless_browser(ctx: Context) -> HandlerResult:
     """
-    Trigger headless browser spawn.
-    Called after frontend sets headless_mode=true via GraphQL.
+    Manually trigger headless browser spawn (fallback).
+    
+    Note: The headless browser is automatically spawned when the kernel starts.
+    This endpoint is a fallback for cases where manual respawn is needed
+    (e.g., if the browser crashed or initial spawn failed).
     
     Returns:
         Status of the spawn operation.
@@ -28,12 +31,8 @@ async def spawn_headless_browser(ctx: Context) -> HandlerResult:
         return orjson.dumps({"status": "error", "message": "No notebook ID available"})
 
     try:
-        await start_headless_browser_if_enabled(str(notebook_id))
-        
-        if headless_browser is not None:
-            return orjson.dumps({"status": "spawned"})
-        else:
-            return orjson.dumps({"status": "not_enabled", "message": "headless_mode not enabled in database"})
+        await start_headless_browser(str(notebook_id))
+        return orjson.dumps({"status": "spawned"})
     except Exception as e:
         return orjson.dumps({"status": "error", "message": str(e)})
 

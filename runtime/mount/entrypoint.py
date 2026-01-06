@@ -576,6 +576,7 @@ async def start_kernel_proc() -> None:
     )
 
     k_state: KernelState | None = None
+    notebook_id: str | None = None
     try:
         resp = await gql_query(
             auth=auth_token_sdk,
@@ -596,6 +597,31 @@ async def start_kernel_proc() -> None:
 
     if k_state is None:
         return
+
+    # Get notebook_id from pod info for headless browser
+    try:
+        resp = await gql_query(
+            auth=auth_token_sdk,
+            query="""
+                query GetPodNotebookId($podId: BigInt!) {
+                    podInfos(filter: {id: {equalTo: $podId}}) {
+                        nodes {
+                            plotNotebookId
+                        }
+                    }
+                }
+            """,
+            variables={"podId": pod_id},
+        )
+        nodes = resp.get("data", {}).get("podInfos", {}).get("nodes", [])
+        if nodes:
+            notebook_id = nodes[0].get("plotNotebookId")
+            if notebook_id is not None:
+                notebook_id = str(notebook_id)
+                plots_ctx_manager.notebook_id = notebook_id
+    except Exception:
+        print("[entrypoint] Failed to get notebook_id from pod info")
+        traceback.print_exc()
 
     # todo(kenny): separate query for backwards compatability. Pull into main
     # fn when "snapshot mode" merged and works well
@@ -632,6 +658,14 @@ async def start_kernel_proc() -> None:
             "session_snapshot_mode": session_snapshot_mode,
         }
     )
+
+    # Start headless browser for agent UI interaction
+    # This provides the agent with a consistent frontend view
+    if notebook_id is not None:
+        print(f"[entrypoint] Starting headless browser for notebook {notebook_id}")
+        await start_headless_browser(notebook_id)
+    else:
+        print("[entrypoint] No notebook_id, skipping headless browser")
 
 
 async def start_agent_proc() -> None:
@@ -694,42 +728,19 @@ async def stop_agent_proc() -> None:
         a_proc.log_file.close()
 
 
-async def start_headless_browser_if_enabled(notebook_id: str) -> None:
-    """Check if headless mode is enabled and spawn browser if so."""
+async def start_headless_browser(notebook_id: str) -> None:
+    """Spawn headless browser for agent to interact with the notebook frontend.
+    
+    The headless browser provides the agent with a consistent UI view,
+    independent of whether a user has the notebook open in their browser.
+    """
     global headless_browser
 
-    # Query notebook info to check headless_mode
+    if headless_browser is not None:
+        print("[entrypoint] Headless browser already running")
+        return
+
     try:
-        resp = await gql_query(
-            auth=auth_token_sdk,
-            query="""
-                query GetNotebookHeadlessMode($podId: BigInt!) {
-                    podInfos(filter: {id: {equalTo: $podId}}) {
-                        nodes {
-                            plotNotebookId
-                            plotNotebookInfo {
-                                id
-                                headlessMode
-                            }
-                        }
-                    }
-                }
-            """,
-            variables={"podId": pod_id},
-        )
-
-        nodes = resp.get("data", {}).get("podInfos", {}).get("nodes", [])
-        if not nodes:
-            print("[entrypoint] No pod info found, skipping headless check")
-            return
-
-        notebook_info = nodes[0].get("plotNotebookInfo", {})
-        headless_mode = notebook_info.get("headlessMode", False)
-
-        if not headless_mode:
-            print("[entrypoint] Headless mode not enabled")
-            return
-
         # Construct URL with auth token for headless browser
         # The frontend is served from console.latch.bio, not the pod
         notebook_url = f"https://console.latch.bio/plots/{notebook_id}?headless=true&sdk-token={sdk_token}"
