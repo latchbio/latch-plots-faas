@@ -1,6 +1,7 @@
 """Endpoints for headless browser management."""
 
-from latch_asgi.context.http import Context, Route
+import orjson
+from latch_asgi.context.http import Context, HandlerResult
 
 from ..entrypoint import (
     headless_browser,
@@ -9,8 +10,7 @@ from ..entrypoint import (
 )
 
 
-@Route.post("/headless/spawn")
-async def spawn_headless_browser(ctx: Context) -> dict:
+async def spawn_headless_browser(ctx: Context) -> HandlerResult:
     """
     Trigger headless browser spawn.
     Called after frontend sets headless_mode=true via GraphQL.
@@ -21,25 +21,24 @@ async def spawn_headless_browser(ctx: Context) -> dict:
     global headless_browser
 
     if headless_browser is not None:
-        return {"status": "already_running"}
+        return orjson.dumps({"status": "already_running"})
 
     notebook_id = plots_ctx_manager.notebook_id
     if notebook_id is None:
-        return {"status": "error", "message": "No notebook ID available"}
+        return orjson.dumps({"status": "error", "message": "No notebook ID available"})
 
     try:
         await start_headless_browser_if_enabled(str(notebook_id))
         
         if headless_browser is not None:
-            return {"status": "spawned"}
+            return orjson.dumps({"status": "spawned"})
         else:
-            return {"status": "not_enabled", "message": "headless_mode not enabled in database"}
+            return orjson.dumps({"status": "not_enabled", "message": "headless_mode not enabled in database"})
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return orjson.dumps({"status": "error", "message": str(e)})
 
 
-@Route.post("/headless/stop")
-async def stop_headless_browser_endpoint(ctx: Context) -> dict:
+async def stop_headless_browser_endpoint(ctx: Context) -> HandlerResult:
     """
     Stop the headless browser if running.
     
@@ -49,11 +48,10 @@ async def stop_headless_browser_endpoint(ctx: Context) -> dict:
     from ..entrypoint import stop_headless_browser
 
     if headless_browser is None:
-        return {"status": "not_running"}
+        return orjson.dumps({"status": "not_running"})
 
     try:
         await stop_headless_browser()
-        return {"status": "stopped"}
+        return orjson.dumps({"status": "stopped"})
     except Exception as e:
-        return {"status": "error", "message": str(e)}
-
+        return orjson.dumps({"status": "error", "message": str(e)})
