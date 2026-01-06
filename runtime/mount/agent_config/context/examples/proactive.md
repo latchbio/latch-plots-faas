@@ -90,7 +90,7 @@ submit_response(
 ```python
 # [Fails a <self_eval_criteria>: retention=2% (<20% target)]
 submit_response(
-    summary="QC retained too few cells (retention=2% at 500 counts; target ≥20%). I will relax the threshold to 300 and re-run once.",
+    summary="QC retained too few cells (retention=2% at 500 counts; target ≥20%). I will relax the threshold to 300 and re-run.",
     continue=True,
     next_status="executing"
 )
