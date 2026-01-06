@@ -215,7 +215,6 @@ class RCtx:
     signals_updated_from_code: dict[str, "Signal"] = field(default_factory=dict)
     stale_nodes: dict[str, Node] = field(default_factory=dict)
     prev_updated_signals: dict[str, "Signal"] = field(default_factory=dict)
-    updated_widgets: set[str] = field(default_factory=set)
 
     in_tx: bool = False
 
@@ -247,12 +246,6 @@ class RCtx:
                     return await f()
                 return f()
             finally:
-                n = self.cur_comp
-                path = n.name_path()
-                for k in n.widget_states:
-                    abs_k = f"{path}/{k}"
-                    self.updated_widgets.add(abs_k)
-
                 self.cur_comp = self.cur_comp.parent
 
     async def _tick(self) -> None:
@@ -345,7 +338,7 @@ class RCtx:
                             self.cur_comp = None
 
         finally:
-            await _inject.kernel.on_tick_finished(tick_updated_signals, self.updated_widgets)
+            await _inject.kernel.on_tick_finished(tick_updated_signals)
             self.prev_updated_signals = {}
             for sig in live_signals.values():
                 sig._ui_update = False
@@ -461,13 +454,16 @@ class Signal(Generic[T]):
         return sig
 
     @overload
-    def __call__(self, /) -> T: ...
+    def __call__(self, /) -> T:
+        ...
 
     @overload
-    def __call__(self, /, upd: T, *, _ui_update: bool = False) -> None: ...
+    def __call__(self, /, upd: T, *, _ui_update: bool = False) -> None:
+        ...
 
     @overload
-    def __call__(self, /, upd: Updater[T], *, _ui_update: bool = False) -> None: ...
+    def __call__(self, /, upd: Updater[T], *, _ui_update: bool = False) -> None:
+        ...
 
     def __call__(
         self, /, upd: T | Updater[T] | Nothing = Nothing.x, *, _ui_update: bool = False
