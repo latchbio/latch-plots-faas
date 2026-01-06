@@ -549,32 +549,12 @@ async def handle_agent_messages(conn_a: SocketIo) -> None:
 
         if current_agent_ctx is None:
             print(f"[entrypoint] No websocket client connected, skipping message: {msg_type}")
-            # Send error response so agent doesn't hang
-            if msg_type == "agent_action":
-                await conn_a.send({
-                    "type": "agent_action_response",
-                    "tx_id": msg.get("tx_id"),
-                    "status": "error",
-                    "error": "No browser connected to handle action"
-                })
             continue
 
         try:
-            action = msg.get("action", "unknown") if msg_type == "agent_action" else "n/a"
-            tx_id = msg.get("tx_id", "none")
-            print(f"[entrypoint] Forwarding to browser: {msg_type} action={action} tx_id={tx_id}")
             await current_agent_ctx.send_message(orjson.dumps(msg).decode())
-            print(f"[entrypoint] Forwarded successfully: tx_id={tx_id}")
         except Exception as e:
             print(f"[entrypoint] Error forwarding message: {e}")
-            # Send error response so agent doesn't hang
-            if msg_type == "agent_action":
-                await conn_a.send({
-                    "type": "agent_action_response",
-                    "tx_id": msg.get("tx_id"),
-                    "status": "error",
-                    "error": f"Failed to forward to browser: {e}"
-                })
 
 
 async def start_kernel_proc() -> None:
@@ -595,7 +575,6 @@ async def start_kernel_proc() -> None:
     )
 
     k_state: KernelState | None = None
-    notebook_id: str | None = None
     try:
         resp = await gql_query(
             auth=auth_token_sdk,
@@ -616,28 +595,6 @@ async def start_kernel_proc() -> None:
 
     if k_state is None:
         return
-
-    resp = await gql_query(
-        auth=auth_token_sdk,
-        query="""
-            query GetPodNotebookId($podId: BigInt!) {
-                podInfos(filter: {id: {equalTo: $podId}}) {
-                    nodes {
-                        plotNotebookId
-                    }
-                }
-            }
-        """,
-        variables={"podId": pod_id},
-    )
-    nodes = resp.get("data", {}).get("podInfos", {}).get("nodes", [])
-    if nodes is not None and len(nodes) > 0:
-        notebook_id = nodes[0].get("plotNotebookId")
-        if notebook_id is not None:
-            notebook_id = str(notebook_id)
-            plots_ctx_manager.notebook_id = notebook_id
-
-    assert notebook_id is not None, "Failed to resolve notebook id"
 
     # todo(kenny): separate query for backwards compatability. Pull into main
     # fn when "snapshot mode" merged and works well
@@ -674,8 +631,6 @@ async def start_kernel_proc() -> None:
             "session_snapshot_mode": session_snapshot_mode,
         }
     )
-
-    await start_headless_browser(notebook_id)
 
 
 async def start_agent_proc() -> None:
