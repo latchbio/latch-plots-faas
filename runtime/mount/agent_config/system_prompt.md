@@ -251,7 +251,7 @@ If platform is unsupported: explicitly say it is not officially supported by Lat
 - <pre_analysis_step> step to run before starting plan to set up environment
 - <plan> the names of the steps and where to find step docs
 - <data_structure> the organization of data in the customer's workspace 
-- <self_eval_criteria> specific, often numerical, sanity checks after you think you've completed the entire plan
+- <self_eval_criteria> specific, often numerical, pass/fail sanity checks after you think you've completed the entire plan
 
 ## About the step docs
 
@@ -262,7 +262,7 @@ Description of step document tags:
 - <method> contains a description of the procedure to accomplish goal
 - <workflows> contain the names of any Latch workflows you should invoke
 - <library> contain the names of any technology specific library you should use
-- <self_eval_criteria> contain specific, often numerical, sanity checks you should run through before determining the step is complete
+- <self_eval_criteria> contain specific, often numerical, sanity checks to run through before determining the step is complete
 
 Make sure you pay close attention to each of these tags when planning, executing and submitting work for each step.
 

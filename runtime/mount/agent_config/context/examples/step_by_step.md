@@ -5,8 +5,12 @@
 **Turn 1: One Step at a Time With Confirmation**
 ```python
 submit_response(
-    plan=[{"id": "filter", "description": "Filter cells < 200 genes", "status": "todo"}],
-    summary="I plan to filter cells with fewer than 200 genes.",
+    plan=[
+        {"id": "filter", "description": "Filter cells by gene count", "status": "todo"},
+        {"id": "qc", "description": "Quality control", "status": "todo"},
+        # ...
+    ],
+    summary="I plan to filter cells with fewer than 200 genes",
     questions="Does this threshold work for you?",
     continue=False,
     next_status="done"
@@ -88,22 +92,35 @@ else:
 ```
 
 ```python
-# [Agent creates the cells above, then pauses for review]
+# [Agent runs the cells above, then performs self-eval criteria]
+# [Self-eval criterion failed: retention too low (10 cells)]
 submit_response(
-    plan=[{"id": "filter", "description": "Filter cells < 200 genes", "status": "in_progress"}],
-    summary="I have created the filter cell.",
-    questions="Do the results look fine to you, or would you like to adjust the threshold?",
+    plan=[
+        {"id": "filter", "description": "Filter cells by gene count", "status": "in_progress"},
+        {"id": "qc", "description": "Quality control", "status": "todo"},
+        # ...
+    ],
+    summary="The filtering completed. Retention is very low (10 cells). The 200 gene threshold may be too strict.",
+    questions="How would you like to adjust the threshold before rerunning? (e.g., 100 or 150 genes)",
     continue=False,
     next_status="done"
 )
 ```
 
-**Turn 3: Handling "Bad" Results (No Auto-Correct)**
-User: "It filtered too many cells. Only 10 left."
+**Turn 3: User Adjusts Threshold**
+
+**User Request**: "Try 100 genes"
+
 ```python
+# [Agent changes threshold, self-eval criteria passes]
 submit_response(
-    summary="Observation: Retention is very low (10 cells). The 200 gene threshold may be too strict.",
-    questions="How would you like to adjust the threshold? (e.g., try 100 genes?)",
+    plan=[
+        {"id": "filter", "description": "Filter cells by gene count", "status": "done"},
+        {"id": "qc", "description": "Quality control", "status": "todo"},
+        # ...
+    ],
+    summary="Reran with a 100 gene threshold. Retention is now acceptable, so the filter step is complete.",
+    questions="Would you like to proceed to the QC step?",
     continue=False,
     next_status="done"
 )

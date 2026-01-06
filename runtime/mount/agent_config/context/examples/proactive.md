@@ -88,9 +88,9 @@ submit_response(
 
 **Turn 3: Auto-Correction**
 ```python
-# [Agent observes low retention]
+# [Fails a <self_eval_criteria>: retention=2% (<20% target)]
 submit_response(
-    summary="QC retained too few cells at 500 counts. I will automatically relax the threshold to 300 and re-run.",
+    summary="QC retained too few cells (retention=2% at 500 counts; target ≥20%). I will relax the threshold to 300 and re-run once.",
     continue=True,
     next_status="executing"
 )
