@@ -20,9 +20,7 @@ agent_start_lock = asyncio.Lock()
 async def agent(s: Span, ctx: Context) -> HandlerResult:
     global connection_idx
 
-    print(f"[agent-endpoint] New agent WebSocket connection (idx={connection_idx})")
     await ctx.accept_connection()
-    print(f"[agent-endpoint] Connection accepted (idx={connection_idx})")
 
     s.set_attributes({
         "pod_id": pod_id,
@@ -31,7 +29,6 @@ async def agent(s: Span, ctx: Context) -> HandlerResult:
     })
 
     entrypoint_module.current_agent_ctx = ctx
-    print(f"[agent-endpoint] Set current_agent_ctx (idx={connection_idx})")
 
     async with agent_start_lock:
         if a_proc.conn_a is None:
@@ -56,13 +53,8 @@ async def agent(s: Span, ctx: Context) -> HandlerResult:
     try:
         while True:
             msg = await receive_json(ctx.receive)
-            msg_type = msg.get("type", "unknown")
-            tx_id = msg.get("tx_id", "none")
-            print(f"[agent-endpoint] Received from browser: {msg_type} tx_id={tx_id}")
             await conn_a.send(msg)
-            print(f"[agent-endpoint] Forwarded to agent: {msg_type} tx_id={tx_id}")
     finally:
-        print(f"[agent-endpoint] Connection closed, clearing current_agent_ctx")
         if entrypoint_module.current_agent_ctx is ctx:
             entrypoint_module.current_agent_ctx = None
 

@@ -15,8 +15,8 @@ from latch_data_validation.data_validation import validate
 
 from runtime.mount.plots_context_manager import PlotsContextManager
 
-from .socketio import SocketIo
 from .headless_browser import HeadlessBrowser
+from .socketio import SocketIo
 from .utils import (
     KernelSnapshotStatus,
     PlotConfig,
@@ -95,7 +95,6 @@ class AgentProc:
 
 a_proc = AgentProc()
 
-# Headless browser for running notebook frontend without user browser
 headless_browser: HeadlessBrowser | None = None
 
 
@@ -618,30 +617,27 @@ async def start_kernel_proc() -> None:
     if k_state is None:
         return
 
-    # Get notebook_id from pod info for headless browser
-    try:
-        resp = await gql_query(
-            auth=auth_token_sdk,
-            query="""
-                query GetPodNotebookId($podId: BigInt!) {
-                    podInfos(filter: {id: {equalTo: $podId}}) {
-                        nodes {
-                            plotNotebookId
-                        }
+    resp = await gql_query(
+        auth=auth_token_sdk,
+        query="""
+            query GetPodNotebookId($podId: BigInt!) {
+                podInfos(filter: {id: {equalTo: $podId}}) {
+                    nodes {
+                        plotNotebookId
                     }
                 }
-            """,
-            variables={"podId": pod_id},
-        )
-        nodes = resp.get("data", {}).get("podInfos", {}).get("nodes", [])
-        if nodes:
-            notebook_id = nodes[0].get("plotNotebookId")
-            if notebook_id is not None:
-                notebook_id = str(notebook_id)
-                plots_ctx_manager.notebook_id = notebook_id
-    except Exception:
-        print("[entrypoint] Failed to get notebook_id from pod info")
-        traceback.print_exc()
+            }
+        """,
+        variables={"podId": pod_id},
+    )
+    nodes = resp.get("data", {}).get("podInfos", {}).get("nodes", [])
+    if nodes is not None and len(nodes) > 0:
+        notebook_id = nodes[0].get("plotNotebookId")
+        if notebook_id is not None:
+            notebook_id = str(notebook_id)
+            plots_ctx_manager.notebook_id = notebook_id
+
+    assert notebook_id is not None, "Failed to resolve notebook id"
 
     # todo(kenny): separate query for backwards compatability. Pull into main
     # fn when "snapshot mode" merged and works well
@@ -679,18 +675,7 @@ async def start_kernel_proc() -> None:
         }
     )
 
-    # Start headless browser for agent UI interaction
-    # This provides the agent with a consistent frontend view
-    if notebook_id is not None:
-        print(f"[entrypoint] Starting headless browser for notebook {notebook_id}")
-        try:
-            await start_headless_browser(notebook_id)
-            print(f"[entrypoint] Headless browser started, current_agent_ctx={current_agent_ctx is not None}")
-        except Exception as e:
-            print(f"[entrypoint] Failed to start headless browser: {e}")
-            traceback.print_exc()
-    else:
-        print("[entrypoint] No notebook_id, skipping headless browser")
+    await start_headless_browser(notebook_id)
 
 
 async def start_agent_proc() -> None:
@@ -754,11 +739,6 @@ async def stop_agent_proc() -> None:
 
 
 async def start_headless_browser(notebook_id: str) -> None:
-    """Spawn headless browser for agent to interact with the notebook frontend.
-    
-    The headless browser provides the agent with a consistent UI view,
-    independent of whether a user has the notebook open in their browser.
-    """
     global headless_browser
 
     if headless_browser is not None:
@@ -766,14 +746,11 @@ async def start_headless_browser(notebook_id: str) -> None:
         return
 
     try:
-        # Construct URL with auth token for headless browser
-        # The frontend is served from console.latch.bio, not the pod
-        notebook_url = f"https://console.latch.bio/plots/{notebook_id}?headless=true&sdk-token={sdk_token}"
+        notebook_url = f"https://console.latch.bio/plots/{notebook_id}"
 
         print(f"[entrypoint] Starting headless browser for notebook {notebook_id}")
         headless_browser = HeadlessBrowser()
         await headless_browser.start(notebook_url)
-        await headless_browser.wait_for_agent_ready()
         print(f"[entrypoint] Headless browser ready for notebook {notebook_id}")
 
     except Exception as e:
@@ -781,23 +758,14 @@ async def start_headless_browser(notebook_id: str) -> None:
         traceback.print_exc()
 
 
-async def stop_headless_browser() -> None:
-    """Stop the headless browser if running."""
-    global headless_browser
-
-    if headless_browser is not None:
-        print("[entrypoint] Stopping headless browser")
-        try:
-            await headless_browser.stop()
-        except Exception as e:
-            print(f"[entrypoint] Error stopping headless browser: {e}")
-        headless_browser = None
-
-
 async def shutdown() -> None:
     await stop_kernel_proc()
     await stop_agent_proc()
-    await stop_headless_browser()
+
+    global headless_browser
+    if headless_browser is not None:
+        await headless_browser.stop()
+        headless_browser = None
 
     with contextlib.suppress(Exception):
         sock_k.close()
