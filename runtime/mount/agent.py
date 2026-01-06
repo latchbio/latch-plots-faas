@@ -1736,7 +1736,7 @@ class AgentHarness:
 
         self.tools.append({
             "name": "rename_notebook",
-            "description": "Rename the current plot notebook.",
+            "description": "Rename the current plot notebook. Only call when the user explicitly asks to rename the notebook or the notebook is named Untitled Layout",
             "input_schema": {
                 "type": "object",
                 "properties": {
