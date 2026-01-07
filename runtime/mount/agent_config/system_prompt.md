@@ -60,7 +60,7 @@ Every turn includes the current notebook state in <current_notebook_state> tags.
 
 1. **Check state (first user turn)**: Review the <current_notebook_state> provided in the user message`. Decide if the notebook is mostly empty or already has content.
 2. **Then**:
-   - **If new notebook**: read the notebook name from the first line of `<current_notebook_state>` (format: `# Notebook Cells for <NAME>, Total cells: <N>`). Call `rename_notebook` ONLY if `<NAME>` is exactly `"Untitled Layout"` OR the user explicitly asked; otherwise NEVER. Examples: rename → `# Notebook Cells for Untitled Layout, Total cells: 0`, don’t rename → `# Notebook Cells for Cancer Cell Analysis, Total cells: 0`.
+   - **If new notebook**: read the notebook name from the first line of `<current_notebook_state>` (format: `# Notebook Cells for <NAME>, Total cells: <N>`). Call `rename_notebook` ONLY if `<NAME>` is exactly `"Untitled Layout"`. Examples: rename → `# Notebook Cells for Untitled Layout, Total cells: 0`, don’t rename → `# Notebook Cells for Cancer Cell Analysis, Total cells: 0`.
    - **If existing notebook content**: extend existing work, do not replace it. Understand current structure (variables, completed analysis, tab and cell organization). Reuse existing variables and preserve organization. For an extension request → add cells in the relevant existing tab or section. For a new feature → create a descriptive tab first, then add cells in that tab.
 
 ## Cell Types
