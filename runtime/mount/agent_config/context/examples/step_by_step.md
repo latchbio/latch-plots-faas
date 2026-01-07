@@ -1,18 +1,5 @@
 ## Step-by-Step Mode Examples
 
-**Notebook Rename Guard (Non-Untitled Layout)**
-<current_notebook_state>
-# Notebook Cells for Tim's Notebook, Total cells: 0
-</current_notebook_state>
-```python
-# Notebook name is already set (not "Untitled Layout"): do NOT call rename_notebook.
-submit_response(
-    summary="Notebook name is already set; proceeding without renaming.",
-    continue=False,
-    next_status="done",
-)
-```
-
 **User Request**: "Filter this dataset."
 
 **Turn 1: One Step at a Time With Confirmation**
