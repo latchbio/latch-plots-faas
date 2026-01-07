@@ -62,12 +62,13 @@ async def agent(s: Span, ctx: Context) -> HandlerResult:
 
             msg_type = msg.get("type")
             if msg_type == "init":
-                auth_state = msg.get("local_storage")
-                if isinstance(auth_state, dict):
-                    entrypoint_module.latest_auth_state = auth_state
+                local_storage = msg.get("local_storage")
+                if isinstance(local_storage, dict):
+                    local_storage.setdefault("plots.is_agent_controlled", "yes")
+                    entrypoint_module.latest_local_storage = local_storage
                     print("[agent_ws] Stored latest auth state for headless browser hydration")
 
-                if entrypoint_module.latest_auth_state is None:
+                if entrypoint_module.latest_local_storage is None:
                     print("[agent_ws] No auth state found, skipping headless browser start")
                     continue
 
@@ -75,7 +76,7 @@ async def agent(s: Span, ctx: Context) -> HandlerResult:
                 try:
                     await start_headless_browser(
                         notebook_id,
-                        auth_state=entrypoint_module.latest_auth_state,
+                        local_storage=entrypoint_module.latest_local_storage,
                     )
                 except Exception as e:
                     print(f"[agent_ws] Failed to start headless browser: {e}")
