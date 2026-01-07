@@ -10,7 +10,13 @@ from opentelemetry.trace import Span
 
 import runtime.mount.entrypoint as entrypoint_module
 
-from ..entrypoint import a_proc, pod_id, pod_session_id, start_agent_proc
+from ..entrypoint import (
+    a_proc,
+    pod_id,
+    pod_session_id,
+    start_agent_proc,
+    start_headless_browser,
+)
 
 connection_idx = 0
 agent_start_lock = asyncio.Lock()
@@ -53,6 +59,27 @@ async def agent(s: Span, ctx: Context) -> HandlerResult:
     try:
         while True:
             msg = await receive_json(ctx.receive)
+
+            msg_type = msg.get("type")
+            if msg_type == "init":
+                auth_state = msg.get("local_storage")
+                if isinstance(auth_state, dict):
+                    entrypoint_module.latest_auth_state = auth_state
+                    print("[agent_ws] Stored latest auth state for headless browser hydration")
+
+                if entrypoint_module.latest_auth_state is None:
+                    print("[agent_ws] No auth state found, skipping headless browser start")
+                    continue
+
+                notebook_id = msg.get("notebook_id")
+                try:
+                    await start_headless_browser(
+                        notebook_id,
+                        auth_state=entrypoint_module.latest_auth_state,
+                    )
+                except Exception as e:
+                    print(f"[agent_ws] Failed to start headless browser: {e}")
+
             await conn_a.send(msg)
     finally:
         if entrypoint_module.current_agent_ctx is ctx:

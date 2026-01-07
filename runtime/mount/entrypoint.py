@@ -96,6 +96,7 @@ class AgentProc:
 a_proc = AgentProc()
 
 headless_browser: HeadlessBrowser | None = None
+latest_auth_state: dict[str, str] | None = None
 
 
 # todo(maximsmol): typing
@@ -693,7 +694,7 @@ async def stop_agent_proc() -> None:
         a_proc.log_file.close()
 
 
-async def start_headless_browser(notebook_id: str) -> None:
+async def start_headless_browser(notebook_id: str, auth_state: dict[str, str]) -> None:
     global headless_browser
 
     if headless_browser is not None:
@@ -705,7 +706,10 @@ async def start_headless_browser(notebook_id: str) -> None:
 
         print(f"[entrypoint] Starting headless browser for notebook {notebook_id}")
         headless_browser = HeadlessBrowser()
-        await headless_browser.start(notebook_url)
+        await headless_browser.start(
+            notebook_url,
+            local_storage=auth_state,
+        )
         print(f"[entrypoint] Headless browser ready for notebook {notebook_id}")
 
     except Exception as e:
