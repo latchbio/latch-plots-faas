@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime
 
 import orjson
 from latch_asgi.context.websocket import Context, HandlerResult
@@ -28,6 +29,7 @@ async def agent(s: Span, ctx: Context) -> HandlerResult:
 
     await ctx.accept_connection()
     conn_label = f"agent_ws#{connection_idx}"
+    ts = lambda: datetime.utcnow().isoformat() + "Z"
 
     s.set_attributes({
         "pod_id": pod_id,
@@ -36,7 +38,7 @@ async def agent(s: Span, ctx: Context) -> HandlerResult:
     })
 
     entrypoint_module.current_agent_ctx = ctx
-    print(f"[agent_ws] Accepted websocket connection {conn_label}")
+    print(f"{ts()} [agent_ws] Accepted websocket connection {conn_label}")
 
     async with agent_start_lock:
         if a_proc.conn_a is None:
@@ -47,7 +49,7 @@ async def agent(s: Span, ctx: Context) -> HandlerResult:
         # On reconnect, initial conn should not wipe global ctx on cleanup
         if entrypoint_module.current_agent_ctx is ctx:
             entrypoint_module.current_agent_ctx = None
-            print(f"[agent_ws] Cleared current_agent_ctx (agent proc missing) {conn_label}")
+            print(f"{ts()} [agent_ws] Cleared current_agent_ctx (agent proc missing) {conn_label}")
         await ctx.send_message(
             orjson.dumps({
                 "type": "agent_error",
@@ -71,14 +73,14 @@ async def agent(s: Span, ctx: Context) -> HandlerResult:
                     entrypoint_module.latest_local_storage = local_storage
                     is_agent_controlled = local_storage.get("plots.is_agent_controlled")
                     print(
-                        "[agent_ws] init received "
+                        f"{ts()} [agent_ws] init received "
                         f"conn={conn_label} "
                         f"is_agent_controlled={is_agent_controlled} "
                         f"notebook_id={msg.get('notebook_id')}"
                     )
 
                 if entrypoint_module.latest_local_storage is None:
-                    print("[agent_ws] No auth state found, skipping headless browser start")
+                    print(f"{ts()} [agent_ws] No auth state found, skipping headless browser start (conn={conn_label})")
                     continue
 
                 notebook_id = msg.get("notebook_id")
@@ -88,12 +90,12 @@ async def agent(s: Span, ctx: Context) -> HandlerResult:
                         local_storage=entrypoint_module.latest_local_storage,
                     )
                 except Exception as e:
-                    print(f"[agent_ws] Failed to start headless browser: {e}")
+                    print(f"{ts()} [agent_ws] Failed to start headless browser: {e}")
 
             await conn_a.send(msg)
     finally:
         if entrypoint_module.current_agent_ctx is ctx:
             entrypoint_module.current_agent_ctx = None
-            print(f"[agent_ws] Cleared current_agent_ctx on disconnect {conn_label}")
+            print(f"{ts()} [agent_ws] Cleared current_agent_ctx on disconnect {conn_label}")
 
     return "Ok"

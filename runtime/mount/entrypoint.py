@@ -6,6 +6,7 @@ import sys
 import traceback
 from asyncio.subprocess import Process
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import IO, TypedDict, TypeVar
 
@@ -481,7 +482,8 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
 
 
 async def handle_agent_messages(conn_a: SocketIo) -> None:
-    print("[entrypoint] Starting agent message listener")
+    ts = lambda: datetime.utcnow().isoformat() + "Z"
+    print(f"{ts()} [entrypoint] Starting agent message listener")
     while True:
         msg = await conn_a.recv()
         msg_type = msg.get("type", "unknown")
@@ -489,11 +491,11 @@ async def handle_agent_messages(conn_a: SocketIo) -> None:
         action = msg.get("action")
 
         if msg_type != "agent_stream_delta":
-            print(f"[entrypoint] Agent > {msg_type}")
+            print(f"{ts()} [entrypoint] Agent > {msg_type}")
 
         if msg_type == "agent_action" and msg.get("action") == "request_reactivity_summary":
             if k_proc.conn_k is not None:
-                print(f"[entrypoint] Routing reactivity request to kernel (tx_id={tx_id})")
+                print(f"{ts()} [entrypoint] Routing reactivity request to kernel (tx_id={tx_id})")
 
                 await k_proc.conn_k.send({
                     "type": "reactivity_summary",
@@ -512,7 +514,7 @@ async def handle_agent_messages(conn_a: SocketIo) -> None:
         if msg_type == "agent_action" and msg.get("action") == "execute_code":
             if k_proc.conn_k is not None:
                 code = msg.get("params", {}).get("code", "")
-                print(f"[entrypoint] Routing execute_code to kernel (tx_id={tx_id})")
+                print(f"{ts()} [entrypoint] Routing execute_code to kernel (tx_id={tx_id})")
 
                 await k_proc.conn_k.send({
                     "type": "execute_code",
@@ -531,7 +533,7 @@ async def handle_agent_messages(conn_a: SocketIo) -> None:
         if msg_type == "agent_action" and msg.get("action") == "get_global_info":
             if k_proc.conn_k is not None:
                 key = msg.get("params", {}).get("key", "")
-                print(f"[entrypoint] Routing get_global_info to kernel (tx_id={tx_id}, key={key})")
+                print(f"{ts()} [entrypoint] Routing get_global_info to kernel (tx_id={tx_id}, key={key})")
 
                 await k_proc.conn_k.send({
                     "type": "get_global_info",
@@ -548,14 +550,14 @@ async def handle_agent_messages(conn_a: SocketIo) -> None:
             continue
 
         if current_agent_ctx is None:
-            print(f"[entrypoint] No websocket client connected, skipping message: {msg_type} action={action} tx_id={tx_id}")
+            print(f"{ts()} [entrypoint] No websocket client connected, skipping message: {msg_type} action={action} tx_id={tx_id}")
             continue
 
         try:
-            print(f"[entrypoint] Forwarding agent message to browser ctx action={action} tx_id={tx_id}")
+            print(f"{ts()} [entrypoint] Forwarding agent message to browser ctx action={action} tx_id={tx_id}")
             await current_agent_ctx.send_message(orjson.dumps(msg).decode())
         except Exception as e:
-            print(f"[entrypoint] Error forwarding message to browser ctx action={action} tx_id={tx_id}: {e}")
+            print(f"{ts()} [entrypoint] Error forwarding message to browser ctx action={action} tx_id={tx_id}: {e}")
 
 
 async def start_kernel_proc() -> None:
