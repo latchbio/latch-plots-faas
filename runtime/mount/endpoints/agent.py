@@ -1,5 +1,6 @@
 import asyncio
 from datetime import datetime
+from typing import Literal
 
 import orjson
 from latch_asgi.context.websocket import Context, HandlerResult
@@ -22,6 +23,11 @@ from ..entrypoint import (
 connection_idx = 0
 agent_start_lock = asyncio.Lock()
 
+# Connection role is determined by the init message:
+# - "user" browser sends init WITH local_storage (triggers headless browser start)
+# - "action_handler" (headless browser) sends init WITHOUT local_storage
+ConnectionRole = Literal["user", "action_handler", "unknown"]
+
 
 @trace_app_function_with_span
 async def agent(s: Span, ctx: Context) -> HandlerResult:
@@ -37,7 +43,8 @@ async def agent(s: Span, ctx: Context) -> HandlerResult:
         "connection_idx": connection_idx,
     })
 
-    entrypoint_module.current_agent_ctx = ctx
+    # Don't set context yet - wait for init message to determine role
+    connection_role: ConnectionRole = "unknown"
     print(f"{ts()} [agent_ws] Accepted websocket connection {conn_label}")
 
     async with agent_start_lock:
@@ -46,10 +53,6 @@ async def agent(s: Span, ctx: Context) -> HandlerResult:
 
     conn_a = a_proc.conn_a
     if conn_a is None:
-        # On reconnect, initial conn should not wipe global ctx on cleanup
-        if entrypoint_module.current_agent_ctx is ctx:
-            entrypoint_module.current_agent_ctx = None
-            print(f"{ts()} [agent_ws] Cleared current_agent_ctx (agent proc missing) {conn_label}")
         await ctx.send_message(
             orjson.dumps({
                 "type": "agent_error",
@@ -68,34 +71,52 @@ async def agent(s: Span, ctx: Context) -> HandlerResult:
             msg_type = msg.get("type")
             if msg_type == "init":
                 local_storage = msg.get("local_storage")
-                is_agent_controlled = None
-                if isinstance(local_storage, dict):
+
+                if isinstance(local_storage, dict) and len(local_storage) > 0:
+                    # User browser: sends init WITH local_storage (includes auth data)
+                    # This triggers headless browser startup
+                    connection_role = "user"
+                    entrypoint_module.user_agent_ctx = ctx
                     entrypoint_module.latest_local_storage = local_storage
+
                     is_agent_controlled = local_storage.get("plots.is_agent_controlled")
                     print(
-                        f"{ts()} [agent_ws] init received "
+                        f"{ts()} [agent_ws] init received (USER browser) "
                         f"conn={conn_label} "
                         f"is_agent_controlled={is_agent_controlled} "
                         f"notebook_id={msg.get('notebook_id')}"
                     )
 
-                if entrypoint_module.latest_local_storage is None:
-                    print(f"{ts()} [agent_ws] No auth state found, skipping headless browser start (conn={conn_label})")
-                    continue
-
-                notebook_id = msg.get("notebook_id")
-                try:
-                    await start_headless_browser(
-                        notebook_id,
-                        local_storage=entrypoint_module.latest_local_storage,
+                    notebook_id = msg.get("notebook_id")
+                    if notebook_id is not None and entrypoint_module.latest_local_storage is not None:
+                        try:
+                            await start_headless_browser(
+                                notebook_id,
+                                local_storage=entrypoint_module.latest_local_storage,
+                            )
+                        except Exception as e:
+                            print(f"{ts()} [agent_ws] Failed to start headless browser: {e}")
+                else:
+                    # Headless browser: sends init WITHOUT local_storage
+                    # This is the action handler that executes agent actions
+                    connection_role = "action_handler"
+                    entrypoint_module.action_handler_ctx = ctx
+                    print(
+                        f"{ts()} [agent_ws] init received (ACTION HANDLER/headless browser) "
+                        f"conn={conn_label} "
+                        f"session_id={msg.get('session_id')}"
                     )
-                except Exception as e:
-                    print(f"{ts()} [agent_ws] Failed to start headless browser: {e}")
 
             await conn_a.send(msg)
     finally:
-        if entrypoint_module.current_agent_ctx is ctx:
-            entrypoint_module.current_agent_ctx = None
-            print(f"{ts()} [agent_ws] Cleared current_agent_ctx on disconnect {conn_label}")
+        # Only clear the context that this connection owns
+        if connection_role == "user" and entrypoint_module.user_agent_ctx is ctx:
+            entrypoint_module.user_agent_ctx = None
+            print(f"{ts()} [agent_ws] Cleared user_agent_ctx on disconnect {conn_label}")
+        elif connection_role == "action_handler" and entrypoint_module.action_handler_ctx is ctx:
+            entrypoint_module.action_handler_ctx = None
+            print(f"{ts()} [agent_ws] Cleared action_handler_ctx on disconnect {conn_label}")
+        elif connection_role == "unknown":
+            print(f"{ts()} [agent_ws] Connection {conn_label} closed before role was determined")
 
     return "Ok"

@@ -75,7 +75,11 @@ pod_id = int((latch_p / "id").read_text())
 pod_session_id = (latch_p / "session-id").read_text()
 
 plots_ctx_manager = PlotsContextManager()
-current_agent_ctx: Context | None = None
+
+# User browser context - receives display messages (streaming, status updates)
+user_agent_ctx: Context | None = None
+# Headless browser context - handles agent actions (clicking, typing, etc.)
+action_handler_ctx: Context | None = None
 
 
 @dataclass
@@ -549,15 +553,31 @@ async def handle_agent_messages(conn_a: SocketIo) -> None:
                 })
             continue
 
-        if current_agent_ctx is None:
-            print(f"{ts()} [entrypoint] No websocket client connected, skipping message: {msg_type} action={action} tx_id={tx_id}")
-            continue
+        # Route agent_action messages to the action handler (headless browser)
+        # Route all other messages (streaming, status) to the user browser
+        if msg_type == "agent_action":
+            target_ctx = action_handler_ctx
+            ctx_label = "action_handler"
+        else:
+            target_ctx = user_agent_ctx
+            ctx_label = "user_agent"
+
+        if target_ctx is None:
+            # Fallback: try the other context if primary is not available
+            fallback_ctx = user_agent_ctx if msg_type == "agent_action" else action_handler_ctx
+            fallback_label = "user_agent" if msg_type == "agent_action" else "action_handler"
+            if fallback_ctx is not None:
+                target_ctx = fallback_ctx
+                ctx_label = f"{fallback_label} (fallback)"
+            else:
+                print(f"{ts()} [entrypoint] No websocket client connected, skipping message: {msg_type} action={action} tx_id={tx_id}")
+                continue
 
         try:
-            print(f"{ts()} [entrypoint] Forwarding agent message to browser ctx action={action} tx_id={tx_id}")
-            await current_agent_ctx.send_message(orjson.dumps(msg).decode())
+            print(f"{ts()} [entrypoint] Forwarding agent message to {ctx_label} ctx: action={action} tx_id={tx_id}")
+            await target_ctx.send_message(orjson.dumps(msg).decode())
         except Exception as e:
-            print(f"{ts()} [entrypoint] Error forwarding message to browser ctx action={action} tx_id={tx_id}: {e}")
+            print(f"{ts()} [entrypoint] Error forwarding message to {ctx_label} ctx: action={action} tx_id={tx_id}: {e}")
 
 
 async def start_kernel_proc() -> None:
