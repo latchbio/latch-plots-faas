@@ -1,5 +1,6 @@
 import json
 from collections.abc import Mapping
+from pathlib import Path
 
 from playwright.async_api import Browser, Page, Playwright, async_playwright
 
@@ -38,6 +39,15 @@ class HeadlessBrowser:
 
         await self.page.goto(notebook_url, wait_until="networkidle")
         await self.page.wait_for_selector("[data-plot-ready='true']", timeout=timeout_ms)
+
+    async def screenshot(self, path: str, *, full_page: bool = True) -> None:
+        """Take a screenshot of the current page to help debug headless runs."""
+        if self.page is None:
+            raise RuntimeError("Headless browser page not initialized")
+
+        p = Path(path)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        await self.page.screenshot(path=str(p), full_page=full_page)
 
     async def stop(self) -> None:
         if self.browser is not None:

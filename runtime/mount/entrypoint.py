@@ -710,6 +710,9 @@ async def start_headless_browser(notebook_id: str, local_storage: dict[str, str]
             notebook_url,
             local_storage=local_storage,
         )
+        with contextlib.suppress(Exception):
+            await headless_browser.screenshot("/var/log/plots-headless.png")
+            print("[entrypoint] Saved headless browser screenshot to /var/log/plots-headless.png")
         print(f"[entrypoint] Headless browser ready for notebook {notebook_id}")
 
     except Exception as e:
