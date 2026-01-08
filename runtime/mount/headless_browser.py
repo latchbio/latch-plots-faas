@@ -37,7 +37,7 @@ class HeadlessBrowser:
         )
 
         await self.page.goto(notebook_url, wait_until="networkidle")
-        await self.page.wait_for_selector("[data-agent-ready='true']", timeout=timeout_ms)
+        await self.page.wait_for_selector("[data-plot-ready='true']", timeout=timeout_ms)
 
     async def stop(self) -> None:
         if self.browser is not None:
