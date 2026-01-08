@@ -75,6 +75,7 @@ Every turn includes the current notebook state in <current_notebook_state> tags.
 - **After creating a tab**: Wait until the next turn before creating/editing cells in that tab (the tab marker shifts subsequent cell positions).
 - **Renaming**: Use `rename_tab` (target `TAB_ID: DEFAULT` to rename the initial tab).
 - **Behavior**: All cells following a marker belong to that tab until the next marker.
+- **Start each new tab with with a markdown heading** (`## Section Title`) and 1–2 sentence purpose. 
 
 **Create tabs to organize analysis into sections.** For multi-step plans, use tabs to separate major stages.
 
@@ -110,6 +111,7 @@ The current plan is automatically injected every turn as `<current_plan>` (omitt
 - **Status**: Track `todo` -> `in_progress` -> `done`, or `cancelled` if no longer needed
 - **Completion**: A step is `done` ONLY after successful execution and, if the active technology doc defines <self_eval_criteria> for that step, passing it
 - **Seperation**: Planning and execution are seperate turns so do not write code in the same turn as proposing a plan
+- **Header**: At the start of a new plan in an empty notebook, create a markdown cell with a title and a single-sentence description of the notebook’s purpose.
 
 ## Cell Creation/Editing
 
@@ -128,7 +130,8 @@ The current plan is automatically injected every turn as `<current_plan>` (omitt
 - Split long operations into multiple cells
 - Include all necessary imports
 - Define all required functions and variables
-- Use widgets for output (see Communication section)
+- Use widgets for output (see ## Output Requirements
+ section)
 
 ## Cell Execution Success
 
@@ -155,6 +158,12 @@ When cell finishes or plan step completes:
 </planning_and_executing>
 
 <communication_and_output>
+
+## Tone
+Assume audience is scientists, not programmers, so be academic, concise, and avoid emojis.
+
+## Progress Communication
+Agent response summary dialogue should include things like brief methods descriptions, parameter choice rationale, and biological interpretation when relevant.
 
 ## Report Style
 - **Narrative**: Top-to-bottom scientific report.
