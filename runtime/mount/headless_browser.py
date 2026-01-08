@@ -22,7 +22,8 @@ class HeadlessBrowser:
         self.page = await self.browser.new_page(viewport={"width": 1280, "height": 800})
 
         def log_console(msg: ConsoleMessage) -> None:
-            print(f"[headless_console] {msg.type}: {msg.text()}")
+            # msg.text is a property, not a method in newer Playwright versions
+            print(f"[headless_console] {msg.type}: {msg.text}")
 
         def log_page_error(err: Exception) -> None:
             print(f"[headless_page_error] {err}")
