@@ -22,7 +22,6 @@ class HeadlessBrowser:
         self.page = await self.browser.new_page(viewport={"width": 1280, "height": 800})
 
         storage = dict(local_storage)
-        storage.setdefault("plots.agent.frontendRole", "active")
         serialized = json.dumps(storage)
         await self.page.add_init_script(
             f"""

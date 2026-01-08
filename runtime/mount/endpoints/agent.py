@@ -64,7 +64,6 @@ async def agent(s: Span, ctx: Context) -> HandlerResult:
             if msg_type == "init":
                 local_storage = msg.get("local_storage")
                 if isinstance(local_storage, dict):
-                    local_storage.setdefault("plots.is_agent_controlled", "yes")
                     entrypoint_module.latest_local_storage = local_storage
                     print("[agent_ws] Stored latest auth state for headless browser hydration")
 
