@@ -485,13 +485,14 @@ async def handle_agent_messages(conn_a: SocketIo) -> None:
     while True:
         msg = await conn_a.recv()
         msg_type = msg.get("type", "unknown")
+        tx_id = msg.get("tx_id")
+        action = msg.get("action")
 
         if msg_type != "agent_stream_delta":
             print(f"[entrypoint] Agent > {msg_type}")
 
         if msg_type == "agent_action" and msg.get("action") == "request_reactivity_summary":
             if k_proc.conn_k is not None:
-                tx_id = msg.get("tx_id")
                 print(f"[entrypoint] Routing reactivity request to kernel (tx_id={tx_id})")
 
                 await k_proc.conn_k.send({
@@ -510,7 +511,6 @@ async def handle_agent_messages(conn_a: SocketIo) -> None:
 
         if msg_type == "agent_action" and msg.get("action") == "execute_code":
             if k_proc.conn_k is not None:
-                tx_id = msg.get("tx_id")
                 code = msg.get("params", {}).get("code", "")
                 print(f"[entrypoint] Routing execute_code to kernel (tx_id={tx_id})")
 
@@ -530,9 +530,8 @@ async def handle_agent_messages(conn_a: SocketIo) -> None:
 
         if msg_type == "agent_action" and msg.get("action") == "get_global_info":
             if k_proc.conn_k is not None:
-                tx_id = msg.get("tx_id")
                 key = msg.get("params", {}).get("key", "")
-                print(f"[entrypoint] Routing get_global_info to kernel (tx_id={tx_id})")
+                print(f"[entrypoint] Routing get_global_info to kernel (tx_id={tx_id}, key={key})")
 
                 await k_proc.conn_k.send({
                     "type": "get_global_info",
@@ -549,13 +548,14 @@ async def handle_agent_messages(conn_a: SocketIo) -> None:
             continue
 
         if current_agent_ctx is None:
-            print(f"[entrypoint] No websocket client connected, skipping message: {msg_type}")
+            print(f"[entrypoint] No websocket client connected, skipping message: {msg_type} action={action} tx_id={tx_id}")
             continue
 
         try:
+            print(f"[entrypoint] Forwarding agent message to browser ctx action={action} tx_id={tx_id}")
             await current_agent_ctx.send_message(orjson.dumps(msg).decode())
         except Exception as e:
-            print(f"[entrypoint] Error forwarding message: {e}")
+            print(f"[entrypoint] Error forwarding message to browser ctx action={action} tx_id={tx_id}: {e}")
 
 
 async def start_kernel_proc() -> None:
@@ -710,7 +710,6 @@ async def start_headless_browser(notebook_id: str, local_storage: dict[str, str]
             notebook_url,
             local_storage=local_storage,
         )
-        await asyncio.sleep(10)
         with contextlib.suppress(Exception):
             await headless_browser.screenshot("/var/log/plots-headless.png")
             print("[entrypoint] Saved headless browser screenshot to /var/log/plots-headless.png")

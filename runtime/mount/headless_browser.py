@@ -41,7 +41,6 @@ class HeadlessBrowser:
         await self.page.wait_for_selector("[data-plot-ready='true']", timeout=timeout_ms)
 
     async def screenshot(self, path: str, *, full_page: bool = True) -> None:
-        """Take a screenshot of the current page to help debug headless runs."""
         if self.page is None:
             raise RuntimeError("Headless browser page not initialized")
 

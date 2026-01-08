@@ -27,6 +27,7 @@ async def agent(s: Span, ctx: Context) -> HandlerResult:
     global connection_idx
 
     await ctx.accept_connection()
+    conn_label = f"agent_ws#{connection_idx}"
 
     s.set_attributes({
         "pod_id": pod_id,
@@ -35,6 +36,7 @@ async def agent(s: Span, ctx: Context) -> HandlerResult:
     })
 
     entrypoint_module.current_agent_ctx = ctx
+    print(f"[agent_ws] Accepted websocket connection {conn_label}")
 
     async with agent_start_lock:
         if a_proc.conn_a is None:
@@ -45,6 +47,7 @@ async def agent(s: Span, ctx: Context) -> HandlerResult:
         # On reconnect, initial conn should not wipe global ctx on cleanup
         if entrypoint_module.current_agent_ctx is ctx:
             entrypoint_module.current_agent_ctx = None
+            print(f"[agent_ws] Cleared current_agent_ctx (agent proc missing) {conn_label}")
         await ctx.send_message(
             orjson.dumps({
                 "type": "agent_error",
@@ -63,9 +66,16 @@ async def agent(s: Span, ctx: Context) -> HandlerResult:
             msg_type = msg.get("type")
             if msg_type == "init":
                 local_storage = msg.get("local_storage")
+                is_agent_controlled = None
                 if isinstance(local_storage, dict):
                     entrypoint_module.latest_local_storage = local_storage
-                    print("[agent_ws] Stored latest auth state for headless browser hydration")
+                    is_agent_controlled = local_storage.get("plots.is_agent_controlled")
+                    print(
+                        "[agent_ws] init received "
+                        f"conn={conn_label} "
+                        f"is_agent_controlled={is_agent_controlled} "
+                        f"notebook_id={msg.get('notebook_id')}"
+                    )
 
                 if entrypoint_module.latest_local_storage is None:
                     print("[agent_ws] No auth state found, skipping headless browser start")
@@ -84,5 +94,6 @@ async def agent(s: Span, ctx: Context) -> HandlerResult:
     finally:
         if entrypoint_module.current_agent_ctx is ctx:
             entrypoint_module.current_agent_ctx = None
+            print(f"[agent_ws] Cleared current_agent_ctx on disconnect {conn_label}")
 
     return "Ok"
