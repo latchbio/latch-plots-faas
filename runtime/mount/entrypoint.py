@@ -80,6 +80,8 @@ plots_ctx_manager = PlotsContextManager()
 user_agent_ctx: Context | None = None
 # Headless browser context - handles agent actions (clicking, typing, etc.)
 action_handler_ctx: Context | None = None
+# Event that signals when action_handler is connected and ready
+action_handler_ready_ev = asyncio.Event()
 
 
 @dataclass
@@ -556,25 +558,38 @@ async def handle_agent_messages(conn_a: SocketIo) -> None:
         # Route agent_action messages to the action handler (headless browser)
         # Route all other messages (streaming, status) to the user browser
         if msg_type == "agent_action":
+            # agent_action MUST go to action_handler - user browser won't handle them
+            # (user browser has isAgentControlled=false and ignores agent_action messages)
+            if action_handler_ctx is None:
+                print(f"{ts()} [entrypoint] ERROR: action_handler_ctx not available for agent_action: action={action} tx_id={tx_id}")
+                print(f"{ts()} [entrypoint] Headless browser may not be connected. user_agent_ctx={'set' if user_agent_ctx else 'None'}")
+                # Send error response back to agent so it doesn't hang waiting
+                await conn_a.send({
+                    "type": "agent_action_response",
+                    "tx_id": tx_id,
+                    "status": "error",
+                    "error": "Action handler (headless browser) not connected. Cannot execute browser actions."
+                })
+                continue
             target_ctx = action_handler_ctx
             ctx_label = "action_handler"
         else:
+            # Display messages (streaming, status) go to user browser
+            # Can fallback to action_handler if user browser disconnected
             target_ctx = user_agent_ctx
             ctx_label = "user_agent"
 
-        if target_ctx is None:
-            # Fallback: try the other context if primary is not available
-            fallback_ctx = user_agent_ctx if msg_type == "agent_action" else action_handler_ctx
-            fallback_label = "user_agent" if msg_type == "agent_action" else "action_handler"
-            if fallback_ctx is not None:
-                target_ctx = fallback_ctx
-                ctx_label = f"{fallback_label} (fallback)"
-            else:
-                print(f"{ts()} [entrypoint] No websocket client connected, skipping message: {msg_type} action={action} tx_id={tx_id}")
-                continue
+            if target_ctx is None:
+                if action_handler_ctx is not None:
+                    target_ctx = action_handler_ctx
+                    ctx_label = "action_handler (fallback)"
+                else:
+                    print(f"{ts()} [entrypoint] No websocket client connected, skipping message: {msg_type} action={action} tx_id={tx_id}")
+                    continue
 
         try:
-            print(f"{ts()} [entrypoint] Forwarding agent message to {ctx_label} ctx: action={action} tx_id={tx_id}")
+            if msg_type != "agent_stream_delta":  # Don't spam logs with deltas
+                print(f"{ts()} [entrypoint] Forwarding {msg_type} to {ctx_label} ctx: action={action} tx_id={tx_id}")
             await target_ctx.send_message(orjson.dumps(msg).decode())
         except Exception as e:
             print(f"{ts()} [entrypoint] Error forwarding message to {ctx_label} ctx: action={action} tx_id={tx_id}: {e}")
@@ -721,6 +736,14 @@ async def start_headless_browser(notebook_id: str, local_storage: dict[str, str]
 
     if headless_browser is not None:
         print("[entrypoint] Headless browser already running")
+        # Still wait for action handler to be ready in case browser is running but not connected yet
+        if not action_handler_ready_ev.is_set():
+            print("[entrypoint] Waiting for action_handler to connect...")
+            try:
+                await asyncio.wait_for(action_handler_ready_ev.wait(), timeout=30)
+                print("[entrypoint] action_handler connected!")
+            except asyncio.TimeoutError:
+                print("[entrypoint] WARNING: Timed out waiting for action_handler to connect")
         return
 
     try:
@@ -735,7 +758,16 @@ async def start_headless_browser(notebook_id: str, local_storage: dict[str, str]
         with contextlib.suppress(Exception):
             await headless_browser.screenshot("/var/log/plots-headless.png")
             print("[entrypoint] Saved headless browser screenshot to /var/log/plots-headless.png")
-        print(f"[entrypoint] Headless browser ready for notebook {notebook_id}")
+        print(f"[entrypoint] Headless browser page ready for notebook {notebook_id}")
+
+        # Wait for the headless browser to establish websocket connection and send init
+        print("[entrypoint] Waiting for action_handler (headless browser) to connect via websocket...")
+        try:
+            await asyncio.wait_for(action_handler_ready_ev.wait(), timeout=30)
+            print("[entrypoint] action_handler connected and ready!")
+        except asyncio.TimeoutError:
+            print("[entrypoint] ERROR: Timed out waiting for action_handler websocket connection")
+            print("[entrypoint] The headless browser page loaded but did not establish agent websocket")
 
     except Exception as e:
         print(f"[entrypoint] Error starting headless browser: {e}")

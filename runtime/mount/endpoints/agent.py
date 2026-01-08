@@ -14,6 +14,7 @@ import runtime.mount.entrypoint as entrypoint_module
 
 from ..entrypoint import (
     a_proc,
+    action_handler_ready_ev,
     pod_id,
     pod_session_id,
     start_agent_proc,
@@ -101,10 +102,12 @@ async def agent(s: Span, ctx: Context) -> HandlerResult:
                     # This is the action handler that executes agent actions
                     connection_role = "action_handler"
                     entrypoint_module.action_handler_ctx = ctx
+                    action_handler_ready_ev.set()
                     print(
                         f"{ts()} [agent_ws] init received (ACTION HANDLER/headless browser) "
                         f"conn={conn_label} "
-                        f"session_id={msg.get('session_id')}"
+                        f"session_id={msg.get('session_id')} "
+                        f"action_handler_ready_ev=SET"
                     )
 
             await conn_a.send(msg)
@@ -115,7 +118,8 @@ async def agent(s: Span, ctx: Context) -> HandlerResult:
             print(f"{ts()} [agent_ws] Cleared user_agent_ctx on disconnect {conn_label}")
         elif connection_role == "action_handler" and entrypoint_module.action_handler_ctx is ctx:
             entrypoint_module.action_handler_ctx = None
-            print(f"{ts()} [agent_ws] Cleared action_handler_ctx on disconnect {conn_label}")
+            action_handler_ready_ev.clear()
+            print(f"{ts()} [agent_ws] Cleared action_handler_ctx on disconnect {conn_label}, action_handler_ready_ev=CLEARED")
         elif connection_role == "unknown":
             print(f"{ts()} [agent_ws] Connection {conn_label} closed before role was determined")
 
