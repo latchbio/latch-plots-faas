@@ -1,8 +1,7 @@
 import json
 from collections.abc import Mapping
 from pathlib import Path
-
-from playwright.async_api import Browser, Page, Playwright, async_playwright
+from playwright.async_api import Browser, ConsoleMessage, Page, Playwright, Request, WebSocket, async_playwright
 
 
 class HeadlessBrowser:
@@ -21,6 +20,25 @@ class HeadlessBrowser:
         self.playwright = await async_playwright().start()
         self.browser = await self.playwright.chromium.launch(headless=True)
         self.page = await self.browser.new_page(viewport={"width": 1280, "height": 800})
+
+        def log_console(msg: ConsoleMessage) -> None:
+            print(f"[headless_console] {msg.type}: {msg.text()}")
+
+        def log_page_error(err: Exception) -> None:
+            print(f"[headless_page_error] {err}")
+
+        def log_request_failed(req: Request) -> None:
+            print(f"[headless_request_failed] {req.url} {req.failure}")
+
+        def log_ws(ws: WebSocket) -> None:
+            print(f"[headless_ws_open] {ws.url}")
+            ws.on("close", lambda: print(f"[headless_ws_close] {ws.url}"))
+            ws.on("framereceived", lambda _: None)
+
+        self.page.on("console", log_console)
+        self.page.on("pageerror", log_page_error)
+        self.page.on("requestfailed", log_request_failed)
+        self.page.on("websocket", log_ws)
 
         storage = dict(local_storage)
         serialized = json.dumps(storage)
