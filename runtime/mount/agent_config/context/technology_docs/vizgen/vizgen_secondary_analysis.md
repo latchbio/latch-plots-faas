@@ -1,49 +1,40 @@
-This document provides ultimate guideline to perform secondary analysis on vizgen MERFISH datasets. Be honest and follow this document to the word.
+<goal>
+Perform secondary analysis on Vizgen MERFISH data, including cell-type annotation and spatial domain detection.
+</goal>
 
-### ** Cell Type Annotation**
-- Prompt the user for **tissue** and **organism**.  
-- Assign biological meaning to clusters using **marker-gene dictionaries**.  
-- Display **dot plots** of cell types and top markers.
+<method>
+1/ **Cell Type Annotation**  
+   - Prompt the user for **tissue** and **organism** using lplots widgets.  
+   - Assign biological meaning to clusters using curated **marker-gene dictionaries**.  
+   - Display **dot plots** showing cluster-level markers and corresponding annotated cell types.
 
-## ** Spatial Domain Detection and Niche Identification
+2/ **Prepare AnnData for Domain Detection**  
+   - Ensure spatial coordinates exist under `adata.obsm["X_spatial"]`.  
+     - If `adata.obsm["Spatial"]` exists, rename it to `adata.obsm["X_spatial"]`.  
+   - Allow the user to choose:
+     - A **filename** for the processed H5AD.  
+     - A **directory** in LData where the file will be saved.  
+   - Write the processed object to H5AD and upload it to the selected LData location.
 
-- Rename `adata.obsm["Spatial"]` to `adata.obsm["X_spatial"]`, then save the processed object to `.h5ad`.
-    ```python
-    if 'Spatial' in adata.obsm.keys():
-        adata.obsm['X_spatial'] = adata.obsm['Spatial']
+3/ **BANSkY / Domain Detection Workflow Launch**  
+   - Expose a small form for:
+     - `run_name`  
+     - `output_dir` (`LatchDir`)  
+     - `lambda_list` (string of values)  
+   - Use these values to construct the workflow `params` dictionary.  
+   - Invoke the BANSkY workflow using `w_workflow` and wait for completion before moving forward.
 
-    # Save the processed H5AD file
-    output_h5ad_path = "/tmp/merfish_processed_for_domain_detection.h5ad"
-    adata.write_h5ad(output_h5ad_path)
-    output_lpath = LPath("latch:///merfish/analysis_output/merfish_processed_for_domain_detection.h5ad")
-    output_lpath.upload_from(output_h5ad_path)
-    local_path = Path(output_h5ad_path)
-    output_lpath.upload_from(local_path)
-    ```
-- Allow the user to a filename and a location to save the input file for the workflow
-- Use this file as input for the domain-detection workflow.
-- Allow the user to select lambda, runname and output_dir using a form created with **lplots widgets**
-```python
-params = {
-    "input_file": LatchFile("latch:///merfish_processed_for_domain_detection.h5ad"),
-    "run_name": "my_run",
-    "output_dir": LatchDir("latch:///Domain_detection_output"),
-    "lambda_list": "0.5",
-}
-w = w_workflow(
-    wf_name="wf.__init__.domain_detection_wf",
-    key="domain_detection_workflow_run_1",
-    version=None,
-    automatic=True,
-    label="Launch Domain Detection Workflow",
-    params=params,
-)
-execution = w.value
+4/ **Post-Workflow Actions**  
+   - Load domain assignments and spatial/domain embeddings from the workflow output directory.  
+   - Prepare the updated AnnData object for downstream spatial analysis.
+</method>
 
-if execution is not None:
-  res = await execution.wait()
+<workflows>
+wf/banksy_wf.md
+</workflows>
 
-  if res is not None and res.status in {"SUCCEEDED", "FAILED", "ABORTED"}:
-      # inspect workflow outputs for downstream analysis
-      workflow_outputs = list(res.output.values())
-```
+<library>
+</library>
+
+<self_eval_criteria>
+</self_eval_criteria>
