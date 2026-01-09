@@ -16,7 +16,7 @@ This step assigns cell types to clusters by:
 ## 0. Setup (import shared helpers)
 
 ```python
-sys.path.insert(0, "/opt/latch/plots-faas/runtime/mount/agent_config/lib")
+sys.path.insert(0, "/opt/latch/plots-faas/runtime/mount/agent_config/context/technology_docs/xenium/lib")
 
 from xenium.xenium_cell_type import (
     load_json_lpath,
@@ -197,7 +197,7 @@ These fields are then used **downstream** to convert the raw `most_common_cell_t
   - `summarize_clusters`
   )
 - CellGuide marker databases and vocab JSONs under
-  `/opt/latch/plots-faas/runtime/mount/agent_config/context/technology_docs/xenium/`
+  `/opt/latch/plots-faas/runtime/mount/agent_config/context/technology_docs/xenium/steps/cell_type_annotation`
 </library>
 
 <self_eval_criteria>

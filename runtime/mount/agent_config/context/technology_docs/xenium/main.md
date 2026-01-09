@@ -21,10 +21,17 @@ MANDATORY: Invoke the `redeem_package` tool to install required Xenium tools int
 3. Differential Gene Expression (DGE) — identify marker genes per cluster and eport top marker genes for each cluster and make dot plots with scanpy -> `steps/differential_expression.md`
 4. Cell Type Annotation — Use CellGuide markers and vocab configs for clean labels. -> `steps/cell_type_annotation/cell_type_annotation.md`
 5. Neighbors Enrichment Analysis and Domain Detection — Build spatial neighbor graph and enrichment metrics, domain-detection workflow (optional). -> `steps/spatial_analysis.md`
-6. Cell Segmentation (Optional) — Optionally resegment cells using the full-resolution TIFF. -> `steps/cell_segmentation.md`
+6. Cell Segmentation (optional) — Optionally resegment cells using the full-resolution TIFF. -> `steps/cell_segmentation.md`
 </plan>
 
 <self_eval_criteria>
 - A single coherent `AnnData` object with counts, metadata, and spatial coordinates is available.
 - All subsequent steps can run without users supplying explicit file paths.
 </self_eval_criteria>
+
+## General Workflow Rules
+
+- **Render figures** using `w_plot` (and table widgets where appropriate).
+  - Do **NOT** reuse the variable name `fig`. Use descriptive names: `fig_qc`, `fig_umap`, etc.
+  - For non-Scanpy figures, use **Plotly**.
+- Keep objects and outputs reproducible: never overwrite without user consent; create new keys/versions.

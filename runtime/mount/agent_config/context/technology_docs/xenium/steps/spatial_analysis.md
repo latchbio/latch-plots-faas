@@ -7,7 +7,7 @@ Quantify spatial neighborhood structure (centrality, enrichment, spatially varia
 <method>
 1/ **Neighbors Enrichment and Spatial Structure**: Build a spatial neighborhood graph using:
    - `sq.gr.spatial_neighbors(adata, coord_type="generic", delaunay=True, spatial_key="Spatial")`
-   Then compute centrality scores with `sq.gr.centrality_scores` and visualize them on the spatial embedding, providing a short explanation of what each centrality score represents and how to interpret it.
+   Then compute **centrality scores** with `sq.gr.centrality_scores` and visualize them on the spatial embedding, providing a short explanation of what each centrality score represents and how to interpret it.
 
 2/ Compute neighborhood enrichment scores between cell types with:
    - `sq.gr.nhood_enrichment(adata, cluster_key="cell_type")`
