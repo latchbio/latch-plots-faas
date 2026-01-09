@@ -1,6 +1,5 @@
 <method>
-
-**Quality control**
+1/ **Quality control**
 - Compute standard QC metrics (genes per cell, counts per cell, mitochondrial fraction if available).
 ```python
 sc.pp.calculate_qc_metrics(adata, percent_top=None, inplace=True)
@@ -10,10 +9,10 @@ sc.pp.calculate_qc_metrics(adata, percent_top=None, inplace=True)
 - **ALWAYS** tell the user how many cells will be removed before applying filters.
 - If all cells are removed, ask user to re-enter parameters.
 
-**Normalization**
+2/ **Normalization**
 - Library-size normalization, then log transform.
 
-**Dimensionality reduction**
+3/ **Dimensionality reduction**
 - PCA on all genes; store in `adata.obsm["X_pca"]`.
 ```python
 sc.tl.pca(adata, n_comps=n_pcs)
@@ -25,16 +24,16 @@ w_plot(label="PCA Explained Variance Ratio", source=fig_pca)
 
 plt.close()
 ```
-**Batch integration**
+4/ **Batch integration**
 - If multiple samples are provided, integrate them using Scanpy `sce.pp.harmony_integrate(key="batch_key")`
 
-**Neighborhood graph, UMAP, clustering**
+5/ **Neighborhood graph, UMAP, clustering**
 - Build neighbors on the integrated space.
 - Compute UMAP; store in `adata.obsm["X_umap"]` or `adata.obsm["UMAP"]`.
 - Run Leiden clustering; store categorical labels in adata.obs["leiden"]; **update the original w_h5 viewer in place—do not create a new viewer.**
 - Render Leiden clusters on the spatial embedding and UMAP using Plotly subplots.
 
-**Non-destructive policy**
+6/ **Non-destructive policy**
 - Do not overwrite existing embeddings or clusters unless the user opts in. Write to new keys if needed.
 
 ### Parameters (render as widgets with sensible defaults)

@@ -2,22 +2,21 @@
 
 <goal>
 Identify cluster-specific marker genes suitable for annotation and visualization.
-
 </goal>
 
 <method>
+1/ Select the DGE method:
+   - **Default (fastest):** `t-test_overestim_var` with Benjamini–Hochberg FDR control.
+   - **Alternative (more robust to outliers/zero inflation):** `wilcoxon`.
+   Keep `t-test_overestim_var` as the default (“Quick mode”) and offer a toggle to “Robust mode” → `wilcoxon` when users prioritize robustness over speed.
 
-- **Default test (fastest):** `t-test_overestim_var` with Benjamini–Hochberg FDR control.
-- **Alternative (more robust to outliers/zero inflation):** `wilcoxon`
-- **Default clustering column:** `"K=5"`. Offer a dropdown widget to let the user select other cluster columns.
+2/ Use `"K=5"` as the default clustering column and offer a dropdown widget to let the user select other cluster columns.
 
-> **Heuristic:** keep `t-test_overestim_var` as default (“Quick mode”). Offer a toggle to “Robust mode” → `wilcoxon` when users prioritize robustness over speed.
+3/ Render parameters as widgets with defaults:
+   - **Method:** `t-test_overestim_var` (default) | `wilcoxon`
+   - **Top genes per cluster:** `top_n` (default: 5)
 
-### Parameters (render as widgets with defaults)
-- **Method:** `t-test_overestim_var` *(default)* \| `wilcoxon`
-- **Top genes per cluster:** `top_n` *(default: 5)*
-
-### Core DGE call
+4/ Filter out cells with missing cluster labels and coerce cluster labels to strings.
 
 ```python
 valid_cells = ~adata.obs[cluster_col].isna()
@@ -27,7 +26,10 @@ adata_filtered = adata[valid_cells].copy()
 adata_filtered.obs[cluster_col] = adata_filtered.obs[cluster_col].apply(
     lambda x: str(x) if not isinstance(x, str) else x
 )
+```
 
+5/ Run differential gene expression using Scanpy with Benjamini–Hochberg correction.
+```python
 sc.tl.rank_genes_groups(
     adata_filtered,
     groupby=cluster_col,
@@ -37,17 +39,13 @@ sc.tl.rank_genes_groups(
 )
 ```
 
-### Reporting
-
-- Per cluster, report:
+6/ Store results under adata.uns["dge"] and, per cluster, report:
     - gene
     - log fold change
     - p-value
     - **FDR** (adjusted p-value).
-- Store results under `adata.uns["dge"]`.
-- Report top marker genes for each cluster and make dot plots with Scanpy.
-- Select the top four biologically meaningful marker genes and color the spatial embedding by their `log1p` expression in four subplots. Explain briefly why they are biologically meaningful.
 
+7/ Report top marker genes for each cluster and make dot plots with Scanpy.
 ```python
 sc.pl.dotplot(
     adata,
@@ -61,6 +59,8 @@ dotplot_fig = plt.gcf()
 w_plot(label="Marker Gene Expression Dot Plot", source=dotplot_fig)
 plt.close()
 ```
+
+8/ Select the top four biologically meaningful marker genes and color the spatial embedding by their log1p expression in four subplots, explaining briefly why they are biologically meaningful.
 </method>
 
 <workflows>
@@ -73,8 +73,7 @@ plt.close()
 </library>
 
 <self_eval_criteria>
-
--  DGE runs without errors on the selected cluster column.
+- DGE runs without errors on the selected cluster column.
 - Most clusters have non-empty marker sets with reasonable log fold changes and FDR.
 - `adata.uns["dge"]` is populated and can be reused for cell-type annotation.
 - Spatial and UMAP plots of top markers look biologically plausible.

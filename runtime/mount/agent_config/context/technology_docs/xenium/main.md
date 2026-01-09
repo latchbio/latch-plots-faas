@@ -7,45 +7,24 @@
 - Does the attached folder contain preprocessing output `analysis.tar.gz`?
 </pre_analysis_questions>
 
-<plan>
+<pre_analysis_step>
+MANDATORY: Invoke the `redeem_package` tool to install required Xenium tools into the workspace.
+  - `package_code`: `7a4f4bd980b3739a825072a975dd9a376c267ff7c84c1c9c59c8da196e58c3bd`
+  - `package_version_id`: `401`
+</pre_analysis_step>
 
-0. Data Preparation — Convert raw Xenium outputs to an `.h5ad` and viewer-ready assets. -> `xenium/data_preparation.md`
-1. Data Loading — Load `.h5ad`, attach spatial tiles, and render with `w_h5`. -> `xenium/data_loading.md`
-2. Preprocessing — QC, normalization, PCA, Harmony (if needed), UMAP and Leiden. **only if the user confirms** -> `xenium/preprocessing.md`
+<plan>
+0. Data Preparation — Convert raw Xenium outputs to an `.h5ad` and viewer-ready assets. -> `steps/data_preparation.md`
+1. Data Loading — Load `.h5ad`, attach spatial tiles, and render with `w_h5`. -> `steps/data_loading.md`
+2. Preprocessing — QC, normalization, PCA, Harmony (if needed), UMAP and Leiden. **only if the user confirms** -> `steps/preprocessing.md`
   - If embeddings or clusters already exist in adata, do not run preprocessing yet. Ask for confirmation in **Step 2** before recomputing.
-3. Differential Gene Expression (DGE) — identify marker genes per cluster and eport top marker genes for each cluster and make dot plots with scanpy -> `xenium/differential_expression.md`
-4. Cell Type Annotation — Use CellGuide markers and vocab configs for clean labels. -> `xenium/cell_type_annotation.md`
-5. Neighbors Enrichment Analysis and Domain Detection — Build spatial neighbor graph and enrichment metrics, domain-detection workflow (optional). -> `xenium/spatial_analysis.md`
-6. Cell Segmentation (Optional) — Optionally resegment cells using the full-resolution TIFF. -> `xenium/cell_segmentation.md`
+3. Differential Gene Expression (DGE) — identify marker genes per cluster and eport top marker genes for each cluster and make dot plots with scanpy -> `steps/differential_expression.md`
+4. Cell Type Annotation — Use CellGuide markers and vocab configs for clean labels. -> `steps/cell_type_annotation/cell_type_annotation.md`
+5. Neighbors Enrichment Analysis and Domain Detection — Build spatial neighbor graph and enrichment metrics, domain-detection workflow (optional). -> `steps/spatial_analysis.md`
+6. Cell Segmentation (Optional) — Optionally resegment cells using the full-resolution TIFF. -> `steps/cell_segmentation.md`
 </plan>
 
 <self_eval_criteria>
 - A single coherent `AnnData` object with counts, metadata, and spatial coordinates is available.
 - All subsequent steps can run without users supplying explicit file paths.
 </self_eval_criteria>
-
----
-
-## Mandatory Package Redemption
-
-Invoke the `redeem_package` tool to install required Xenium tools into the workspace.
-
-- `package_code`: `7a4f4bd980b3739a825072a975dd9a376c267ff7c84c1c9c59c8da196e58c3bd`
-- `package_version_id`: `401`
-
----
-
-## General Workflow Rules
-
-- **Always render a form** for any workflow with `lplots.widgets`.
-  - Pre-populate sensible defaults.
-  - **End with `w.value`** to execute.
-- **Summarize results** (and progress/status) using `w_text_output(content=..., appearance={"message_box": "success" | "info"})`.
-- **Render figures** using `w_plot` (and table widgets where appropriate).
-  - Do **NOT** reuse the variable name `fig`. Use descriptive names: `fig_qc`, `fig_umap`, etc.
-  - For non-Scanpy figures, use **Plotly**.
-- Do **not** ask users for file paths or node IDs; auto-discover from the attached folder.
-- Keep objects and outputs reproducible: never overwrite without user consent; create new keys/versions.
-- **Always include `w.value` at the end** when using a widget.
-- Do **not** use `lplots.widgets.number`.
-- Wait for workflows to complete before proceeding. After completion, load the new `adata` from `{output_directory}/{run_name}` via `ldata`.
