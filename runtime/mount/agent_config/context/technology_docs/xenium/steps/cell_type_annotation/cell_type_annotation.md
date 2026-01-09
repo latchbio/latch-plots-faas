@@ -180,7 +180,6 @@ Use `load_vocab_index` and `load_cell_type_vocab_config` to load the appropriate
 These fields are then used **downstream** to convert the raw `most_common_cell_type` entries in `cluster_summary` into final labels for `adata.obs["cell_type"]`. The full per-cluster summary and the vocab config should be stored in `adata.uns["cell_type_annotation"]` for transparency and reproducibility.
 
 ---
-
 </method>
 
 <workflows>
@@ -202,7 +201,6 @@ These fields are then used **downstream** to convert the raw `most_common_cell_t
 </library>
 
 <self_eval_criteria>
-
 - A valid clustering column and matching DGE key were found and used.
 - `cluster_summary` contains interpretable `most_common_cell_type` entries and supporting `core_markers`.
 - If a vocab config is available, final labels in `adata.obs["cell_type"]` are restricted to `allowed_vocab`.
