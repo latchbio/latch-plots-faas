@@ -75,11 +75,10 @@ pod_session_id = (latch_p / "session-id").read_text()
 
 plots_ctx_manager = PlotsContextManager()
 
-# User browser context - receives display messages (streaming, status updates)
 user_agent_ctx: Context | None = None
-# Headless browser context - handles agent actions (clicking, typing, etc.)
+
+# backend browser
 action_handler_ctx: Context | None = None
-# Event that signals when action_handler is connected and ready
 action_handler_ready_ev = asyncio.Event()
 
 
@@ -494,6 +493,9 @@ async def handle_agent_messages(conn_a: SocketIo) -> None:
         tx_id = msg.get("tx_id")
         action = msg.get("action")
 
+        if msg_type != "agent_stream_delta":
+            print(f"[entrypoint] Agent > {msg_type}")
+
         if msg_type == "agent_action" and msg.get("action") == "request_reactivity_summary":
             if k_proc.conn_k is not None:
 
@@ -547,11 +549,7 @@ async def handle_agent_messages(conn_a: SocketIo) -> None:
                 })
             continue
 
-        # Route agent_action messages to the action handler (headless browser)
-        # Route all other messages (streaming, status) to the user browser
         if msg_type == "agent_action":
-            # agent_action MUST go to action_handler - user browser won't handle them
-            # (user browser has isAgentControlled=false and ignores agent_action messages)
             if action_handler_ctx is None:
                 print(f"[entrypoint] action_handler not connected for agent_action: {action}")
                 await conn_a.send({
@@ -563,8 +561,6 @@ async def handle_agent_messages(conn_a: SocketIo) -> None:
                 continue
             target_ctx = action_handler_ctx
         else:
-            # Display messages (streaming, status) go to user browser
-            # Can fallback to action_handler if user browser disconnected
             target_ctx = user_agent_ctx
             if target_ctx is None:
                 target_ctx = action_handler_ctx
@@ -632,7 +628,7 @@ async def start_kernel_proc() -> None:
         data = validate(resp, TmpPlotsNotebookKernelSnapshotModeResp)
         session_snapshot_mode = data.data.tmpPlotsNotebookKernelSnapshotMode
         if session_snapshot_mode:
-            kernel_snapshot_state.status = "loading"
+            kernel_snapshot_state.status = "start"
     except Exception:
         err_msg = {"type": "error", "data": traceback.format_exc()}
         await plots_ctx_manager.broadcast_message(orjson.dumps(err_msg).decode())
@@ -717,12 +713,6 @@ async def start_headless_browser(notebook_id: str, local_storage: dict[str, str]
     global headless_browser
 
     if headless_browser is not None:
-        # Still wait for action handler to be ready in case browser is running but not connected yet
-        if not action_handler_ready_ev.is_set():
-            try:
-                await asyncio.wait_for(action_handler_ready_ev.wait(), timeout=30)
-            except asyncio.TimeoutError:
-                print("[entrypoint] Timed out waiting for action_handler to connect")
         return
 
     try:
@@ -734,19 +724,15 @@ async def start_headless_browser(notebook_id: str, local_storage: dict[str, str]
             notebook_url,
             local_storage=local_storage,
         )
-        with contextlib.suppress(Exception):
-            await headless_browser.screenshot("/var/log/plots-headless.png")
 
-        # Wait for the headless browser to establish websocket connection and send init
         try:
             await asyncio.wait_for(action_handler_ready_ev.wait(), timeout=30)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             print("[entrypoint] Timed out waiting for action_handler websocket connection")
 
     except Exception as e:
         print(f"[entrypoint] Error starting headless browser: {e}")
         traceback.print_exc()
-        # Clean up on failure so retry is possible
         if headless_browser is not None:
             with contextlib.suppress(Exception):
                 await headless_browser.stop()
@@ -759,7 +745,8 @@ async def shutdown() -> None:
 
     global headless_browser
     if headless_browser is not None:
-        await headless_browser.stop()
+        with contextlib.suppress(Exception):
+            await headless_browser.stop()
         headless_browser = None
 
     with contextlib.suppress(Exception):

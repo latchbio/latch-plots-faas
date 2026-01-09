@@ -43,7 +43,7 @@ if pod_id_path.exists():
 
 sess: ClientSession | None = None
 
-KernelSnapshotStatus = Literal["loading", "done", "progress", "start", "error"]
+KernelSnapshotStatus = Literal["done", "progress", "start", "error"]
 
 
 class Trace(TypedDict):

@@ -23,9 +23,6 @@ from ..entrypoint import (
 connection_idx = 0
 agent_start_lock = asyncio.Lock()
 
-# Connection role is determined by the init message:
-# - "user" browser sends init WITH local_storage (triggers headless browser start)
-# - "action_handler" (headless browser) sends init WITHOUT local_storage
 ConnectionRole = Literal["user", "action_handler", "unknown"]
 
 
@@ -41,7 +38,6 @@ async def agent(s: Span, ctx: Context) -> HandlerResult:
         "connection_idx": connection_idx,
     })
 
-    # Don't set context yet - wait for init message to determine role
     connection_role: ConnectionRole = "unknown"
 
     async with agent_start_lock:
@@ -70,34 +66,29 @@ async def agent(s: Span, ctx: Context) -> HandlerResult:
                 local_storage = msg.get("local_storage")
 
                 if isinstance(local_storage, dict) and len(local_storage) > 0:
-                    # User browser: sends init WITH local_storage (includes auth data)
-                    # This triggers headless browser startup
                     connection_role = "user"
                     entrypoint_module.user_agent_ctx = ctx
                     entrypoint_module.latest_local_storage = local_storage
 
                     notebook_id = msg.get("notebook_id")
-                    if notebook_id is not None and entrypoint_module.latest_local_storage is not None:
-                        try:
-                            await start_headless_browser(
-                                notebook_id,
-                                local_storage=entrypoint_module.latest_local_storage,
-                            )
-                        except Exception as e:
-                            print(f"[agent_ws] Failed to start headless browser: {e}")
+                    if notebook_id is None:
+                        raise ValueError("notebook_id required in init message")
+
+                    await start_headless_browser(
+                        notebook_id,
+                        local_storage=entrypoint_module.latest_local_storage,
+                    )
                 else:
-                    # Headless browser: sends init WITHOUT local_storage
-                    # This is the action handler that executes agent actions
+                    # backend browser opening connection
                     connection_role = "action_handler"
                     entrypoint_module.action_handler_ctx = ctx
                     action_handler_ready_ev.set()
 
             await conn_a.send(msg)
     finally:
-        # Only clear the context that this connection owns
-        if connection_role == "user" and entrypoint_module.user_agent_ctx is ctx:
+        if connection_role == "user":
             entrypoint_module.user_agent_ctx = None
-        elif connection_role == "action_handler" and entrypoint_module.action_handler_ctx is ctx:
+        elif connection_role == "action_handler":
             entrypoint_module.action_handler_ctx = None
             action_handler_ready_ev.clear()
 
