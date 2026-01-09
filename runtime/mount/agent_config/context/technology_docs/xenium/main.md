@@ -20,8 +20,9 @@ MANDATORY: Invoke the `redeem_package` tool to install required Xenium tools int
   - If embeddings or clusters already exist in adata, do not run preprocessing yet. Ask for confirmation in **Step 2** before recomputing.
 3. Differential Gene Expression (DGE) — identify marker genes per cluster and eport top marker genes for each cluster and make dot plots with scanpy -> `steps/differential_expression.md`
 4. Cell Type Annotation — Use CellGuide markers and vocab configs for clean labels. -> `steps/cell_type_annotation/cell_type_annotation.md`
-5. Neighbors Enrichment Analysis and Domain Detection — Build spatial neighbor graph and enrichment metrics, domain-detection workflow (optional). -> `steps/spatial_analysis.md`
-6. Domain Detection (optional) — Optionally detect tissue domain with workflow. -> `steps/domain_detection_wf.md`
+5. Neighbors Enrichment Analysis — Build spatial neighbor graph and enrichment metrics. -> `steps/spatial_analysis.md`
+6. Domain Detection (optional) — Optionally detect tissue domain with workflow. -> `wf/domain_detection_wf.md`
+  - Load output h5ad object from workflow and visualize detected domain (e.g. `labels_scaled_gaussian_*` in `obs`) in spatial embedding.
 7. Cell Segmentation (optional) — Optionally resegment cells using the full-resolution TIFF. -> `steps/cell_segmentation_wf.md`
 </plan>
 
