@@ -86,8 +86,6 @@ async def agent(s: Span, ctx: Context) -> HandlerResult:
                     entrypoint_module.action_handler_ctx = ctx
                     action_handler_ready_ev.set()
 
-            # If this is an action response, cancel any pending fallback timeout
-            msg_type = msg.get("type")
             if msg_type == "agent_action_response":
                 tx_id = msg.get("tx_id")
                 if tx_id is not None:
