@@ -1,12 +1,11 @@
 # Step 5 — Neighbors Enrichment Analysis and Domain Detection
 
 <goal>
-Quantify spatial neighborhood structure (centrality, enrichment, spatially variable genes) and detect higher-order spatial domains from the processed Xenium dataset.
+Quantify spatial neighborhood structure (centrality, enrichment, spatially variable genes) from the processed Xenium dataset.
 </goal>
 
 <method>
-1/ **Neighbors Enrichment and Spatial Structure**:
-   - Build a spatial neighborhood graph using clustering results and compute centrality scores.
+1/ Build a spatial neighborhood graph using clustering results and compute centrality scores with Squidpy.
    - Use `w_text_output` to provide a one-sentence summary of what each centrality score represents and how to interpret it.
    - Visualize centrality scores on spatial embeddings.
    ```python
@@ -26,12 +25,9 @@ Quantify spatial neighborhood structure (centrality, enrichment, spatially varia
 3/ Identify spatially variable genes using Moran’s I with:
    - `sq.gr.spatial_autocorr(adata, mode="moran", n_jobs=-1)`
    Highlight the top spatially autocorrelated genes on the spatial embedding.
-
-4/ **Domain Detection**: Run the domain detection workflow as specified in `wf/domain_detection_wf.md` using the preprocessed `.h5ad` as input, and load the resulting domain-labeled `.h5ad` for downstream visualization.
 </method>
 
 <workflows>
-- `wf/domain_detection_wf.md`
 </workflows>
 
 <library>
@@ -49,6 +45,5 @@ Quantify spatial neighborhood structure (centrality, enrichment, spatially varia
 - Spatial neighbor graph builds successfully with reasonable centrality patterns.
 - Neighborhood enrichment heatmap shows interpretable positive and negative z-scores between cell-type pairs.
 - Moran’s I identifies non-trivial sets of spatially variable genes.
-- The processed `.h5ad` is successfully written, uploaded, and consumed by the domain-detection workflow.
-- Domain labels (e.g. `labels_scaled_gaussian_*`) are present in the output `AnnData` and produce coherent spatial domains when visualized.
+- The processed `.h5ad` is successfully written, uploaded.
 </self_eval_criteria>
