@@ -50,8 +50,6 @@ else:
         w_text_output(content=f"Cached download: `{local_p}`", appearance={"message_box": "success"})
 ```
 
-**Before creating Cell 2 (required docs lookup)**
-
 ```python
 from lplots.widgets.h5 import w_h5
 from lplots.widgets.text import w_text_output, w_text_input
