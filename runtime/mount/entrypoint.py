@@ -6,7 +6,6 @@ import sys
 import traceback
 from asyncio.subprocess import Process
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
 from typing import IO, TypedDict, TypeVar
 
@@ -488,20 +487,15 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
 
 
 async def handle_agent_messages(conn_a: SocketIo) -> None:
-    ts = lambda: datetime.utcnow().isoformat() + "Z"
-    print(f"{ts()} [entrypoint] Starting agent message listener")
+    print("[entrypoint] Starting agent message listener")
     while True:
         msg = await conn_a.recv()
         msg_type = msg.get("type", "unknown")
         tx_id = msg.get("tx_id")
         action = msg.get("action")
 
-        if msg_type != "agent_stream_delta":
-            print(f"{ts()} [entrypoint] Agent > {msg_type}")
-
         if msg_type == "agent_action" and msg.get("action") == "request_reactivity_summary":
             if k_proc.conn_k is not None:
-                print(f"{ts()} [entrypoint] Routing reactivity request to kernel (tx_id={tx_id})")
 
                 await k_proc.conn_k.send({
                     "type": "reactivity_summary",
@@ -520,7 +514,6 @@ async def handle_agent_messages(conn_a: SocketIo) -> None:
         if msg_type == "agent_action" and msg.get("action") == "execute_code":
             if k_proc.conn_k is not None:
                 code = msg.get("params", {}).get("code", "")
-                print(f"{ts()} [entrypoint] Routing execute_code to kernel (tx_id={tx_id})")
 
                 await k_proc.conn_k.send({
                     "type": "execute_code",
@@ -539,7 +532,6 @@ async def handle_agent_messages(conn_a: SocketIo) -> None:
         if msg_type == "agent_action" and msg.get("action") == "get_global_info":
             if k_proc.conn_k is not None:
                 key = msg.get("params", {}).get("key", "")
-                print(f"{ts()} [entrypoint] Routing get_global_info to kernel (tx_id={tx_id}, key={key})")
 
                 await k_proc.conn_k.send({
                     "type": "get_global_info",
@@ -561,9 +553,7 @@ async def handle_agent_messages(conn_a: SocketIo) -> None:
             # agent_action MUST go to action_handler - user browser won't handle them
             # (user browser has isAgentControlled=false and ignores agent_action messages)
             if action_handler_ctx is None:
-                print(f"{ts()} [entrypoint] ERROR: action_handler_ctx not available for agent_action: action={action} tx_id={tx_id}")
-                print(f"{ts()} [entrypoint] Headless browser may not be connected. user_agent_ctx={'set' if user_agent_ctx else 'None'}")
-                # Send error response back to agent so it doesn't hang waiting
+                print(f"[entrypoint] action_handler not connected for agent_action: {action}")
                 await conn_a.send({
                     "type": "agent_action_response",
                     "tx_id": tx_id,
@@ -572,27 +562,19 @@ async def handle_agent_messages(conn_a: SocketIo) -> None:
                 })
                 continue
             target_ctx = action_handler_ctx
-            ctx_label = "action_handler"
         else:
             # Display messages (streaming, status) go to user browser
             # Can fallback to action_handler if user browser disconnected
             target_ctx = user_agent_ctx
-            ctx_label = "user_agent"
-
             if target_ctx is None:
-                if action_handler_ctx is not None:
-                    target_ctx = action_handler_ctx
-                    ctx_label = "action_handler (fallback)"
-                else:
-                    print(f"{ts()} [entrypoint] No websocket client connected, skipping message: {msg_type} action={action} tx_id={tx_id}")
-                    continue
+                target_ctx = action_handler_ctx
+            if target_ctx is None:
+                continue
 
         try:
-            if msg_type != "agent_stream_delta":  # Don't spam logs with deltas
-                print(f"{ts()} [entrypoint] Forwarding {msg_type} to {ctx_label} ctx: action={action} tx_id={tx_id}")
             await target_ctx.send_message(orjson.dumps(msg).decode())
         except Exception as e:
-            print(f"{ts()} [entrypoint] Error forwarding message to {ctx_label} ctx: action={action} tx_id={tx_id}: {e}")
+            print(f"[entrypoint] Error forwarding {msg_type} message: {e}")
 
 
 async def start_kernel_proc() -> None:
@@ -735,15 +717,12 @@ async def start_headless_browser(notebook_id: str, local_storage: dict[str, str]
     global headless_browser
 
     if headless_browser is not None:
-        print("[entrypoint] Headless browser already running")
         # Still wait for action handler to be ready in case browser is running but not connected yet
         if not action_handler_ready_ev.is_set():
-            print("[entrypoint] Waiting for action_handler to connect...")
             try:
                 await asyncio.wait_for(action_handler_ready_ev.wait(), timeout=30)
-                print("[entrypoint] action_handler connected!")
             except asyncio.TimeoutError:
-                print("[entrypoint] WARNING: Timed out waiting for action_handler to connect")
+                print("[entrypoint] Timed out waiting for action_handler to connect")
         return
 
     try:
@@ -757,21 +736,21 @@ async def start_headless_browser(notebook_id: str, local_storage: dict[str, str]
         )
         with contextlib.suppress(Exception):
             await headless_browser.screenshot("/var/log/plots-headless.png")
-            print("[entrypoint] Saved headless browser screenshot to /var/log/plots-headless.png")
-        print(f"[entrypoint] Headless browser page ready for notebook {notebook_id}")
 
         # Wait for the headless browser to establish websocket connection and send init
-        print("[entrypoint] Waiting for action_handler (headless browser) to connect via websocket...")
         try:
             await asyncio.wait_for(action_handler_ready_ev.wait(), timeout=30)
-            print("[entrypoint] action_handler connected and ready!")
         except asyncio.TimeoutError:
-            print("[entrypoint] ERROR: Timed out waiting for action_handler websocket connection")
-            print("[entrypoint] The headless browser page loaded but did not establish agent websocket")
+            print("[entrypoint] Timed out waiting for action_handler websocket connection")
 
     except Exception as e:
         print(f"[entrypoint] Error starting headless browser: {e}")
         traceback.print_exc()
+        # Clean up on failure so retry is possible
+        if headless_browser is not None:
+            with contextlib.suppress(Exception):
+                await headless_browser.stop()
+            headless_browser = None
 
 
 async def shutdown() -> None:
