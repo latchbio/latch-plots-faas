@@ -17,7 +17,7 @@ submit_response(
 )
 ```
 
-**Turn 1 (continued): Example execution cells created**
+**Turn 1 (continued): Example cells created**
 
 ```python
 from lplots.widgets.ldata import w_ldata_picker
@@ -91,7 +91,8 @@ submit_response(
 **Turn 3: Auto-Correction**
 
 ```python
-# [Fails a <self_eval_criteria>: retention=2% (<20% target)]
+# [Agent does QC, then evaluates <self_eval_criteria>]
+# [Self-eval criterion failed: retention=2% (<20% target) at 500 counts]
 submit_response(
     summary="QC retained too few cells (retention=2% at 500 counts; target ≥20%). I will relax the threshold to 300 and re-run.",
     continue=True,

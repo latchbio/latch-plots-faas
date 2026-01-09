@@ -1,8 +1,8 @@
 ## Step-by-Step Mode Examples
 
-**User Request**: "Filter this dataset."
+**User Request**: "Analyze this dataset."
 
-**Turn 1: One Step at a Time With Confirmation**
+**Turn 1: Plan Confirmation**
 
 ```python
 submit_response(
@@ -18,11 +18,11 @@ submit_response(
 )
 ```
 
-**Turn 2: User Confirms -> Atomic Execution**
+**Turn 2: User Confirms -> Step Execution**
 
 User: "Yes, proceed."
 
-**Example execution cells (step-by-step compliant)**
+**Example cells**
 
 ```python
 from lplots.widgets.ldata import w_ldata_picker
