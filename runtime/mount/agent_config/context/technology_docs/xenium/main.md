@@ -35,3 +35,4 @@ MANDATORY: Invoke the `redeem_package` tool to install required Xenium tools int
   - Do **NOT** reuse the variable name `fig`. Use descriptive names: `fig_qc`, `fig_umap`, etc.
   - For non-Scanpy figures, use **Plotly**.
 - Keep objects and outputs reproducible: never overwrite without user consent; create new keys/versions.
+- Do not use lplots.widgets.number.

@@ -18,7 +18,7 @@ This step assigns cell types to clusters by:
 ```python
 sys.path.insert(0, "/opt/latch/plots-faas/runtime/mount/agent_config/context/technology_docs/xenium/lib")
 
-from xenium.xenium_cell_type import (
+from xenium_cell_type import (
     load_json_lpath,
     load_vocab_index,
     load_cell_type_vocab_config,
