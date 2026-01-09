@@ -19,18 +19,10 @@ submit_response(
 ```
 
 **Turn 2: User Confirms -> Atomic Execution**
+
 User: "Yes, proceed."
 
 **Example execution cells (step-by-step compliant)**
-
-**Before creating Cell 1 (required docs lookup)**
-
-Doc lookup (grep → read section → copy exact signature/patterns):
-- `grep -n "^### w_ldata_picker$" latch_api_docs/latch_api_reference.md`
-- `grep -n "^### w_text_output$" latch_api_docs/latch_api_reference.md`
-- `grep -n "^## LPath" latch_api_docs/latch_api_reference.md`
-- `grep -n "^## Reactivity" latch_api_docs/latch_api_reference.md`
-- Then use `read_file` on `latch_api_docs/latch_api_reference.md` for each match and apply import paths/params/usage tips exactly.
 
 ```python
 from lplots.widgets.ldata import w_ldata_picker
@@ -60,14 +52,6 @@ else:
 
 **Before creating Cell 2 (required docs lookup)**
 
-Doc lookup (grep → read section → copy exact signature/patterns):
-- `grep -n "^### w_h5$" latch_api_docs/latch_api_reference.md`
-- `grep -n "^### w_text_input$" latch_api_docs/latch_api_reference.md`
-- `grep -n "^### w_table$" latch_api_docs/latch_api_reference.md`
-- `grep -n "^### w_plot$" latch_api_docs/latch_api_reference.md`
-- `grep -n "^## Reactivity" latch_api_docs/latch_api_reference.md`
-- Then use `read_file` on `latch_api_docs/latch_api_reference.md` for each match and apply import paths/params/usage tips exactly.
-
 ```python
 from lplots.widgets.h5 import w_h5
 from lplots.widgets.text import w_text_output, w_text_input
@@ -80,7 +64,7 @@ import plotly.express as px
 
 if "local_h5ad_path" not in locals():
     local_h5ad_path = Signal(None)
-local_p_str = local_h5ad_path() # subscribes this cell
+local_p_str = local_h5ad_path()  # subscribes this cell
 if local_p_str is None:
     w_text_output(content="No file downloaded yet—run the previous cell first.", appearance={"message_box": "warning"})
 else:
