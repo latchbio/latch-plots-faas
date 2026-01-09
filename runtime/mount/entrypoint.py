@@ -15,7 +15,6 @@ from latch_data_validation.data_validation import validate
 
 from runtime.mount.plots_context_manager import PlotsContextManager
 
-from .agent import interaction_required_actions
 from .headless_browser import HeadlessBrowser
 from .socketio import SocketIo
 from .utils import (
@@ -551,7 +550,7 @@ async def handle_agent_messages(conn_a: SocketIo) -> None:
             continue
 
         if msg_type == "agent_action":
-            if action in interaction_required_actions:
+            if action in {"smart_ui_spotlight", "h5_open_image_aligner"}:
                 if user_agent_ctx is not None:
                     target_ctx = user_agent_ctx
                 else:
