@@ -61,6 +61,7 @@ plt.close()
 ```
 
 8/ Select the top four biologically meaningful marker genes and color the spatial embedding by their log1p expression in four subplots, explaining briefly why they are biologically meaningful.
+    - Use `w_text_output` to summarize the function of each top gene and its biological significance.
 </method>
 
 <workflows>
