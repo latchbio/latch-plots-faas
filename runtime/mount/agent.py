@@ -1825,7 +1825,7 @@ class AgentHarness:
                     },
                     "plan_update_overview": {
                         "type": "string",
-                        "description": "Short title overview of what changed. E.g. 'Added QC steps' or 'Completed step 2, step 3 now in progress'"                    
+                        "description": "Short title overview of what changed. E.g. 'Added QC steps' or 'Completed step 2, step 3 now in progress'"
                     }
                 },
                 "required": ["plan", "plan_diff", "plan_update_overview"]
@@ -2997,7 +2997,7 @@ class AgentHarness:
     async def _run_quick_inference(self, prompt: str) -> str:
         messages = [{
             "role": "user",
-            "content": prompt + "\n\nDo not use any markdown formatting."
+            "content": prompt + "\n\nDo not use any markdown formatting. If the content does not contain a clear reasoning process, provide a best-effort summary of the available text. Do not return meta-commentary."
         }]
 
         try:
@@ -3014,7 +3014,7 @@ class AgentHarness:
             return ""
 
     async def _summarize_and_send_chunk(self, text: str, block_index: int) -> None:
-        prompt = f"Summarize the most recent thoughts in this reasoning process into a brief, active phrase (2-6 words). Focus on spatial analysis tasks, protocol verification, or scientific reasoning currently being analyzed. Examples: 'Verifying widget parameters', 'Analyzing QC metrics', 'Checking protocol compliance'.\n\nThinking:\n{text}"
+        prompt = f"Summarize the most recent thoughts in this reasoning process into a brief, active phrase (2-6 words). Focus on spatial analysis tasks, protocol verification, or scientific reasoning currently being analyzed. If no clear reasoning is present, summarize the general intent. Examples: 'Verifying widget parameters', 'Analyzing QC metrics', 'Checking protocol compliance'.\n\nThinking:\n{text}"
         summary = await self._run_quick_inference(prompt)
 
         if summary.strip() != "":
@@ -3206,7 +3206,7 @@ class AgentHarness:
                         thinking_text_str = f"Thinking:\n{thinking_text}\n\n" if thinking_text is not None else ""
                         response_text_str = f"Response:\n{response_text}\n\n" if response_text is not None else ""
 
-                        prompt = f"Summarize the reasoning process in a concise past-tense sentence (2-6 words). Focus on analysis tasks, protocol verification, or scientific conclusions reached. Examples: 'Verified widget parameters', 'Analyzed QC metrics', 'Checked protocol compliance'.\n\n{thinking_text_str}{response_text_str}"
+                        prompt = f"Summarize the reasoning process in a concise past-tense sentence (2-6 words). Focus on analysis tasks, protocol verification, or scientific conclusions reached. If no clear reasoning is present, summarize the general action taken. Examples: 'Verified widget parameters', 'Analyzed QC metrics', 'Checked protocol compliance'.\n\n{thinking_text_str}{response_text_str}"
 
                         summary = await self._run_quick_inference(prompt)
 
@@ -3459,38 +3459,38 @@ class AgentHarness:
             latest_submit_response = None
             latest_update_plan = None
             latest_submit_response_with_plan = None
-            
+
             for history_msg in reversed(messages):
                 if history_msg.get("role") != "assistant":
                     continue
                 content = history_msg.get("content")
                 if not isinstance(content, list):
                     continue
-                
+
                 for block in reversed(content):
                     if not isinstance(block, dict) or block.get("type") != "tool_use":
                         continue
-                    
+
                     tool_name = block.get("name")
                     tool_input = block.get("input", {})
-                    
+
                     if tool_name == "submit_response":
                         if latest_submit_response is None:
                             latest_submit_response = tool_input
                         if latest_submit_response_with_plan is None and tool_input.get("plan"):
                             latest_submit_response_with_plan = tool_input
-                    
+
                     if tool_name == "update_plan" and latest_update_plan is None:
                         plan_items = tool_input.get("plan", [])
                         if plan_items:
                             latest_update_plan = tool_input
-                    
+
                     if latest_submit_response is not None and latest_update_plan is not None:
                         break
-                
+
                 if latest_submit_response is not None and latest_update_plan is not None:
                     break
-            
+
             if latest_update_plan is not None:
                 plan_items = latest_update_plan.get("plan", [])
                 self.current_plan = {"steps": plan_items}
