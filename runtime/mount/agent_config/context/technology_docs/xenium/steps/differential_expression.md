@@ -46,21 +46,8 @@ sc.tl.rank_genes_groups(
     - **FDR** (adjusted p-value).
 
 7/ Report top marker genes for each cluster and make dot plots with Scanpy.
-```python
-sc.pl.dotplot(
-    adata,
-    var_names=all_marker_genes,
-    groupby=cluster_col_name,
-    standard_scale="var",
-    show=False,
-)
 
-dotplot_fig = plt.gcf()
-w_plot(label="Marker Gene Expression Dot Plot", source=dotplot_fig)
-plt.close()
-```
-
-8/ Select the top four biologically meaningful marker genes and color the spatial embedding by their log1p expression in four subplots, explaining briefly why they are biologically meaningful.
+8/ Select the **top four** biologically meaningful marker genes and color the spatial embedding by their log1p expression in four subplots, explaining briefly why they are biologically meaningful.
     - Use `w_text_output` to summarize the function of each top gene and its biological significance.
 </method>
 
