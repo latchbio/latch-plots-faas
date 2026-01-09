@@ -14,6 +14,8 @@ import runtime.mount.entrypoint as entrypoint_module
 from ..entrypoint import (
     a_proc,
     action_handler_ready_ev,
+    handle_user_disconnect_fallback,
+    mark_action_handled,
     pod_id,
     pod_session_id,
     start_agent_proc,
@@ -84,10 +86,19 @@ async def agent(s: Span, ctx: Context) -> HandlerResult:
                     entrypoint_module.action_handler_ctx = ctx
                     action_handler_ready_ev.set()
 
+            # If this is an action response, cancel any pending fallback timeout
+            msg_type = msg.get("type")
+            if msg_type == "agent_action_response":
+                tx_id = msg.get("tx_id")
+                if tx_id is not None:
+                    mark_action_handled(tx_id)
+
             await conn_a.send(msg)
     finally:
         if connection_role == "user":
             entrypoint_module.user_agent_ctx = None
+            # Fallback any pending user browser actions to backend browser
+            await handle_user_disconnect_fallback()
         elif connection_role == "action_handler":
             entrypoint_module.action_handler_ctx = None
             action_handler_ready_ev.clear()

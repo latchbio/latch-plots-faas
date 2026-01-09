@@ -81,6 +81,29 @@ user_agent_ctx: Context | None = None
 action_handler_ctx: Context | None = None
 action_handler_ready_ev = asyncio.Event()
 
+pending_user_browser_actions: dict[str, dict] = {}  # tx_id -> original message
+
+
+def mark_action_handled(tx_id: str) -> None:
+    pending_user_browser_actions.pop(tx_id, None)
+
+
+async def handle_user_disconnect_fallback() -> None:
+    actions_to_fallback = list(pending_user_browser_actions.items())
+    pending_user_browser_actions.clear()
+
+    for tx_id, msg in actions_to_fallback:
+        print(f"[entrypoint] User disconnected, falling back tx_id={tx_id} to backend browser")
+        if action_handler_ctx is not None:
+            await action_handler_ctx.send_message(orjson.dumps(msg).decode())
+        elif a_proc.conn_a is not None:
+            await a_proc.conn_a.send({
+                "type": "agent_action_response",
+                "tx_id": tx_id,
+                "status": "error",
+                "error": "User disconnected and backend browser not available"
+            })
+
 
 @dataclass
 class KernelProc:
@@ -550,9 +573,12 @@ async def handle_agent_messages(conn_a: SocketIo) -> None:
             continue
 
         if msg_type == "agent_action":
+            force_backend = msg.get("params", {}).get("force_backend", False)
+
             if action in {"smart_ui_spotlight", "h5_open_image_aligner"}:
                 if user_agent_ctx is not None:
                     target_ctx = user_agent_ctx
+                    track_for_disconnect = False
                 else:
                     print(f"[entrypoint] User browser unavailable for user-specific action: {action}")
                     await conn_a.send({
@@ -569,28 +595,54 @@ async def handle_agent_messages(conn_a: SocketIo) -> None:
                         )
                     })
                     continue
-            elif action_handler_ctx is None:
-                print(f"[entrypoint] action_handler not connected for agent_action: {action}")
+            elif force_backend:
+                if action_handler_ctx is not None:
+                    target_ctx = action_handler_ctx
+                    track_for_disconnect = False
+                else:
+                    print(f"[entrypoint] Backend browser not connected for forced action: {action}")
+                    await conn_a.send({
+                        "type": "agent_action_response",
+                        "tx_id": tx_id,
+                        "status": "error",
+                        "error": "Backend browser not connected. Cannot execute browser actions."
+                    })
+                    continue
+            elif user_agent_ctx is not None:
+                target_ctx = user_agent_ctx
+                track_for_disconnect = True
+            elif action_handler_ctx is not None:
+                target_ctx = action_handler_ctx
+                track_for_disconnect = False
+            else:
+                print(f"[entrypoint] No browser connected for agent_action: {action}")
                 await conn_a.send({
                     "type": "agent_action_response",
                     "tx_id": tx_id,
                     "status": "error",
-                    "error": "Action handler (headless browser) not connected. Cannot execute browser actions."
+                    "error": "No browser connected. Cannot execute browser actions."
                 })
                 continue
-            else:
-                target_ctx = action_handler_ctx
         else:
             target_ctx = user_agent_ctx
+            track_for_disconnect = False
             if target_ctx is None:
                 target_ctx = action_handler_ctx
             if target_ctx is None:
                 continue
 
         try:
+            if track_for_disconnect and tx_id is not None:
+                pending_user_browser_actions[tx_id] = msg
+
             await target_ctx.send_message(orjson.dumps(msg).decode())
         except Exception as e:
             print(f"[entrypoint] Error forwarding {msg_type} message: {e}")
+            if track_for_disconnect and tx_id is not None:
+                mark_action_handled(tx_id)
+                if action_handler_ctx is not None:
+                    print(f"[entrypoint] Send failed, falling back to backend browser for {tx_id}")
+                    await action_handler_ctx.send_message(orjson.dumps(msg).decode())
 
 
 async def start_kernel_proc() -> None:
