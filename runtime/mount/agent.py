@@ -44,6 +44,12 @@ if sandbox_root:
 context_root = Path(__file__).parent / "agent_config" / "context"
 
 
+interaction_required_actions = frozenset({
+    "smart_ui_spotlight",
+    "h5_open_image_aligner",
+})
+
+
 class Mode(Enum):
     planning = "planning"
     executing = "executing"

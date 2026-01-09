@@ -15,6 +15,7 @@ from latch_data_validation.data_validation import validate
 
 from runtime.mount.plots_context_manager import PlotsContextManager
 
+from .agent import interaction_required_actions
 from .headless_browser import HeadlessBrowser
 from .socketio import SocketIo
 from .utils import (
@@ -550,7 +551,26 @@ async def handle_agent_messages(conn_a: SocketIo) -> None:
             continue
 
         if msg_type == "agent_action":
-            if action_handler_ctx is None:
+            if action in interaction_required_actions:
+                if user_agent_ctx is not None:
+                    target_ctx = user_agent_ctx
+                else:
+                    print(f"[entrypoint] User browser unavailable for user-specific action: {action}")
+                    await conn_a.send({
+                        "type": "agent_action_response",
+                        "tx_id": tx_id,
+                        "status": "error",
+                        "error": (
+                            """
+                            The agent cannot interact with the user as they are not actively viewing
+                            the page but this action requires user interaction. Please proceed
+                            without relying on user input, or inform the user they need to be on the
+                            page to proceed.
+                            """
+                        )
+                    })
+                    continue
+            elif action_handler_ctx is None:
                 print(f"[entrypoint] action_handler not connected for agent_action: {action}")
                 await conn_a.send({
                     "type": "agent_action_response",
@@ -559,7 +579,8 @@ async def handle_agent_messages(conn_a: SocketIo) -> None:
                     "error": "Action handler (headless browser) not connected. Cannot execute browser actions."
                 })
                 continue
-            target_ctx = action_handler_ctx
+            else:
+                target_ctx = action_handler_ctx
         else:
             target_ctx = user_agent_ctx
             if target_ctx is None:
