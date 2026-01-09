@@ -777,7 +777,7 @@ These files persist across turns and can help maintain context for complex, mult
 
 When user mentions an assay platform, read the corresponding documentation:
 
-- **Takara Seeker/Trekker** → `technology_docs/takara.md`
+- **Takara Seeker/Trekker** → `technology_docs/takara/main.md`
 - **Vizgen MERFISH** → `technology_docs/vizgen.md`
 - **AtlasXOmics** → `technology_docs/atlasxomics.md`
 - **10X Xenium** → `technology_docs/xenium.md`

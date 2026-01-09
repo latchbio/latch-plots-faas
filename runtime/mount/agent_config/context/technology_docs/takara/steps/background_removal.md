@@ -1,14 +1,14 @@
-## Seeker Background Removal
+<goal>
+Remove off-tissue background beads from Curio Seeker spatial transcriptomics
+data. Seeker only.
+</goal>
 
-Remove off-tissue background beads from Curio Seeker spatial transcriptomics data.
-
-ONLY use if the data is from Seeker (not Trekker).
-
+<method>
 ### Setup
 
 ```python
 import sys
-sys.path.insert(0, "/opt/latch/plots-faas/runtime/mount/agent_config/lib")
+sys.path.insert(0, "/opt/latch/plots-faas/runtime/mount/agent_config/context/technology_docs/takara/lib")
 
 from takara import remove_background, KitType
 ```
@@ -64,3 +64,14 @@ import numpy as np
 log10_umi = np.log10(adata.obs["total_counts"] + 1)
 log10_umi.hist(bins=100)
 ```
+</method>
+
+<workflows>
+</workflows>
+
+<library>
+</library>
+
+<self_eval_criteria>
+- Difficult to check without understanding what portion of slide covered with tissue
+</self_eval_criteria>
