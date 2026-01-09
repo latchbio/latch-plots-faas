@@ -13,9 +13,9 @@ from latch.types.directory import LatchDir
 from latch.types.file import LatchFile
 from lplots.utils.nothing import _Nothing
 from matplotlib.figure import Figure, SubFigure
+from molviewspec.builder import State
 from typing_extensions import _AnnotatedAlias
 from yarl import URL
-from molviewspec.builder import State
 
 # todo(rteqs): get rid of this
 sys.path.append(str(Path(__file__).parent.parent.absolute()))

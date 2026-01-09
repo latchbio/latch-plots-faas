@@ -12,7 +12,7 @@ from latch_asgi.server import LatchASGIServer
 
 from .config import config
 from .mount.endpoints import http_routes, websocket_routes
-from .mount.entrypoint import shutdown, start_agent_proc, start_kernel_proc
+from .mount.entrypoint import shutdown, start_kernel_proc
 
 cfg = HypercornConfig()
 cfg.bind = ["[::]:5000"]

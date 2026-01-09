@@ -49,10 +49,12 @@ class Mode(Enum):
     executing = "executing"
     debugging = "debugging"
 
+
 class Behavior(Enum):
     default = "default"
     proactive = "proactive"
     step_by_step = "step_by_step"
+
 
 @dataclass
 class AgentHarness:
@@ -574,6 +576,8 @@ class AgentHarness:
         if self.mode == Mode.planning and action in {"create_cell", "edit_cell", "run_cell", "delete_cell"}:
             self.set_mode(Mode.executing)
 
+        force_backend = params.get("force_backend", False)
+
         tx_id = f"tx_{uuid.uuid4().hex[:12]}"
         loop = asyncio.get_running_loop()
         response_future = loop.create_future()
@@ -593,11 +597,22 @@ class AgentHarness:
             print(f"[agent] Operation cancelled (session reinitialized): action={action}, tx_id={tx_id}")
             return {"status": "error", "error": f"OPERATION FAILED: '{action}' was interrupted because the session was reinitialized. This operation did NOT complete. You must retry or inform the user."}
         except TimeoutError:
+            self.pending_operations.pop(tx_id, None)
+            duration = time.time() - start_time
+            print(f"[agent] {action} timed out after {duration:.3f}s")
+
+            if not force_backend:
+                print(f"[agent] Retrying {action} with backend browser")
+                return await self.atomic_operation(action, {**params, "force_backend": True}, timeout=timeout)
+
             return {"status": "error", "error": f"OPERATION FAILED: '{action}' timed out after 10 seconds. This operation did NOT complete.", "tx_id": tx_id}
         finally:
-            duration = time.time() - start_time
-            print(f"[agent] {action} took {duration:.3f}s")
-            self.pending_operations.pop(tx_id, None)
+            ret = self.pending_operations.pop(tx_id, None)
+
+            # None case when action times out and already logged in previous except block
+            if ret is not None:
+                duration = time.time() - start_time
+                print(f"[agent] {action} took {duration:.3f}s")
 
     async def handle_action_response(self, msg: dict[str, object]) -> None:
         tx_id = msg.get("tx_id")
