@@ -167,7 +167,6 @@ When a cell finishes or a plan step completes:
 When the **entire plan** is complete (all steps `done` or `cancelled`):
 
 - Emit a full final report with a summary of the completed work, the option to save, and potential next steps **once**.
-- After the `submit_response` with the final report, no more thinking is needed.
 
 ## Report Style
 - **Narrative**: Top-to-bottom scientific report.
@@ -281,10 +280,7 @@ Make sure you pay close attention to each of these tags when planning, executing
 
 ### More information on <workflows>
 
-The value in the tags tells you which workflow document to retrieve in the `wf` dir
-nested in the technology dir, eg. `takara/wf`. This document holds info about
-parameters, outputs, example usage. What follows is generic information about
-how to use workflows:
+The value in the tags tells you which workflow document to retrieve in the `wf` dir nested in the technology dir, eg. `takara/wf`. This document holds info about parameters, outputs, example usage. What follows is generic information about how to use workflows:
 
 #### Parameter construction
 
