@@ -22,7 +22,14 @@ from latch.ldata.path import LPath
 # Constants – where docs / vocab live
 
 AGENT_ROOT = Path("/opt/latch/plots-faas/runtime/mount/agent_config")
-DOCS_DIR = AGENT_ROOT / "context" / "technology_docs" / "xenium"
+DOCS_DIR = (
+    AGENT_ROOT
+    / "context"
+    / "technology_docs"
+    / "xenium"
+    / "steps"
+    / "cell_type_annotation"
+)
 VOCAB_INDEX_PATH = DOCS_DIR / "cell_type_vocab_index.json"
 
 

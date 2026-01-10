@@ -48,7 +48,7 @@ sc.tl.rank_genes_groups(
 7/ Report top marker genes for each cluster and make dot plots with Scanpy.
 
 8/ Select the **top four** biologically meaningful marker genes and color the spatial embedding by their log1p expression in four subplots, explaining briefly why they are biologically meaningful.
-    - Use `w_text_output` to summarize the function of each top gene and its biological significance.
+    - Use `w_text_output` to summarize the biological function of each top gene.
 </method>
 
 <workflows>
