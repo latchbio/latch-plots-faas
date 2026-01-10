@@ -38,7 +38,11 @@ class HeadlessBrowser:
         )
 
         await self.page.goto(notebook_url, wait_until="networkidle")
-        await self.page.wait_for_selector("[data-plot-ready='true']", timeout=timeout_ms)
+        try:
+            await self.page.wait_for_selector("[data-plot-ready='true']", timeout=timeout_ms)
+        except Exception:
+            await self.screenshot("/var/log/headless_browser_no_selector.png")
+            raise
 
     async def screenshot(self, path: str) -> None:
         if self.page is None:

@@ -807,6 +807,8 @@ async def start_headless_browser(notebook_id: str, local_storage: dict[str, str]
         traceback.print_exc()
         if headless_browser is not None:
             with contextlib.suppress(Exception):
+                await headless_browser.screenshot("/var/log/headless_browser_error.png")
+            with contextlib.suppress(Exception):
                 await headless_browser.stop()
             headless_browser = None
 
