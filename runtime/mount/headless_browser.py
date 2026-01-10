@@ -22,6 +22,9 @@ class HeadlessBrowser:
         self.browser = await self.playwright.chromium.launch(headless=True)
         self.page = await self.browser.new_page(viewport={"width": 1280, "height": 800})
 
+        self.page.on("console", lambda msg: print(f"[headless-browser-console] [{msg.type}] {msg.text}"))
+        self.page.on("pageerror", lambda err: print(f"[headless-browser-error] {err}"))
+
         storage = dict(local_storage)
         serialized = json.dumps(storage)
         await self.page.add_init_script(
