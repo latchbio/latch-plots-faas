@@ -47,6 +47,8 @@ class HeadlessBrowser:
             await self.screenshot("/var/log/headless_browser_no_selector.png")
             raise
 
+        await self.screenshot("/var/log/headless_browser_ready.png")
+
     async def screenshot(self, path: str) -> None:
         if self.page is None:
             raise RuntimeError("Headless browser page not initialized")
