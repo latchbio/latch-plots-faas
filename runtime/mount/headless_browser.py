@@ -29,14 +29,36 @@ class HeadlessBrowser:
         serialized = json.dumps(storage)
         await self.page.add_init_script(
             f"""
+            console.log("[HB-INIT] Starting localStorage initialization");
             const entries = JSON.parse({json.dumps(serialized)});
+            console.log("[HB-INIT] Keys to set:", Object.keys(entries));
             for (const [k, v] of Object.entries(entries)) {{
                 try {{
-                localStorage.setItem(k, v);
+                    localStorage.setItem(k, v);
+                    console.log("[HB-INIT] Set localStorage key:", k, "value length:", v.length);
                 }} catch (err) {{
-                console.warn("Failed to set localStorage", k, err);
+                    console.error("[HB-INIT] Failed to set localStorage", k, err);
                 }}
             }}
+            // Verify what was set
+            console.log("[HB-INIT] Verifying localStorage:");
+            console.log("[HB-INIT] plots.is_agent_controlled =", localStorage.getItem("plots.is_agent_controlled"));
+            console.log("[HB-INIT] viewAccountId =", localStorage.getItem("viewAccountId"));
+            const authData = localStorage.getItem("latch.authData");
+            if (authData) {{
+                try {{
+                    const parsed = JSON.parse(authData);
+                    console.log("[HB-INIT] latch.authData status:", parsed.status);
+                    console.log("[HB-INIT] latch.authData hasAuth0Data:", !!parsed.auth0Data);
+                    console.log("[HB-INIT] latch.authData hasIdToken:", !!parsed.auth0Data?.idToken);
+                    console.log("[HB-INIT] latch.authData idToken prefix:", parsed.auth0Data?.idToken?.substring(0, 20));
+                }} catch (e) {{
+                    console.error("[HB-INIT] Failed to parse latch.authData:", e);
+                }}
+            }} else {{
+                console.error("[HB-INIT] latch.authData not set!");
+            }}
+            console.log("[HB-INIT] localStorage initialization complete");
             """
         )
 
