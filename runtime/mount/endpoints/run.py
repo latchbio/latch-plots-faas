@@ -28,6 +28,7 @@ from ..entrypoint import (
     pod_session_id,
     ready_ev,
 )
+from ..plots_context_manager import agent_session_sub
 from ..utils import gql_query
 
 
@@ -71,6 +72,7 @@ auth_header_regex = re.compile(
     ^(
         Bearer \s+ (?P<oauth_token>.*) |
         Latch-Session-Token \s+ (?P<session_token>.*) |
+        Latch-SDK-Token \s+ (?P<sdk_token>.*) |
     )$
     """,
     re.IGNORECASE | re.VERBOSE,
@@ -106,6 +108,7 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
     if auth_header_regex_match is not None:
         oauth_token = auth_header_regex_match.group("oauth_token")
         session_token = auth_header_regex_match.group("session_token")
+        sdk_token = auth_header_regex_match.group("sdk_token")
 
         if oauth_token is not None:
             # todo(rteqs): expose functionality in latch_asgi
@@ -120,6 +123,10 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
 
         elif session_token is not None:
             s.set_attribute("session_token", session_token)
+
+        elif sdk_token is not None:
+            auth0_sub = agent_session_sub
+            s.set_attribute("is_agent_session", True)  # noqa: FBT003
 
     data_q = await gql_query(
         auth=auth_msg.token,

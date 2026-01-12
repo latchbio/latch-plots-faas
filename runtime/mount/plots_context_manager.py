@@ -14,11 +14,15 @@ class UserProfile:
     key: str | None
     name: str
     picture_url: str | None
+    is_agent: bool = False
 
 
 async def try_send_message(ctx: Context, msg: str) -> None:
     with contextlib.suppress(WebsocketConnectionClosedError):
         await ctx.send_message(zlib.compress(msg.encode("utf-8"), level=1))
+
+
+agent_session_sub = "agent-session"
 
 
 class PlotsContextManager:
@@ -31,6 +35,12 @@ class PlotsContextManager:
         self.unique_users: set[UserProfile] = set()
         self.notebook_id: str | None = None
 
+    def _get_first_non_agent_user_key(self) -> str | None:
+        for _, user in self.contexts.values():
+            if not user.is_agent:
+                return user.key
+        return None
+
     async def add_context(
         self,
         sess_hash: str,
@@ -41,6 +51,8 @@ class PlotsContextManager:
         picture_url: str | None = None,
         name: str | None = None,
     ) -> str:
+        is_agent = auth0_sub == agent_session_sub
+
         use_auth0 = (
             auth0_sub is not None and picture_url is not None and name is not None
         )
@@ -48,13 +60,14 @@ class PlotsContextManager:
         assert user_key is not None
 
         name = name if name is not None else f"Anonymous {connection_idx}"
-        user = UserProfile(key=user_key, picture_url=picture_url, name=name)
+        user = UserProfile(key=user_key, picture_url=picture_url, name=name, is_agent=is_agent)
 
         self.contexts[sess_hash] = (ctx, user)
         self.unique_users.add(user)
 
         self.session_count_by_user[user_key] += 1
-        if self.session_owner is None:
+
+        if self.session_owner is None and not is_agent:
             self.session_owner = user_key
 
         await self.broadcast_users()
@@ -76,7 +89,7 @@ class PlotsContextManager:
                 if len(self.contexts) == 0:
                     self.session_owner = None
                 else:
-                    self.session_owner = next(iter(self.contexts.values()))[1].key
+                    self.session_owner = self._get_first_non_agent_user_key()
 
         await self.broadcast_users()
 
@@ -86,11 +99,13 @@ class PlotsContextManager:
                 tg.create_task(try_send_message(ctx, msg))
 
     async def broadcast_users(self) -> None:
+        visible_users = [u for u in self.unique_users if not u.is_agent]
+
         # todo(rteqs): get rid of extra decode
         await self.broadcast_message(
             orjson.dumps({
                 "type": "users",
-                "users": list(self.unique_users),
+                "users": visible_users,
                 "session_owner": self.session_owner,
             }).decode()
         )
