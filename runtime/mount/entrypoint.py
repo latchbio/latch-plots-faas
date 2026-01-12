@@ -575,7 +575,19 @@ async def handle_agent_messages(conn_a: SocketIo) -> None:
         if msg_type == "agent_action":
             force_backend = msg.get("params", {}).get("force_backend", False)
 
-            if action in {"smart_ui_spotlight", "h5_open_image_aligner"}:
+            if action in {
+                "smart_ui_spotlight",
+                "h5_filter_by", "h5_color_by",
+                "h5_set_selected_obsm_key",
+                "h5_set_background_image",
+                "h5_open_image_aligner",
+                "h5_autoscale",
+                "h5_zoom",
+                "h5_set_background_image_visibility",
+                "h5_add_selected_cells_to_categorical_obs",
+                "h5_set_marker_opacity",
+                "h5_manage_obs",
+            }:
                 if user_agent_ctx is not None:
                     target_ctx = user_agent_ctx
                     track_for_disconnect = False

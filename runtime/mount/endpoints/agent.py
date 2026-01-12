@@ -82,7 +82,6 @@ async def agent(s: Span, ctx: Context) -> HandlerResult:
                         local_storage=entrypoint_module.latest_local_storage,
                     )
                 else:
-                    # backend browser opening connection
                     connection_role = "action_handler"
                     entrypoint_module.action_handler_ctx = ctx
                     action_handler_ready_ev.set()
@@ -96,7 +95,7 @@ async def agent(s: Span, ctx: Context) -> HandlerResult:
     finally:
         if connection_role == "user":
             entrypoint_module.user_agent_ctx = None
-            # Fallback any pending user browser actions to backend browser
+            # note(aidan): not sure if this is preferable to the agent figuring it out
             await handle_user_disconnect_fallback()
         elif connection_role == "action_handler":
             entrypoint_module.action_handler_ctx = None

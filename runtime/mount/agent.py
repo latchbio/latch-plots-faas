@@ -609,7 +609,6 @@ class AgentHarness:
         finally:
             ret = self.pending_operations.pop(tx_id, None)
 
-            # None case when action times out and already logged in previous except block
             if ret is not None:
                 duration = time.time() - start_time
                 print(f"[agent] {action} took {duration:.3f}s")
