@@ -3121,21 +3121,18 @@ class AgentHarness:
 
             assert self.system_prompt is not None
 
-            if self.behavior == Behavior.proactive:
-                behavior_file = "proactive.md"
-            else:
-                behavior_file = "step_by_step.md"
-            
+            behavior_file = "proactive.md" if self.behavior == Behavior.proactive else "step_by_step.md"
+
             turn_behavior_content = (context_root / "turn_behavior" / behavior_file).read_text()
             final_system_prompt = re.sub(
-                r"<turn_behavior></turn_behavior>",
+                r"TURN_BEHAVIOR_PLACEHOLDER",
                 f"<turn_behavior>\n{turn_behavior_content}\n</turn_behavior>",
                 self.system_prompt,
             )
             
             examples_content = (context_root / "examples" / behavior_file).read_text()
             final_system_prompt = re.sub(
-                r"<examples></examples>",
+                r"EXAMPLES_PLACEHOLDER",
                 f"<examples>\n{examples_content}\n</examples>",
                 final_system_prompt,
             )
@@ -3541,11 +3538,7 @@ class AgentHarness:
         self.manually_cancelled = False
 
         if behavior is not None:
-            try:
-                self.behavior = Behavior(behavior)
-            except ValueError:
-                print(f"[agent] Unknown behavior '{behavior}', defaulting to step by step")
-                self.behavior = Behavior.step_by_step
+            self.behavior = Behavior.step_by_step if behavior == "step_by_step" else Behavior.proactive
 
         full_query = query
         if contextual_node_data:

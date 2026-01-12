@@ -67,12 +67,8 @@ Run Vizgen MERFISH cell segmentation from raw images.
       - If `"Watershed"` is selected:
         - Do **not** include a `channel_map` block (no RGB channel mapping).
       - **Always** set the following fields in `segmentation_parameters` for every task:
-        ```json
-        {
-          "nuclear_channel": "all",
-          "entity_fill_channel": "all"
-        }
-        ```
+        - `nuclear_channel`: `"all"`
+        - `entity_fill_channel`: `"all"`
       - Additional numeric parameters (e.g., `diameter`, `flow_threshold`, `cellprob_threshold`, `minimum_mask_size`, polygon settings) may be exposed as widgets as needed and inserted into:
         - `"segmentation_parameters"` and `"polygon_parameters"`.
 

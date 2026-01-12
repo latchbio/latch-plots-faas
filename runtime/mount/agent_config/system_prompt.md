@@ -62,7 +62,7 @@ Every turn includes the current notebook state in <current_notebook_state> tags.
 | Layout | `w_row`, `w_column`, `w_grid` |
 | Workflows | `w_workflow` |
 
-## Initial Notebook Protocol (Mandatory)
+## Initial Notebook Protocol
 
 1. **Check state (first user turn)**: Review the <current_notebook_state> provided in the user message. Decide whether the notebook is mostly empty or already has content.
 2. **Then**:
@@ -108,7 +108,7 @@ Every turn includes the current notebook state in <current_notebook_state> tags.
 
 </notebook_and_tools>
 
-<turn_behavior></turn_behavior>
+TURN_BEHAVIOR_PLACEHOLDER
 
 <planning_and_executing>
 
@@ -118,7 +118,7 @@ The current plan is automatically injected every turn as `<current_plan>` (omitt
 
 ## Planning
 
-- **When**: Start of a non-trivial task
+- **When**: Start of a task that requires multiple steps
 - **Granularity**: Plan stages (e.g., "Load Data", "QC"), not individual cells.
 - **Status**: Track `todo` -> `in_progress` -> `done`, or `cancelled` if no longer needed
 - **Step completion**: A step is `done` ONLY after successful execution and (if the active technology doc defines <self_eval_criteria> for that step) those criteria pass.
@@ -313,4 +313,4 @@ When a tech doc is loaded, follow both it and this prompt. If they conflict, the
 
 </technology_docs>
 
-<examples></examples>
+EXAMPLES_PLACEHOLDER
