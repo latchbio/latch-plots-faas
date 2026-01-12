@@ -93,7 +93,6 @@ async def handle_user_disconnect_fallback() -> None:
     pending_user_browser_actions.clear()
 
     for tx_id, msg in actions_to_fallback:
-        print(f"[entrypoint] User disconnected, falling back tx_id={tx_id} to backend browser")
         if action_handler_ctx is not None:
             await action_handler_ctx.send_message(orjson.dumps(msg).decode())
         elif a_proc.conn_a is not None:
@@ -642,7 +641,6 @@ async def handle_agent_messages(conn_a: SocketIo) -> None:
             if track_for_disconnect and tx_id is not None:
                 mark_action_handled(tx_id)
                 if action_handler_ctx is not None:
-                    print(f"[entrypoint] Send failed, falling back to backend browser for {tx_id}")
                     await action_handler_ctx.send_message(orjson.dumps(msg).decode())
 
 
@@ -793,33 +791,17 @@ async def start_headless_browser(notebook_id: str, local_storage: dict[str, str]
     try:
         notebook_url = f"https://console.latch.bio/plots/{notebook_id}"
 
-        print(f"[entrypoint] Starting headless browser for notebook {notebook_id}")
-        print(f"[entrypoint] Headless browser URL: {notebook_url}")
-        print(f"[entrypoint] Headless browser localStorage keys: {list(local_storage.keys())}")
-
-        # Log important localStorage values (truncated for security)
-        if "viewAccountId" in local_storage:
-            print(f"[entrypoint] Headless browser viewAccountId: {local_storage['viewAccountId']}")
-        if "plots.is_agent_controlled" in local_storage:
-            print(f"[entrypoint] Headless browser is_agent_controlled: {local_storage['plots.is_agent_controlled']}")
-        if "latch.authData" in local_storage:
-            auth_data_preview = local_storage["latch.authData"][:100] + "..." if len(local_storage["latch.authData"]) > 100 else local_storage["latch.authData"]
-            print(f"[entrypoint] Headless browser latch.authData (preview): {auth_data_preview}")
-
         headless_browser = HeadlessBrowser()
         await headless_browser.start(
             notebook_url,
             local_storage=local_storage,
         )
 
-        print(f"[entrypoint] Headless browser page loaded, waiting for action_handler connection...")
-
         try:
             await asyncio.wait_for(action_handler_ready_ev.wait(), timeout=30)
-            print(f"[entrypoint] Headless browser action_handler connected successfully!")
+            print("[entrypoint] Headless browser action_handler connected successfully!")
         except TimeoutError:
             print("[entrypoint] Timed out waiting for action_handler websocket connection")
-            print("[entrypoint] Check headless browser console logs for debugging info")
 
     except Exception as e:
         print(f"[entrypoint] Error starting headless browser: {e}")
