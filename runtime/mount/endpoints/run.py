@@ -176,6 +176,8 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
 
         connection_idx += 1
 
+        is_agent_session = auth0_sub == agent_session_sub
+
         while True:
             msg = await receive_json(ctx.receive)
             session_owner = plots_ctx_manager.session_owner
@@ -184,6 +186,7 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
             if (
                 msg["type"] in {"run_cell", "stop_cell", "dispose_cell"}
                 and not is_session_owner
+                and not is_agent_session
             ):
                 await ctx.send_message(
                     orjson.dumps(
