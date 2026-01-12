@@ -18,6 +18,7 @@ from ..entrypoint import (
     mark_action_handled,
     pod_id,
     pod_session_id,
+    restart_headless_browser,
     start_agent_proc,
     start_headless_browser,
 )
@@ -100,5 +101,6 @@ async def agent(s: Span, ctx: Context) -> HandlerResult:
         elif connection_role == "action_handler":
             entrypoint_module.action_handler_ctx = None
             action_handler_ready_ev.clear()
+            await restart_headless_browser()
 
     return "Ok"

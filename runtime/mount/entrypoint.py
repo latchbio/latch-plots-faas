@@ -125,6 +125,7 @@ a_proc = AgentProc()
 
 headless_browser: HeadlessBrowser | None = None
 latest_local_storage: dict[str, str] | None = None
+headless_browser_notebook_id: str | None = None
 
 
 # todo(maximsmol): typing
@@ -782,10 +783,12 @@ async def stop_agent_proc() -> None:
 
 
 async def start_headless_browser(notebook_id: str, local_storage: dict[str, str]) -> None:
-    global headless_browser
+    global headless_browser, headless_browser_notebook_id
 
     if headless_browser is not None:
         return
+
+    headless_browser_notebook_id = notebook_id
 
     try:
         notebook_url = f"https://console.latch.bio/plots/{notebook_id}"
@@ -827,6 +830,26 @@ async def start_headless_browser(notebook_id: str, local_storage: dict[str, str]
             with contextlib.suppress(Exception):
                 await headless_browser.stop()
             headless_browser = None
+
+
+async def restart_headless_browser() -> None:
+    global headless_browser
+
+    notebook_id = headless_browser_notebook_id
+    local_storage = latest_local_storage
+
+    if notebook_id is None or local_storage is None:
+        print("[entrypoint] Cannot restart headless browser: missing notebook_id or local_storage")
+        return
+
+    print("[entrypoint] Restarting headless browser after disconnect...")
+
+    if headless_browser is not None:
+        with contextlib.suppress(Exception):
+            await headless_browser.stop()
+        headless_browser = None
+
+    await start_headless_browser(notebook_id, local_storage)
 
 
 async def shutdown() -> None:
