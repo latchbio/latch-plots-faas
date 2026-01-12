@@ -22,7 +22,7 @@ MANDATORY: Invoke the `redeem_package` tool to install required Xenium tools int
 4. Cell Type Annotation — Use CellGuide markers and vocab configs for clean labels. -> `steps/cell_type_annotation/cell_type_annotation.md`
 5. Neighbors Enrichment Analysis — Build spatial neighbor graph and enrichment metrics. -> `steps/spatial_analysis.md`
 6. Domain Detection (optional) — Optionally detect tissue domain with workflow. -> `wf/domain_detection_wf.md`
-  - Load output h5ad object from workflow and visualize detected domain (e.g. `labels_scaled_gaussian_*` in `obs`) in spatial embedding.
+  - Load output h5ad object from workflow and visualize detected domain in spatial embedding. (e.g. `labels_scaled_gaussian_*` in `obs`) in spatial embedding.
 7. Cell Segmentation (optional) — Optionally resegment cells using the full-resolution TIFF. -> `steps/cell_segmentation_wf.md`
 </plan>
 
