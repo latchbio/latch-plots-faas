@@ -3,10 +3,13 @@ import contextlib
 import zlib
 from collections import defaultdict
 from dataclasses import dataclass
+from pathlib import Path
 
 import orjson
 from latch_asgi.context.websocket import Context
 from latch_asgi.framework.websocket import WebsocketConnectionClosedError
+
+session_count_file = Path("/tmp/user-session-count")  # noqa: S108
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -70,6 +73,7 @@ class PlotsContextManager:
         if self.session_owner is None and not is_agent:
             self.session_owner = user_key
 
+        self._write_user_session_count()
         await self.broadcast_users()
 
         return user_key
@@ -91,6 +95,7 @@ class PlotsContextManager:
                 else:
                     self.session_owner = self._get_first_non_agent_user_key()
 
+        self._write_user_session_count()
         await self.broadcast_users()
 
     async def broadcast_message(self, msg: str) -> None:
@@ -113,3 +118,10 @@ class PlotsContextManager:
     async def override_session_owner(self, user_key: str) -> None:
         self.session_owner = user_key
         await self.broadcast_users()
+
+    def _write_user_session_count(self) -> None:
+        user_session_count = sum(
+            1 for _, user in self.contexts.values() if not user.is_agent
+        )
+        session_count_file.parent.mkdir(parents=True, exist_ok=True)
+        session_count_file.write_text(str(user_session_count), encoding="utf-8")
