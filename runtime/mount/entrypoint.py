@@ -15,6 +15,7 @@ from latch_data_validation.data_validation import validate
 
 from runtime.mount.plots_context_manager import PlotsContextManager
 
+from .headless_browser import HeadlessBrowser
 from .socketio import SocketIo
 from .utils import (
     KernelSnapshotStatus,
@@ -73,7 +74,34 @@ pod_id = int((latch_p / "id").read_text())
 pod_session_id = (latch_p / "session-id").read_text()
 
 plots_ctx_manager = PlotsContextManager()
-current_agent_ctx: Context | None = None
+
+user_agent_ctx: Context | None = None
+
+# backend browser
+action_handler_ctx: Context | None = None
+action_handler_ready_ev = asyncio.Event()
+
+pending_user_browser_actions: dict[str, dict] = {}  # tx_id -> original message
+
+
+def mark_action_handled(tx_id: str) -> None:
+    pending_user_browser_actions.pop(tx_id, None)
+
+
+async def handle_user_disconnect_fallback() -> None:
+    actions_to_fallback = list(pending_user_browser_actions.items())
+    pending_user_browser_actions.clear()
+
+    for tx_id, msg in actions_to_fallback:
+        if action_handler_ctx is not None:
+            await action_handler_ctx.send_message(orjson.dumps(msg).decode())
+        elif a_proc.conn_a is not None:
+            await a_proc.conn_a.send({
+                "type": "agent_action_response",
+                "tx_id": tx_id,
+                "status": "error",
+                "error": "User disconnected and backend browser not available"
+            })
 
 
 @dataclass
@@ -93,6 +121,10 @@ class AgentProc:
 
 
 a_proc = AgentProc()
+
+headless_browser: HeadlessBrowser | None = None
+latest_local_storage: dict[str, str] | None = None
+headless_browser_notebook_id: str | None = None
 
 
 # todo(maximsmol): typing
@@ -481,14 +513,14 @@ async def handle_agent_messages(conn_a: SocketIo) -> None:
     while True:
         msg = await conn_a.recv()
         msg_type = msg.get("type", "unknown")
+        tx_id = msg.get("tx_id")
+        action = msg.get("action")
 
         if msg_type != "agent_stream_delta":
             print(f"[entrypoint] Agent > {msg_type}")
 
         if msg_type == "agent_action" and msg.get("action") == "request_reactivity_summary":
             if k_proc.conn_k is not None:
-                tx_id = msg.get("tx_id")
-                print(f"[entrypoint] Routing reactivity request to kernel (tx_id={tx_id})")
 
                 await k_proc.conn_k.send({
                     "type": "reactivity_summary",
@@ -506,9 +538,7 @@ async def handle_agent_messages(conn_a: SocketIo) -> None:
 
         if msg_type == "agent_action" and msg.get("action") == "execute_code":
             if k_proc.conn_k is not None:
-                tx_id = msg.get("tx_id")
                 code = msg.get("params", {}).get("code", "")
-                print(f"[entrypoint] Routing execute_code to kernel (tx_id={tx_id})")
 
                 await k_proc.conn_k.send({
                     "type": "execute_code",
@@ -526,9 +556,7 @@ async def handle_agent_messages(conn_a: SocketIo) -> None:
 
         if msg_type == "agent_action" and msg.get("action") == "get_global_info":
             if k_proc.conn_k is not None:
-                tx_id = msg.get("tx_id")
                 key = msg.get("params", {}).get("key", "")
-                print(f"[entrypoint] Routing get_global_info to kernel (tx_id={tx_id})")
 
                 await k_proc.conn_k.send({
                     "type": "get_global_info",
@@ -544,14 +572,95 @@ async def handle_agent_messages(conn_a: SocketIo) -> None:
                 })
             continue
 
-        if current_agent_ctx is None:
-            print("[entrypoint] No websocket client connected, skipping message")
-            continue
+        if msg_type == "agent_action":
+            force_backend_browser_retry = msg.get("params", {}).get("force_backend_browser_retry", False)
+
+            if action in {
+                "smart_ui_spotlight",
+                "h5_filter_by", "h5_color_by",
+                "h5_set_selected_obsm_key",
+                "h5_set_background_image",
+                "h5_open_image_aligner",
+                "h5_autoscale",
+                "h5_zoom",
+                "h5_set_background_image_visibility",
+                "h5_add_selected_cells_to_categorical_obs",
+                "h5_set_marker_opacity",
+                "h5_manage_obs",
+            }:
+                if user_agent_ctx is not None:
+                    target_ctx = user_agent_ctx
+                    track_for_disconnect = False
+                else:
+                    print(f"[entrypoint] User browser unavailable for user-specific action: {action}")
+                    await conn_a.send({
+                        "type": "agent_action_response",
+                        "tx_id": tx_id,
+                        "status": "error",
+                        "error": (
+                            """
+                            The agent cannot interact with the user as they are not actively viewing
+                            the page but this action requires user interaction. Please proceed
+                            without relying on user input, or inform the user they need to be on the
+                            page to proceed.
+                            """
+                        )
+                    })
+                    continue
+            elif force_backend_browser_retry:
+                if action_handler_ctx is not None:
+                    target_ctx = action_handler_ctx
+                    track_for_disconnect = False
+                else:
+                    print(f"[entrypoint] Backend browser not connected for forced action: {action}")
+                    await conn_a.send({
+                        "type": "agent_action_response",
+                        "tx_id": tx_id,
+                        "status": "error",
+                        "error": "Backend browser not connected. Cannot execute browser actions."
+                    })
+                    continue
+            elif user_agent_ctx is not None:
+                target_ctx = user_agent_ctx
+                track_for_disconnect = True
+            elif action_handler_ctx is not None:
+                target_ctx = action_handler_ctx
+                track_for_disconnect = False
+            else:
+                print(f"[entrypoint] No browser connected for agent_action: {action}")
+                await conn_a.send({
+                    "type": "agent_action_response",
+                    "tx_id": tx_id,
+                    "status": "error",
+                    "error": "No browser connected. Cannot execute browser actions."
+                })
+                continue
+        else:
+            target_ctx = user_agent_ctx
+            track_for_disconnect = False
+            if target_ctx is None:
+                target_ctx = action_handler_ctx
+            if target_ctx is None:
+                continue
 
         try:
-            await current_agent_ctx.send_message(orjson.dumps(msg).decode())
+            if track_for_disconnect and tx_id is not None:
+                pending_user_browser_actions[tx_id] = msg
+
+            await target_ctx.send_message(orjson.dumps(msg).decode())
         except Exception as e:
-            print(f"[entrypoint] Error forwarding message: {e}")
+            print(f"[entrypoint] Error forwarding {msg_type} message: {e}")
+            if track_for_disconnect and tx_id is not None:
+                mark_action_handled(tx_id)
+                if action_handler_ctx is not None:
+                    await action_handler_ctx.send_message(orjson.dumps(msg).decode())
+                elif a_proc.conn_a is not None:
+                    await a_proc.conn_a.send({
+                        "type": "agent_action_response",
+                        "tx_id": tx_id,
+                        "status": "error",
+                        "error": f"Failed to forward action: {e}"
+                    })
 
 
 async def start_kernel_proc() -> None:
@@ -609,7 +718,7 @@ async def start_kernel_proc() -> None:
         data = validate(resp, TmpPlotsNotebookKernelSnapshotModeResp)
         session_snapshot_mode = data.data.tmpPlotsNotebookKernelSnapshotMode
         if session_snapshot_mode:
-            kernel_snapshot_state.status = "loading"
+            kernel_snapshot_state.status = "start"
     except Exception:
         err_msg = {"type": "error", "data": traceback.format_exc()}
         await plots_ctx_manager.broadcast_message(orjson.dumps(err_msg).decode())
@@ -690,9 +799,69 @@ async def stop_agent_proc() -> None:
         a_proc.log_file.close()
 
 
+async def start_headless_browser(notebook_id: str, local_storage: dict[str, str]) -> None:
+    global headless_browser, headless_browser_notebook_id
+
+    if headless_browser is not None:
+        return
+
+    headless_browser_notebook_id = notebook_id
+
+    try:
+        notebook_url = f"https://console.latch.bio/plots/{notebook_id}"
+
+        headless_browser = HeadlessBrowser()
+        await headless_browser.start(
+            notebook_url,
+            local_storage=local_storage,
+        )
+
+        try:
+            await asyncio.wait_for(action_handler_ready_ev.wait(), timeout=30)
+            print("[entrypoint] Headless browser action_handler connected successfully!")
+        except TimeoutError:
+            print("[entrypoint] Timed out waiting for action_handler websocket connection")
+
+    except Exception as e:
+        print(f"[entrypoint] Error starting headless browser: {e}")
+        traceback.print_exc()
+        if headless_browser is not None:
+            with contextlib.suppress(Exception):
+                await headless_browser.screenshot("/var/log/headless_browser_error.png")
+            with contextlib.suppress(Exception):
+                await headless_browser.stop()
+            headless_browser = None
+
+
+async def restart_headless_browser() -> None:
+    global headless_browser
+
+    notebook_id = headless_browser_notebook_id
+    local_storage = latest_local_storage
+
+    if notebook_id is None or local_storage is None:
+        print("[entrypoint] Cannot restart headless browser: missing notebook_id or local_storage")
+        return
+
+    print("[entrypoint] Restarting headless browser after disconnect...")
+
+    if headless_browser is not None:
+        with contextlib.suppress(Exception):
+            await headless_browser.stop()
+        headless_browser = None
+
+    await start_headless_browser(notebook_id, local_storage)
+
+
 async def shutdown() -> None:
     await stop_kernel_proc()
     await stop_agent_proc()
+
+    global headless_browser
+    if headless_browser is not None:
+        with contextlib.suppress(Exception):
+            await headless_browser.stop()
+        headless_browser = None
 
     with contextlib.suppress(Exception):
         sock_k.close()
