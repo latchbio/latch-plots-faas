@@ -2314,7 +2314,7 @@ class AgentHarness:
                 "properties": {
                     "keyword": {
                         "type": "string",
-                        "enum": ["lasso_select", "file_upload", "widget_input"],
+                        "enum": ["lasso_select", "file_upload", "widget_input", "checkpoint", "clear_history", "disable_agent", "restart_pod"],
                         "description": "The UI element to highlight"
                     },
                     "widget_key": {
