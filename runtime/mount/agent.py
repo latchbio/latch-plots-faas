@@ -51,7 +51,6 @@ class Mode(Enum):
 
 
 class Behavior(Enum):
-    default = "default"
     proactive = "proactive"
     step_by_step = "step_by_step"
 
@@ -81,7 +80,7 @@ class AgentHarness:
     latest_notebook_context: dict = field(default_factory=dict)
     current_status: str | None = None
     expected_widgets: dict[str, object | None] = field(default_factory=dict)
-    behavior: Behavior | None = None
+    behavior: Behavior = Behavior.step_by_step
     latest_notebook_state: str | None = None
     current_plan: dict | None = None
     buffer: list[str] = field(default_factory=list)
@@ -842,7 +841,7 @@ class AgentHarness:
 
             print(f"[tool] edit_cell id={cell_id}")
 
-            original_code = None
+            original_code = ""
 
             cells = self.latest_notebook_context.get("cells", [])
 
@@ -1751,7 +1750,7 @@ class AgentHarness:
 
         self.tools.append({
             "name": "rename_notebook",
-            "description": "Rename the current plot notebook.",
+            "description": "Rename the current plot notebook. Only call when the user explicitly asks to rename the notebook or the notebook is named Untitled Layout",
             "input_schema": {
                 "type": "object",
                 "properties": {
@@ -1839,7 +1838,7 @@ class AgentHarness:
                     },
                     "plan_update_overview": {
                         "type": "string",
-                        "description": "Short title overview of what changed. E.g. 'Added QC steps' or 'Completed step 2, step 3 now in progress'"                    
+                        "description": "Short title overview of what changed. E.g. 'Added QC steps' or 'Completed step 2, step 3 now in progress'"
                     }
                 },
                 "required": ["plan", "plan_diff", "plan_update_overview"]
@@ -1873,24 +1872,24 @@ class AgentHarness:
         self.tool_map["submit_response"] = submit_response
 
         self.tools.append({
-                    "name": "set_widget",
-                    "description": "Set a single widget value by widget key.",
-                    "input_schema": {
-                        "type": "object",
-                        "properties": {
-                            "key": {
-                                "type": "string",
-                                "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
-                            },
-                            "value": {
-                                "description": "JSON-serializable value"
-                            },
-                            "action_summary": {"type": "string", "description": "Summary of the purpose of the set_widget."},
-                            "label": {"type": "string", "description": "Label of the widget to set"},
-                        },
-                        "required": ["key", "value", "action_summary", "label"],
+            "name": "set_widget",
+            "description": "Set a single widget value by widget key.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "key": {
+                        "type": "string",
+                        "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
                     },
-                })
+                    "value": {
+                        "description": "JSON-serializable value"
+                    },
+                    "action_summary": {"type": "string", "description": "Summary of the purpose of the set_widget."},
+                    "label": {"type": "string", "description": "Label of the widget to set"},
+                },
+                "required": ["key", "value", "action_summary", "label"],
+            },
+        })
         self.tool_map["set_widget"] = set_widget
 
         self.tools.append({
@@ -3011,7 +3010,7 @@ class AgentHarness:
     async def _run_quick_inference(self, prompt: str) -> str:
         messages = [{
             "role": "user",
-            "content": prompt + "\n\nDo not use any markdown formatting."
+            "content": prompt + "\n\nDo not use any markdown formatting. If the content does not contain a clear reasoning process, provide a best-effort summary of the available text. Do not return meta-commentary."
         }]
 
         try:
@@ -3028,7 +3027,7 @@ class AgentHarness:
             return ""
 
     async def _summarize_and_send_chunk(self, text: str, block_index: int) -> None:
-        prompt = f"Summarize the most recent thoughts in this reasoning process into a brief, active phrase (2-6 words). Focus on spatial analysis tasks, protocol verification, or scientific reasoning currently being analyzed. Examples: 'Verifying widget parameters', 'Analyzing QC metrics', 'Checking protocol compliance'.\n\nThinking:\n{text}"
+        prompt = f"Summarize the most recent thoughts in this reasoning process into a brief, active phrase (2-6 words). Focus on spatial analysis tasks, protocol verification, or scientific reasoning currently being analyzed. If no clear reasoning is present, summarize the general intent. Examples: 'Verifying widget parameters', 'Analyzing QC metrics', 'Checking protocol compliance'.\n\nThinking:\n{text}"
         summary = await self._run_quick_inference(prompt)
 
         if summary.strip() != "":
@@ -3136,17 +3135,20 @@ class AgentHarness:
 
             assert self.system_prompt is not None
 
-            if self.behavior == Behavior.proactive:
-                behavior_file = "proactive_behavior.md"
-            elif self.behavior == Behavior.step_by_step:
-                behavior_file = "step_by_step_behavior.md"
-            else:
-                behavior_file = "default_behavior.md"
-            behavior_instructions = (context_root / behavior_file).read_text()
+            behavior_file = "proactive.md" if self.behavior == Behavior.proactive else "step_by_step.md"
+
+            turn_behavior_content = (context_root / "turn_behavior" / behavior_file).read_text()
             final_system_prompt = re.sub(
-                r"<turn_structure>.*?</turn_structure>",
-                f"<turn_structure>\n{behavior_instructions}\n</turn_structure>",
+                r"TURN_BEHAVIOR_PLACEHOLDER",
+                f"<turn_behavior>\n{turn_behavior_content}\n</turn_behavior>",
                 self.system_prompt,
+            )
+            
+            examples_content = (context_root / "examples" / behavior_file).read_text()
+            final_system_prompt = re.sub(
+                r"EXAMPLES_PLACEHOLDER",
+                f"<examples>\n{examples_content}\n</examples>",
+                final_system_prompt,
             )
 
             system_blocks = [
@@ -3220,7 +3222,7 @@ class AgentHarness:
                         thinking_text_str = f"Thinking:\n{thinking_text}\n\n" if thinking_text is not None else ""
                         response_text_str = f"Response:\n{response_text}\n\n" if response_text is not None else ""
 
-                        prompt = f"Summarize the reasoning process in a concise past-tense sentence (2-6 words). Focus on analysis tasks, protocol verification, or scientific conclusions reached. Examples: 'Verified widget parameters', 'Analyzed QC metrics', 'Checked protocol compliance'.\n\n{thinking_text_str}{response_text_str}"
+                        prompt = f"Summarize the reasoning process in a concise past-tense sentence (2-6 words). Focus on analysis tasks, protocol verification, or scientific conclusions reached. If no clear reasoning is present, summarize the general action taken. Examples: 'Verified widget parameters', 'Analyzed QC metrics', 'Checked protocol compliance'.\n\n{thinking_text_str}{response_text_str}"
 
                         summary = await self._run_quick_inference(prompt)
 
@@ -3473,38 +3475,38 @@ class AgentHarness:
             latest_submit_response = None
             latest_update_plan = None
             latest_submit_response_with_plan = None
-            
+
             for history_msg in reversed(messages):
                 if history_msg.get("role") != "assistant":
                     continue
                 content = history_msg.get("content")
                 if not isinstance(content, list):
                     continue
-                
+
                 for block in reversed(content):
                     if not isinstance(block, dict) or block.get("type") != "tool_use":
                         continue
-                    
+
                     tool_name = block.get("name")
                     tool_input = block.get("input", {})
-                    
+
                     if tool_name == "submit_response":
                         if latest_submit_response is None:
                             latest_submit_response = tool_input
                         if latest_submit_response_with_plan is None and tool_input.get("plan"):
                             latest_submit_response_with_plan = tool_input
-                    
+
                     if tool_name == "update_plan" and latest_update_plan is None:
                         plan_items = tool_input.get("plan", [])
                         if plan_items:
                             latest_update_plan = tool_input
-                    
+
                     if latest_submit_response is not None and latest_update_plan is not None:
                         break
-                
+
                 if latest_submit_response is not None and latest_update_plan is not None:
                     break
-            
+
             if latest_update_plan is not None:
                 plan_items = latest_update_plan.get("plan", [])
                 self.current_plan = {"steps": plan_items}
@@ -3550,7 +3552,7 @@ class AgentHarness:
         self.manually_cancelled = False
 
         if behavior is not None:
-            self.behavior = Behavior(behavior)
+            self.behavior = Behavior.step_by_step if behavior == "step_by_step" else Behavior.proactive
 
         full_query = query
         if contextual_node_data:
