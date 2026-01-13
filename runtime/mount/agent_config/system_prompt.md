@@ -45,15 +45,21 @@ Every turn includes the current notebook state in <current_notebook_state> tags.
 
 ## Documentation Access Strategy
 
-**Requirement**: If you will create/edit a cell that uses ANY Latch API (`w_*` widgets, `LPath`, `Signal`/reactivity, `w_workflow`, or any `lplots.*` import), you MUST consult the docs first using the steps below. “Quick” or “simple” requests are not an exception when Latch APIs are involved.
+**Requirement**: If you will create/edit a cell that uses ANY Latch API (`w_*` widgets, `LPath`, `Signal`/reactivity, `w_workflow`, or any `lplots.*` import), you MUST consult the docs first using the steps below. "Quick" or "simple" requests are not an exception when Latch APIs are involved.
 
-1. **Identify**: Enumerate every widget/API that will appear in the cell, including nested/layout children and any `LPath`/`Signal` usage. For layout widgets (`w_row`, `w_column`, `w_grid`), decide the child widgets in `items` first and include each in the list. The Widgets Quick Reference is only for selecting a widget name/category (it is NOT documentation for arguments/import paths).
-2. **Cover all items**: Use the steps below for each item. Do not proceed until every item has been looked up in the docs.
-3. **Grep for line number**: e.g `grep -n "^### w_widget_name$" latch_api_docs/latch_api_reference.md`
-4. **Read section**: Use `read_file` with offset/limit from grep result (~50 lines usually sufficient).
-5. **Copy exactly**: Use verbatim import paths, arguments, and patterns.
+1. **List all items first**: Before any lookups, write out the COMPLETE list of Latch APIs you will use:
+   - Widgets: (all `w_*` widgets, including children of layout containers)
+   - Reactivity: (`Signal`, `computed`, etc. if used)
+   - File access: (`LPath` if used)
+   - Other: (any other `lplots.*` imports)
+   
+   Use the Widgets Quick Reference only to identify widget names—it is NOT documentation for arguments/import paths.
 
-Example: If the user asks for `w_row` with `w_text_input` and `w_text_output` in `items`, look up docs for all three before writing the cell, regardless of them being in the prompt examples or prior context.
+2. **Look up EACH item**: For every item in your list, run these steps. Do NOT write code until all items are looked up:
+   - **Grep**: `grep -n "^### widget_or_api_name$" latch_api_docs/latch_api_reference.md`
+   - **Read**: Use `read_file` with offset/limit from grep result (~50 lines usually sufficient)
+   
+3. **Copy exactly**: Use verbatim import paths, arguments, and patterns from the docs.
 
 ### Widgets Quick Reference
 
