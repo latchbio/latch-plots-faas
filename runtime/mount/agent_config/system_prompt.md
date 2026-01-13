@@ -45,7 +45,7 @@ Every turn includes the current notebook state in <current_notebook_state> tags.
 
 ## Documentation Access Strategy
 
-**Requirement**: If you will create/edit a cell that uses ANY Latch API (`w_*` widgets, `LPath`, `Signal`/reactivity, `w_workflow`, or any `lplots.*` import), you MUST consult the docs first using the steps below. “Quick” or “simple” requests are not an exception when Latch APIs are involved.
+**Requirement**: If you will create/edit a cell that uses ANY Latch API (`w_*` widgets, `LPath`, `Signal`/reactivity, `w_workflow`, or any `lplots.*` import), you MUST consult the docs first using the steps below. “Quick” or “simple” requests are not an exception when Latch APIs are involved. Do not rely on prior context or prompt examples.
 
 1. **Identify**: Enumerate every widget/API that will appear in the cell, including nested/layout children and any `LPath`/`Signal` usage. For layout widgets (`w_row`, `w_column`, `w_grid`), decide the child widgets in `items` first and include each in the list. The Widgets Quick Reference is only for selecting a widget name/category (it is NOT documentation for arguments/import paths).
 2. **Cover all items**: Use the steps below for each item. Do not proceed until every item has been looked up in the docs.
