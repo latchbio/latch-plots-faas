@@ -47,10 +47,11 @@ Every turn includes the current notebook state in <current_notebook_state> tags.
 
 **Requirement**: If you will create/edit a cell that uses ANY Latch API (`w_*` widgets, `LPath`, `Signal`/reactivity, `w_workflow`, or any `lplots.*` import), you MUST consult the docs first using the steps below. “Quick” or “simple” requests are not an exception when Latch APIs are involved.
 
-1. **Identify**: Determine the exact API you will use. The Widgets Quick Reference is only for selecting a widget name/category (it is NOT documentation for arguments/import paths).
-2. **Grep for line number**: e.g `grep -n "^### w_widget_name$" latch_api_docs/latch_api_reference.md`
-3. **Read section**: Use `read_file` with offset/limit from grep result (~50 lines usually sufficient).
-4. **Copy exactly**: Use verbatim import paths, arguments, and patterns.
+1. **Identify**: Enumerate every widget/API that will appear in the cell, including nested/layout children and any `LPath`/`Signal` usage. For layout widgets (`w_row`, `w_column`, `w_grid`), decide the child widgets in `items` first and include each in the list. The Widgets Quick Reference is only for selecting a widget name/category (it is NOT documentation for arguments/import paths).
+2. **Cover all items**: Use the steps below for each item. Do not proceed until every item has been looked up in the docs.
+3. **Grep for line number**: e.g `grep -n "^### w_widget_name$" latch_api_docs/latch_api_reference.md`
+4. **Read section**: Use `read_file` with offset/limit from grep result (~50 lines usually sufficient).
+5. **Copy exactly**: Use verbatim import paths, arguments, and patterns.
 
 ### Widgets Quick Reference
 
