@@ -12,6 +12,12 @@ This directory contains agent context files which can be modified to customize t
 agent_config/
 ├── system_prompt.md              # System prompt
 ├── context/
+│   ├── turn_behavior/                 # Per-behavior-mode turn guidelines
+│   │   ├── proactive.md
+│   │   └── step_by_step.md
+│   ├── examples/                 # Per-behavior-mode examples
+│   │   ├── proactive.md
+│   │   └── step_by_step.md
 │   ├── technology_docs/          # Platform-specific documentation
 │   │   ├── vizgen.md
 │   │   ├── atlasxomics.md

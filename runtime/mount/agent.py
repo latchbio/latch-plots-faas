@@ -50,7 +50,6 @@ class Mode(Enum):
     debugging = "debugging"
 
 class Behavior(Enum):
-    default = "default"
     proactive = "proactive"
     step_by_step = "step_by_step"
 
@@ -79,7 +78,7 @@ class AgentHarness:
     latest_notebook_context: dict = field(default_factory=dict)
     current_status: str | None = None
     expected_widgets: dict[str, object | None] = field(default_factory=dict)
-    behavior: Behavior | None = None
+    behavior: Behavior = Behavior.step_by_step
     latest_notebook_state: str | None = None
     current_plan: dict | None = None
     buffer: list[str] = field(default_factory=list)
@@ -828,7 +827,7 @@ class AgentHarness:
 
             print(f"[tool] edit_cell id={cell_id}")
 
-            original_code = None
+            original_code = ""
 
             cells = self.latest_notebook_context.get("cells", [])
 
@@ -1737,7 +1736,7 @@ class AgentHarness:
 
         self.tools.append({
             "name": "rename_notebook",
-            "description": "Rename the current plot notebook.",
+            "description": "Rename the current plot notebook. Only call when the user explicitly asks to rename the notebook or the notebook is named Untitled Layout",
             "input_schema": {
                 "type": "object",
                 "properties": {
@@ -1859,24 +1858,24 @@ class AgentHarness:
         self.tool_map["submit_response"] = submit_response
 
         self.tools.append({
-                    "name": "set_widget",
-                    "description": "Set a single widget value by widget key.",
-                    "input_schema": {
-                        "type": "object",
-                        "properties": {
-                            "key": {
-                                "type": "string",
-                                "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
-                            },
-                            "value": {
-                                "description": "JSON-serializable value"
-                            },
-                            "action_summary": {"type": "string", "description": "Summary of the purpose of the set_widget."},
-                            "label": {"type": "string", "description": "Label of the widget to set"},
-                        },
-                        "required": ["key", "value", "action_summary", "label"],
+            "name": "set_widget",
+            "description": "Set a single widget value by widget key.",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "key": {
+                        "type": "string",
+                        "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
                     },
-                })
+                    "value": {
+                        "description": "JSON-serializable value"
+                    },
+                    "action_summary": {"type": "string", "description": "Summary of the purpose of the set_widget."},
+                    "label": {"type": "string", "description": "Label of the widget to set"},
+                },
+                "required": ["key", "value", "action_summary", "label"],
+            },
+        })
         self.tool_map["set_widget"] = set_widget
 
         self.tools.append({
@@ -3122,17 +3121,20 @@ class AgentHarness:
 
             assert self.system_prompt is not None
 
-            if self.behavior == Behavior.proactive:
-                behavior_file = "proactive_behavior.md"
-            elif self.behavior == Behavior.step_by_step:
-                behavior_file = "step_by_step_behavior.md"
-            else:
-                behavior_file = "default_behavior.md"
-            behavior_instructions = (context_root / behavior_file).read_text()
+            behavior_file = "proactive.md" if self.behavior == Behavior.proactive else "step_by_step.md"
+
+            turn_behavior_content = (context_root / "turn_behavior" / behavior_file).read_text()
             final_system_prompt = re.sub(
-                r"<turn_structure>.*?</turn_structure>",
-                f"<turn_structure>\n{behavior_instructions}\n</turn_structure>",
+                r"TURN_BEHAVIOR_PLACEHOLDER",
+                f"<turn_behavior>\n{turn_behavior_content}\n</turn_behavior>",
                 self.system_prompt,
+            )
+            
+            examples_content = (context_root / "examples" / behavior_file).read_text()
+            final_system_prompt = re.sub(
+                r"EXAMPLES_PLACEHOLDER",
+                f"<examples>\n{examples_content}\n</examples>",
+                final_system_prompt,
             )
 
             system_blocks = [
@@ -3536,7 +3538,7 @@ class AgentHarness:
         self.manually_cancelled = False
 
         if behavior is not None:
-            self.behavior = Behavior(behavior)
+            self.behavior = Behavior.step_by_step if behavior == "step_by_step" else Behavior.proactive
 
         full_query = query
         if contextual_node_data:
