@@ -3051,6 +3051,11 @@ class AgentHarness:
 
             notebook_state = await self.refresh_cells_context()
             self.latest_notebook_state = notebook_state
+
+            # Dump notebook_state to file for debugging
+            with open("/tmp/notebook_state_dump.txt", "w") as f:
+                f.write(notebook_state)
+
             notebook_state_block = {
                 "type": "text",
                 "text": f"<current_notebook_state>\n{notebook_state}\n</current_notebook_state>",
@@ -3129,7 +3134,7 @@ class AgentHarness:
                 f"<turn_behavior>\n{turn_behavior_content}\n</turn_behavior>",
                 self.system_prompt,
             )
-            
+
             examples_content = (context_root / "examples" / behavior_file).read_text()
             final_system_prompt = re.sub(
                 r"EXAMPLES_PLACEHOLDER",
