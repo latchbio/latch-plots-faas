@@ -573,7 +573,7 @@ async def handle_agent_messages(conn_a: SocketIo) -> None:
             continue
 
         if msg_type == "agent_action":
-            force_backend = msg.get("params", {}).get("force_backend", False)
+            force_backend_browser_retry = msg.get("params", {}).get("force_backend_browser_retry", False)
 
             if action in {
                 "smart_ui_spotlight",
@@ -607,7 +607,7 @@ async def handle_agent_messages(conn_a: SocketIo) -> None:
                         )
                     })
                     continue
-            elif force_backend:
+            elif force_backend_browser_retry:
                 if action_handler_ctx is not None:
                     target_ctx = action_handler_ctx
                     track_for_disconnect = False
@@ -654,6 +654,13 @@ async def handle_agent_messages(conn_a: SocketIo) -> None:
                 mark_action_handled(tx_id)
                 if action_handler_ctx is not None:
                     await action_handler_ctx.send_message(orjson.dumps(msg).decode())
+                elif a_proc.conn_a is not None:
+                    await a_proc.conn_a.send({
+                        "type": "agent_action_response",
+                        "tx_id": tx_id,
+                        "status": "error",
+                        "error": f"Failed to forward action: {e}"
+                    })
 
 
 async def start_kernel_proc() -> None:

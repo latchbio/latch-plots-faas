@@ -575,7 +575,7 @@ class AgentHarness:
         if self.mode == Mode.planning and action in {"create_cell", "edit_cell", "run_cell", "delete_cell"}:
             self.set_mode(Mode.executing)
 
-        force_backend = params.get("force_backend", False)
+        force_backend_browser_retry = params.get("force_backend_browser_retry", False)
 
         tx_id = f"tx_{uuid.uuid4().hex[:12]}"
         loop = asyncio.get_running_loop()
@@ -600,9 +600,9 @@ class AgentHarness:
             duration = time.time() - start_time
             print(f"[agent] {action} timed out after {duration:.3f}s")
 
-            if not force_backend:
+            if not force_backend_browser_retry:
                 print(f"[agent] Retrying {action} with backend browser")
-                return await self.atomic_operation(action, {**params, "force_backend": True}, timeout=timeout)
+                return await self.atomic_operation(action, {**params, "force_backend_browser_retry": True}, timeout=timeout)
 
             return {"status": "error", "error": f"OPERATION FAILED: '{action}' timed out after 10 seconds. This operation did NOT complete.", "tx_id": tx_id}
         finally:
