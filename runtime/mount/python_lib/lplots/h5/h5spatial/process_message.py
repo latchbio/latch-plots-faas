@@ -130,27 +130,28 @@ def get_boundary_sample(
 ) -> duckdb.DuckDBPyRelation:
     return conn.sql(f"""
         select
-            flatten(
-                list(
-                    list_transform(
-                        ST_Dump(
-                            ST_Points(geometry)
-                        ),
-                        x -> [
-                            ST_X(x['geom']),
-                            ST_Y(x['geom'])
-                        ]
-                    )
-                )
-            )
+            flatten(list(data.x))
             as boundary
-        from
-            {table_name}
-        where
-            ST_XMax(Geometry) >= {x_min} and ST_XMin(Geometry) <= {x_max} and
-            ST_YMax(Geometry) >= {y_min} and ST_YMin(Geometry) <= {y_max}
-        order by random()
-        limit {max_boundaries}
+        from (
+            select
+                list_transform(
+                    ST_Dump(
+                        ST_Points(geometry)
+                    ),
+                    x -> [
+                        ST_X(x['geom']),
+                        ST_Y(x['geom'])
+                    ]
+                )
+                as x
+            from
+                {table_name}
+            where
+                ST_XMax(Geometry) >= {x_min} and ST_XMin(Geometry) <= {x_max} and
+                ST_YMax(Geometry) >= {y_min} and ST_YMin(Geometry) <= {y_max}
+            order by random()
+            limit {max_boundaries}
+        ) data
     """)  # noqa: S608
 
 
@@ -183,8 +184,7 @@ async def process_boundaries_request(  # noqa: RUF029
             y_min=float(msg["y_min"]),
             x_max=float(msg["x_max"]),
             y_max=float(msg["y_max"]),
-            # max_boundaries=max_boundaries,
-            max_boundaries=1,
+            max_boundaries=max_boundaries,
         )
 
         data = sampled_data.fetchall()
