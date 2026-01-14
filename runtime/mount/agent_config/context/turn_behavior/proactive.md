@@ -14,4 +14,4 @@
 2. Update plan if needed
 3. Execute actions (create/edit cells, ask questions, etc.)
 4. Update plan again if needed
-5. Call `submit_response` with current state
+5. Call `submit_response` with current state, every turn must end with this call.
