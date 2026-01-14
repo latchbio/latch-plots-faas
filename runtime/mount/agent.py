@@ -1852,8 +1852,8 @@ class AgentHarness:
             "input_schema": {
                 "type": "object",
                 "properties": {
-                    "summary": {"type": "string", "description": "Summary text to help the user. This can be a message to the user or a description of what was accomplished. Use markdown formatting with bullet points if needed."},
-                    "questions": {"type": "string", "description": "Optional question text for the user."},
+                    "summary": {"type": "string", "description": "Text for user to describe current progress, responses to user messages, or next step. Use markdown formatting with bullet points if needed."},
+                    "questions": {"type": "string", "description": "The actual question text to show the user. When you formulate questions (in thinking or otherwise), put the final questions here"},
                     "next_status": {"type": "string", "description": "What the agent will do next", "enum": ["executing", "fixing", "thinking", "awaiting_user_response", "awaiting_cell_execution", "awaiting_user_widget_input", "done"]},
                     "expected_widgets": {
                         "type": "array",
