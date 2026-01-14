@@ -3593,6 +3593,15 @@ class AgentHarness:
 
             file.unlink()
 
+        await self._insert_history(
+            event_type="cancellation",
+            role="system",
+            payload={
+                "reason": "Request cancelled by user",
+            },
+            request_id=request_id if isinstance(request_id, str) else str(request_id),
+        )
+
         self._start_conversation_loop()
 
     async def handle_clear_history(self) -> None:
