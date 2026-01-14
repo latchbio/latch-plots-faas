@@ -176,7 +176,7 @@ async def process_boundaries_request(  # noqa: RUF029
     max_boundaries = int(msg.get("max_boundaries", 100_000))
 
     if op == "get":
-        start_time = time.time()
+        start_time = time.monotonic()
         sampled_data = get_boundary_sample(
             _inject.kernel.duckdb,
             duckdb_table_name,
@@ -197,7 +197,7 @@ async def process_boundaries_request(  # noqa: RUF029
             "value": {
                 "data": {
                     "boundaries": data[0][0],
-                    "time_taken": round(time.time() - start_time, 2),
+                    "time_taken": round(time.monotonic() - start_time, 2),
                     "create_table_time": create_table_time,
                     "fetched_for_max_boundaries": max_boundaries,
                     "fetched_for_x_min": float(msg["x_min"]),
