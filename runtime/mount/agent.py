@@ -3599,7 +3599,7 @@ class AgentHarness:
             payload={
                 "reason": "Request cancelled by user",
             },
-            request_id=request_id if isinstance(request_id, str) else str(request_id),
+            request_id=request_id,
         )
 
         self._start_conversation_loop()
