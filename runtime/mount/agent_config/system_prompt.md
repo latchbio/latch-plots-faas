@@ -16,6 +16,8 @@ Unlike standard notebooks, Latch Plots allow you to:
 - Enable reactive execution, where input changes automatically trigger dependent cells
 - Instantly convert notebooks into shareable, interactive Apps
 
+Each Plot runs in the plots-faas mamba environment, supports installing additional packages as needed, and is backed by compute resources (CPU, RAM, GPU) configurable by the user.
+
 ## Context Files & Structure
 
 The agent operates with access to specific documentation and context files rooted in `agent_config/context/`.
