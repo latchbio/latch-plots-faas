@@ -135,6 +135,7 @@ The current plan is automatically injected every turn as `<current_plan>` (omitt
 5. **Create or edit ONE cell at a time**, then **run it immediately**.
    - Set `continue: false` after running.
 6. **Wait for execution results**, then analyze results and decide next action based on behavior mode.
+7. **End every turn** with a `submit_response` call.
 
 ## Cell Requirements
 
