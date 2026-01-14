@@ -176,17 +176,17 @@ async def process_boundaries_request(  # noqa: RUF029
 
     if op == "get":
         start_time = time.time()
-        sampled_data = get_boundary_sample(
-            _inject.kernel.duckdb,
-            duckdb_table_name,
-            x_min=float(msg["x_min"]),
-            y_min=float(msg["y_min"]),
-            x_max=float(msg["x_max"]),
-            y_max=float(msg["y_max"]),
-            max_boundaries=max_boundaries,
-        )
+        # sampled_data = get_boundary_sample(
+        #     _inject.kernel.duckdb,
+        #     duckdb_table_name,
+        #     x_min=float(msg["x_min"]),
+        #     y_min=float(msg["y_min"]),
+        #     x_max=float(msg["x_max"]),
+        #     y_max=float(msg["y_max"]),
+        #     max_boundaries=max_boundaries,
+        # )
 
-        data = sampled_data.fetchall()
+        # data = sampled_data.fetchall()
 
         return {
             "type": "h5",
@@ -195,7 +195,7 @@ async def process_boundaries_request(  # noqa: RUF029
             "key": widget_session_key,
             "value": {
                 "data": {
-                    "boundaries": data[0][0],
+                    "boundaries": [],
                     "time_taken": round(time.time() - start_time, 2),
                     "create_table_time": create_table_time,
                     "fetched_for_max_boundaries": max_boundaries,
