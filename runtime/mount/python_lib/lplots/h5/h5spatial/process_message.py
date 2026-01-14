@@ -130,8 +130,8 @@ def get_boundary_sample(
 ) -> duckdb.DuckDBPyRelation:
     return conn.sql(f"""
         select
-            flatten(list(data.x))
-            as boundary
+            list(data.x)
+            as boundaries
         from (
             select
                 list_transform(
