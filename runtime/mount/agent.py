@@ -1852,7 +1852,7 @@ class AgentHarness:
             "input_schema": {
                 "type": "object",
                 "properties": {
-                    "summary": {"type": "string", "description": "Summary text to help the user. This can be a message to the user or a description of what was accomplished. Use markdown formatting with bullet points if needed."},
+                    "summary": {"type": "string", "description": "String describing current progress, responses to user messages, or next step. Use markdown formatting with bullet points if needed."},
                     "questions": {"type": "string", "description": "Question(s) text for the user."},
                     "next_status": {"type": "string", "description": "What the agent will do next", "enum": ["executing", "fixing", "thinking", "awaiting_user_response", "awaiting_cell_execution", "awaiting_user_widget_input", "done"]},
                     "expected_widgets": {
