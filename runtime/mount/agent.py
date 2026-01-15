@@ -2874,13 +2874,15 @@ class AgentHarness:
         usage_data = None
 
         try:
-            # Test triggers for error handling
-            if any("__test_overload__" in str(m.get("content", "")) for m in kwargs.get("messages", [])):
+            # Test triggers for error handling (only check the last message)
+            messages = kwargs.get("messages", [])
+            last_message_content = str(messages[-1].get("content", "")) if messages else ""
+            if "__test_overload__" in last_message_content:
                 from unittest.mock import Mock
                 mock_response = Mock()
                 mock_response.status_code = 529
                 raise APIStatusError("Overloaded", response=mock_response, body={"error": {"type": "overloaded_error"}})
-            if any("__test_api_error__" in str(m.get("content", "")) for m in kwargs.get("messages", [])):
+            if "__test_api_error__" in last_message_content:
                 from unittest.mock import Mock
                 mock_response = Mock()
                 mock_response.status_code = 500
@@ -3019,9 +3021,9 @@ class AgentHarness:
             error_type = e.body.get("error", {}).get("type") if isinstance(e.body, dict) else None
 
             if e.status_code == 529:
-                user_message = "Claude is currently experiencing high demand. Please wait a moment and try again."
+                user_message = "AI service is experiencing high demand. Try again in a moment. If it persists, contact support@latch.bio."
             else:
-                user_message = "Agent had trouble connecting with the AI service provider. Please try again or reach out to support@latch.bio"
+                user_message = "Couldn't connect to the AI service. Try again. If it persists, contact support@latch.bio."
 
             await self.send({
                 "type": "agent_stream_complete",
