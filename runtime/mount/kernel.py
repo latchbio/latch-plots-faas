@@ -537,12 +537,12 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
                 processed_traces.append(trace)
             elif trace["type"] == "violin":
                 # note(tim): if the trace has multiple violins,
-                # seperate them into different traces to allow 
+                # seperate them into different traces to allow
                 # precomputation for each
                 group_traces, has_group_settings = _split_violin_groups(trace)
 
                 if group_traces is not None:
-                    # note(tim): determine if we need to set violinmode to 
+                    # note(tim): determine if we need to set violinmode to
                     # overlay to avoid group name offsets issues
                     if not has_group_settings:
                         res.setdefault("layout", {})["violinmode"] = "overlay"
@@ -551,7 +551,7 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
                             precalc_violin(group_trace)
                             orientation = trace.get("orientation", "v")
                             data_axis = "y" if orientation == "v" else "x"
-                            
+
                             # note(tim): plotly has weird issues if this is not provided
                             group_trace[data_axis] = []
 
@@ -1074,6 +1074,14 @@ class Kernel:
         assert ctx.cur_comp is not None
 
         key = f"{ctx.cur_comp.name_path()}/{key}"
+
+        # Debug logging
+        with open("/tmp/widget_signals_debug.log", "a") as f:
+            f.write(f"=== get_widget_value ===\n")
+            f.write(f"key: {key}\n")
+            f.write(f"widget_signals keys: {list(self.widget_signals.keys())}\n")
+            f.write(f"key in widget_signals: {key in self.widget_signals}\n")
+            f.write("\n")
 
         if key not in self.widget_signals:
             self.widget_signals[key] = Signal(Nothing.x, name=key)
