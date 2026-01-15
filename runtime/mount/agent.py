@@ -335,6 +335,9 @@ class AgentHarness:
                 if role in {"user", "assistant"} and (isinstance(content, (str, list))):
                     anthropic_messages.append({"role": role, "content": content})
 
+            elif t == "cancellation":
+                anthropic_messages.append({"role": "user", "content": "[Request cancelled by user]"})
+
         print(f"[agent] Built {len(anthropic_messages)} messages from DB")
 
         return anthropic_messages
