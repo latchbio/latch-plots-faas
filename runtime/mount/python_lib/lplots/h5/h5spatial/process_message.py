@@ -2,10 +2,7 @@ import time
 from typing import Any
 
 import duckdb
-from duckdb import (
-    ColumnExpression,
-    ConstantExpression,
-)
+from duckdb import ColumnExpression, ConstantExpression
 
 from ... import _inject
 
@@ -23,10 +20,10 @@ def get_spatial_sample(
     table_rel = conn.sql(f"select * from {table_name}")  # noqa: S608
 
     spatial_filter = (
-        (ColumnExpression("global_x") >= ConstantExpression(x_min)) &
-        (ColumnExpression("global_x") <= ConstantExpression(x_max)) &
-        (ColumnExpression("global_y") >= ConstantExpression(y_min)) &
-        (ColumnExpression("global_y") <= ConstantExpression(y_max))
+        (ColumnExpression("global_x") >= ConstantExpression(x_min))
+        & (ColumnExpression("global_x") <= ConstantExpression(x_max))
+        & (ColumnExpression("global_y") >= ConstantExpression(y_min))
+        & (ColumnExpression("global_y") <= ConstantExpression(y_max))
     )
 
     if genes_to_fetch is not None and len(genes_to_fetch) > 0:
@@ -42,17 +39,12 @@ def get_spatial_sample(
     points_in_scope_result = points_in_scope_rel.fetchone()
     points_in_scope = 0 if points_in_scope_result is None else points_in_scope_result[0]
 
-    total_points_rel = table_rel.aggregate(
-        "count(*)"
-    )
+    total_points_rel = table_rel.aggregate("count(*)")
     total_points_result = total_points_rel.fetchone()
     total_points = 0 if total_points_result is None else total_points_result[0]
 
     sampled_rel = (
-        table_rel
-        .filter(filter_condition)
-        .order("random()")
-        .limit(max_transcripts)
+        table_rel.filter(filter_condition).order("random()").limit(max_transcripts)
     )
 
     return sampled_rel, points_in_scope, total_points
@@ -70,7 +62,7 @@ async def process_spatial_request(  # noqa: RUF029
             "key": widget_session_key,
             "data_type": "transcripts",
             "value": {
-                "error": f"Invalid transcripts operation: {msg.get('op', '`op` key missing from message')}",
+                "error": f"Invalid transcripts operation: {msg.get('op', '`op` key missing from message')}"
             },
         }
 
@@ -123,29 +115,43 @@ async def process_spatial_request(  # noqa: RUF029
         "type": "h5",
         "data_type": "transcripts",
         "key": widget_session_key,
-        "value": {
-            "error": f"Unsupported transcripts operation: {op}",
-        },
+        "value": {"error": f"Unsupported transcripts operation: {op}"},
     }
 
 
 def get_boundary_sample(
     conn: duckdb.DuckDBPyConnection,
     table_name: str,
-    x_min: float, y_min: float, x_max: float, y_max: float,
+    x_min: float,
+    y_min: float,
+    x_max: float,
+    y_max: float,
     max_boundaries: int = 100_000,
 ) -> duckdb.DuckDBPyRelation:
     return conn.sql(f"""
         select
-            EntityID,
-            st_astext(Geometry) as coords
-        from
-            {table_name}
-        where
-            ST_XMax(Geometry) >= {x_min} and ST_XMin(Geometry) <= {x_max} and
-            ST_YMax(Geometry) >= {y_min} and ST_YMin(Geometry) <= {y_max}
-        order by random()
-        limit {max_boundaries}
+            list(data.x)
+            as boundaries
+        from (
+            select
+                list_transform(
+                    ST_Dump(
+                        ST_Points(geometry)
+                    ),
+                    x -> [
+                        ST_X(x['geom']),
+                        ST_Y(x['geom'])
+                    ]
+                )
+                as x
+            from
+                {table_name}
+            where
+                ST_XMax(Geometry) >= {x_min} and ST_XMin(Geometry) <= {x_max} and
+                ST_YMax(Geometry) >= {y_min} and ST_YMin(Geometry) <= {y_max}
+            order by random()
+            limit {max_boundaries}
+        ) data
     """)  # noqa: S608
 
 
@@ -161,7 +167,7 @@ async def process_boundaries_request(  # noqa: RUF029
             "key": widget_session_key,
             "data_type": "boundaries",
             "value": {
-                "error": f"Invalid boundaries operation: {msg.get('op', '`op` key missing from message')}",
+                "error": f"Invalid boundaries operation: {msg.get('op', '`op` key missing from message')}"
             },
         }
 
@@ -170,7 +176,7 @@ async def process_boundaries_request(  # noqa: RUF029
     max_boundaries = int(msg.get("max_boundaries", 100_000))
 
     if op == "get":
-        start_time = time.time()
+        start_time = time.monotonic()
         sampled_data = get_boundary_sample(
             _inject.kernel.duckdb,
             duckdb_table_name,
@@ -183,52 +189,6 @@ async def process_boundaries_request(  # noqa: RUF029
 
         data = sampled_data.fetchall()
 
-        boundaries = []
-
-        for row in data:
-            wkt_coords: str | None = row[1]
-
-            if wkt_coords is None:
-                boundaries.append(None)
-                continue
-
-            try:
-                if "EMPTY" in wkt_coords:
-                    boundaries.append(None)
-                    continue
-                if wkt_coords.startswith("LINESTRING "):
-                    coords_str = wkt_coords[11:-1]
-                elif wkt_coords.startswith("POLYGON "):
-                    coords_str = wkt_coords[9:-2]
-                elif wkt_coords.startswith("MULTIPOLYGON "):
-                    start_idx = wkt_coords.find("(((") + 3
-                    paren_count = 0
-                    end_idx = start_idx
-                    for i, char in enumerate(wkt_coords[start_idx:], start_idx):
-                        if char == "(":
-                            paren_count += 1
-                        elif char == ")":
-                            paren_count -= 1
-                            if paren_count < 0:
-                                end_idx = i
-                                break
-                    coords_str = wkt_coords[start_idx:end_idx]
-                else:
-                    raise ValueError(f"Unhandled WKT: {wkt_coords}")
-
-                coord_pairs = []
-                for pair in coords_str.split(","):
-                    clean_pair = pair.strip().replace("(", "").replace(")", "")
-                    coords = clean_pair.split()
-                    if len(coords) < 2:
-                        continue
-                    x, y = round(float(coords[0]), 2), round(float(coords[1]), 2)
-                    coord_pairs.append([x, y])
-
-                boundaries.append(coord_pairs)
-            except Exception as e:
-                raise RuntimeError(f"Error parsing WKT: {wkt_coords}") from e
-
         return {
             "type": "h5",
             "op": op,
@@ -236,8 +196,8 @@ async def process_boundaries_request(  # noqa: RUF029
             "key": widget_session_key,
             "value": {
                 "data": {
-                    "boundaries": boundaries,
-                    "time_taken": round(time.time() - start_time, 2),
+                    "boundaries": data[0][0],
+                    "time_taken": round(time.monotonic() - start_time, 2),
                     "create_table_time": create_table_time,
                     "fetched_for_max_boundaries": max_boundaries,
                     "fetched_for_x_min": float(msg["x_min"]),
@@ -252,7 +212,5 @@ async def process_boundaries_request(  # noqa: RUF029
         "type": "h5",
         "data_type": "boundaries",
         "key": widget_session_key,
-        "value": {
-            "error": f"Unsupported boundaries operation: {op}",
-        },
+        "value": {"error": f"Unsupported boundaries operation: {op}"},
     }
