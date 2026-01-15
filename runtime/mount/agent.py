@@ -3018,10 +3018,10 @@ class AgentHarness:
 
             error_type = e.body.get("error", {}).get("type") if isinstance(e.body, dict) else None
 
-            if e.status_code == 529:  # Anthropic overloaded
+            if e.status_code == 529:
                 user_message = "Claude is currently experiencing high demand. Please wait a moment and try again."
             else:
-                user_message = "Something went wrong. Please try again."
+                user_message = "Agent had trouble connecting with the AI service provider. Please try again or reach out to support@latch.bio"
 
             await self.send({
                 "type": "agent_stream_complete",
