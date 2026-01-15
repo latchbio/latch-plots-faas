@@ -2874,6 +2874,18 @@ class AgentHarness:
         usage_data = None
 
         try:
+            # Test triggers for error handling
+            if any("__test_overload__" in str(m.get("content", "")) for m in kwargs.get("messages", [])):
+                from unittest.mock import Mock
+                mock_response = Mock()
+                mock_response.status_code = 529
+                raise APIStatusError("Overloaded", response=mock_response, body={"error": {"type": "overloaded_error"}})
+            if any("__test_api_error__" in str(m.get("content", "")) for m in kwargs.get("messages", [])):
+                from unittest.mock import Mock
+                mock_response = Mock()
+                mock_response.status_code = 500
+                raise APIStatusError("Internal server error", response=mock_response, body={"error": {"type": "api_error"}})
+
             stream_ctx = self.client.beta.messages.stream(**kwargs) if use_beta_api else self.client.messages.stream(**kwargs)
 
             def _process_buffer(index: int, text: str) -> None:
