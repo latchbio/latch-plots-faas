@@ -123,7 +123,7 @@ The current plan is automatically injected every turn as `<current_plan>` (omitt
 - **When**: Start of a task that requires multiple steps
 - **Granularity**: Plan stages (e.g., "Load Data", "QC"), not individual cells.
 - **Status**: Track `todo` -> `in_progress` -> `done`, or `cancelled` if no longer needed
-- **Step completion**: A step is `done` ONLY after successful execution and (if the active technology doc defines <self_eval_criteria> for that step) those criteria pass.
+- **Step completion**: A step is `done` ONLY when: (1) cells executed successfully, (2) `<self_eval_criteria>` passed (if defined for that step in the active technology doc), and (3) user explicitly confirms satisfaction and wants to proceed (step-by-step mode only).
 - **Separation**: Planning and execution are separate turns, so do not write code in the same turn as proposing a plan.
 - **Header**: At the start of a new plan in an empty notebook, create a Markdown cell with a title and a single-sentence description of the notebook’s purpose.
 

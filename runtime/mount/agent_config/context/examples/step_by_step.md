@@ -105,25 +105,25 @@ submit_response(
     summary="The filtering completed. Retention is very low (10 cells). The 200 gene threshold may be too strict.",
     questions="How would you like to adjust the threshold before rerunning? (e.g., 100 or 150 genes)",
     continue=False,
-    next_status="done"
+    next_status="awaiting_user_response"
 )
 ```
 
-**Turn 3: User Adjusts Threshold**
+**Turn 3: User Adjusts Threshold. Agent Executes Cells Successfully and Asks for User Confirmation**
 
 **User Request**: "Try 100 genes"
 
 ```python
-# [Agent changes threshold, self-eval criteria passes]
+# Agent changes threshold to 100 genes, reruns cells, and self-eval criteria passes
 submit_response(
     plan=[
-        {"id": "filter", "description": "Filter cells by gene count", "status": "done"},
+        {"id": "filter", "description": "Filter cells by gene count", "status": "in_progress"},
         {"id": "qc", "description": "Quality control", "status": "todo"},
         # ...
     ],
-    summary="Reran with a 100 gene threshold. Retention is now acceptable, so the filter step is complete.",
-    questions="Would you like to proceed to the QC step?",
+    summary="Filtering step complete. Results: 3,873 / 4,992 spots retained (77.6%). Retention is now acceptable.",
+    questions="Are you satisfied with these results? Should I proceed to the normalization step?",
     continue=False,
-    next_status="done"
+    next_status="awaiting_user_response"
 )
 ```
