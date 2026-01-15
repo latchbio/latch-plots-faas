@@ -3021,9 +3021,9 @@ class AgentHarness:
             error_type = e.body.get("error", {}).get("type") if isinstance(e.body, dict) else None
 
             if e.status_code == 529:
-                user_message = "AI service is experiencing high demand. Try again in a moment. If it persists, contact support@latch.bio."
+                user_message = "AI service is experiencing high demand. Please try again in a moment."
             else:
-                user_message = "Couldn't connect to the AI service. Try again. If it persists, contact support@latch.bio."
+                user_message = "Couldn't connect to the AI service. Please try again."
 
             await self.send({
                 "type": "agent_stream_complete",
