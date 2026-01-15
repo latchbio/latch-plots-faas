@@ -114,12 +114,7 @@ submit_response(
 **User Request**: "Try 100 genes"
 
 ```python
-# [Agent changes threshold and reruns cells]
-# [Cells execute with new threshold]
-```
-
-```python
-# [Agent runs cells with 100 gene threshold, self-eval criteria passes]
+# Agent changes threshold to 100 genes, reruns cells, and self-eval criteria passes
 submit_response(
     plan=[
         {"id": "filter", "description": "Filter cells by gene count", "status": "in_progress"},
