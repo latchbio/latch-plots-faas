@@ -15,6 +15,7 @@ from enum import Enum
 from pathlib import Path
 
 from agent_utils.auto_install import anthropic
+from anthropic import APIStatusError
 from anthropic.types import MessageParam, ToolParam
 from anthropic.types.beta.beta_message import BetaMessage
 from anthropic.types.message import Message
@@ -2998,6 +2999,25 @@ class AgentHarness:
             print(f"[agent] Stream completed in {duration_seconds:.3f}s, {len(content_blocks)} blocks")
 
             return final_message, duration_seconds
+
+        except APIStatusError as e:
+            print(f"[agent] Stream error (status={e.status_code}): {e}")
+            traceback.print_exc()
+
+            error_type = e.body.get("error", {}).get("type") if isinstance(e.body, dict) else None
+
+            if e.status_code == 529:  # Anthropic overloaded
+                user_message = "Claude is currently experiencing high demand. Please wait a moment and try again."
+            else:
+                user_message = "Something went wrong. Please try again."
+
+            await self.send({
+                "type": "agent_stream_complete",
+                "error": user_message,
+                "error_type": error_type,
+            })
+
+            raise
 
         except Exception as e:
             print(f"[agent] Stream error: {e}")
