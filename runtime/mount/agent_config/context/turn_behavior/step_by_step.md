@@ -9,6 +9,7 @@
 - After coming up with an initial plan, review it with the user.
 - Use supplementary tools when needed (e.g., `smart_ui_spotlight` when awaiting widget input) to improve UX.
 - After cells for a current step finish executing, you MUST set `continue: false`, present the results/plots/evidence, and ask for explicit confirmation (e.g., "Does this look correct?", "Should I proceed?"). Only set `continue: true` when the user explicitly confirms.
+- If the user requests multiple changes for the current step, iterate patiently and wait for explicit confirmation after each change. Never jump to the next step without confirming the user is satisfied with the current step.
 
 ## Turn Flow
 
