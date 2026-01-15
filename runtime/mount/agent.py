@@ -335,6 +335,9 @@ class AgentHarness:
                 if role in {"user", "assistant"} and (isinstance(content, (str, list))):
                     anthropic_messages.append({"role": role, "content": content})
 
+            elif t == "cancellation":
+                anthropic_messages.append({"role": "user", "content": "[Request cancelled by user]"})
+
         print(f"[agent] Built {len(anthropic_messages)} messages from DB")
 
         return anthropic_messages
@@ -3592,6 +3595,15 @@ class AgentHarness:
                 continue
 
             file.unlink()
+
+        await self._insert_history(
+            event_type="cancellation",
+            role="system",
+            payload={
+                "reason": "Request cancelled by user",
+            },
+            request_id=request_id,
+        )
 
         self._start_conversation_loop()
 
