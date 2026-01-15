@@ -114,16 +114,38 @@ submit_response(
 **User Request**: "Try 100 genes"
 
 ```python
-# [Agent changes threshold, self-eval criteria passes]
+# [Agent changes threshold and reruns cells]
+# [Cells execute with new threshold]
+```
+
+```python
+# [Agent runs cells with 100 gene threshold, self-eval criteria passes]
 submit_response(
     plan=[
-        {"id": "filter", "description": "Filter cells by gene count", "status": "done"},
+        {"id": "filter", "description": "Filter cells by gene count", "status": "in_progress"},
         {"id": "qc", "description": "Quality control", "status": "todo"},
         # ...
     ],
-    summary="Reran with a 100 gene threshold. Retention is now acceptable, so the filter step is complete.",
-    questions="Would you like to proceed to the QC step?",
+    summary="Reran with a 100 gene threshold. Results: 3,873 / 4,992 spots retained (77.6%)",
     continue=False,
     next_status="done"
+)
+```
+
+**Turn 4: Agent Asks for Confirmation After Cell Execution**
+
+```python
+# [Cells for the filtering step have finished executing]
+
+submit_response(
+    plan=[
+        {"id": "filter", "description": "Filter cells by gene count", "status": "in_progress"},
+        {"id": "qc", "description": "Quality control", "status": "todo"},
+        # ...
+    ],
+    summary="Filtering step complete. Results: 3,873 / 4,992 spots retained (77.6%). Retention is now acceptable.",
+    questions="Are you satisfied with these results? Should I proceed to the normalization step?",
+    continue=False,
+    next_status="awaiting_user_response"
 )
 ```
