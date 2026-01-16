@@ -15,6 +15,7 @@ from enum import Enum
 from pathlib import Path
 
 from agent_utils.auto_install import anthropic
+from anthropic import APIStatusError
 from anthropic.types import MessageParam, ToolParam
 from anthropic.types.beta.beta_message import BetaMessage
 from anthropic.types.message import Message
@@ -2999,13 +3000,52 @@ class AgentHarness:
 
             return final_message, duration_seconds
 
+        except APIStatusError as e:
+            print(f"[agent] Stream error (status={e.status_code}): {e}")
+
+            should_contact_support = 400 <= e.status_code < 500 and e.status_code != 429
+
+            if should_contact_support:
+                user_message = "An unexpected error occurred. Please try again."
+            else:
+                user_message = "Our model provider is experiencing a temporary issue. Please try again in a few minutes."
+
+            error_payload = {
+                "message": user_message,
+                "should_contact_support": should_contact_support,
+            }
+
+            await self._insert_history(
+                event_type="error",
+                role="system",
+                payload=error_payload,
+            )
+
+            await self.send({
+                "type": "agent_stream_complete",
+                "error": error_payload,
+            })
+
+            raise
+
         except Exception as e:
             print(f"[agent] Stream error: {e}")
             traceback.print_exc()
 
+            error_payload = {
+                "message": "An unexpected error occurred. Please try again.",
+                "should_contact_support": True,
+            }
+
+            await self._insert_history(
+                event_type="error",
+                role="system",
+                payload=error_payload,
+            )
+
             await self.send({
                 "type": "agent_stream_complete",
-                "error": str(e),
+                "error": error_payload,
             })
 
             raise
