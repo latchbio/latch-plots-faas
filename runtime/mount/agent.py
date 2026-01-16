@@ -3003,17 +3003,19 @@ class AgentHarness:
         except APIStatusError as e:
             print(f"[agent] Stream error (status={e.status_code}): {e}")
 
-            contact_support = 400 <= e.status_code < 500 and e.status_code != 429
+            should_contact_support = 400 <= e.status_code < 500 and e.status_code != 429
 
-            if contact_support:
+            if should_contact_support:
                 user_message = "An unexpected error occurred."
             else:
                 user_message = "Our model provider is experiencing a temporary issue. Please try again in a few minutes."
 
             await self.send({
                 "type": "agent_stream_complete",
-                "error": user_message,
-                "contact_support": contact_support,
+                "error": {
+                    "message": user_message,
+                    "should_contact_support": should_contact_support,
+                },
             })
 
             raise
