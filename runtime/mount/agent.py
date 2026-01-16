@@ -2884,7 +2884,7 @@ class AgentHarness:
             if "__test_api_error__" in last_message_content:
                 from unittest.mock import Mock
                 mock_response = Mock()
-                mock_response.status_code = 500
+                mock_response.status_code = 400
                 raise APIStatusError("Internal server error", response=mock_response, body={"error": {"type": "api_error"}})
 
 
