@@ -3033,7 +3033,7 @@ class AgentHarness:
             traceback.print_exc()
 
             error_payload = {
-                "message": "Something went wrong. Please try again.",
+                "message": "An unexpected error occurred. Please try again.",
                 "should_contact_support": True,
             }
 
