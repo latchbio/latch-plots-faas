@@ -2874,6 +2874,21 @@ class AgentHarness:
         usage_data = None
 
         try:
+            messages = kwargs.get("messages", [])
+            last_message_content = str(messages[-1].get("content", "")) if messages else ""
+            if "__test_overload__" in last_message_content:
+                from unittest.mock import Mock
+                mock_response = Mock()
+                mock_response.status_code = 529
+                raise APIStatusError("Overloaded", response=mock_response, body={"error": {"type": "overloaded_error"}})
+            if "__test_api_error__" in last_message_content:
+                from unittest.mock import Mock
+                mock_response = Mock()
+                mock_response.status_code = 400
+                raise APIStatusError("Bad request", response=mock_response, body={"error": {"type": "invalid_request_error"}})
+            if "__test_exception__" in last_message_content:
+                raise Exception("Test exception")
+
             stream_ctx = self.client.beta.messages.stream(**kwargs) if use_beta_api else self.client.messages.stream(**kwargs)
 
             def _process_buffer(index: int, text: str) -> None:
@@ -3006,16 +3021,24 @@ class AgentHarness:
             should_contact_support = 400 <= e.status_code < 500 and e.status_code != 429
 
             if should_contact_support:
-                user_message = "An unexpected error occurred."
+                user_message = "An unexpected error occurred. Please try again."
             else:
                 user_message = "Our model provider is experiencing a temporary issue. Please try again in a few minutes."
 
+            error_payload = {
+                "message": user_message,
+                "should_contact_support": should_contact_support,
+            }
+
+            await self._insert_history(
+                event_type="error",
+                role="system",
+                payload=error_payload,
+            )
+
             await self.send({
                 "type": "agent_stream_complete",
-                "error": {
-                    "message": user_message,
-                    "should_contact_support": should_contact_support,
-                },
+                "error": error_payload,
             })
 
             raise
@@ -3024,9 +3047,20 @@ class AgentHarness:
             print(f"[agent] Stream error: {e}")
             traceback.print_exc()
 
+            error_payload = {
+                "message": "Something went wrong. Please try again.",
+                "should_contact_support": True,
+            }
+
+            await self._insert_history(
+                event_type="error",
+                role="system",
+                payload=error_payload,
+            )
+
             await self.send({
                 "type": "agent_stream_complete",
-                "error": str(e),
+                "error": error_payload,
             })
 
             raise
