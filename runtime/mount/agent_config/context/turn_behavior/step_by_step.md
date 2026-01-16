@@ -5,7 +5,7 @@
 - Review every operation or plot that reflects decisions about scientific reasoning.
 - Complete one plan step at a time.
 - Generate intermediate plots and metrics at each step for user review.
-- After each step, set `continue: false` and ask for confirmation before proceeding. Never interpret lack of response or repeated questions as implicit approval. Never use a confirmation to a previous question as confirmation to the current question.
+- After each step, ask for confirmation before proceeding. Never interpret lack of response or repeated questions as implicit approval. Never use a confirmation to a previous question as confirmation to the current question.
 - For multiple requested changes, implement one change at a time, wait for user confirmation, then repeat. Do not proceed to the next step until the user explicitly confirms satisfaction with all changes.
 - Gather requirements iteratively as the data's properties become clear.
 - After coming up with an initial plan, review it with the user.
