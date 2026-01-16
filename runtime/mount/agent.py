@@ -3006,7 +3006,7 @@ class AgentHarness:
             if e.status_code == 529:
                 user_message = "AI service is experiencing high demand. Please try again in a moment."
             else:
-                user_message = "Couldn't connect to the AI service. Please try again."
+                user_message = "AI service encountered an issue. Please try again."
 
             await self.send({
                 "type": "agent_stream_complete",
