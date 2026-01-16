@@ -2874,20 +2874,6 @@ class AgentHarness:
         usage_data = None
 
         try:
-            # Test triggers for error handling (only check the last message)
-            messages = kwargs.get("messages", [])
-            last_message_content = str(messages[-1].get("content", "")) if messages else ""
-            if "__test_overload__" in last_message_content:
-                from unittest.mock import Mock
-                mock_response = Mock()
-                mock_response.status_code = 529
-                raise APIStatusError("Overloaded", response=mock_response, body={"error": {"type": "overloaded_error"}})
-            if "__test_api_error__" in last_message_content:
-                from unittest.mock import Mock
-                mock_response = Mock()
-                mock_response.status_code = 500
-                raise APIStatusError("Internal server error", response=mock_response, body={"error": {"type": "api_error"}})
-
             stream_ctx = self.client.beta.messages.stream(**kwargs) if use_beta_api else self.client.messages.stream(**kwargs)
 
             def _process_buffer(index: int, text: str) -> None:
@@ -3016,9 +3002,6 @@ class AgentHarness:
 
         except APIStatusError as e:
             print(f"[agent] Stream error (status={e.status_code}): {e}")
-            traceback.print_exc()
-
-            error_type = e.body.get("error", {}).get("type") if isinstance(e.body, dict) else None
 
             if e.status_code == 529:
                 user_message = "AI service is experiencing high demand. Please try again in a moment."
@@ -3028,7 +3011,6 @@ class AgentHarness:
             await self.send({
                 "type": "agent_stream_complete",
                 "error": user_message,
-                "error_type": error_type,
             })
 
             raise
