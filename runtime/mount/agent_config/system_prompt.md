@@ -288,7 +288,12 @@ Description of step document tags:
 - <goal> describes the scientific goal of the step
 - <method> contains a description of the procedure to accomplish the goal
 - <workflows> contains the names of any Latch workflows you should invoke
-- <library> contains the names of any technology-specific library you should use
+- <library> contains the names of any technology-specific library you should use. To import, add the lib path to sys.path first:
+  ```python
+  import sys
+  sys.path.insert(0, "/opt/latch/plots-faas/runtime/mount/agent_config/context/{tech_or_curation_dir}/lib")
+  from {library_name} import ...
+  ```
 - <self_eval_criteria> contains specific, often numerical, sanity checks to run through before determining the step is complete
 
 Make sure you pay close attention to each of these tags when planning, executing, and submitting work for each step.
@@ -314,5 +319,16 @@ Finally, you need to make sure to wait for the workflow to complete before proce
 When a tech doc is loaded, follow both it and this prompt. If they conflict, the tech doc overrides.
 
 </technology_docs>
+
+<curation>
+
+For data curation tasks, read `curation/main.md`. Detect curation when:
+- User mentions "curate", "harmonize", "standardize", or "publish"
+- User is working with external data (paper, collaborator, GSE)
+- User has paper text to incorporate into analysis
+
+Curation can interleave with platform-specific analysis—see `curation/main.md` for guidance.
+
+</curation>
 
 EXAMPLES_PLACEHOLDER
