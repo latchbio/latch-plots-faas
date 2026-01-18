@@ -16,6 +16,11 @@ _srp_cache: dict[str, pd.DataFrame] = {}
 
 
 def gsm_to_gse(gsm_id: str) -> str | None:
+    """GSM sample ID → parent GSE series ID. Returns None if not found.
+
+    Call this first if user provides a GSM. All other functions expect GSE.
+    Example: gsm_to_gse("GSM2177186") → "GSE81903"
+    """
     try:
         df = _sradb.gsm_to_gse([gsm_id])
         if df.shape[0] >= 1 and "study_alias" in df.columns:
@@ -111,6 +116,11 @@ def construct_study_metadata(gse_id: str) -> str:
 
 
 def list_gse_supplementary_files(gse_id: str) -> list[str]:
+    """Preview available supplementary files for a GSE without downloading.
+
+    Requires GSE ID. For GSM, convert first: gse_id = gsm_to_gse(gsm_id)
+    Returns filenames like ["GSE12345_counts.csv.gz", "GSE12345_metadata.xlsx"]
+    """
     series_dir = f"{gse_id[:-3]}nnn"
     root = f"https://ftp.ncbi.nlm.nih.gov/geo/series/{series_dir}/{gse_id}/suppl/"
 
@@ -123,6 +133,11 @@ def list_gse_supplementary_files(gse_id: str) -> list[str]:
 
 
 def download_gse_supplementary_files(gse_id: str, target_dir: Path) -> list[Path]:
+    """Download all supplementary files from NCBI FTP to target_dir.
+
+    Requires GSE ID. For GSM, convert first: gse_id = gsm_to_gse(gsm_id)
+    Returns list of local Path objects for downloaded files.
+    """
     series_dir = f"{gse_id[:-3]}nnn"
     root = f"https://ftp.ncbi.nlm.nih.gov/geo/series/{series_dir}/{gse_id}/suppl/"
 

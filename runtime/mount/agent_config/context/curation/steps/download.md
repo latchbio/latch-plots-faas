@@ -19,8 +19,19 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, "/opt/latch/plots-faas/runtime/mount/agent_config/context/curation/lib")
+from curate.geo import gsm_to_gse
 
 accession = "GSE12345"  # from user
+
+# Convert GSM to GSE if needed (all functions expect GSE)
+if accession.upper().startswith("GSM"):
+    gse_id = gsm_to_gse(accession)
+    if gse_id:
+        print(f"Converted {accession} → {gse_id}")
+        accession = gse_id
+    else:
+        print(f"Could not find parent GSE for {accession}")
+
 CONTEXT_DIR = Path(f"/opt/latch/plots-faas/runtime/mount/agent_config/context/curation/tmp/{accession}")
 CONTEXT_DIR.mkdir(parents=True, exist_ok=True)
 ```
