@@ -80,6 +80,7 @@ class AgentHarness:
     agent_session_id: int | None = None
     latest_notebook_context: dict = field(default_factory=dict)
     current_status: str | None = None
+    received_prompt: bool = False
     expected_widgets: dict[str, object | None] = field(default_factory=dict)
     behavior: Behavior = Behavior.step_by_step
     latest_notebook_state: str | None = None
@@ -641,6 +642,7 @@ class AgentHarness:
 
         if msg_type == "user_query":
             self.current_request_id = msg.get("request_id")
+            self.received_prompt = True
 
             payload = {
                 "content": msg["content"],
@@ -1202,6 +1204,7 @@ class AgentHarness:
                     self.pending_auto_continue = False
 
                 self.current_status = next_status
+                self.received_prompt = False
                 if next_status == "awaiting_user_widget_input":
                     self.expected_widgets = {str(k): None for k in expected_widgets}
 
@@ -3617,6 +3620,7 @@ class AgentHarness:
         print(f"[agent] Cancelling request {request_id}")
 
         self.current_request_id = None
+        self.received_prompt = False
         self.should_auto_continue = False
         self.pending_auto_continue = False
         self.manually_cancelled = True
@@ -3652,6 +3656,7 @@ class AgentHarness:
         await self._mark_all_history_removed()
 
         self.current_plan = None
+        self.received_prompt = False
 
         self._start_conversation_loop()
 
@@ -3752,8 +3757,13 @@ class AgentHarness:
 
                 if cell_id is not None:
                     self.executing_cells.discard(str(cell_id))
-                if self.current_status in {"awaiting_user_response", "awaiting_user_widget_input", "done"}:
-                    print(f"[agent] Not adding cell {cell_id} result because {self.current_status}")
+                if self.current_status in {"awaiting_user_response", "done"} and not self.received_prompt:
+                    print(f"[agent] Not adding cell {cell_id} result because {self.current_status} and no prompt received")
+                    return
+
+                has_all_widgets_values = all(v is not None for v in self.expected_widgets.values())
+                if self.current_status == "awaiting_user_widget_input" and not has_all_widgets_values:
+                    print(f"[agent] Not adding cell {cell_id} result because awaiting_user_widget_input and all widgets have values")
                     return
 
                 if self.current_request_id is not None:
