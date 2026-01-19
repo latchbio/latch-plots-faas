@@ -3753,8 +3753,8 @@ class AgentHarness:
 
                 if cell_id is not None:
                     self.executing_cells.discard(str(cell_id))
-                if self.current_status in {"awaiting_user_response", "done", "awaiting_user_widget_input"}:
-                    print(f"[agent] Not adding cell {cell_id} result because status is {self.current_status}")
+                if self.current_status in {"awaiting_user_response", "awaiting_user_widget_input", "done"}:
+                    print(f"[agent] Not adding cell {cell_id} result because {self.current_status}")
                     return
 
                 if self.current_request_id is not None:
