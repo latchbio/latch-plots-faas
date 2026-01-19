@@ -3786,7 +3786,6 @@ class AgentHarness:
                             "type": "set_widget_value",
                             "data": self.expected_widgets
                         })
-
         elif msg_type == "get_full_prompt":
             tx_id = msg.get("tx_id")
             print(f"[agent] Get full prompt request (tx_id={tx_id})")
