@@ -488,7 +488,7 @@ class AgentHarness:
         tx_id: str | None = None,
         template_version_id: str | None = None,
     ) -> None:
-        full_payload = {
+        payload = {
             "type": event_type,
             "role": role,
             "timestamp": int(time.time() * 1000),
@@ -497,7 +497,7 @@ class AgentHarness:
 
         if skip_db_history:
             self.in_memory_history.append({
-                "payload": full_payload,
+                "payload": payload,
                 "request_id": request_id,
                 "template_version_id": template_version_id,
             })
@@ -508,7 +508,7 @@ class AgentHarness:
         variables = {
             "sessionId": str(self.agent_session_id),
             "eventType": event_type,
-            "payload": full_payload,
+            "payload": payload,
             "requestId": request_id,
             "txId": tx_id,
             "templateVersionId": str(template_version_id) if template_version_id is not None else None,
