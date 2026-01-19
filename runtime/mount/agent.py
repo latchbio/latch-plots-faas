@@ -25,6 +25,8 @@ from utils import auth_token_sdk, gql_query, nucleus_url, pod_id
 
 sys.stdout.reconfigure(line_buffering=True)
 
+skip_db_history = os.environ.get("AGENT_SKIP_DB_HISTORY") == "1"
+
 cache_chunk_size = 20
 
 reactivity_ready_statuses = {"ran", "ok", "success", "error"}
@@ -86,6 +88,7 @@ class AgentHarness:
     current_plan: dict | None = None
     buffer: list[str] = field(default_factory=list)
     summarize_tasks: set[asyncio.Task] = field(default_factory=set)
+    in_memory_history: list[dict] = field(default_factory=list)
 
     mode_config: dict[Mode, tuple[str, int | None]] = field(default_factory=lambda: {
         Mode.planning: ("claude-opus-4-5-20251101", 4096),
@@ -108,6 +111,8 @@ class AgentHarness:
         })
 
     async def _fetch_history_from_db(self) -> list[dict]:
+        if skip_db_history:
+            return self.in_memory_history
         assert self.agent_session_id is not None
         resp = await gql_query(
             auth=auth_token_sdk,
@@ -483,19 +488,27 @@ class AgentHarness:
         tx_id: str | None = None,
         template_version_id: str | None = None,
     ) -> None:
-        assert self.agent_session_id is not None
-
-        payload = {
+        full_payload = {
             "type": event_type,
             "role": role,
             "timestamp": int(time.time() * 1000),
             **payload,
         }
 
+        if skip_db_history:
+            self.in_memory_history.append({
+                "payload": full_payload,
+                "request_id": request_id,
+                "template_version_id": template_version_id,
+            })
+            return
+
+        assert self.agent_session_id is not None
+
         variables = {
             "sessionId": str(self.agent_session_id),
             "eventType": event_type,
-            "payload": payload,
+            "payload": full_payload,
             "requestId": request_id,
             "txId": tx_id,
             "templateVersionId": str(template_version_id) if template_version_id is not None else None,
@@ -516,6 +529,9 @@ class AgentHarness:
         await self._notify_history_updated(request_id=request_id)
 
     async def _mark_all_history_removed(self) -> None:
+        if skip_db_history:
+            self.in_memory_history.clear()
+            return
         assert self.agent_session_id is not None
 
         await gql_query(
