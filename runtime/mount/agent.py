@@ -657,6 +657,7 @@ class AgentHarness:
 
         if msg_type == "user_query":
             self.current_request_id = msg.get("request_id")
+            self.current_status = "thinking"
 
             payload = {
                 "content": msg["content"],
@@ -3796,6 +3797,7 @@ class AgentHarness:
                             self.expected_widgets[key] = value
 
                     if all(v is not None for v in self.expected_widgets.values()):
+                        self.current_status = "thinking"
                         await self.pending_messages.put({
                             "type": "set_widget_value",
                             "data": self.expected_widgets
