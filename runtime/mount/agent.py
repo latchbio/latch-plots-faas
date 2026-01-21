@@ -3018,11 +3018,10 @@ class AgentHarness:
             return final_message, duration_seconds
 
         except APIStatusError as e:
-            status_code = e.body.get("error", {}).get("status_code", e.status_code)
-            print(f"[agent] Stream error (status={status_code}): {e}")
-
-            should_contact_support = 400 <= status_code < 500 and status_code != 429
-
+            print(f"[agent] Stream error (status={e.status_code}): {e}")
+            
+            should_contact_support = 400 <= e.status_code < 500 and e.status_code != 429
+            
             if should_contact_support:
                 user_message = "An unexpected error occurred. Please try again."
             else:
