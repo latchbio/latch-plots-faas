@@ -7,6 +7,7 @@
         "notes": "Cell types and several markers are from the paper main text; marker sets are merged with canonical ovary markers for improved panel coverage."
       },
       "match": {
+        "kit": "seeker",
         "organism": ["Mus musculus", "mouse"],
         "tissue": ["ovary"],
         "context": ["cycling", "folliculogenesis", "ovulation", "hCG timecourse"]
@@ -203,6 +204,197 @@
             ],
             "notes": "Timecourse shifts are soft expectations; stage-dependent remodeling."
           }
+        ]
+      }
+    },
+    {
+      "id": "mouse_lung_inflammaging_balt_xenium_scrna_priors_merged_v1",
+      "source": {
+        "paper": "bioRxiv doi:10.1101/2025.10.01.679697v1",
+        "notes": "Major cell types are from the paper's Xenium/scRNA-seq UMAP labels; marker sets are merged (paper custom Xenium genes + canonical lung markers) to support panel-aware self-eval."
+      },
+      "match": {
+        "kit": "xenium",
+        "organism": ["Mus musculus", "mouse"],
+        "tissue": ["lung"],
+        "context": [
+          "aged",
+          "inflammaging",
+          "BALT",
+          "fibroblast_NFkB_activation",
+          "Tnfaip3_CKO"
+        ]
+      },
+      "priors": {
+        "expected_major_types": [
+          { "cell_type": "Epithelial", "expectation": "common", "notes": "Airway + alveolar epithelial populations." },
+          { "cell_type": "Immune", "expectation": "common", "notes": "T/B lymphocytes and other leukocytes in BALT context." },
+          { "cell_type": "Myeloid", "expectation": "common", "notes": "Alveolar and interstitial macrophages; DCs; neutrophils." },
+          { "cell_type": "Stromal / Fibroblast", "expectation": "common", "notes": "Fibroblasts; fibrosis-associated programs." },
+          { "cell_type": "Endothelial", "expectation": "common", "notes": "Vascular compartment." },
+          { "cell_type": "Smooth muscle", "expectation": "optional", "notes": "May be present depending on region and section." },
+          { "cell_type": "Adipose", "expectation": "optional", "notes": "May appear depending on dissection/section." },
+          { "cell_type": "Proliferating", "expectation": "optional", "notes": "Cell-cycle state cluster." }
+        ],
+        "expected_subtypes": {
+          "Epithelial": [
+            { "cell_type": "AT1", "expectation": "common" },
+            { "cell_type": "AT2", "expectation": "common" },
+            { "cell_type": "Club", "expectation": "optional" },
+            { "cell_type": "Ciliated", "expectation": "optional" },
+            { "cell_type": "Neuroendocrine", "expectation": "rare" }
+          ],
+          "Immune": [
+            {
+              "cell_type": "T cell",
+              "expectation": "common",
+              "children": [
+                { "cell_type": "CD4+ T", "expectation": "common" },
+                {
+                  "cell_type": "CD8+ T",
+                  "expectation": "common",
+                  "children": [
+                    { "cell_type": "CD8+ T (GZMK+ exhausted)", "expectation": "optional", "notes": "Paper emphasizes GZMK+ exhaustion program in BALT context." }
+                  ]
+                }
+              ]
+            },
+            { "cell_type": "B cell", "expectation": "common" }
+          ],
+          "Myeloid": [
+            { "cell_type": "Alveolar MP", "expectation": "common" },
+            { "cell_type": "Interstitial MP", "expectation": "common" },
+            { "cell_type": "Dendritic cell", "expectation": "optional" },
+            { "cell_type": "Neutrophil", "expectation": "optional" }
+          ],
+          "Stromal / Fibroblast": [
+            { "cell_type": "Fibroblast", "expectation": "common" },
+            { "cell_type": "Adventitial fibroblast", "expectation": "optional" },
+            { "cell_type": "Alveolar fibroblast", "expectation": "optional" },
+            { "cell_type": "Peribronchial fibroblast", "expectation": "optional" }
+          ]
+        },
+        "marker_priors": [
+          {
+            "cell_type": "T cell",
+            "primary": ["Cd4", "Tcf7", "Il7"],
+            "alternates": ["Ifng", "Ccl5"],
+            "anti_markers": ["Cd19", "Itgam", "Pdgfra"],
+            "notes": "Paper custom panel includes Cd4, Tcf7, Il7, Ifng, Ccl5."
+          },
+          {
+            "cell_type": "CD8+ T",
+            "primary": ["Ccl5", "Ifng", "Eomes", "Gzmb"],
+            "alternates": ["Tcf7", "Il7", "Tigit"],
+            "anti_markers": ["Cd19", "Siglecf", "Pdgfra"],
+            "notes": "Paper custom panel includes Eomes, Gzmb, Ifng, Ccl5, Tigit."
+          },
+          {
+            "cell_type": "CD8+ T (GZMK+ exhausted)",
+            "primary": ["Gzmk", "Tox", "Pdcd1"],
+            "alternates": ["Tigit", "Ifng", "Eomes"],
+            "anti_markers": ["Tcf7", "Il7"],
+            "notes": "Paper custom panel includes Gzmk, Tox, Pdcd1; treat as optional state-level call."
+          },
+          {
+            "cell_type": "B cell",
+            "primary": ["Cd19"],
+            "alternates": ["Cd74", "Ms4a1"],
+            "anti_markers": ["Cd4", "Gzmk"],
+            "notes": "Paper custom panel includes Cd19; canonical additions are panel-dependent."
+          },
+          {
+            "cell_type": "Neutrophil",
+            "primary": ["Ly6c1"],
+            "alternates": ["Cxcl1", "Cxcl2"],
+            "anti_markers": ["Cd19", "Pdgfra"],
+            "notes": "Paper custom panel includes Ly6c1; cytokine/chemokine genes included."
+          },
+          {
+            "cell_type": "Dendritic cell",
+            "primary": ["Itgax", "Itgax"],
+            "alternates": ["Itgax", "Itgam"],
+            "anti_markers": ["Cd19"],
+            "notes": "Paper custom panel includes Itgax (CD11c) and Itgam (CD11b)."
+          },
+          {
+            "cell_type": "Alveolar MP",
+            "primary": ["Siglecf", "Apoe"],
+            "alternates": ["C1qa"],
+            "anti_markers": ["Cd4", "Cd19"],
+            "notes": "Paper custom panel includes Siglecf and Apoe and C1qa."
+          },
+          {
+            "cell_type": "Interstitial MP",
+            "primary": ["C1qa", "Cx3cr1", "Ccr2", "Ly6c1"],
+            "alternates": ["Apoe", "Ccl2"],
+            "anti_markers": ["Siglecf"],
+            "notes": "Paper custom panel includes C1qa, Cx3cr1, Ccr2, Ly6c1, Ccl2."
+          },
+          {
+            "cell_type": "Fibroblast",
+            "primary": ["Pdgfra", "Cxcl12", "Hhip", "Gli1"],
+            "alternates": ["Il6", "Postn", "Cthrc1", "Tnf"],
+            "anti_markers": ["Cd4", "Cd19", "Itgam"],
+            "notes": "Paper custom panel includes Pdgfra, Cxcl12, Hhip, Gli1, Il6, Postn, Cthrc1."
+          },
+          {
+            "cell_type": "Smooth muscle",
+            "primary": ["Acta2"],
+            "alternates": ["Tagln", "Myh11"],
+            "anti_markers": ["Pdgfra", "Cd4"],
+            "notes": "Paper custom panel includes Acta2; canonical additions are panel-dependent."
+          },
+          {
+            "cell_type": "AT1",
+            "primary": ["Ager", "Pdpn"],
+            "alternates": ["Cav1"],
+            "anti_markers": ["Sftpc"],
+            "notes": "Canonical AT1 markers (panel coverage varies)."
+          },
+          {
+            "cell_type": "AT2",
+            "primary": ["Sftpc", "Sftpb"],
+            "alternates": ["Slc34a2"],
+            "anti_markers": ["Ager"],
+            "notes": "Canonical AT2 markers (panel coverage varies)."
+          },
+          {
+            "cell_type": "Club",
+            "primary": ["Scgb1a1"],
+            "alternates": ["Muc5ac"],
+            "anti_markers": ["Sftpc"],
+            "notes": "Paper custom panel includes Muc5ac (goblet-like); canonical Club marker Scgb1a1 depends on panel."
+          },
+          {
+            "cell_type": "Basal-like airway epithelial",
+            "primary": ["Krt5", "Trp63"],
+            "alternates": ["Shh"],
+            "anti_markers": ["Pdgfra"],
+            "notes": "Paper custom panel includes Krt5, Trp63, Shh."
+          },
+          {
+            "cell_type": "Proliferating",
+            "primary": ["Mki67"],
+            "alternates": ["Top2a"],
+            "anti_markers": [],
+            "notes": "Paper custom panel includes Mki67."
+          },
+          {
+            "cell_type": "Senescent / stressed state",
+            "primary": ["Cdkn2a"],
+            "alternates": ["Tnf", "Il6"],
+            "anti_markers": [],
+            "notes": "Paper custom panel includes Cdkn2a, Il6, Tnf."
+          }
+        ],
+        "spatial_morphology_priors": [
+          { "cell_type": "T cell", "patterns": ["BALT_dense_aggregates", "peribronchovascular_clusters"] },
+          { "cell_type": "B cell", "patterns": ["BALT_dense_aggregates"] },
+          { "cell_type": "CD4+ T", "patterns": ["BALT_dense_aggregates", "peribronchovascular_clusters"] },
+          { "cell_type": "CD8+ T (GZMK+ exhausted)", "patterns": ["within_BALT", "co-localized_with_T_cell_regions"] },
+          { "cell_type": "Endothelial", "patterns": ["vascular_tracks"] },
+          { "cell_type": "Fibroblast", "patterns": ["interstitial_mesh", "peribronchovascular_enrichment_possible"] }
         ]
       }
     }

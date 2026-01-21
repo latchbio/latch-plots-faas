@@ -5,10 +5,7 @@ Assign biologically meaningful cell-type labels to clusters using DGE markers an
 </goal>
 
 <self_eval_criteria>
-- A valid clustering column and matching DGE key were found and used.
-- `cluster_summary` contains interpretable `most_common_cell_type` entries and supporting `core_markers`.
-- If a vocab config is available, final labels in `adata.obs["cell_type"]` are restricted to `allowed_vocab`.
-- Spatial and UMAP views of `adata.obs["cell_type"]` show biologically plausible patterns without placeholder categories.
+- Follow `technology_docs/evals/cell_typing.md`
 </self_eval_criteria>
 
 <method>
