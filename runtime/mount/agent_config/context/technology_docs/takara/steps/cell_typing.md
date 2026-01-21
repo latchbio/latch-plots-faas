@@ -27,4 +27,5 @@ Identify cell types in each cluster.
 </library>
 
 <self_eval_criteria>
+- Reference `technology_docs/cell_types.json`.
 </self_eval_criteria>

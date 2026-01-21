@@ -4,6 +4,13 @@
 Assign biologically meaningful cell-type labels to clusters using DGE markers and CellGuide, then (optionally) map them into a controlled vocabulary.
 </goal>
 
+<self_eval_criteria>
+- A valid clustering column and matching DGE key were found and used.
+- `cluster_summary` contains interpretable `most_common_cell_type` entries and supporting `core_markers`.
+- If a vocab config is available, final labels in `adata.obs["cell_type"]` are restricted to `allowed_vocab`.
+- Spatial and UMAP views of `adata.obs["cell_type"]` show biologically plausible patterns without placeholder categories.
+</self_eval_criteria>
+
 <method>
 This step assigns cell types to clusters by:
 1. Using precomputed **cluster-level marker genes** (from DGE).
@@ -199,10 +206,3 @@ These fields are then used **downstream** to convert the raw `most_common_cell_t
 - CellGuide marker databases and vocab JSONs under
   `/opt/latch/plots-faas/runtime/mount/agent_config/context/technology_docs/xenium/steps/cell_type_annotation`
 </library>
-
-<self_eval_criteria>
-- A valid clustering column and matching DGE key were found and used.
-- `cluster_summary` contains interpretable `most_common_cell_type` entries and supporting `core_markers`.
-- If a vocab config is available, final labels in `adata.obs["cell_type"]` are restricted to `allowed_vocab`.
-- Spatial and UMAP views of `adata.obs["cell_type"]` show biologically plausible patterns without placeholder categories.
-</self_eval_criteria>

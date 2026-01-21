@@ -1,0 +1,257 @@
+{
+    "schema_version": "cell_types_priors_v0",
+    "description": "Shared cell-type priors + shared self-eval templates/config for spatial biology agents. Entries are keyed by organism×tissue×context and provide expected cell types, marker priors, and spatial morphology priors.",
+    "eval_templates": {
+      "cell_type_annotation_self_eval_v0": [
+        "Load `technology_docs/cell_types.json` via `execute_code` and select the best-matching priors entry for `(organism, tissue, disease_or_context/context)`.",
+        "Verify that major expected cell types are present in final labels (or explicitly justify missing due to panel coverage / low signal / filtering).",
+        "Verify proportion sanity: rare/unexpected cell types should not be dominant unless explicitly justified by the experimental context.",
+        "Verify marker sanity for each labeled type: >= min_pos_markers positive markers (present in `adata.var_names`) show enrichment; anti-markers are not enriched.",
+        "Apply panel coverage gating: compute overlap between priors markers and `adata.var_names`; if low, downgrade confidence and require additional evidence (spatial morphology + DGE coherence) or label as `Unknown`.",
+        "Verify spatial plausibility: labeled cell types show expected spatial morphology patterns (e.g., follicle layers, vascular tracks, punctate infiltrates) rather than diffuse random noise."
+      ]
+    },
+    "eval_rule_config": {
+      "cell_type_annotation_self_eval_v0": {
+        "min_pos_markers_cell_based": 3,
+        "min_pos_markers_spot_based": 2,
+        "min_pos_markers_low_coverage": 1,
+        "panel_coverage": {
+          "min_overlap_markers_per_type": 2,
+          "low_coverage_threshold_fraction": 0.34,
+          "actions_if_low_coverage": [
+            "downgrade_confidence",
+            "require_spatial_evidence",
+            "allow_unknown_label"
+          ]
+        },
+        "anti_marker_checks": {
+          "enabled": true,
+          "max_anti_marker_hits_per_cluster": 1
+        },
+        "proportion_sanity": {
+          "enabled": true,
+          "unexpected_max_fraction": 0.05,
+          "rare_max_fraction": 0.2
+        },
+        "spatial_morphology": {
+          "enabled": true,
+          "min_anchor_types_to_validate": 2,
+          "anchor_types_priority": ["Endothelial", "Immune", "Epithelial", "Fibroblast"]
+        },
+        "replicate_consistency": {
+          "enabled": false,
+          "notes": "Enable if multiple samples/conditions exist with replicate structure."
+        }
+      }
+    },
+    "entries": [
+      {
+        "id": "mouse_ovary_ovulation_priors_merged_v0",
+        "source": {
+          "paper": "PNAS doi:10.1073/pnas.2317418121",
+          "notes": "Marker sets are merged (paper-mentioned + common ovary markers). Paper-derived markers are primarily from main text; general markers fill coverage gaps for targeted panels."
+        },
+        "match": {
+          "organism": ["Mus musculus", "mouse"],
+          "tissue": ["ovary"],
+          "context": ["cycling", "folliculogenesis", "ovulation", "hCG timecourse"]
+        },
+        "priors": {
+          "expected_cell_types": [
+            { "cell_type": "Granulosa", "expectation": "common" },
+            { "cell_type": "Cumulus", "expectation": "common" },
+            { "cell_type": "Oocyte", "expectation": "rare" },
+            { "cell_type": "Theca (steroidogenic)", "expectation": "common" },
+            { "cell_type": "Stromal / Fibroblast-like", "expectation": "common" },
+            { "cell_type": "Smooth muscle", "expectation": "optional" },
+            { "cell_type": "Pericyte", "expectation": "optional" },
+            { "cell_type": "Endothelial", "expectation": "common" },
+            { "cell_type": "Immune", "expectation": "optional" },
+            { "cell_type": "Epithelial (OSE)", "expectation": "optional" },
+            { "cell_type": "Erythrocyte", "expectation": "rare" }
+          ],
+          "marker_priors": [
+            {
+              "cell_type": "Granulosa (pan)",
+              "primary": [
+                "Foxl2",
+                "Fshr",
+                "Amh",
+                "Inha",
+                "Cyp19a1",
+                "Inhba",
+                "Inhbb",
+                "Gja1",
+                "Fst",
+                "Nr5a2",
+                "Esr2"
+              ],
+              "alternates": ["Kitl", "Lhcgr", "Hsd3b1", "Serpine2", "Nap1l5"],
+              "anti_markers": ["Zp3", "Ptprc", "Pecam1", "Col1a1", "Krt8", "Krt18"],
+              "notes": "Includes paper antral markers (Inhba/Inhbb etc.) + common granulosa markers."
+            },
+            {
+              "cell_type": "Granulosa (preantral program)",
+              "primary": ["Kctd14", "Gas6", "Igfbp7", "Amh", "Fshr"],
+              "alternates": ["Foxl2", "Kitl", "Gja1", "Malat1"],
+              "anti_markers": ["Zp3", "Ptprc", "Pecam1"],
+              "notes": "Paper highlights Kctd14, Gas6, Igfbp7, Malat1."
+            },
+            {
+              "cell_type": "Granulosa (early antral program)",
+              "primary": ["Inhba", "Inhbb", "Cyp19a1", "Fshr", "Inha"],
+              "alternates": ["Hsd3b1", "Serpine2", "Gja1", "Fst", "Nap1l5", "Nr5a2", "Esr2", "Lhcgr"],
+              "anti_markers": ["Zp3", "Ptprc"],
+              "notes": "Paper highlights Inhba/Inhbb and several antral markers."
+            },
+            {
+              "cell_type": "Granulosa (atretic program)",
+              "primary": ["Cfh", "Ctgf", "Nupr1", "Gpx3"],
+              "alternates": ["Pik3ip1", "Itih2", "Tex14", "Fos", "Jun"],
+              "anti_markers": ["Zp3"],
+              "notes": "Paper highlights Cfh/Ctgf and newly identified Gpx3/Itih2/Tex14."
+            },
+            {
+              "cell_type": "Granulosa (mitotic program)",
+              "primary": ["Top2a", "Cdk1", "Mki67"],
+              "alternates": ["Ube2c", "Tpx2", "Hmgb2"],
+              "anti_markers": [],
+              "notes": "Paper highlights Top2a/Cdk1."
+            },
+            {
+              "cell_type": "Granulosa (cumulus-like signature in preovulatory follicles)",
+              "primary": ["Inhbb", "Kctd14", "Ank1", "Aldh3b1", "Irx3", "Cacna1a"],
+              "alternates": [],
+              "anti_markers": [],
+              "notes": "Paper: cumulus-like granulosa expresses Inhbb+Kctd14 and upregulates Ank1/Aldh3b1/Irx3/Cacna1a."
+            },
+            {
+              "cell_type": "Granulosa (ovulation-poised / rupture-associated)",
+              "primary": ["Edn2", "Junb", "Adamts1", "Ptgs1"],
+              "alternates": ["Apln", "Cyr61", "Gpx3", "Akr1c18", "Rora", "Ldhd", "Fabp4"],
+              "anti_markers": [],
+              "notes": "Paper: Edn2+ rupture-associated granulosa with listed co-varying genes."
+            },
+            {
+              "cell_type": "Granulosa (lytic-like / prematurely luteinized)",
+              "primary": ["Ltbp1", "Lhcgr"],
+              "alternates": ["Star", "Cyp11a1"],
+              "anti_markers": [],
+              "notes": "Paper highlights Ltbp1; Lhcgr increases at 12h."
+            },
+            {
+              "cell_type": "Cumulus (expansion / peri-ovulatory)",
+              "primary": ["Has2", "Ptgs2", "Tnfaip6", "Ptx3", "Areg", "Ereg", "Star", "Cyp11a1"],
+              "alternates": ["Nupr1", "Spp1", "Btc"],
+              "anti_markers": ["Pecam1", "Ptprc", "Col1a1"],
+              "notes": "Paper mentions Ptx3, Star, Cyp11a1, Nupr1, Spp1; general adds Has2/Ptgs2/Tnfaip6/Areg/Ereg."
+            },
+            {
+              "cell_type": "Oocyte (pan / mature program)",
+              "primary": ["H1foo", "Zp3", "Zp2", "Gdf9", "Bmp15", "Btg4", "Tet3"],
+              "alternates": [
+                "Zp1",
+                "Nobox",
+                "Figla",
+                "Ooep",
+                "Dazl",
+                "Pou5f1",
+                "Riok1",
+                "Ccdc186",
+                "Ppig",
+                "Dnajc21",
+                "Zcchc8",
+                "Unc50",
+                "Rbm36"
+              ],
+              "anti_markers": ["Ptprc", "Pecam1", "Col1a1"],
+              "notes": "Paper uses H1foo and highlights mature-program genes; merged with canonical oocyte markers."
+            },
+            {
+              "cell_type": "Theca (steroidogenic)",
+              "primary": ["Cyp17a1", "Star", "Cyp11a1", "Hsd3b1", "Nr5a1"],
+              "alternates": ["Lhcgr", "Insl3", "Akr1c18"],
+              "anti_markers": ["Zp3", "Pecam1", "Ptprc"],
+              "notes": "Paper mentions Cyp17a1 (theca) and Hsd3b1 in antral marker list."
+            },
+            {
+              "cell_type": "Stromal / Fibroblast-like",
+              "primary": ["Col1a1", "Col1a2", "Dcn", "Lum", "Postn", "Mmp2", "Col5a2", "Tgfbi", "Eln"],
+              "alternates": ["Col3a1", "Fn1", "C7", "Ctgf", "Pdgfra", "Ntrk2", "Bdnf"],
+              "anti_markers": ["Ptprc", "Pecam1", "Zp3"],
+              "notes": "Paper lists ECM remodeling program genes; merged with canonical fibroblast markers."
+            },
+            {
+              "cell_type": "Smooth muscle",
+              "primary": ["Acta2", "Tagln", "Myh11", "Lmod1", "Myom1"],
+              "alternates": ["Cnn1", "Des", "Rgs5"],
+              "anti_markers": ["Ptprc", "Pecam1"],
+              "notes": "Paper lists Myom1/Lmod1 in late contraction program."
+            },
+            {
+              "cell_type": "Pericyte",
+              "primary": ["Rgs5", "Cspg4", "Pdgfrb"],
+              "alternates": ["Des", "Notch3", "Mcame"],
+              "anti_markers": ["Ptprc", "Epcam"],
+              "notes": "Paper includes Pdgfrb in late mesenchyme program; paper reports pericyte proportion increase."
+            },
+            {
+              "cell_type": "Endothelial",
+              "primary": ["Pecam1", "Vwf", "Kdr", "Robo4", "Esam"],
+              "alternates": ["Klf2", "Eng"],
+              "anti_markers": ["Ptprc", "Zp3", "Col1a1"],
+              "notes": "Paper reports endothelial proportion increase; canonical vascular markers."
+            },
+            {
+              "cell_type": "Immune (broad)",
+              "primary": ["Ptprc", "Lyz2", "Csf1r", "C1qa"],
+              "alternates": ["Nkg7", "Cd3d", "Trac", "Ms4a1"],
+              "anti_markers": ["Zp3", "Fshr", "Pecam1"],
+              "notes": "Paper mentions immune as a broad compartment; markers are canonical."
+            },
+            {
+              "cell_type": "Epithelial (OSE)",
+              "primary": ["Krt8", "Krt18", "Epcam", "Krt19"],
+              "alternates": ["Krt7", "Tacstd2"],
+              "anti_markers": ["Ptprc", "Pecam1"],
+              "notes": "Paper mentions epithelial as a broad compartment; markers are canonical."
+            },
+            {
+              "cell_type": "Erythrocyte",
+              "primary": ["Hbb-bs", "Hba-a1", "Hbb-bt"],
+              "alternates": ["Alas2"],
+              "anti_markers": [],
+              "notes": "Paper mentions erythrocytes as a broad compartment; markers are canonical."
+            }
+          ],
+          "spatial_morphology_priors": [
+            { "cell_type": "Granulosa", "patterns": ["follicle_layer", "ring_like_possible"] },
+            { "cell_type": "Cumulus", "patterns": ["inner_follicle", "near_oocyte"] },
+            { "cell_type": "Oocyte", "patterns": ["single_focus", "central_in_follicle"] },
+            { "cell_type": "Endothelial", "patterns": ["vascular_tracks"] },
+            { "cell_type": "Immune", "patterns": ["punctate_infiltrates"] }
+          ],
+          "condition_shift_priors": [
+            {
+              "axes": ["timepoint_post_hcg"],
+              "shifts": [
+                {
+                  "cell_type": "Endothelial",
+                  "direction": "increase",
+                  "notes": "Paper reports increase ~4–6h post-hCG."
+                },
+                {
+                  "cell_type": "Pericyte",
+                  "direction": "increase",
+                  "notes": "Paper reports increase ~4–6h post-hCG."
+                }
+              ],
+              "notes": "Timecourse shifts are soft expectations; stage-dependent remodeling."
+            }
+          ]
+        }
+      }
+    ]
+  }
+  

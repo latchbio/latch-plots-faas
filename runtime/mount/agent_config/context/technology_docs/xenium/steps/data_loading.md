@@ -4,6 +4,10 @@
 Load `.h5ad` Xenium data, attach spatial imagery, and expose basic structure (cells, genes, embeddings, clusters) to the user.
 </goal>
 
+<self_eval_criteria>
+- Use `capture_widget_image` to verify spatial embedding is displayed in `w_h5`. 
+</self_eval_criteria>
+
 <method>
 - Use Scanpy to read `.h5ad`, infer spatial coordinates in `adata.obsm`, and render with `w_h5(adata, spatial_dir)`.
 
@@ -32,9 +36,3 @@ Load `.h5ad` Xenium data, attach spatial imagery, and expose basic structure (ce
 - `scanpy`
 - `lplots.widgets.h5` (or equivalent `w_h5`)
 </library>
-
-<self_eval_criteria>
-- Spatial coordinates are detected and displayed correctly in the viewer.
-- For multi-sample inputs, `adata.obs["batch_key"]` is present and valid.
-- Pre-existing embeddings and cluster labels, if present, are preserved and not overwritten without confirmation.
-</self_eval_criteria>
