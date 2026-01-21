@@ -73,6 +73,7 @@ class AgentHarness:
     current_request_id: str | None = None
     should_auto_continue: bool = False
     pending_auto_continue: bool = False
+    suppress_followup: bool = False
     manually_cancelled: bool = False
     pending_tool_calls: set[str] = field(default_factory=set)
 
@@ -651,6 +652,10 @@ class AgentHarness:
 
         msg_type = msg.get("type")
 
+        if self.suppress_followup and msg_type in {"resume", "cell_result", "set_widget_value"}:
+            print(f"[agent] Suppressing follow-up message type={msg_type}")
+            return
+
         if msg_type == "resume":
             print("[agent] Resuming turn after tool results")
             return
@@ -658,6 +663,7 @@ class AgentHarness:
         if msg_type == "user_query":
             self.current_request_id = msg.get("request_id")
             self.current_status = "thinking"
+            self.suppress_followup = False
 
             payload = {
                 "content": msg["content"],
@@ -1217,6 +1223,12 @@ class AgentHarness:
                 else:
                     self.should_auto_continue = should_continue
                     self.pending_auto_continue = False
+
+                terminal_statuses = {"done", "awaiting_user_response"}
+                if not should_continue and next_status in terminal_statuses:
+                    self.suppress_followup = True
+                else:
+                    self.suppress_followup = False
 
                 self.current_status = next_status
                 if next_status == "awaiting_user_widget_input":
@@ -3500,6 +3512,7 @@ class AgentHarness:
 
             self.should_auto_continue = False
             self.pending_auto_continue = False
+            self.suppress_followup = False
 
             self.agent_session_id = new_session_id
 
@@ -3610,6 +3623,7 @@ class AgentHarness:
         behavior = msg.get("behavior")
 
         self.manually_cancelled = False
+        self.suppress_followup = False
 
         if behavior is not None:
             self.behavior = Behavior.step_by_step if behavior == "step_by_step" else Behavior.proactive
@@ -3636,6 +3650,7 @@ class AgentHarness:
         self.current_request_id = None
         self.should_auto_continue = False
         self.pending_auto_continue = False
+        self.suppress_followup = False
         self.manually_cancelled = True
         self.executing_cells.clear()
 
@@ -3669,6 +3684,7 @@ class AgentHarness:
         await self._mark_all_history_removed()
 
         self.current_plan = None
+        self.suppress_followup = False
 
         self._start_conversation_loop()
 
@@ -3769,7 +3785,11 @@ class AgentHarness:
 
                 if cell_id is not None:
                     self.executing_cells.discard(str(cell_id))
-                if self.current_status in {"awaiting_user_response", "awaiting_user_widget_input", "done"}:
+                if self.suppress_followup:
+                    print(f"[agent] Suppressing cell {cell_id} result while follow-up is suppressed")
+                    return
+                execution_statuses = {"executing", "awaiting_cell_execution", "thinking", "fixing"}
+                if self.current_status is not None and self.current_status not in execution_statuses:
                     print(f"[agent] Not adding cell {cell_id} result because {self.current_status}")
                     return
 
