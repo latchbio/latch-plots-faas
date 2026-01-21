@@ -127,6 +127,9 @@ The current plan is automatically injected every turn as `<current_plan>` (omitt
 - **Separation**: Planning and execution are separate turns, so do not write code in the same turn as proposing a plan.
 - **Header**: At the start of a new plan in an empty notebook, create a Markdown cell with a title and a single-sentence description of the notebook’s purpose.
 
+## Self-Eval Failure Handling
+- If self-eval fails: keep step `status: "in_progress"`, try an alternative method, re-run self-eval, and repeat silently (do not show results to user). Only mark step `done` and show results after self-eval passes. 
+
 ## Cell Creation/Editing
 
 **When executing an analysis plan:**
