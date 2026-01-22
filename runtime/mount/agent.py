@@ -648,13 +648,16 @@ class AgentHarness:
 
     async def _wait_for_message(self) -> None:
         print("[agent] _wait_for_message: waiting for message...")
-        msg = await self.pending_messages.get()
+        while True:
+            msg = await self.pending_messages.get()
 
-        msg_type = msg.get("type")
+            msg_type = msg.get("type")
 
-        if self.suppress_followup and msg_type in {"resume", "cell_result", "set_widget_value"}:
-            print(f"[agent] Suppressing follow-up message type={msg_type}")
-            return
+            if self.suppress_followup and msg_type in {"resume", "cell_result", "set_widget_value"}:
+                print(f"[agent] Suppressing follow-up message type={msg_type}")
+                continue
+
+            break
 
         if msg_type == "resume":
             print("[agent] Resuming turn after tool results")
