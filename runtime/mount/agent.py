@@ -73,8 +73,7 @@ class AgentHarness:
     current_request_id: str | None = None
     should_auto_continue: bool = False
     pending_auto_continue: bool = False
-    suppress_followup: bool = False
-    manually_cancelled: bool = False
+    pause_until_user_query: bool = False
     pending_tool_calls: set[str] = field(default_factory=set)
 
     pending_messages: asyncio.Queue = field(default_factory=asyncio.Queue)
@@ -653,7 +652,7 @@ class AgentHarness:
 
             msg_type = msg.get("type")
 
-            if self.suppress_followup and msg_type in {"resume", "cell_result", "set_widget_value"}:
+            if self.pause_until_user_query and msg_type in {"resume", "cell_result", "set_widget_value"}:
                 print(f"[agent] Suppressing follow-up message type={msg_type}")
                 continue
 
@@ -666,7 +665,7 @@ class AgentHarness:
         if msg_type == "user_query":
             self.current_request_id = msg.get("request_id")
             self.current_status = "thinking"
-            self.suppress_followup = False
+            self.pause_until_user_query = False
 
             payload = {
                 "content": msg["content"],
@@ -1229,9 +1228,9 @@ class AgentHarness:
 
                 terminal_statuses = {"done", "awaiting_user_response"}
                 if not should_continue and next_status in terminal_statuses:
-                    self.suppress_followup = True
+                    self.pause_until_user_query = True
                 else:
-                    self.suppress_followup = False
+                    self.pause_until_user_query = False
 
                 self.current_status = next_status
                 if next_status == "awaiting_user_widget_input":
@@ -3515,7 +3514,7 @@ class AgentHarness:
 
             self.should_auto_continue = False
             self.pending_auto_continue = False
-            self.suppress_followup = False
+            self.pause_until_user_query = False
 
             self.agent_session_id = new_session_id
 
@@ -3608,7 +3607,7 @@ class AgentHarness:
                 else:
                     print(f"[agent] Reconnected with status '{next_status}', staying idle")
 
-            if len(messages) > 0 and messages[-1].get("role") == "user" and not self.manually_cancelled:
+            if len(messages) > 0 and messages[-1].get("role") == "user" and not self.pause_until_user_query:
                 print("[agent] Incomplete turn detected, auto-resuming")
                 await self.pending_messages.put({"type": "resume"})
         except Exception as e:
@@ -3625,8 +3624,7 @@ class AgentHarness:
         template_version_id = msg.get("template_version_id")
         behavior = msg.get("behavior")
 
-        self.manually_cancelled = False
-        self.suppress_followup = False
+        self.pause_until_user_query = False
 
         if behavior is not None:
             self.behavior = Behavior.step_by_step if behavior == "step_by_step" else Behavior.proactive
@@ -3653,8 +3651,7 @@ class AgentHarness:
         self.current_request_id = None
         self.should_auto_continue = False
         self.pending_auto_continue = False
-        self.suppress_followup = False
-        self.manually_cancelled = True
+        self.pause_until_user_query = True
         self.executing_cells.clear()
 
         await self._clear_running_state()
@@ -3687,7 +3684,7 @@ class AgentHarness:
         await self._mark_all_history_removed()
 
         self.current_plan = None
-        self.suppress_followup = False
+        self.pause_until_user_query = False
 
         self._start_conversation_loop()
 
@@ -3788,8 +3785,8 @@ class AgentHarness:
 
                 if cell_id is not None:
                     self.executing_cells.discard(str(cell_id))
-                if self.suppress_followup:
-                    print(f"[agent] Suppressing cell {cell_id} result while follow-up is suppressed")
+                if self.pause_until_user_query:
+                    print(f"[agent] Suppressing cell {cell_id} result while pause_until_user_query is True")
                     return
                 execution_statuses = {"executing", "awaiting_cell_execution", "thinking", "fixing"}
                 if self.current_status is not None and self.current_status not in execution_statuses:
