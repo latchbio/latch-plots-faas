@@ -42,6 +42,7 @@ os.system(
 os.system(
     "git -C /opt/latch/plots-faas pull origin tim/sp-devkit || git -C /opt/latch/plots-faas pull origin main"
 )
+os.system("cp /opt/latch/plots-faas/runtime/start.py /opt/latch/custom_app")
 os.system("git -C /opt/latch/plots-faas submodule update --init --recursive --force")
 os.system("git -C /opt/latch/plots-faas rev-parse HEAD > /opt/latch/plots_faas_version")
 
