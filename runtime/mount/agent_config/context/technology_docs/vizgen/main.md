@@ -18,7 +18,9 @@
 
 5. Spatial Analysis -> `vizgen/spatial_analysis.md`
 
-6. Secondary Analysis (Cell Type Annotation + Domain Detection) -> `vizgen/vizgen_secondary_analysis.md`
+6. Cell Type Annotation -> `vizgen/cell_typing.md`
+
+7. Domain Detection -> `vizgen/domain_detection.md`
 
 </plan>
 
