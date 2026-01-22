@@ -51,7 +51,7 @@ os.system("/opt/mamba/envs/plots-faas/bin/pip install --upgrade latch")
 
 technology_docs = Path("/opt/latch/plots-faas/runtime/mount/agent_config/context/technology_docs")
 for sp_requirements in technology_docs.glob("*/requirements.txt"):
-    os.system(f"/opt/mamba/envs/plots-faas/bin/pip install -q --no-deps -r {sp_requirements}")
+    os.system(f"/opt/mamba/envs/plots-faas/bin/pip install --no-deps -r {sp_requirements}")
 
 os.execle(
     "/usr/bin/nice",
