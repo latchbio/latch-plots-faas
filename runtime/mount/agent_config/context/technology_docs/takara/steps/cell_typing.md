@@ -4,7 +4,7 @@ Identify cell types.
 
 <method>
 
-**Load priors**: Load `technology_docs/cell_types.json` and select matching entry by (organism, tissue, context). Perform annotation using ONLY `expected_major_types` in priors.
+**Load priors**: Load `technology_docs/evals/cell_types.json` and select matching entry by (organism, tissue, context). Perform annotation using ONLY `expected_major_types` in priors.
 
 **Trekker (single-cell)**: 
 - Use cluster-based cell type annotation. Extract markers per cluster and assign labels based on marker enrichment and biological context.
