@@ -19,13 +19,32 @@ Interleave with platform analysis (Xenium, Takara, Vizgen):
 - Validation: FINAL step before export
 </detection>
 
-<pre_analysis_questions>
-- Do you have a GSE ID to download from GEO?
-- Do you have paper text (abstract, methods, results)?
-- Do you have an H5AD or need to construct from raw files?
-- What organism (human, mouse, other)?
-- Need to map cell types to Cell Ontology?
-</pre_analysis_questions>
+<inputs>
+Only ask for:
+1. **GSE ID or uploaded files** (required) - Starting point for data acquisition
+2. **Paper text** (strongly encouraged) - Abstract, methods, results for context
+</inputs>
+
+<inference>
+Infer everything else from data - do not ask upfront:
+
+| Field | Inference Source |
+|-------|------------------|
+| Organism | Gene ID prefix: ENSG→human, ENSMUSG→mouse |
+| File format | Downloaded file extensions (.h5ad, .mtx, .csv) |
+| Sample structure | GEO metadata `title`, `source_name_ch1` columns |
+| Cell counts | Paper text mentions (e.g., "10,234 cells") |
+| Cell types | Clustering + marker genes → Cell Ontology |
+| Tissue | GEO `source_name_ch1` or paper methods |
+| Disease | GEO characteristics or paper title/methods |
+| Sequencing platform | SRA metadata `instrument` field |
+| Sex/Age | GEO sample characteristics |
+
+**Only ask user when:**
+- Inference is ambiguous (multiple valid interpretations)
+- Validation fails and needs clarification
+- Critical metadata missing from all sources
+</inference>
 
 <plan>
 1. Download -> `steps/download.md`
@@ -50,15 +69,17 @@ Interleave with platform analysis (Xenium, Takara, Vizgen):
 </interleave_guidance>
 
 <required_obs_columns>
-- `latch_sample_id`: Unique sample identifier (required)
-- `latch_cell_type_lvl_1`: Cell Ontology term ("name/CL:NNNNNNN")
-- `latch_disease`: MONDO term ("name/MONDO:NNNNNNN")
-- `latch_tissue`: UBERON term ("name/UBERON:NNNNNNN")
-- `latch_organism`: e.g., "Homo sapiens", "Mus musculus"
-- `latch_sequencing_platform`: EFO term ("name/EFO:NNNNNNN")
-- `latch_subject_id`: Subject/donor identifier (if applicable)
-- `latch_condition`: Experimental condition (free text)
-- `latch_sample_site`: Collection site (if applicable)
+| Column | Format | Inference Source |
+|--------|--------|------------------|
+| `latch_sample_id` | string | GEO title/source or user input |
+| `latch_cell_type_lvl_1` | "name/CL:NNNNNNN" | Cell typing results |
+| `latch_disease` | "name/MONDO:NNNNNNN" | Paper/GEO metadata |
+| `latch_tissue` | "name/UBERON:NNNNNNN" | GEO source_name or paper |
+| `latch_organism` | "Homo sapiens" / "Mus musculus" | Gene ID prefix |
+| `latch_sequencing_platform` | "name/EFO:NNNNNNN" | SRA instrument field |
+| `latch_subject_id` | string | GEO characteristics |
+| `latch_condition` | free text | Paper/GEO metadata |
+| `latch_sample_site` | string | GEO characteristics |
 </required_obs_columns>
 
 <required_var_columns>
@@ -71,6 +92,7 @@ Interleave with platform analysis (Xenium, Takara, Vizgen):
 - var.index contains valid Ensembl IDs
 - gene_symbols exists and is unique
 - Counts are raw integers (ingestion) or normalized (after transform)
-- No "unknown" where paper provides information
+- No "unknown" where paper/metadata provides information
 - Cell type proportions biologically plausible
+- Organism matches gene ID prefix (ENSG=human, ENSMUSG=mouse)
 </self_eval_criteria>

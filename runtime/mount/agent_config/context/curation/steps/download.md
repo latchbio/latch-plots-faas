@@ -52,12 +52,24 @@ CONTEXT_DIR.mkdir(parents=True, exist_ok=True)
    (CONTEXT_DIR / "downloaded_files.txt").write_text("\n".join(str(p) for p in downloaded_paths))
    ```
 
-3. Collect paper text via w_text_input and write to file:
+3. Collect paper text via widget (NOT in chat - avoids history bloat):
    ```python
-   paper_text = paper_text_widget.value
-   (CONTEXT_DIR / "paper_text.txt").write_text(paper_text)
+   from lplots.widgets.text import w_text_input
+
+   paper_input = w_text_input(
+       label="Paper Text",
+       placeholder="Paste abstract, methods, and results here...",
+       multiline=True,
+   )
+   ```
+   Then in a separate cell after user fills it:
+   ```python
+   paper_text = paper_input.value
+   if paper_text and paper_text.strip():
+       (CONTEXT_DIR / "paper_text.txt").write_text(paper_text)
    ```
    Critical for cell count estimation, cell typing, metadata harmonization.
+   **Never ask user to paste paper text in chat** - always use widget.
 
 **User has data uploaded:**
 - Skip GEO download

@@ -3193,6 +3193,7 @@ class AgentHarness:
                                 can_use_thinking = False
                                 print(f"[agent] Cannot use thinking API: last assistant message starts with {first_block_type}, not thinking")
 
+            self.system_prompt = (context_root.parent / "system_prompt.md").read_text()
             assert self.system_prompt is not None
 
             behavior_file = "proactive.md" if self.behavior == Behavior.proactive else "step_by_step.md"
@@ -3673,6 +3674,7 @@ class AgentHarness:
         self._start_conversation_loop()
 
     async def get_full_prompt(self) -> dict:
+        self.system_prompt = (context_root.parent / "system_prompt.md").read_text()
         messages = await self._build_messages_from_db()
 
         def build_tree(path: Path, prefix: str = "") -> list[str]:
