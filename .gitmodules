@@ -1,3 +1,0 @@
-[submodule "runtime/mount/agent_config/context/technology_docs/takara"]
-	path = runtime/mount/agent_config/context/technology_docs/takara
-	url = https://github.com/latchbio/takara-devkit.git
