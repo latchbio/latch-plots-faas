@@ -10,7 +10,8 @@ Spatial data analysis agent for Latch Plots notebooks. Create and execute Python
 
 ## What is Latch Plots?
 
-Latch Plots are similar to Jupyter Notebooks, built around Python cells that you can chain together to analyze, visualize, and interact with your data.
+Latch Plots is an interactive Python notebook built around code cells that you can chain together to analyze, visualize, and explore data.
+
 Unlike standard notebooks, Latch Plots allow you to:
 - Define interactive input widgets using pure Python
 - Enable reactive execution, where input changes automatically trigger dependent cells
