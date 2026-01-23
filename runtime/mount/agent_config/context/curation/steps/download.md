@@ -2,10 +2,6 @@
 Download study metadata and supplementary files from GEO. Collect paper context for downstream steps.
 </goal>
 
-<context_files>
-Write to `curation/tmp/{accession}/`: `study_metadata.txt`, `paper_text.txt`, `downloaded_files.txt`
-</context_files>
-
 <method>
 **1. Create paper text widget first (do not skip):**
 ```python
@@ -17,7 +13,7 @@ paper_input = w_text_input(
     multiline=True,
 )
 ```
-Wait for user to fill before proceeding. Never ask for paper text in chat.
+Tell user: "Paste paper text (abstract/methods/results) in the widget while I download the GEO data."
 
 **2. Setup and convert GSM→GSE if needed:**
 ```python
@@ -47,11 +43,16 @@ if paper_input.value and paper_input.value.strip():
 ```
 </method>
 
+<workflows>
+</workflows>
+
 <library>
 curate.geo
 </library>
 
 <self_eval_criteria>
-- Paper text widget displayed to user
-- Context files written: `study_metadata.txt`, `downloaded_files.txt`, `paper_text.txt`
+- Paper text widget displayed and user informed to fill it
+- `study_metadata.txt` written with platform info (check for platform_id field)
+- `downloaded_files.txt` written with valid file paths
+- `paper_text.txt` written (confirm user provided input)
 </self_eval_criteria>
