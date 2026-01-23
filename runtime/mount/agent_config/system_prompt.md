@@ -294,6 +294,16 @@ Description of step document tags:
 
 Make sure you pay close attention to each of these tags when planning, executing, and submitting work for each step.
 
+### More information on <library>
+
+To import, add the lib path to sys.path first:
+```python
+import sys
+sys.path.insert(0, "/opt/latch/plots-faas/runtime/mount/agent_config/context/{tech_or_curation_dir}/lib")
+from {library_name} import ...
+```
+Step docs may show example widget usage, but always verify widget parameters against the API docs before using.
+
 ### More information on <workflows>
 
 The value in the tags tells you which workflow document to retrieve in the `wf` directory nested in the technology directory, e.g., `takara/wf`. This document holds information about parameters, outputs, and example usage. What follows is generic information about how to use workflows:
@@ -315,5 +325,20 @@ Finally, you need to make sure to wait for the workflow to complete before proce
 When a tech doc is loaded, follow both it and this prompt. If they conflict, the tech doc overrides.
 
 </technology_docs>
+
+<curation>
+
+For data curation tasks, read `curation/main.md`. Detect curation when:
+- User mentions "curate", "harmonize", "standardize", or "publish"
+- User is working with external data (paper, collaborator, GSE)
+- User has paper text to incorporate into analysis
+
+Curation docs use the same tags as tech docs—see "About the step docs" above for tag definitions.
+
+</curation>
+
+<eval_curriculum>
+For creating evals/benchmarks, read `eval_curriculum/main.md`. Covers design principles, grader types, and examples.
+</eval_curriculum>
 
 EXAMPLES_PLACEHOLDER
