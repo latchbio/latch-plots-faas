@@ -1,0 +1,1725 @@
+{
+  "entries": [
+    {
+      "id": "mouse_ovary_ovulation_priors_merged_v1",
+      "source": {
+        "paper": "PNAS doi:10.1073/pnas.2317418121",
+        "notes": "Cell types and several markers are from the paper main text; marker sets are merged with canonical ovary markers for improved panel coverage."
+      },
+      "match": {
+        "kit": "seeker",
+        "organism": [
+          "Mus musculus",
+          "mouse"
+        ],
+        "tissue": [
+          "ovary"
+        ],
+        "context": [
+          "cycling",
+          "folliculogenesis",
+          "ovulation",
+          "hCG timecourse"
+        ]
+      },
+      "priors": {
+        "expected_major_types": [
+          {
+            "cell_type": "Granulosa",
+            "expectation": "common",
+            "notes": "Follicle somatic compartment."
+          },
+          {
+            "cell_type": "Mesenchymal / Stromal",
+            "expectation": "common",
+            "notes": "Includes theca, fibroblast-like, smooth muscle, pericytes, dividing mesenchyme."
+          },
+          {
+            "cell_type": "Oocyte",
+            "expectation": "rare",
+            "notes": "Small spatial footprint."
+          },
+          {
+            "cell_type": "Endothelial",
+            "expectation": "common",
+            "notes": "Vascular compartment."
+          },
+          {
+            "cell_type": "Immune",
+            "expectation": "optional",
+            "notes": "Variable by stage/region."
+          },
+          {
+            "cell_type": "Epithelial",
+            "expectation": "optional",
+            "notes": "Broad epithelial compartment mentioned in paper."
+          },
+          {
+            "cell_type": "Erythrocyte",
+            "expectation": "rare",
+            "notes": "Broad compartment mentioned in paper."
+          }
+        ],
+        "expected_subtypes": {
+          "Granulosa": [
+            {
+              "cell_type": "Mural granulosa",
+              "expectation": "optional",
+              "notes": "Paper: mural vs cumulus compartments."
+            },
+            {
+              "cell_type": "Cumulus granulosa",
+              "expectation": "optional",
+              "notes": "Paper: cumulus-like signature."
+            },
+            {
+              "cell_type": "Preantral granulosa",
+              "expectation": "optional",
+              "notes": "Paper-defined program."
+            },
+            {
+              "cell_type": "Early antral granulosa",
+              "expectation": "optional",
+              "notes": "Paper-defined program."
+            },
+            {
+              "cell_type": "Atretic granulosa",
+              "expectation": "optional",
+              "notes": "Paper-defined program."
+            },
+            {
+              "cell_type": "Mitotic granulosa",
+              "expectation": "optional",
+              "notes": "Paper-defined program."
+            },
+            {
+              "cell_type": "Rupture-associated granulosa (Edn2+)",
+              "expectation": "optional",
+              "notes": "Paper: ovulation-poised follicles."
+            },
+            {
+              "cell_type": "Lytic-like / prematurely luteinized granulosa (Ltbp1+)",
+              "expectation": "optional",
+              "notes": "Paper: lytic-like follicles."
+            }
+          ],
+          "Mesenchymal / Stromal": [
+            {
+              "cell_type": "Theca (steroidogenic)",
+              "expectation": "optional",
+              "notes": "Paper mentions Cyp17a1; theca subtype."
+            },
+            {
+              "cell_type": "Fibroblast-like",
+              "expectation": "optional",
+              "notes": "Paper mentions fibroblast-like cells; ECM remodeling."
+            },
+            {
+              "cell_type": "Smooth muscle",
+              "expectation": "optional",
+              "notes": "Paper mentions smooth muscle cells."
+            },
+            {
+              "cell_type": "Dividing mesenchyme",
+              "expectation": "optional",
+              "notes": "Paper mentions dividing mesenchyme cells."
+            },
+            {
+              "cell_type": "Pericyte",
+              "expectation": "optional",
+              "notes": "Paper mentions pericytes; vascularization."
+            }
+          ]
+        },
+        "marker_priors": [
+          {
+            "cell_type": "Granulosa",
+            "primary": [
+              "Foxl2",
+              "Fshr",
+              "Amh",
+              "Inha",
+              "Cyp19a1",
+              "Inhba",
+              "Inhbb",
+              "Gja1",
+              "Fst",
+              "Nr5a2",
+              "Esr2"
+            ],
+            "alternates": [
+              "Kitl",
+              "Lhcgr",
+              "Hsd3b1",
+              "Serpine2",
+              "Nap1l5"
+            ],
+            "anti_markers": [
+              "Zp3",
+              "Ptprc",
+              "Pecam1",
+              "Col1a1",
+              "Krt8",
+              "Krt18"
+            ],
+            "notes": "Merged granulosa markers; paper highlights Inhba/Inhbb and multiple antral markers."
+          },
+          {
+            "cell_type": "Preantral granulosa",
+            "primary": [
+              "Kctd14",
+              "Gas6",
+              "Igfbp7",
+              "Amh",
+              "Fshr"
+            ],
+            "alternates": [
+              "Foxl2",
+              "Kitl",
+              "Gja1",
+              "Malat1"
+            ],
+            "anti_markers": [
+              "Zp3",
+              "Ptprc",
+              "Pecam1"
+            ],
+            "notes": "Paper highlights Kctd14, Gas6, Igfbp7, Malat1."
+          },
+          {
+            "cell_type": "Early antral granulosa",
+            "primary": [
+              "Inhba",
+              "Inhbb",
+              "Cyp19a1",
+              "Fshr",
+              "Inha"
+            ],
+            "alternates": [
+              "Hsd3b1",
+              "Serpine2",
+              "Gja1",
+              "Fst",
+              "Nap1l5",
+              "Nr5a2",
+              "Esr2",
+              "Lhcgr"
+            ],
+            "anti_markers": [
+              "Zp3",
+              "Ptprc"
+            ],
+            "notes": "Paper highlights Inhba/Inhbb and antral markers."
+          },
+          {
+            "cell_type": "Atretic granulosa",
+            "primary": [
+              "Cfh",
+              "Ctgf",
+              "Nupr1",
+              "Gpx3"
+            ],
+            "alternates": [
+              "Pik3ip1",
+              "Itih2",
+              "Tex14",
+              "Fos",
+              "Jun"
+            ],
+            "anti_markers": [
+              "Zp3"
+            ],
+            "notes": "Paper highlights Cfh/Ctgf and newly identified Gpx3/Itih2/Tex14."
+          },
+          {
+            "cell_type": "Mitotic granulosa",
+            "primary": [
+              "Top2a",
+              "Cdk1",
+              "Mki67"
+            ],
+            "alternates": [
+              "Ube2c",
+              "Tpx2",
+              "Hmgb2"
+            ],
+            "anti_markers": [],
+            "notes": "Paper highlights Top2a/Cdk1."
+          },
+          {
+            "cell_type": "Cumulus granulosa",
+            "primary": [
+              "Has2",
+              "Ptgs2",
+              "Tnfaip6",
+              "Ptx3",
+              "Areg",
+              "Ereg",
+              "Star",
+              "Cyp11a1"
+            ],
+            "alternates": [
+              "Nupr1",
+              "Spp1",
+              "Btc",
+              "Inhbb",
+              "Kctd14",
+              "Ank1",
+              "Aldh3b1",
+              "Irx3",
+              "Cacna1a"
+            ],
+            "anti_markers": [
+              "Pecam1",
+              "Ptprc",
+              "Col1a1"
+            ],
+            "notes": "Merged cumulus expansion + paper cumulus-like granulosa signature."
+          },
+          {
+            "cell_type": "Rupture-associated granulosa (Edn2+)",
+            "primary": [
+              "Edn2",
+              "Junb",
+              "Adamts1",
+              "Ptgs1"
+            ],
+            "alternates": [
+              "Apln",
+              "Cyr61",
+              "Gpx3",
+              "Akr1c18",
+              "Rora",
+              "Ldhd",
+              "Fabp4"
+            ],
+            "anti_markers": [],
+            "notes": "Paper: Edn2+ rupture-associated granulosa with listed co-varying genes."
+          },
+          {
+            "cell_type": "Lytic-like / prematurely luteinized granulosa (Ltbp1+)",
+            "primary": [
+              "Ltbp1",
+              "Lhcgr"
+            ],
+            "alternates": [
+              "Star",
+              "Cyp11a1"
+            ],
+            "anti_markers": [],
+            "notes": "Paper highlights Ltbp1; Lhcgr increases at 12h."
+          },
+          {
+            "cell_type": "Oocyte",
+            "primary": [
+              "H1foo",
+              "Zp3",
+              "Zp2",
+              "Gdf9",
+              "Bmp15",
+              "Btg4",
+              "Tet3"
+            ],
+            "alternates": [
+              "Zp1",
+              "Nobox",
+              "Figla",
+              "Ooep",
+              "Dazl",
+              "Pou5f1",
+              "Riok1",
+              "Ccdc186",
+              "Ppig",
+              "Dnajc21",
+              "Zcchc8",
+              "Unc50",
+              "Rbm36"
+            ],
+            "anti_markers": [
+              "Ptprc",
+              "Pecam1",
+              "Col1a1"
+            ],
+            "notes": "Paper uses H1foo and highlights mature-program genes; merged with canonical oocyte markers."
+          },
+          {
+            "cell_type": "Theca (steroidogenic)",
+            "primary": [
+              "Cyp17a1",
+              "Star",
+              "Cyp11a1",
+              "Hsd3b1",
+              "Nr5a1"
+            ],
+            "alternates": [
+              "Lhcgr",
+              "Insl3",
+              "Akr1c18"
+            ],
+            "anti_markers": [
+              "Zp3",
+              "Pecam1",
+              "Ptprc"
+            ],
+            "notes": "Paper mentions Cyp17a1 (theca) and Hsd3b1 in antral marker list."
+          },
+          {
+            "cell_type": "Stromal / Fibroblast-like",
+            "primary": [
+              "Col1a1",
+              "Col1a2",
+              "Dcn",
+              "Lum",
+              "Postn",
+              "Mmp2",
+              "Col5a2",
+              "Tgfbi",
+              "Eln"
+            ],
+            "alternates": [
+              "Col3a1",
+              "Fn1",
+              "C7",
+              "Ctgf",
+              "Pdgfra",
+              "Ntrk2",
+              "Bdnf"
+            ],
+            "anti_markers": [
+              "Ptprc",
+              "Pecam1",
+              "Zp3"
+            ],
+            "notes": "Paper lists ECM remodeling program genes; merged with canonical fibroblast markers."
+          },
+          {
+            "cell_type": "Smooth muscle",
+            "primary": [
+              "Acta2",
+              "Tagln",
+              "Myh11",
+              "Lmod1",
+              "Myom1"
+            ],
+            "alternates": [
+              "Cnn1",
+              "Des",
+              "Rgs5"
+            ],
+            "anti_markers": [
+              "Ptprc",
+              "Pecam1"
+            ],
+            "notes": "Paper lists Myom1/Lmod1 in late contraction program."
+          },
+          {
+            "cell_type": "Pericyte",
+            "primary": [
+              "Rgs5",
+              "Cspg4",
+              "Pdgfrb"
+            ],
+            "alternates": [
+              "Des",
+              "Notch3",
+              "Mcame"
+            ],
+            "anti_markers": [
+              "Ptprc",
+              "Epcam"
+            ],
+            "notes": "Paper includes Pdgfrb in late mesenchyme program; paper reports pericyte proportion increase."
+          },
+          {
+            "cell_type": "Endothelial",
+            "primary": [
+              "Pecam1",
+              "Vwf",
+              "Kdr",
+              "Robo4",
+              "Esam"
+            ],
+            "alternates": [
+              "Klf2",
+              "Eng"
+            ],
+            "anti_markers": [
+              "Ptprc",
+              "Zp3",
+              "Col1a1"
+            ],
+            "notes": "Paper reports endothelial proportion increase; canonical vascular markers."
+          },
+          {
+            "cell_type": "Immune",
+            "primary": [
+              "Ptprc",
+              "Lyz2",
+              "Csf1r",
+              "C1qa"
+            ],
+            "alternates": [
+              "Nkg7",
+              "Cd3d",
+              "Trac",
+              "Ms4a1"
+            ],
+            "anti_markers": [
+              "Zp3",
+              "Fshr",
+              "Pecam1"
+            ],
+            "notes": "Paper mentions immune as a broad compartment; markers are canonical."
+          },
+          {
+            "cell_type": "Epithelial",
+            "primary": [
+              "Krt8",
+              "Krt18",
+              "Epcam",
+              "Krt19"
+            ],
+            "alternates": [
+              "Krt7",
+              "Tacstd2"
+            ],
+            "anti_markers": [
+              "Ptprc",
+              "Pecam1"
+            ],
+            "notes": "Paper mentions epithelial as a broad compartment; markers are canonical."
+          },
+          {
+            "cell_type": "Erythrocyte",
+            "primary": [
+              "Hbb-bs",
+              "Hba-a1",
+              "Hbb-bt"
+            ],
+            "alternates": [
+              "Alas2"
+            ],
+            "anti_markers": [],
+            "notes": "Paper mentions erythrocytes as a broad compartment; markers are canonical."
+          }
+        ],
+        "spatial_morphology_priors": [
+          {
+            "cell_type": "Granulosa",
+            "patterns": [
+              "follicle_layer",
+              "ring_like_possible"
+            ]
+          },
+          {
+            "cell_type": "Cumulus",
+            "patterns": [
+              "inner_follicle",
+              "near_oocyte"
+            ]
+          },
+          {
+            "cell_type": "Oocyte",
+            "patterns": [
+              "single_focus",
+              "central_in_follicle"
+            ]
+          },
+          {
+            "cell_type": "Endothelial",
+            "patterns": [
+              "vascular_tracks"
+            ]
+          },
+          {
+            "cell_type": "Immune",
+            "patterns": [
+              "punctate_infiltrates"
+            ]
+          }
+        ],
+        "condition_shift_priors": [
+          {
+            "axes": [
+              "timepoint_post_hcg"
+            ],
+            "shifts": [
+              {
+                "cell_type": "Endothelial",
+                "direction": "increase",
+                "notes": "Paper reports increase ~4\u20136h post-hCG."
+              },
+              {
+                "cell_type": "Pericyte",
+                "direction": "increase",
+                "notes": "Paper reports increase ~4\u20136h post-hCG."
+              }
+            ],
+            "notes": "Timecourse shifts are soft expectations; stage-dependent remodeling."
+          }
+        ]
+      }
+    },
+    {
+      "id": "mouse_lung_inflammaging_balt_xenium_scrna_priors_merged_v1",
+      "source": {
+        "paper": "bioRxiv doi:10.1101/2025.10.01.679697v1",
+        "notes": "Major cell types are from the paper's Xenium/scRNA-seq UMAP labels; marker sets are merged (paper custom Xenium genes + canonical lung markers) to support panel-aware self-eval."
+      },
+      "match": {
+        "kit": "xenium",
+        "organism": [
+          "Mus musculus",
+          "mouse"
+        ],
+        "tissue": [
+          "lung"
+        ],
+        "context": [
+          "aged",
+          "inflammaging",
+          "BALT",
+          "fibroblast_NFkB_activation",
+          "Tnfaip3_CKO"
+        ]
+      },
+      "priors": {
+        "expected_major_types": [
+          {
+            "cell_type": "Epithelial",
+            "expectation": "common",
+            "notes": "Airway + alveolar epithelial populations."
+          },
+          {
+            "cell_type": "Immune",
+            "expectation": "common",
+            "notes": "T/B lymphocytes and other leukocytes in BALT context."
+          },
+          {
+            "cell_type": "Myeloid",
+            "expectation": "common",
+            "notes": "Alveolar and interstitial macrophages; DCs; neutrophils."
+          },
+          {
+            "cell_type": "Stromal / Fibroblast",
+            "expectation": "common",
+            "notes": "Fibroblasts; fibrosis-associated programs."
+          },
+          {
+            "cell_type": "Endothelial",
+            "expectation": "common",
+            "notes": "Vascular compartment."
+          },
+          {
+            "cell_type": "Smooth muscle",
+            "expectation": "optional",
+            "notes": "May be present depending on region and section."
+          },
+          {
+            "cell_type": "Adipose",
+            "expectation": "optional",
+            "notes": "May appear depending on dissection/section."
+          },
+          {
+            "cell_type": "Proliferating",
+            "expectation": "optional",
+            "notes": "Cell-cycle state cluster."
+          }
+        ],
+        "expected_subtypes": {
+          "Epithelial": [
+            {
+              "cell_type": "AT1",
+              "expectation": "common"
+            },
+            {
+              "cell_type": "AT2",
+              "expectation": "common"
+            },
+            {
+              "cell_type": "Club",
+              "expectation": "optional"
+            },
+            {
+              "cell_type": "Ciliated",
+              "expectation": "optional"
+            },
+            {
+              "cell_type": "Neuroendocrine",
+              "expectation": "rare"
+            }
+          ],
+          "Immune": [
+            {
+              "cell_type": "T cell",
+              "expectation": "common",
+              "children": [
+                {
+                  "cell_type": "CD4+ T",
+                  "expectation": "common"
+                },
+                {
+                  "cell_type": "CD8+ T",
+                  "expectation": "common",
+                  "children": [
+                    {
+                      "cell_type": "CD8+ T (GZMK+ exhausted)",
+                      "expectation": "optional",
+                      "notes": "Paper emphasizes GZMK+ exhaustion program in BALT context."
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "cell_type": "B cell",
+              "expectation": "common"
+            }
+          ],
+          "Myeloid": [
+            {
+              "cell_type": "Alveolar MP",
+              "expectation": "common"
+            },
+            {
+              "cell_type": "Interstitial MP",
+              "expectation": "common"
+            },
+            {
+              "cell_type": "Dendritic cell",
+              "expectation": "optional"
+            },
+            {
+              "cell_type": "Neutrophil",
+              "expectation": "optional"
+            }
+          ],
+          "Stromal / Fibroblast": [
+            {
+              "cell_type": "Fibroblast",
+              "expectation": "common"
+            },
+            {
+              "cell_type": "Adventitial fibroblast",
+              "expectation": "optional"
+            },
+            {
+              "cell_type": "Alveolar fibroblast",
+              "expectation": "optional"
+            },
+            {
+              "cell_type": "Peribronchial fibroblast",
+              "expectation": "optional"
+            }
+          ]
+        },
+        "marker_priors": [
+          {
+            "cell_type": "T cell",
+            "primary": [
+              "Cd4",
+              "Tcf7",
+              "Il7"
+            ],
+            "alternates": [
+              "Ifng",
+              "Ccl5"
+            ],
+            "anti_markers": [
+              "Cd19",
+              "Itgam",
+              "Pdgfra"
+            ],
+            "notes": "Paper custom panel includes Cd4, Tcf7, Il7, Ifng, Ccl5."
+          },
+          {
+            "cell_type": "CD8+ T",
+            "primary": [
+              "Ccl5",
+              "Ifng",
+              "Eomes",
+              "Gzmb"
+            ],
+            "alternates": [
+              "Tcf7",
+              "Il7",
+              "Tigit"
+            ],
+            "anti_markers": [
+              "Cd19",
+              "Siglecf",
+              "Pdgfra"
+            ],
+            "notes": "Paper custom panel includes Eomes, Gzmb, Ifng, Ccl5, Tigit."
+          },
+          {
+            "cell_type": "CD8+ T (GZMK+ exhausted)",
+            "primary": [
+              "Gzmk",
+              "Tox",
+              "Pdcd1"
+            ],
+            "alternates": [
+              "Tigit",
+              "Ifng",
+              "Eomes"
+            ],
+            "anti_markers": [
+              "Tcf7",
+              "Il7"
+            ],
+            "notes": "Paper custom panel includes Gzmk, Tox, Pdcd1; treat as optional state-level call."
+          },
+          {
+            "cell_type": "B cell",
+            "primary": [
+              "Cd19"
+            ],
+            "alternates": [
+              "Cd74",
+              "Ms4a1"
+            ],
+            "anti_markers": [
+              "Cd4",
+              "Gzmk"
+            ],
+            "notes": "Paper custom panel includes Cd19; canonical additions are panel-dependent."
+          },
+          {
+            "cell_type": "Neutrophil",
+            "primary": [
+              "Ly6c1"
+            ],
+            "alternates": [
+              "Cxcl1",
+              "Cxcl2",
+              "Mmp9",
+              "Pi16",
+              "Cd300lf",
+              "Cxcr2",
+              "Csf3r"
+            ],
+            "anti_markers": [
+              "Cd19",
+              "Pdgfra"
+            ]
+          },
+          {
+            "cell_type": "Dendritic cell",
+            "primary": [
+              "Itgax",
+              "Itgax"
+            ],
+            "alternates": [
+              "Itgax",
+              "Itgam"
+            ],
+            "anti_markers": [
+              "Cd19"
+            ],
+            "notes": "Paper custom panel includes Itgax (CD11c) and Itgam (CD11b)."
+          },
+          {
+            "cell_type": "Alveolar MP",
+            "primary": [
+              "Siglecf",
+              "Apoe"
+            ],
+            "alternates": [
+              "C1qa"
+            ],
+            "anti_markers": [
+              "Cd4",
+              "Cd19"
+            ],
+            "notes": "Paper custom panel includes Siglecf and Apoe and C1qa."
+          },
+          {
+            "cell_type": "Interstitial MP",
+            "primary": [
+              "C1qa",
+              "Cx3cr1",
+              "Ccr2",
+              "Ly6c1"
+            ],
+            "alternates": [
+              "Apoe",
+              "Ccl2"
+            ],
+            "anti_markers": [
+              "Siglecf"
+            ],
+            "notes": "Paper custom panel includes C1qa, Cx3cr1, Ccr2, Ly6c1, Ccl2."
+          },
+          {
+            "cell_type": "Fibroblast",
+            "primary": [
+              "Pdgfra",
+              "Cxcl12",
+              "Hhip",
+              "Gli1"
+            ],
+            "alternates": [
+              "Il6",
+              "Postn",
+              "Cthrc1",
+              "Tnf"
+            ],
+            "anti_markers": [
+              "Cd4",
+              "Cd19",
+              "Itgam"
+            ],
+            "notes": "Paper custom panel includes Pdgfra, Cxcl12, Hhip, Gli1, Il6, Postn, Cthrc1."
+          },
+          {
+            "cell_type": "Smooth muscle",
+            "primary": [
+              "Acta2"
+            ],
+            "alternates": [
+              "Tagln",
+              "Myh11",
+              "Des",
+              "Rgs5",
+              "Apoe",
+              "Pck1",
+              "Myoz1"
+            ],
+            "anti_markers": [
+              "Pdgfra",
+              "Cd4"
+            ]
+          },
+          {
+            "cell_type": "AT1",
+            "primary": [
+              "Ager",
+              "Pdpn"
+            ],
+            "alternates": [
+              "Cav1",
+              "Tspan8",
+              "Fbln5",
+              "Aqp5",
+              "Cavin2",
+              "Timp3"
+            ],
+            "anti_markers": [
+              "Sftpc"
+            ],
+            "notes": "UPDATED: Ager/Pdpn not in Xenium panel. Added CellGuide alternates (Tspan8, Fbln5, Aqp5, Cavin2, Timp3)."
+          },
+          {
+            "cell_type": "AT2",
+            "primary": [
+              "Sftpc",
+              "Sftpb"
+            ],
+            "alternates": [
+              "Slc34a2",
+              "Muc1",
+              "Lamp3",
+              "Tfcp2l1",
+              "Fasn",
+              "Sftpd"
+            ],
+            "anti_markers": [
+              "Ager"
+            ],
+            "notes": "UPDATED: Sftpc/Sftpb not in Xenium panel. Added CellGuide alternates (Muc1, Lamp3, Tfcp2l1, Fasn, Sftpd)."
+          },
+          {
+            "cell_type": "Club",
+            "primary": [
+              "Scgb1a1"
+            ],
+            "alternates": [
+              "Muc5ac"
+            ],
+            "anti_markers": [
+              "Sftpc"
+            ],
+            "notes": "Paper custom panel includes Muc5ac (goblet-like); canonical Club marker Scgb1a1 depends on panel."
+          },
+          {
+            "cell_type": "Basal-like airway epithelial",
+            "primary": [
+              "Krt5",
+              "Trp63"
+            ],
+            "alternates": [
+              "Shh"
+            ],
+            "anti_markers": [
+              "Pdgfra"
+            ],
+            "notes": "Paper custom panel includes Krt5, Trp63, Shh."
+          },
+          {
+            "cell_type": "Proliferating",
+            "primary": [
+              "Mki67"
+            ],
+            "alternates": [
+              "Top2a"
+            ],
+            "anti_markers": [],
+            "notes": "Paper custom panel includes Mki67."
+          },
+          {
+            "cell_type": "Senescent / stressed state",
+            "primary": [
+              "Cdkn2a"
+            ],
+            "alternates": [
+              "Tnf",
+              "Il6"
+            ],
+            "anti_markers": [],
+            "notes": "Paper custom panel includes Cdkn2a, Il6, Tnf."
+          },
+          {
+            "cell_type": "Endothelial",
+            "primary": [
+              "Pecam1",
+              "Cdh5"
+            ],
+            "alternates": [
+              "Cldn5",
+              "Vwf",
+              "Ctss",
+              "Lyve1",
+              "Plvap",
+              "Ncf4",
+              "Calcrl",
+              "Gpihbp1",
+              "Clec14a",
+              "Tmem100"
+            ],
+            "anti_markers": [
+              "Pdgfra",
+              "Cd4"
+            ]
+          },
+          {
+            "cell_type": "Ciliated",
+            "primary": [
+              "Foxj1"
+            ],
+            "alternates": [
+              "Dnah5",
+              "Dnali1",
+              "Fam183b",
+              "Ccdc153",
+              "Anxa8",
+              "Tmem212"
+            ],
+            "anti_markers": [
+              "Sftpc"
+            ]
+          },
+          {
+            "cell_type": "Pericyte",
+            "primary": [
+              "Pdgfrb",
+              "Rgs5"
+            ],
+            "alternates": [
+              "Notch3",
+              "Lipg",
+              "Gap43",
+              "Vsnl1",
+              "Higd1b",
+              "Gng11"
+            ],
+            "anti_markers": []
+          }
+        ],
+        "spatial_morphology_priors": [
+          {
+            "cell_type": "T cell",
+            "patterns": [
+              "BALT_dense_aggregates",
+              "peribronchovascular_clusters"
+            ]
+          },
+          {
+            "cell_type": "B cell",
+            "patterns": [
+              "BALT_dense_aggregates"
+            ]
+          },
+          {
+            "cell_type": "CD4+ T",
+            "patterns": [
+              "BALT_dense_aggregates",
+              "peribronchovascular_clusters"
+            ]
+          },
+          {
+            "cell_type": "CD8+ T (GZMK+ exhausted)",
+            "patterns": [
+              "within_BALT",
+              "co-localized_with_T_cell_regions"
+            ]
+          },
+          {
+            "cell_type": "Endothelial",
+            "patterns": [
+              "vascular_tracks"
+            ]
+          },
+          {
+            "cell_type": "Fibroblast",
+            "patterns": [
+              "interstitial_mesh",
+              "peribronchovascular_enrichment_possible"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "mouse_brain_xenium_vocab_v1",
+      "source": {
+        "paper": "10x Genomics Xenium Mouse Brain Gene Expression Panel",
+        "notes": "Cell types from Xenium full brain panel vocabulary; standard cell type annotations for mouse brain spatial transcriptomics."
+      },
+      "match": {
+        "kit": "xenium",
+        "organism": [
+          "Mus musculus",
+          "mouse"
+        ],
+        "tissue": [
+          "brain"
+        ],
+        "context": [
+          "general",
+          "spatial_transcriptomics"
+        ]
+      },
+      "priors": {
+        "expected_major_types": [
+          {
+            "cell_type": "excitatory neurons",
+            "expectation": "common",
+            "notes": "Includes pyramidal, glutamatergic, IT, PT, corticothalamic neurons."
+          },
+          {
+            "cell_type": "inhibitory neurons",
+            "expectation": "common",
+            "notes": "Includes GABAergic, interneurons, Purkinje, basket, chandelier, Martinotti cells."
+          },
+          {
+            "cell_type": "astrocyte",
+            "expectation": "common",
+            "notes": "Includes astrocytes, astroglia, Bergmann glia."
+          },
+          {
+            "cell_type": "oligodendrocytes",
+            "expectation": "common",
+            "notes": "Myelinating oligodendrocytes."
+          },
+          {
+            "cell_type": "oligodendrocyte precursor cells (OPC)",
+            "expectation": "common",
+            "notes": "NG2+ oligodendrocyte precursor cells."
+          },
+          {
+            "cell_type": "microglia",
+            "expectation": "common",
+            "notes": "Brain-resident macrophages, mononuclear phagocytes."
+          },
+          {
+            "cell_type": "pericyte / endothelial cells",
+            "expectation": "common",
+            "notes": "Endothelial cells, pericytes, mural cells, vascular smooth muscle."
+          },
+          {
+            "cell_type": "fibroblasts",
+            "expectation": "optional",
+            "notes": "Fibroblast populations in brain tissue."
+          }
+        ],
+        "expected_subtypes": {},
+        "marker_priors": [
+          {
+            "cell_type": "excitatory neurons",
+            "primary": [
+              "Slc17a7",
+              "Camk2a",
+              "Nrgn"
+            ],
+            "alternates": [
+              "Satb2",
+              "Tbr1",
+              "Neurod6",
+              "Slc17a6"
+            ],
+            "anti_markers": [
+              "Gad1",
+              "Gad2",
+              "Slc32a1"
+            ],
+            "notes": "Glutamatergic neurons; Slc17a7 (Vglut1) is canonical cortical excitatory marker."
+          },
+          {
+            "cell_type": "inhibitory neurons",
+            "primary": [
+              "Gad1",
+              "Gad2",
+              "Slc32a1"
+            ],
+            "alternates": [
+              "Pvalb",
+              "Sst",
+              "Vip",
+              "Npy"
+            ],
+            "anti_markers": [
+              "Slc17a7",
+              "Slc17a6"
+            ],
+            "notes": "GABAergic neurons; Gad1/Gad2 are canonical inhibitory markers."
+          },
+          {
+            "cell_type": "astrocyte",
+            "primary": [
+              "Gfap",
+              "Aqp4",
+              "Aldh1l1"
+            ],
+            "alternates": [
+              "Slc1a3",
+              "Slc1a2",
+              "S100b",
+              "Glul"
+            ],
+            "anti_markers": [
+              "Mbp",
+              "Pdgfra",
+              "Ptprc"
+            ],
+            "notes": "Canonical astrocyte markers; Aldh1l1 is pan-astrocyte."
+          },
+          {
+            "cell_type": "oligodendrocytes",
+            "primary": [
+              "Mbp",
+              "Plp1",
+              "Mog"
+            ],
+            "alternates": [
+              "Mag",
+              "Cnp",
+              "Olig1"
+            ],
+            "anti_markers": [
+              "Pdgfra",
+              "Gfap"
+            ],
+            "notes": "Mature myelinating oligodendrocytes."
+          },
+          {
+            "cell_type": "oligodendrocyte precursor cells (OPC)",
+            "primary": [
+              "Pdgfra",
+              "Cspg4"
+            ],
+            "alternates": [
+              "Olig2",
+              "Sox10",
+              "Gpr17"
+            ],
+            "anti_markers": [
+              "Mbp",
+              "Mog"
+            ],
+            "notes": "NG2+ (Cspg4) OPCs; Pdgfra is canonical marker."
+          },
+          {
+            "cell_type": "microglia",
+            "primary": [
+              "Cx3cr1",
+              "P2ry12",
+              "Tmem119"
+            ],
+            "alternates": [
+              "Csf1r",
+              "Hexb",
+              "C1qa",
+              "Aif1"
+            ],
+            "anti_markers": [
+              "Gfap",
+              "Mbp",
+              "Slc17a7"
+            ],
+            "notes": "Brain-resident macrophages; Tmem119 and P2ry12 are microglia-specific."
+          },
+          {
+            "cell_type": "pericyte / endothelial cells",
+            "primary": [
+              "Pecam1",
+              "Cldn5",
+              "Pdgfrb"
+            ],
+            "alternates": [
+              "Flt1",
+              "Vwf",
+              "Rgs5",
+              "Kcnj8"
+            ],
+            "anti_markers": [
+              "Gfap",
+              "Slc17a7",
+              "Mbp"
+            ],
+            "notes": "Vascular cells; Pecam1/Cldn5 for endothelial, Pdgfrb/Rgs5 for pericytes."
+          },
+          {
+            "cell_type": "fibroblasts",
+            "primary": [
+              "Col1a1",
+              "Col1a2",
+              "Dcn"
+            ],
+            "alternates": [
+              "Lum",
+              "Pdgfra"
+            ],
+            "anti_markers": [
+              "Pecam1",
+              "Ptprc"
+            ],
+            "notes": "Meningeal and perivascular fibroblasts."
+          }
+        ],
+        "spatial_morphology_priors": [
+          {
+            "cell_type": "excitatory neurons",
+            "patterns": [
+              "cortical_layers",
+              "hippocampal_pyramidal_layer"
+            ]
+          },
+          {
+            "cell_type": "inhibitory neurons",
+            "patterns": [
+              "scattered_throughout_cortex",
+              "cortical_layers"
+            ]
+          },
+          {
+            "cell_type": "astrocyte",
+            "patterns": [
+              "distributed_throughout",
+              "near_vasculature"
+            ]
+          },
+          {
+            "cell_type": "oligodendrocytes",
+            "patterns": [
+              "white_matter_tracts",
+              "corpus_callosum"
+            ]
+          },
+          {
+            "cell_type": "microglia",
+            "patterns": [
+              "distributed_throughout",
+              "punctate"
+            ]
+          },
+          {
+            "cell_type": "pericyte / endothelial cells",
+            "patterns": [
+              "vascular_tracks"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "mouse_kidney_xenium_vocab_v1",
+      "source": {
+        "paper": "10x Genomics Xenium Mouse Kidney Gene Expression Panel",
+        "notes": "Cell types from Xenium mouse kidney panel vocabulary; standard cell type annotations for mouse kidney spatial transcriptomics."
+      },
+      "match": {
+        "kit": "xenium",
+        "organism": [
+          "Mus musculus",
+          "mouse"
+        ],
+        "tissue": [
+          "kidney"
+        ],
+        "context": [
+          "general",
+          "spatial_transcriptomics"
+        ]
+      },
+      "priors": {
+        "expected_major_types": [
+          {
+            "cell_type": "Epithelial",
+            "expectation": "common",
+            "notes": "Nephron epithelial cells: podocytes, tubule cells, collecting duct cells."
+          },
+          {
+            "cell_type": "Endothelial",
+            "expectation": "common",
+            "notes": "Glomerular and non-glomerular endothelial cells."
+          },
+          {
+            "cell_type": "Stromal",
+            "expectation": "common",
+            "notes": "Fibroblasts, pericytes, smooth muscle cells."
+          },
+          {
+            "cell_type": "Epithelial (specialized)",
+            "expectation": "optional",
+            "notes": "Parietal epithelial cells, urothelial cells."
+          }
+        ],
+        "expected_subtypes": {
+          "Epithelial": [
+            {
+              "cell_type": "podocyte",
+              "expectation": "common",
+              "notes": "Visceral epithelial cells in glomeruli."
+            },
+            {
+              "cell_type": "proximal tubule cells",
+              "expectation": "common",
+              "notes": "PT S1, PT S2, PT S3, injured PT, fatty remodeled PT."
+            },
+            {
+              "cell_type": "loop of Henle cells",
+              "expectation": "common",
+              "notes": "Descending thin limb, ascending thin limb, thick ascending limb (TAL)."
+            },
+            {
+              "cell_type": "distal convoluted tubule cells",
+              "expectation": "common",
+              "notes": "DCT, macula densa."
+            },
+            {
+              "cell_type": "connecting tubule / collecting duct principal cells",
+              "expectation": "common",
+              "notes": "CNT, collecting duct principal cells."
+            },
+            {
+              "cell_type": "collecting duct intercalated cells",
+              "expectation": "common",
+              "notes": "IC A (alpha), IC B (beta) intercalated cells."
+            }
+          ],
+          "Endothelial": [
+            {
+              "cell_type": "glomerular endothelial cells",
+              "expectation": "common",
+              "notes": "Glomerular capillary endothelial cells."
+            },
+            {
+              "cell_type": "non glomerular endothelial cells",
+              "expectation": "common",
+              "notes": "Peritubular capillary, vasa recta, vascular endothelial cells."
+            }
+          ],
+          "Stromal": [
+            {
+              "cell_type": "fibroblasts",
+              "expectation": "common",
+              "notes": "Mesenchymal fibroblasts in kidney interstitium."
+            },
+            {
+              "cell_type": "pericyte / smooth muscle cells",
+              "expectation": "common",
+              "notes": "Pericytes, vascular smooth muscle, mural cells."
+            }
+          ],
+          "Epithelial (specialized)": [
+            {
+              "cell_type": "parietal epithelial cells",
+              "expectation": "common",
+              "notes": "PECs in Bowman's capsule."
+            },
+            {
+              "cell_type": "urothelial cells",
+              "expectation": "optional",
+              "notes": "Urothelium in renal pelvis/ureter if included in section."
+            }
+          ]
+        },
+        "marker_priors": [
+          {
+            "cell_type": "podocyte",
+            "primary": [
+              "Nphs1",
+              "Nphs2",
+              "Wt1"
+            ],
+            "alternates": [
+              "Podxl",
+              "Synpo",
+              "Cd2ap"
+            ],
+            "anti_markers": [
+              "Pecam1",
+              "Slc34a1"
+            ],
+            "notes": "Glomerular visceral epithelial cells; Nphs1/Nphs2 are slit diaphragm proteins."
+          },
+          {
+            "cell_type": "glomerular endothelial cells",
+            "primary": [
+              "Pecam1",
+              "Ehd3",
+              "Kdr"
+            ],
+            "alternates": [
+              "Cdh5",
+              "Emcn"
+            ],
+            "anti_markers": [
+              "Nphs1",
+              "Slc34a1"
+            ],
+            "notes": "Glomerular capillary endothelial cells; Ehd3 is relatively glomerular-specific."
+          },
+          {
+            "cell_type": "non glomerular endothelial cells",
+            "primary": [
+              "Pecam1",
+              "Plvap",
+              "Cdh5"
+            ],
+            "alternates": [
+              "Emcn",
+              "Flt1"
+            ],
+            "anti_markers": [
+              "Ehd3",
+              "Nphs1"
+            ],
+            "notes": "Peritubular capillary and vasa recta endothelial cells."
+          },
+          {
+            "cell_type": "proximal tubule cells",
+            "primary": [
+              "Slc34a1",
+              "Lrp2",
+              "Cubn"
+            ],
+            "alternates": [
+              "Slc5a12",
+              "Slc22a6",
+              "Aqp1"
+            ],
+            "anti_markers": [
+              "Slc12a1",
+              "Aqp2"
+            ],
+            "notes": "Proximal tubule S1-S3 segments; Slc34a1 (NaPi-IIa) is canonical marker."
+          },
+          {
+            "cell_type": "loop of Henle cells",
+            "primary": [
+              "Slc12a1",
+              "Umod"
+            ],
+            "alternates": [
+              "Aqp1",
+              "Clcnka"
+            ],
+            "anti_markers": [
+              "Slc34a1",
+              "Aqp2"
+            ],
+            "notes": "TAL expresses Slc12a1 (NKCC2) and Umod (uromodulin)."
+          },
+          {
+            "cell_type": "distal convoluted tubule cells",
+            "primary": [
+              "Slc12a3",
+              "Pvalb"
+            ],
+            "alternates": [
+              "Trpm6",
+              "Calb1"
+            ],
+            "anti_markers": [
+              "Slc12a1",
+              "Aqp2"
+            ],
+            "notes": "DCT expresses Slc12a3 (NCC); Pvalb marks early DCT."
+          },
+          {
+            "cell_type": "connecting tubule / collecting duct principal cells",
+            "primary": [
+              "Aqp2",
+              "Aqp3",
+              "Fxyd4"
+            ],
+            "alternates": [
+              "Scnn1g",
+              "Hsd11b2"
+            ],
+            "anti_markers": [
+              "Slc4a1",
+              "Slc26a4"
+            ],
+            "notes": "Principal cells express aquaporins (Aqp2/3) for water reabsorption."
+          },
+          {
+            "cell_type": "collecting duct intercalated cells",
+            "primary": [
+              "Atp6v1b1",
+              "Atp6v0d2"
+            ],
+            "alternates": [
+              "Slc4a1",
+              "Slc26a4",
+              "Foxi1"
+            ],
+            "anti_markers": [
+              "Aqp2"
+            ],
+            "notes": "IC-A expresses Slc4a1 (AE1); IC-B expresses Slc26a4 (pendrin)."
+          },
+          {
+            "cell_type": "parietal epithelial cells",
+            "primary": [
+              "Cldn1",
+              "Pdpn"
+            ],
+            "alternates": [
+              "Vcam1"
+            ],
+            "anti_markers": [
+              "Nphs1",
+              "Wt1"
+            ],
+            "notes": "Bowman's capsule parietal epithelial cells."
+          },
+          {
+            "cell_type": "urothelial cells",
+            "primary": [
+              "Upk1b",
+              "Upk3a",
+              "Krt20"
+            ],
+            "alternates": [
+              "Krt5",
+              "Krt7"
+            ],
+            "anti_markers": [
+              "Aqp2",
+              "Slc34a1"
+            ],
+            "notes": "Uroplakins are specific to urothelium."
+          },
+          {
+            "cell_type": "fibroblasts",
+            "primary": [
+              "Col1a1",
+              "Col1a2",
+              "Pdgfra"
+            ],
+            "alternates": [
+              "Dcn",
+              "Vim"
+            ],
+            "anti_markers": [
+              "Pecam1",
+              "Ptprc"
+            ],
+            "notes": "Interstitial fibroblasts in kidney."
+          },
+          {
+            "cell_type": "pericyte / smooth muscle cells",
+            "primary": [
+              "Pdgfrb",
+              "Acta2",
+              "Rgs5"
+            ],
+            "alternates": [
+              "Myh11",
+              "Tagln"
+            ],
+            "anti_markers": [
+              "Pecam1",
+              "Ptprc"
+            ],
+            "notes": "Pericytes and vascular smooth muscle cells."
+          }
+        ],
+        "spatial_morphology_priors": [
+          {
+            "cell_type": "podocyte",
+            "patterns": [
+              "glomeruli"
+            ]
+          },
+          {
+            "cell_type": "glomerular endothelial cells",
+            "patterns": [
+              "glomeruli"
+            ]
+          },
+          {
+            "cell_type": "parietal epithelial cells",
+            "patterns": [
+              "glomeruli_bowman_capsule"
+            ]
+          },
+          {
+            "cell_type": "proximal tubule cells",
+            "patterns": [
+              "cortex",
+              "outer_medulla"
+            ]
+          },
+          {
+            "cell_type": "loop of Henle cells",
+            "patterns": [
+              "medulla",
+              "outer_medulla"
+            ]
+          },
+          {
+            "cell_type": "distal convoluted tubule cells",
+            "patterns": [
+              "cortex"
+            ]
+          },
+          {
+            "cell_type": "connecting tubule / collecting duct principal cells",
+            "patterns": [
+              "cortex",
+              "medulla"
+            ]
+          },
+          {
+            "cell_type": "collecting duct intercalated cells",
+            "patterns": [
+              "cortex",
+              "medulla"
+            ]
+          },
+          {
+            "cell_type": "non glomerular endothelial cells",
+            "patterns": [
+              "vascular_tracks",
+              "peritubular"
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

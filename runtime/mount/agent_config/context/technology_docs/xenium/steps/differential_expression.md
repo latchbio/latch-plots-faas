@@ -4,6 +4,12 @@
 Identify cluster-specific marker genes suitable for annotation and visualization.
 </goal>
 
+<self_eval_criteria>
+- Most clusters have non-empty marker sets with reasonable log fold changes and FDR.
+- `adata.uns["dge"]` is populated and can be reused for cell-type annotation.
+- Spatial and UMAP plots of top markers look biologically plausible.
+</self_eval_criteria>
+
 <method>
 1/ Select the DGE method:
    - **Default (fastest):** `t-test_overestim_var` with Benjamini–Hochberg FDR control.
@@ -59,11 +65,4 @@ sc.tl.rank_genes_groups(
 - `matplotlib`
 - `plotly`
 </library>
-
-<self_eval_criteria>
-- DGE runs without errors on the selected cluster column.
-- Most clusters have non-empty marker sets with reasonable log fold changes and FDR.
-- `adata.uns["dge"]` is populated and can be reused for cell-type annotation.
-- Spatial and UMAP plots of top markers look biologically plausible.
-</self_eval_criteria>
 

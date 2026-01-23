@@ -1,23 +1,17 @@
 <goal>
-Identify cell types in each cluster.
+Identify cell types.
 </goal>
 
 <method>
-1. **Extract top 20 marker genes per cluster** (not just 5 - critical markers often appear in positions 6-20)
 
-2. **Analyze and interpret each cluster**: Consider gene function, biological role, and tissue context. Write out your reasoning.
+**Load priors**: Load `technology_docs/evals/cell_types.json` and select matching entry by (organism, tissue, context). Perform annotation using ONLY `expected_major_types` in priors.
 
-3. **Apply descriptive labels**:
-   - Preferred: Functional description (e.g., "Proliferating cells", "Steroidogenic cells")
-   - If uncertain: Description + marker (e.g., "Stromal-like (Col1a1+)")
-   - **NEVER**: "Cluster X"
+**Trekker (single-cell)**: 
+- Use cluster-based cell type annotation. Extract markers per cluster and assign labels based on marker enrichment and biological context.
 
-4. **Validation checks**:
-   - All clusters have biological interpretation (no "Cluster X" labels)
-   - Proportions are biologically plausible
-   - Create summary table with counts and percentages
-   - Generate dot plot of top markers
-   - Create one violin plot per cell type, comparing its enriched markers to other cell types. 
+**Seeker (beads = 1–2 cells per spot)**:
+- **Reference-free**: Annotate each **spot** based on marker gene expression.
+- **Reference-based**: Use deconvolution via `technology_docs/tools/cell2location.md`. If a single-cell reference is required, use `technology_docs/tools/curate_sc_reference.md`.
 </method>
 
 <workflows>
@@ -27,4 +21,5 @@ Identify cell types in each cluster.
 </library>
 
 <self_eval_criteria>
+- Follow `technology_docs/evals/cell_typing.md`
 </self_eval_criteria>
