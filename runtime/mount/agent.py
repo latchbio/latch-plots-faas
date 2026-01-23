@@ -73,7 +73,7 @@ class AgentHarness:
     current_request_id: str | None = None
     should_auto_continue: bool = False
     pending_auto_continue: bool = False
-    pause_until_user_query: bool = False
+    manually_cancelled: bool = False
     pending_tool_calls: set[str] = field(default_factory=set)
 
     pending_messages: asyncio.Queue = field(default_factory=asyncio.Queue)
@@ -647,16 +647,9 @@ class AgentHarness:
 
     async def _wait_for_message(self) -> None:
         print("[agent] _wait_for_message: waiting for message...")
-        while True:
-            msg = await self.pending_messages.get()
+        msg = await self.pending_messages.get()
 
-            msg_type = msg.get("type")
-
-            if self.pause_until_user_query and msg_type in {"resume", "cell_result", "set_widget_value"}:
-                print(f"[agent] Suppressing follow-up message type={msg_type}")
-                continue
-
-            break
+        msg_type = msg.get("type")
 
         if msg_type == "resume":
             print("[agent] Resuming turn after tool results")
@@ -665,7 +658,6 @@ class AgentHarness:
         if msg_type == "user_query":
             self.current_request_id = msg.get("request_id")
             self.current_status = "thinking"
-            self.pause_until_user_query = False
 
             payload = {
                 "content": msg["content"],
@@ -1225,12 +1217,6 @@ class AgentHarness:
                 else:
                     self.should_auto_continue = should_continue
                     self.pending_auto_continue = False
-
-                terminal_statuses = {"done", "awaiting_user_response"}
-                if not should_continue and next_status in terminal_statuses:
-                    self.pause_until_user_query = True
-                else:
-                    self.pause_until_user_query = False
 
                 self.current_status = next_status
                 if next_status == "awaiting_user_widget_input":
@@ -1883,12 +1869,12 @@ class AgentHarness:
 
         self.tools.append({
             "name": "submit_response",
-            "description": "Submit the user-facing response with next_status, questions, and summary. At least one of summary or questions is REQUIRED. Call this at the end of every turn.",
+            "description": "Submit the final response with next_status, questions, and summary. At least one of summary or questions is REQUIRED. Call this at the end of every turn.",
             "input_schema": {
                 "type": "object",
                 "properties": {
-                    "summary": {"type": "string", "description": "User-facing progress, responses, or next step. Use markdown bullets if needed."},
-                    "questions": {"type": "string", "description": "User-facing questions. Put finalized question text here."},
+                    "summary": {"type": "string", "description": "Text for user to describe current progress, responses to user messages, or next step. Use markdown formatting with bullet points if needed."},
+                    "questions": {"type": "string", "description": "The actual question text to show the user. When you formulate questions (in thinking or otherwise), put the final questions here"},
                     "next_status": {"type": "string", "description": "What the agent will do next", "enum": ["executing", "fixing", "thinking", "awaiting_user_response", "awaiting_cell_execution", "awaiting_user_widget_input", "done"]},
                     "expected_widgets": {
                         "type": "array",
@@ -3515,7 +3501,6 @@ class AgentHarness:
 
             self.should_auto_continue = False
             self.pending_auto_continue = False
-            self.pause_until_user_query = False
 
             self.agent_session_id = new_session_id
 
@@ -3608,7 +3593,7 @@ class AgentHarness:
                 else:
                     print(f"[agent] Reconnected with status '{next_status}', staying idle")
 
-            if len(messages) > 0 and messages[-1].get("role") == "user" and not self.pause_until_user_query:
+            if len(messages) > 0 and messages[-1].get("role") == "user" and not self.manually_cancelled:
                 print("[agent] Incomplete turn detected, auto-resuming")
                 await self.pending_messages.put({"type": "resume"})
         except Exception as e:
@@ -3625,7 +3610,7 @@ class AgentHarness:
         template_version_id = msg.get("template_version_id")
         behavior = msg.get("behavior")
 
-        self.pause_until_user_query = False
+        self.manually_cancelled = False
 
         if behavior is not None:
             self.behavior = Behavior.step_by_step if behavior == "step_by_step" else Behavior.proactive
@@ -3652,7 +3637,7 @@ class AgentHarness:
         self.current_request_id = None
         self.should_auto_continue = False
         self.pending_auto_continue = False
-        self.pause_until_user_query = True
+        self.manually_cancelled = True
         self.executing_cells.clear()
 
         await self._clear_running_state()
@@ -3685,7 +3670,6 @@ class AgentHarness:
         await self._mark_all_history_removed()
 
         self.current_plan = None
-        self.pause_until_user_query = False
 
         self._start_conversation_loop()
 
@@ -3787,11 +3771,7 @@ class AgentHarness:
 
                 if cell_id is not None:
                     self.executing_cells.discard(str(cell_id))
-                if self.pause_until_user_query:
-                    print(f"[agent] Suppressing cell {cell_id} result while pause_until_user_query is True")
-                    return
-                execution_statuses = {"executing", "awaiting_cell_execution", "thinking", "fixing"}
-                if self.current_status is not None and self.current_status not in execution_statuses:
+                if self.current_status in {"awaiting_user_response", "awaiting_user_widget_input", "done"}:
                     print(f"[agent] Not adding cell {cell_id} result because {self.current_status}")
                     return
 
