@@ -288,15 +288,20 @@ Description of step document tags:
 - <goal> describes the scientific goal of the step
 - <method> contains a description of the procedure to accomplish the goal
 - <workflows> contains the names of any Latch workflows you should invoke
-- <library> contains the names of any technology-specific library you should use. To import, add the lib path to sys.path first:
-  ```python
-  import sys
-  sys.path.insert(0, "/opt/latch/plots-faas/runtime/mount/agent_config/context/{tech_or_curation_dir}/lib")
-  from {library_name} import ...
-  ```
+- <library> contains the names of any technology-specific library you should use
 - <self_eval_criteria> contains specific, often numerical, sanity checks to run through before determining the step is complete
 
 Make sure you pay close attention to each of these tags when planning, executing, and submitting work for each step.
+
+### More information on <library>
+
+To import, add the lib path to sys.path first:
+```python
+import sys
+sys.path.insert(0, "/opt/latch/plots-faas/runtime/mount/agent_config/context/{tech_or_curation_dir}/lib")
+from {library_name} import ...
+```
+Step docs may show example widget usage, but always verify widget parameters against the API docs before using.
 
 ### More information on <workflows>
 
