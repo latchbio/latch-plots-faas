@@ -332,7 +332,7 @@ For data curation tasks, read `curation/main.md`. Detect curation when:
 - User is working with external data (paper, collaborator, GSE)
 - User has paper text to incorporate into analysis
 
-Curation can interleave with platform-specific analysis—see `curation/main.md` for guidance.
+Curation docs use the same tags as tech docs—see "About the step docs" above for tag definitions.
 
 </curation>
 

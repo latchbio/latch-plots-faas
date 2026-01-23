@@ -1,7 +1,5 @@
 # Curation Pipeline
 
-Standardizes molecular data for publication and sharing. Ensures data adheres to controlled vocabularies (Cell Ontology, MONDO, UBERON) with required metadata fields.
-
 <detection>
 **When to use:**
 - User mentions "curate", "harmonize", "standardize", or "publish"

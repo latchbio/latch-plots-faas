@@ -8,8 +8,7 @@ Download study metadata and supplementary files from GEO. Collect paper context 
 from lplots.widgets.text import w_text_input
 
 paper_input = w_text_input(
-    label="Paper Text",
-    multiline=True,
+    label="Paper Text"
 )
 ```
 Tell user: "Paste paper text (abstract/methods/results) in the widget while I download the GEO data."

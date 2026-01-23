@@ -45,14 +45,8 @@ def _df_to_str(df: pd.DataFrame | None) -> str:
 
 
 def download_gse_metadata(gse_id: str) -> pd.DataFrame:
-    tmp_dir = Path("tmp_geo")
-    tmp_dir.mkdir(exist_ok=True)
-    try:
-        gse = GEOparse.get_GEO(geo=gse_id, destdir=str(tmp_dir.resolve()))
-    finally:
-        for f in tmp_dir.iterdir():
-            f.unlink()
-        tmp_dir.rmdir()
+    with TemporaryDirectory() as tmp:
+        gse = GEOparse.get_GEO(geo=gse_id, destdir=tmp)
 
     all_keys = set()
     for gsm in gse.gsms.values():
