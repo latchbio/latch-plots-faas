@@ -3633,7 +3633,7 @@ class AgentHarness:
         full_query = query
         if contextual_node_data:
             full_query = f"{query} \n\nHere is the context of the selected nodes the user would like to use: <ContextualNodeData>{json.dumps(contextual_node_data)}</ContextualNodeData>"
-        if selected_widgets is not None and isinstance(selected_widgets, list) and len(selected_widgets) > 0:
+        if selected_widgets is not None:
             full_query = f"{full_query} \n\nHere is the list of widgets the user is referencing: <SelectedWidgets>{json.dumps(selected_widgets)}</SelectedWidgets>"
 
         await self.pending_messages.put({
