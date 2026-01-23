@@ -1883,12 +1883,12 @@ class AgentHarness:
 
         self.tools.append({
             "name": "submit_response",
-            "description": "Submit the final response with next_status, questions, and summary. At least one of summary or questions is REQUIRED. Call this at the end of every turn.",
+            "description": "Submit the user-facing response with next_status, questions, and summary. At least one of summary or questions is REQUIRED. Call this at the end of every turn.",
             "input_schema": {
                 "type": "object",
                 "properties": {
-                    "summary": {"type": "string", "description": "Text for user to describe current progress, responses to user messages, or next step. Use markdown formatting with bullet points if needed."},
-                    "questions": {"type": "string", "description": "The actual question text to show the user. When you formulate questions (in thinking or otherwise), put the final questions here"},
+                    "summary": {"type": "string", "description": "User-facing progress, responses, or next step. Use markdown bullets if needed."},
+                    "questions": {"type": "string", "description": "User-facing questions. Put finalized question text here."},
                     "next_status": {"type": "string", "description": "What the agent will do next", "enum": ["executing", "fixing", "thinking", "awaiting_user_response", "awaiting_cell_execution", "awaiting_user_widget_input", "done"]},
                     "expected_widgets": {
                         "type": "array",
