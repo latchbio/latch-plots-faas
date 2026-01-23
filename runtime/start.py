@@ -42,7 +42,7 @@ os.system(
 os.system(
     "git -C /opt/latch/plots-faas pull origin main || git -C /opt/latch/plots-faas forgejo-mirror main"
 )
-os.system("git -C /opt/latch/plots-faas submodule update --init --force")
+os.system("git -C /opt/latch/plots-faas submodule update --init")
 os.system("git -C /opt/latch/plots-faas rev-parse HEAD > /opt/latch/plots_faas_version")
 
 os.chdir("/opt/latch/plots-faas")
@@ -51,7 +51,7 @@ os.system("/opt/mamba/envs/plots-faas/bin/pip install --upgrade latch")
 
 technology_docs = Path("/opt/latch/plots-faas/runtime/mount/agent_config/context/technology_docs")
 for sp_requirements in technology_docs.glob("*/requirements.txt"):
-    os.system(f"/opt/mamba/envs/plots-faas/bin/pip install -c /opt/latch/plots-constraints.txt -r {sp_requirements}")
+    os.system(f"/opt/mamba/envs/plots-faas/bin/pip install -c /opt/latch/requirements-plots.txt -r {sp_requirements}")
 
 os.execle(
     "/usr/bin/nice",
