@@ -3033,9 +3033,9 @@ class AgentHarness:
 
         except APIStatusError as e:
             print(f"[agent] Stream error (status={e.status_code}): {e}")
-            
+
             should_contact_support = 400 <= e.status_code < 500 and e.status_code != 429
-            
+
             if should_contact_support:
                 user_message = "An unexpected error occurred. Please try again."
             else:
@@ -3217,7 +3217,7 @@ class AgentHarness:
                 f"<turn_behavior>\n{turn_behavior_content}\n</turn_behavior>",
                 self.system_prompt,
             )
-            
+
             examples_content = (context_root / "examples" / behavior_file).read_text()
             final_system_prompt = re.sub(
                 r"EXAMPLES_PLACEHOLDER",
@@ -3622,6 +3622,7 @@ class AgentHarness:
         request_id = msg.get("request_id")
         contextual_node_data = msg.get("contextual_node_data")
         template_version_id = msg.get("template_version_id")
+        selected_widgets = msg.get("selected_widgets")
         behavior = msg.get("behavior")
 
         self.pause_until_user_query = False
@@ -3632,6 +3633,8 @@ class AgentHarness:
         full_query = query
         if contextual_node_data:
             full_query = f"{query} \n\nHere is the context of the selected nodes the user would like to use: <ContextualNodeData>{json.dumps(contextual_node_data)}</ContextualNodeData>"
+        if selected_widgets is not None and isinstance(selected_widgets, list) and len(selected_widgets) > 0:
+            full_query = f"{full_query} \n\nHere is the list of widgets the user is referencing: <SelectedWidgets>{json.dumps(selected_widgets)}</SelectedWidgets>"
 
         await self.pending_messages.put({
             "type": "user_query",
@@ -3640,6 +3643,7 @@ class AgentHarness:
             "display_query": query,
             "display_nodes": contextual_node_data,
             "template_version_id": template_version_id,
+            "selected_widgets": selected_widgets,
         })
 
         print(f"[agent] Message queued successfully (request_id={request_id})")
