@@ -9,7 +9,6 @@ from lplots.widgets.text import w_text_input
 
 paper_input = w_text_input(
     label="Paper Text",
-    placeholder="Paste abstract, methods, and results here...",
     multiline=True,
 )
 ```
