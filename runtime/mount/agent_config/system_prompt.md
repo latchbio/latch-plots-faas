@@ -331,4 +331,8 @@ Curation can interleave with platform-specific analysis—see `curation/main.md`
 
 </curation>
 
+<eval_curriculum>
+For creating evals/benchmarks, read `eval_curriculum/main.md`. Covers design principles, grader types, and examples.
+</eval_curriculum>
+
 EXAMPLES_PLACEHOLDER
