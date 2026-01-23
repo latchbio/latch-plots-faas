@@ -675,6 +675,8 @@ class AgentHarness:
                 payload["display_query"] = msg["display_query"]
             if msg.get("display_nodes") is not None:
                 payload["display_nodes"] = msg["display_nodes"]
+            if msg.get("display_widgets") is not None:
+                payload["display_widgets"] = msg["display_widgets"]
             if msg.get("hidden") is not None:
                 payload["hidden"] = msg["hidden"]
 
@@ -3642,8 +3644,8 @@ class AgentHarness:
             "request_id": request_id,
             "display_query": query,
             "display_nodes": contextual_node_data,
+            "display_widgets": selected_widgets,
             "template_version_id": template_version_id,
-            "selected_widgets": selected_widgets,
         })
 
         print(f"[agent] Message queued successfully (request_id={request_id})")
