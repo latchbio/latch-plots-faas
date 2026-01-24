@@ -3283,6 +3283,11 @@ class AgentHarness:
                 continue
 
             response_content = response.model_dump()["content"]
+            if isinstance(response_content, list):
+                for block in response_content:
+                    if isinstance(block, dict):
+                        block.pop("caller", None)
+                        block.pop("parsed_output", None)
             if response_content is not None and (not isinstance(response_content, list) or len(response_content) > 0):
                 if isinstance(response_content, list):
                     thinking_text = None
