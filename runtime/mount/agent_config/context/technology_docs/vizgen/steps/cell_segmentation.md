@@ -15,7 +15,7 @@ Configure Vizgen MERFISH cell segmentation and launch the workflow.
 </method>
 
 <workflows>
-wf/cell_segmentation_wf.md
+wf.__init__.vizgen_cell_segmentation_wf
 </workflows>
 
 <library>
