@@ -2,3 +2,15 @@
 	path = runtime/mount/agent_config/context/technology_docs/takara
 	url = https://github.com/latchbio/takara-devkit.git
 	branch = main
+[submodule "runtime/mount/agent_config/context/technology_docs/xenium"]
+	path = runtime/mount/agent_config/context/technology_docs/xenium
+	url = https://github.com/latchbio/xenium-devkit.git
+	branch = main
+[submodule "runtime/mount/agent_config/context/technology_docs/vizgen"]
+	path = runtime/mount/agent_config/context/technology_docs/vizgen
+	url = https://github.com/latchbio/vizgen-devkit.git
+	branch = main
+[submodule "runtime/mount/agent_config/context/technology_docs/atlasxomics"]
+	path = runtime/mount/agent_config/context/technology_docs/atlasxomics
+	url = https://github.com/latchbio/atlasx-devkit.git
+	branch = main
