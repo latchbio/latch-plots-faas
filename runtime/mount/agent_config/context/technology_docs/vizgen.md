@@ -12,13 +12,13 @@ Invoke the `redeem_package` tool to install required Vizgen tools into the works
 
 ## **DATA LOADING**
 
-Follow instructions at `vizgen/vizgen_data_loading.md`
+Follow instructions at `vizgen/steps/data_loading.md`
 
 ---
 
 ## **QUALITTY CONTROL**
 
-Follow instructions at `vizgen/vizgen_QC.md`
+Follow instructions at `vizgen/steps/qc.md`
 
 ## **PREPROCESSING**
 
@@ -28,26 +28,26 @@ IF TRUE
 Procced to **Spatial Analysis Step** after the rapids workflow finishes.
 
 ELSE Skip steps 4-10:
-## **ALWAYS FOLLOW INSTRUCTIONS FROM `vizgen_scanpy_preprocessing.md`**
+## **ALWAYS FOLLOW INSTRUCTIONS FROM `vizgen/steps/scanpy_preprocessing.md`**
 Procced to **Spatial Analysis Step** after this step
 
 ---
 
 ## **SPATIAL ANALYSIS (using Squidpy)**
 
-Follow instructions at `vizgen/vizgen_spatial_analysis.md`
+Follow instructions at `vizgen/steps/spatial_analysis.md`
 
 ---
 
 ## **SECONDARY ANALYSIS**
 
-Follow instructions at `vizgen/vizgen_secondary_analysis.md`
+Follow instructions at `vizgen/steps/vizgen_secondary_analysis.md`
 
 ---
 
 ## Launch Cell segmentation Workflow
 
-Follow instructions at `vizgen/vizgen_cell_segmentation.md`
+Follow instructions at `vizgen/steps/cell_segmentation.md`
 
 ---
 

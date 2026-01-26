@@ -30,7 +30,7 @@ Perform secondary analysis on Vizgen MERFISH data, including cell-type annotatio
 </method>
 
 <workflows>
-wf/banksy_wf.md
+wf.__init__.domain_detection_wf
 </workflows>
 
 <library>
