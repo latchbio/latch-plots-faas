@@ -11,6 +11,7 @@ import traceback
 import uuid
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
+from datetime import datetime
 from enum import Enum
 from pathlib import Path
 
@@ -3781,10 +3782,9 @@ class AgentHarness:
             print(f"[agent] {msg.get('action', 'unknown')} -> {msg.get('status', 'unknown')}")
             await self.handle_action_response(msg)
         elif msg_type == "kernel_message":
-            print(f"[agent] Kernel message: {msg}")
-
             nested_msg = msg.get("message", {})
             nested_type = nested_msg.get("type")
+            print(f"[agent] Kernel message: {nested_type}")
 
             if nested_type == "cell_result":
                 cell_id = nested_msg.get("cell_id")
@@ -3799,11 +3799,11 @@ class AgentHarness:
                 if cell_id is not None:
                     self.executing_cells.discard(str(cell_id))
                 if self.pause_until_user_query:
-                    print(f"[agent] Suppressing cell {cell_id} result while pause_until_user_query is True")
+                    print(f"        Suppressing cell {cell_id} result while pause_until_user_query is True")
                     return
                 execution_statuses = {"executing", "awaiting_cell_execution", "thinking", "fixing"}
                 if self.current_status is not None and self.current_status not in execution_statuses:
-                    print(f"[agent] Not adding cell {cell_id} result because {self.current_status}")
+                    print(f"        Not adding cell {cell_id} result because {self.current_status}")
                     return
 
                 if self.current_request_id is not None:
@@ -3816,18 +3816,20 @@ class AgentHarness:
                         "display_name": display_name,
                     })
                 else:
-                    print(f"[agent] Cell {cell_id} completed but no active request - updating executing_cells only")
+                    print(f"        Cell {cell_id} completed but no active request - updating executing_cells only")
 
             elif nested_type == "start_cell":
                 cell_id = nested_msg.get("cell_id")
                 if cell_id is not None and self.current_request_id is not None:
                     self.executing_cells.add(str(cell_id))
+                    print(f"        Added cell {cell_id} to executing_cells")
             elif nested_type == "set_widget_value":
                 if self.current_status == "awaiting_user_widget_input":
                     data = nested_msg.get("data", {})
                     for key, value in data.items():
                         if key in self.expected_widgets:
                             self.expected_widgets[key] = value
+                            print(f"        Set widget {key}")
 
                     if all(v is not None for v in self.expected_widgets.values()):
                         self.current_status = "thinking"
@@ -3835,6 +3837,9 @@ class AgentHarness:
                             "type": "set_widget_value",
                             "data": self.expected_widgets
                         })
+                        print("        Finished waiting for widget input")
+            else:
+                print("        Ignored")
         elif msg_type == "get_full_prompt":
             tx_id = msg.get("tx_id")
             print(f"[agent] Get full prompt request (tx_id={tx_id})")
@@ -3857,10 +3862,10 @@ class AgentHarness:
                 **result
             })
         elif msg_type == "seed_plan_from_history":
-            print(f"[agent] seed_plan_from_history received")
+            print("[agent] seed_plan_from_history received")
             plan = msg.get("plan")
             if plan is None or plan.get("steps") is None:
-                print(f"[agent] Invalid plan received")
+                print("[agent] Invalid plan received")
                 return
 
             if self.current_plan is None:
@@ -3874,7 +3879,6 @@ async def main() -> None:
     global loop
     loop = asyncio.get_running_loop()
 
-    from datetime import datetime
     print(f"{datetime.now().isoformat()} [agent] Starting")
 
     sock = socket.socket(family=socket.AF_UNIX, fileno=int(sys.argv[-1]))

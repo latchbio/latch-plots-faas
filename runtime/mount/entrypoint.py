@@ -514,8 +514,11 @@ async def handle_agent_messages(conn_a: SocketIo) -> None:
         tx_id = msg.get("tx_id")
         action = msg.get("action")
 
-        if msg_type != "agent_stream_delta":
+        if msg_type != "agent_stream_delta" and "agent_stream_block" not in msg_type:
             print(f"[entrypoint] Agent > {msg_type}")
+
+        if msg_type == "agent_action":
+            print(f"[entrypoint]       > (action={action})")
 
         if msg_type == "agent_action" and msg.get("action") == "request_reactivity_summary":
             if k_proc.conn_k is not None:
