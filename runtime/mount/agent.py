@@ -11,7 +11,7 @@ import traceback
 import uuid
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
 
@@ -90,6 +90,7 @@ class AgentHarness:
     buffer: list[str] = field(default_factory=list)
     summarize_tasks: set[asyncio.Task] = field(default_factory=set)
     in_memory_history: list[dict] = field(default_factory=list)
+    widget_image_dump_index: int = 0
 
     mode_config: dict[Mode, tuple[str, int | None]] = field(default_factory=lambda: {
         Mode.planning: ("claude-opus-4-5-20251101", 4096),
@@ -2852,6 +2853,23 @@ class AgentHarness:
                 }
 
             print(f"[tool] capture_widget_image: {widget_key}")
+
+            dump_index = self.widget_image_dump_index
+            self.widget_image_dump_index += 1
+            dump_path = Path(f"/tmp/widget_image_{dump_index}.txt")  # noqa: S108
+            dump_lines = [
+                f"dump_index: {dump_index}",
+                f"timestamp: {datetime.now(UTC).isoformat()}",
+                f"widget_key: {widget_key}",
+                "",
+                "latest_notebook_state:",
+                self.latest_notebook_state or "",
+                "",
+                "latest_notebook_context:",
+                json.dumps(self.latest_notebook_context, indent=2, sort_keys=True, default=str),
+            ]
+            dump_text = "\n".join(dump_lines)
+            dump_path.write_text(dump_text, encoding="utf-8")  # noqa: ASYNC240
 
             result = await self.atomic_operation("capture_widget_image", {"widget_key": widget_key})
 
