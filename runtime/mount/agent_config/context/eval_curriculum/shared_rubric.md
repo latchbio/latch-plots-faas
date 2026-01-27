@@ -1,15 +1,8 @@
-# Eval Design Curriculum
+# SpatialBench Eval Rubric (Shared)
 
-<detection>
-Use when user wants to:
-- Create evaluation problems for SpatialBench
-- Design graders or test cases
-- Review/improve existing evals
-</detection>
-
-GRADERS -> `graders.md`
-EXAMPLES -> `examples.md`
-
+This section is **authoritative** and is intended to be reused verbatim in:
+- the human-facing curriculum (as the canonical rubric), and
+- the judge system prompt (as the grading rubric).
 
 ## Core Rule: Specify WHAT, not HOW
 - For all evals: tasks should specify **what to return** (exact JSON fields) and the **scientific goal**, not a step-by-step method or parameters.
@@ -114,3 +107,24 @@ A grader must align with what the task asks the agent to return.
 ### label_set_jaccard
 - Expected output: `{"labels": ["A", "C"]}` (order-independent)
 - Used for multi-select sets; penalizes missing + extra items.
+
+---
+
+## Using Trajectories (if provided) as evidence
+
+Trajectories can indicate:
+- **Shortcutting:** very short "answer immediately" trajectories + high pass rate.
+- **Tolerance too tight:** correct-looking work + low pass rate.
+- **Durability issues:** large variance across runs/methods.
+
+Only cite trajectory evidence that is explicitly visible in the trajectory.
+
+---
+
+## Suggestion priority (actionable fixes)
+
+When recommending fixes, prioritize in this order:
+1. If shortcuts exist via precomputed dataset fields: **remove those fields first**.
+2. Fix verifiability: specify JSON output fields; align grader with output.
+3. Fix durability: widen/adjust tolerances; anchor inputs; avoid unstable artifacts; adjust eval_type if mismatched.
+4. Fix anti-shortcut: remove answer leaks; make distractors plausible; avoid "answer in question".

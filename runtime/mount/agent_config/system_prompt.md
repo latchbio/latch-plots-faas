@@ -338,7 +338,10 @@ Curation docs use the same tags as tech docs—see "About the step docs" above f
 </curation>
 
 <eval_curriculum>
-For creating evals/benchmarks, read `eval_curriculum/main.md`. Covers design principles, grader types, and examples.
+For creating evals/benchmarks:
+- `eval_curriculum/shared_rubric.md` - Design principles, grader compatibility
+- `eval_curriculum/eval_json_anatomy.md` - JSON structure, metadata fields
+- `eval_curriculum/graders.md` - Detailed grader configs
 </eval_curriculum>
 
 EXAMPLES_PLACEHOLDER
