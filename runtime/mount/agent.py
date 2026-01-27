@@ -306,6 +306,13 @@ class AgentHarness:
                 role = payload.get("role")
                 content = payload.get("content")
 
+                display_widgets = payload.get("display_widgets")
+                if role == "user" and display_widgets is not None and isinstance(content, str):
+                    for widget in display_widgets:
+                        ref_pattern = f"@({widget['widgetKey']}|{widget['id']})"
+                        inline_widget = f"<Widget label=\"{widget['label']}\" type=\"{widget['widgetType']}\" widget_key=\"{widget['widgetKey']}\" cell=\"{widget['cellDisplayName']}\"/>"
+                        content = content.replace(ref_pattern, inline_widget)
+
                 if (role == "user" and isinstance(content, dict) and content.get("type") == "cell_result"):
                     exception = content.get("exception")
                     logs = content.get("logs")
@@ -3642,9 +3649,6 @@ class AgentHarness:
         full_query = query
         if contextual_node_data:
             full_query = f"{query} \n\nHere is the context of the selected nodes the user would like to use: <ContextualNodeData>{json.dumps(contextual_node_data)}</ContextualNodeData>"
-        if selected_widgets is not None:
-            full_query = f"{full_query} \n\nHere is the list of widgets the user is referencing: <SelectedWidgets>{json.dumps(selected_widgets)}</SelectedWidgets>"
-
         await self.pending_messages.put({
             "type": "user_query",
             "content": full_query,
