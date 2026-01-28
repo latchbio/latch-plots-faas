@@ -1,6 +1,6 @@
-## Grader Types
+# Grader Types
 
-### 2.1 `numeric_tolerance`
+## `numeric_tolerance`
 
 **Use case:** QC metrics, counts, normalized values, ratios
 
@@ -23,11 +23,11 @@
 }
 ```
 
-**When to use:** When the answer is a single number and you can define acceptable variation. See Examples 1, 2, 3, 10.
+**When to use:** When the answer is a single number and you can define acceptable variation.
 
 ---
 
-### 2.2 `multiple_choice`
+## `multiple_choice`
 
 **Use case:** Interpretation questions, pattern identification, qualitative comparisons
 
@@ -47,11 +47,11 @@
 }
 ```
 
-**When to use:** When testing interpretation or understanding rather than computation. All distractors must be biologically plausible. See Examples 4, 9.
+**When to use:** When testing interpretation or understanding rather than computation. All distractors must be biologically plausible.
 
 ---
 
-### 2.3 `distribution_comparison`
+## `distribution_comparison`
 
 **Use case:** Cell type proportions, population compositions
 
@@ -80,11 +80,11 @@
 }
 ```
 
-**When to use:** When testing multi-class annotation where each category has an expected proportion. See Example 6.
+**When to use:** When testing multi-class annotation where each category has an expected proportion.
 
 ---
 
-### 2.4 `marker_gene_precision_recall`
+## `marker_gene_precision_recall`
 
 **Use case:** Marker gene discovery, differential expression, top-K gene lists
 
@@ -110,11 +110,11 @@
 }
 ```
 
-**When to use:** For discovery tasks where you have a validated set of expected markers. Recall threshold determines how many canonical markers must appear in the agent's list. See Examples 5, 7, 8.
+**When to use:** For discovery tasks where you have a validated set of expected markers. Recall threshold determines how many canonical markers must appear in the agent's list.
 
 ---
 
-### 2.5 `label_set_jaccard`
+## `label_set_jaccard`
 
 **Use case:** Multi-select questions, set matching, pathway selection
 
@@ -136,4 +136,3 @@
 ```
 
 **When to use:** When multiple answers are correct and order doesn't matter. Penalizes both missing items and extra incorrect items.
-
