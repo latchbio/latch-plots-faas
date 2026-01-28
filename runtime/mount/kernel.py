@@ -1180,6 +1180,7 @@ class Kernel:
                 assert not ctx.in_tx
 
             self.cell_status[cell_id] = "running"
+            print(f"[tim] kernel.py exec: cell {cell_id} status set to 'running'")
 
             comp = self.cell_rnodes.get(cell_id)
             if comp is not None and not _from_stub:
@@ -1197,6 +1198,7 @@ class Kernel:
             stmts = list(ast.iter_child_nodes(parsed))
             if len(stmts) == 0:
                 self.cell_status[cell_id] = "ok"
+                print(f"[tim] kernel.py exec: cell {cell_id} status set to 'ok' (empty cell) -> frontend sees 'ran'")
                 self.k_globals.clear()
                 await self.send_cell_result(cell_id)
                 return
@@ -1208,6 +1210,7 @@ class Kernel:
                 # the only complication is to tell when it has *finished*
                 # running so we can set the status & send results + flush logs
                 self.cell_status[cell_id] = "running"
+                print(f"[tim] kernel.py x(): cell {cell_id} status set to 'running'")
 
                 try:
                     assert ctx.cur_comp is not None
@@ -1231,10 +1234,12 @@ class Kernel:
                         ...
 
                     self.cell_status[cell_id] = "ok"
+                    print(f"[tim] kernel.py x(): cell {cell_id} status set to 'ok' (success) -> frontend sees 'ran'")
                     await self.send_cell_result(cell_id)
 
                 except (KeyboardInterrupt, Exception):
                     self.cell_status[cell_id] = "error"
+                    print(f"[tim] kernel.py x(): cell {cell_id} status set to 'error' (exception)")
                     await self.send_cell_result(cell_id)
 
                 finally:
@@ -1248,6 +1253,7 @@ class Kernel:
 
         except (KeyboardInterrupt, asyncio.CancelledError, Exception):
             self.cell_status[cell_id] = "error"
+            print(f"[tim] kernel.py exec: cell {cell_id} status set to 'error' (outer exception)")
             await self.send_cell_result(cell_id)
         finally:
             self.active_cell_task = None
@@ -1834,6 +1840,7 @@ class Kernel:
             if node is not None:
                 node.dispose()
                 del self.cell_rnodes[cell_id]
+                print(f"[tim] kernel.py dispose_cell: cell {cell_id} status deleted")
                 del self.cell_status[cell_id]
 
             return
@@ -1852,6 +1859,7 @@ class Kernel:
             self.k_globals.clear()
 
             self.cell_rnodes.clear()
+            print("[tim] kernel.py reset_kernel_globals: clearing all cell statuses")
             self.cell_status.clear()
 
             self.ldata_dataframes.clear()
