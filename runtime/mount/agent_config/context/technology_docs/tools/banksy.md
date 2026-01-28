@@ -1,6 +1,6 @@
 # BANKSY Spatial Domain Detection Workflow
 
-**Workflow:** `wf.init.domain_detection_wf`  
+**Workflow:** `wf.__init__.domain_detection_wf`  
 **Backend:** Graph-based spatial domain detection using **BANKSY**
 
 **Purpose:**  
@@ -122,7 +122,7 @@ params = {
 
 # Launch workflow
 w = w_workflow(
-    wf_name="wf.init.domain_detection_wf",
+    wf_name="wf.__init__.domain_detection_wf",
     version=None,
     label="Launch Domain Detection Workflow",
     params=params,
