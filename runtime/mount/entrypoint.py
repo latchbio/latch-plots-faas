@@ -112,13 +112,17 @@ class KernelProc:
 
 main_k_proc = KernelProc()
 
-kernel_procs: dict[str, KernelProc] = {}
-kernel_procs["main"] = main_k_proc
+kernel_procs: dict[str, KernelProc] = {"main": main_k_proc}
 
 
-def get_kernel_proc(kernel_id: str | None) -> KernelProc | None:
+async def get_kernel_proc(kernel_id: str | None) -> KernelProc | None:
     if kernel_id is None or kernel_id == "main":
         return main_k_proc
+
+    if kernel_id not in kernel_procs:
+        k = kernel_procs[kernel_id] = KernelProc()
+        await start_kernel_proc(k)
+
     return kernel_procs.get(kernel_id)
 
 
