@@ -21,7 +21,7 @@ from ..entrypoint import (
     cell_last_run_outputs,
     cell_sequencers,
     cell_status,
-    k_proc,
+    get_kernel_proc,
     kernel_snapshot_state,
     plots_ctx_manager,
     pod_id,
@@ -90,15 +90,13 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
 
     notebook_id = auth_msg.notebook_id
 
-    s.set_attributes(
-        {
-            "notebook_id": notebook_id,
-            "pod_id": pod_id,
-            "pod_session_id": pod_session_id,
-            "sess_hash": sess_hash,
-            "connection_idx": connection_idx,
-        }
-    )
+    s.set_attributes({
+        "notebook_id": notebook_id,
+        "pod_id": pod_id,
+        "pod_session_id": pod_session_id,
+        "sess_hash": sess_hash,
+        "connection_idx": connection_idx,
+    })
 
     auth_header_regex_match = auth_header_regex.match(auth_msg.token)
     auth0_sub: str | None = None
@@ -145,8 +143,6 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
     if not data.data.plotsSignerHasNotebookAccess:
         raise WebsocketBadMessage(f"Signer cannot access notebook {notebook_id}")
 
-    conn_k = k_proc.conn_k
-    assert conn_k is not None
     user_key = await plots_ctx_manager.add_context(
         sess_hash=sess_hash,
         ctx=ctx,
@@ -162,16 +158,14 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
         await ready_ev.wait()
 
         await ctx.send_message(
-            orjson.dumps(
-                {
-                    "type": "ready",
-                    "connection_idx": connection_idx,
-                    "cell_status": cell_status,
-                    "cell_sequencers": cell_sequencers,
-                    "cell_outputs": cell_last_run_outputs,
-                    "kernel_snapshot_status": kernel_snapshot_state.status,
-                }
-            ).decode()
+            orjson.dumps({
+                "type": "ready",
+                "connection_idx": connection_idx,
+                "cell_status": cell_status,
+                "cell_sequencers": cell_sequencers,
+                "cell_outputs": cell_last_run_outputs,
+                "kernel_snapshot_status": kernel_snapshot_state.status,
+            }).decode()
         )
 
         connection_idx += 1
@@ -189,34 +183,51 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
                 and not is_agent_session
             ):
                 await ctx.send_message(
-                    orjson.dumps(
-                        {
-                            "type": "not_session_owner_error",
-                            "data": {"message": "user is not session owner"},
-                        }
-                    ).decode()
+                    orjson.dumps({
+                        "type": "not_session_owner_error",
+                        "data": {"message": "user is not session owner"},
+                    }).decode()
                 )
                 continue
+
+            kernel_id = msg.get("kernel_id")
+            k_proc = get_kernel_proc(kernel_id)
 
             if msg["type"] == "dispose_cell":
                 cell_id = msg["cell_id"]
 
-                if cell_status.get(cell_id) == "running" and k_proc.proc is not None:
+                if (
+                    cell_status.get(cell_id) == "running"
+                    and k_proc is not None
+                    and k_proc.proc is not None
+                ):
                     k_proc.proc.send_signal(signal=signal.SIGINT)
 
                 cell_status.pop(cell_id, None)
                 cell_last_run_outputs.pop(cell_id, None)
                 cell_sequencers.pop(cell_id, None)
 
-            if msg["type"] == "stop_cell" and k_proc.proc is not None:
-                k_proc.proc.send_signal(signal=signal.SIGINT)
+            if msg["type"] == "stop_cell":
+                if k_proc is not None and k_proc.proc is not None:
+                    k_proc.proc.send_signal(signal=signal.SIGINT)
                 continue
 
             if msg["type"] == "override_session_owner":
                 await plots_ctx_manager.override_session_owner(msg["user_key"])
                 continue
 
-            await conn_k.send(msg)
+            if k_proc is None or k_proc.conn_k is None:
+                await ctx.send_message(
+                    orjson.dumps({
+                        "type": "kernel_error",
+                        "data": {
+                            "message": f"kernel not available: kernel_id={kernel_id!r}"
+                        },
+                    }).decode()
+                )
+                continue
+
+            await k_proc.conn_k.send(msg)
     except WebsocketConnectionClosedError:
         ...
     finally:
