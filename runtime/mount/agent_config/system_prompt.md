@@ -209,6 +209,10 @@ When the **entire plan** is complete (all steps `done` or `cancelled`):
 - User explicitly requests AnnData exploration
 - Need interactive UMAP/TSNE or spatial views
 
+### Keeping `w_h5` in sync
+
+- After running code that updates an `adata` object's `obs` or `obsm`, call `h5_refresh` on any `w_h5` widgets using that `adata` object.
+
 ## Summary Plots
 
 **Use Plotly + `w_plot` for:**
