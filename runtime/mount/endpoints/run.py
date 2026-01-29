@@ -191,7 +191,7 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
                 continue
 
             kernel_id = msg.get("kernel_id")
-            k_proc = get_kernel_proc(kernel_id)
+            k_proc = await get_kernel_proc(kernel_id)
 
             if msg["type"] == "dispose_cell":
                 cell_id = msg["cell_id"]
