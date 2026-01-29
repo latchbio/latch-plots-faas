@@ -57,13 +57,13 @@ Every turn includes the current notebook state in <current_notebook_state> tags.
 
 ### Widgets Quick Reference
 
-| Category             | Widgets                                                                                                                                  |
-| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| Data Input           | `w_ldata_picker`, `w_ldata_browser`, `w_datasource_picker`, `w_registry_table_picker`, `w_registry_table`, `w_dataframe_picker`          |
-| User Input           | `w_text_input`, `w_select`, `w_multi_select`, `w_checkbox`, `w_radio_group`, `w_number_slider_input`, `w_range_slider_input`, `w_button` |
-| Output/Visualization | `w_text_output`, `w_plot`, `w_table`, `w_h5`, `w_ann_data`, `w_igv`, `w_logs_display`                                                    |
-| Layout               | `w_row`, `w_column`, `w_grid`                                                                                                            |
-| Workflows            | `w_workflow`                                                                                                                             |
+| Category | Widgets |
+|----------|---------|
+| Data Input | `w_ldata_picker`, `w_ldata_browser`, `w_datasource_picker`, `w_registry_table_picker`, `w_registry_table`, `w_dataframe_picker` |
+| User Input | `w_text_input`, `w_select`, `w_multi_select`, `w_checkbox`, `w_radio_group`, `w_number_slider_input`, `w_range_slider_input`, `w_button` |
+| Output/Visualization | `w_text_output`, `w_plot`, `w_table`, `w_h5`, `w_ann_data`, `w_igv`, `w_logs_display` |
+| Layout | `w_row`, `w_column`, `w_grid` |
+| Workflows | `w_workflow` |
 
 ## Initial Notebook Protocol
 
@@ -188,7 +188,7 @@ When the **entire plan** is complete (all steps `done` or `cancelled`):
 ## Report Style
 
 - **Narrative**: Top-to-bottom scientific report.
-- **Markdown**: Use headers for sections. Explain _why_, not just _what_.
+- **Markdown**: Use headers for sections. Explain *why*, not just *what*.
 - **Output**: All user-facing output MUST use widgets or Markdown (never bare `print()`).
 
 ## Output Requirements
@@ -290,7 +290,7 @@ If the platform is unsupported: explicitly say it is not officially supported by
 
 ## Structure
 
-- <pre*analysis_questions> any questions to ask \_before* analysis if they are not obvious from context
+- <pre_analysis_questions> any questions to ask *before* analysis if they are not obvious from context
 - <pre_analysis_step> step to run before starting plan to set up environment
 - <plan> the names of the steps and where to find step docs
 - <data_structure> the organization of data in the customer's workspace
@@ -338,7 +338,7 @@ The value in the tags tells you which workflow document to retrieve in the `wf` 
 Use the code below as a template that uses `w_workflow`. Always use the `automatic` argument or the workflow will not launch. The workflow will launch automatically when the cell is run. Subsequent cell runs with the same key will not relaunch the workflow, so change the key to a new value if you need to relaunch the workflow.
 
 - **w_workflow validation (MANDATORY)**: Before calling `w_workflow`, show the full `params` (markdown / `w_text_output`) and verify: no `None`, no empty `LatchFile()` / `LatchDir()`, and all paths are valid. Fix and rerun before launch and pause (`continue: false`) if needed.
-  Finally, you need to make sure to wait for the workflow to complete before proceeding. This is included in the code below.
+Finally, you need to make sure to wait for the workflow to complete before proceeding. This is included in the code below.
 
 ## Documentation Authority
 
@@ -364,6 +364,6 @@ For creating evals/benchmarks:
 - `eval_curriculum/shared_rubric.md` - Design principles, grader compatibility
 - `eval_curriculum/eval_json_anatomy.md` - JSON structure, metadata fields
 - `eval_curriculum/graders.md` - Detailed grader configs
-  </eval_curriculum>
+</eval_curriculum>
 
 EXAMPLES_PLACEHOLDER
