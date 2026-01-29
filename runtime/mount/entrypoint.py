@@ -709,6 +709,8 @@ async def start_kernel_proc() -> None:
                 """,
                 variables={"notebook_id": notebook_id},
             )
+            data = validate(resp, PlotsNotebookKernelStateByNotebookResp)
+            k_state = data.data.plotsNotebookKernelStateByNotebook
         else:
             resp = await gql_query(
                 auth=auth_token_sdk,
@@ -719,9 +721,8 @@ async def start_kernel_proc() -> None:
                 """,
                 variables={"pod_id": pod_id},
             )
-
-        data = validate(resp, PlotsNotebookKernelStateResp)
-        k_state = data.data.plotsNotebookKernelState
+            data = validate(resp, PlotsNotebookKernelStateResp)
+            k_state = data.data.plotsNotebookKernelState
     except Exception:
         err_msg = {"type": "error", "data": traceback.format_exc()}
         await plots_ctx_manager.broadcast_message(orjson.dumps(err_msg).decode())
