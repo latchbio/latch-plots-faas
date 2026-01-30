@@ -1330,6 +1330,31 @@ class AgentHarness:
                 "summary": f"Failed to set h5 widget coloring: {result.get('error', 'Unknown error')}",
             }
 
+        async def h5_refresh(args: dict) -> dict:
+            widget_key = args.get("widget_key")
+
+            print(f"[tool] h5_refresh widget_key={widget_key}")
+
+            params = {
+                "widget_key": widget_key,
+            }
+
+            result = await self.atomic_operation("h5_refresh", params)
+            if result.get("status") == "success":
+                return {
+                    "tool_name": "h5_refresh",
+                    "success": True,
+                    "label": args.get("label"),
+                    "summary": f"Refreshed h5 widget {widget_key}",
+                    "widget_key": widget_key,
+                }
+
+            return {
+                "tool_name": "h5_refresh",
+                "success": False,
+                "summary": f"Failed to refresh h5 widget: {result.get('error', 'Unknown error')}",
+            }
+
         async def h5_set_selected_obsm_key(args: dict) -> dict:
             widget_key = args.get("widget_key")
             obsm_key = args.get("obsm_key")
@@ -2097,6 +2122,26 @@ class AgentHarness:
             },
         })
         self.tool_map["h5_color_by"] = h5_color_by
+
+        self.tools.append({
+            "name": "h5_refresh",
+            "description": "Refresh an h5/AnnData widget (re-render/recompute view after state changes).",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "widget_key": {
+                        "type": "string",
+                        "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
+                    },
+                    "label": {
+                        "type": "string",
+                        "description": "Label of the widget"
+                    },
+                },
+                "required": ["widget_key"],
+            },
+        })
+        self.tool_map["h5_refresh"] = h5_refresh
 
         self.tools.append({
             "name": "h5_set_selected_obsm_key",
