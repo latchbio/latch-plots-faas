@@ -73,6 +73,12 @@ auth_token_sdk = f"Latch-SDK-Token {sdk_token}"
 pod_id = int((latch_p / "id").read_text())
 pod_session_id = (latch_p / "session-id").read_text()
 
+# notebook_id is directly provided in the case of the eval harness (no corresponding pod)
+notebook_id_file = latch_p / "notebook-id"
+notebook_id = None
+with contextlib.suppress(Exception):
+    notebook_id = notebook_id_file.read_text().strip() if notebook_id_file.exists() else None
+
 plots_ctx_manager = PlotsContextManager()
 
 user_agent_ctx: Context | None = None
@@ -157,6 +163,16 @@ class PlotsNotebookKernelState:
 @dataclass(frozen=True)
 class PlotsNotebookKernelStateResp:
     data: PlotsNotebookKernelState
+
+
+@dataclass(frozen=True)
+class PlotsNotebookKernelStateByNotebook:
+    plotsNotebookKernelStateByNotebook: KernelState
+
+
+@dataclass(frozen=True)
+class PlotsNotebookKernelStateByNotebookResp:
+    data: PlotsNotebookKernelStateByNotebook
 
 
 @dataclass(frozen=True)
@@ -683,18 +699,31 @@ async def start_kernel_proc() -> None:
 
     k_state: KernelState | None = None
     try:
-        resp = await gql_query(
-            auth=auth_token_sdk,
-            query="""
-                query plotsNotebookKernelState($pod_id: BigInt!) {
-                    plotsNotebookKernelState(argPodId: $pod_id)
-                }
-            """,
-            variables={"pod_id": pod_id},
-        )
-
-        data = validate(resp, PlotsNotebookKernelStateResp)
-        k_state = data.data.plotsNotebookKernelState
+        # eval harness case
+        if notebook_id is not None:
+            resp = await gql_query(
+                auth=auth_token_sdk,
+                query="""
+                    query plotsNotebookKernelStateByNotebook($notebook_id: BigInt!) {
+                        plotsNotebookKernelStateByNotebook(argNotebookId: $notebook_id)
+                    }
+                """,
+                variables={"notebook_id": notebook_id},
+            )
+            data = validate(resp, PlotsNotebookKernelStateByNotebookResp)
+            k_state = data.data.plotsNotebookKernelStateByNotebook
+        else:
+            resp = await gql_query(
+                auth=auth_token_sdk,
+                query="""
+                    query plotsNotebookKernelState($pod_id: BigInt!) {
+                        plotsNotebookKernelState(argPodId: $pod_id)
+                    }
+                """,
+                variables={"pod_id": pod_id},
+            )
+            data = validate(resp, PlotsNotebookKernelStateResp)
+            k_state = data.data.plotsNotebookKernelState
     except Exception:
         err_msg = {"type": "error", "data": traceback.format_exc()}
         await plots_ctx_manager.broadcast_message(orjson.dumps(err_msg).decode())
