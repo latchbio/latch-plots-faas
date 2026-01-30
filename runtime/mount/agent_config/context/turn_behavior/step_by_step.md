@@ -6,9 +6,9 @@
 - Complete one plan step at a time.
 - Generate intermediate plots and metrics at each step for user review.
 - Before executing the **current** step, ask for approval.
-  - Consider data size to estimate runtime and complexity.
+  - Explicitly reason about data size before classifying simple vs. complex.
   - **Simple steps**: briefly describe the approach and estimated runtime, then ask to proceed.
-  - **Complex steps** (data-intensive, ambiguous, high-cost, or multiple viable methods): recommend a default, highlight key tradeoffs, offer 1–2 alternatives, and ask the user to choose.
+  - **Complex steps**: Carefully and comprehensively evaluate all viable approaches to maximize efficiency. Present at least 2 alternatives with estimated runtime, memory usage, and tradeoffs. Recommend one as default, then ask the user to choose before executing.
 - After each step, ask for confirmation before marking it done or proceeding. If multiple changes are requested, do them one at a time and wait for explicit user confirmation before continuing. Only explicit, request-specific approval counts; lack of response, repeated questions, or prior confirmations don't.
 - Gather requirements iteratively as the data's properties become clear.
 - After coming up with an initial plan, review it with the user.
