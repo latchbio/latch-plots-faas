@@ -232,6 +232,9 @@ class AgentHarness:
         return msg
 
     def _prepare_messages_for_inference(self, messages: list[MessageParam]) -> list[MessageParam]:
+        # TODO(tim): can be optimized by collecting tool info in _build_messages_from_db
+        messages = self._repair_tool_use_pairing(messages)
+
         nrof_messages = len(messages)
 
         cache_pos = nrof_messages - (nrof_messages % cache_chunk_size)
@@ -348,6 +351,97 @@ class AgentHarness:
         print(f"[agent] Built {len(anthropic_messages)} messages from DB")
 
         return anthropic_messages
+
+    def _repair_tool_use_pairing(self, messages: list[MessageParam]) -> list[MessageParam]:
+        if not messages:
+            return messages
+
+        # Collect tool_use and tool_result positions
+        tool_use_at: dict[str, int] = {}  # tool_id -> assistant_msg_index
+        tool_result_at: dict[str, int] = {}  # tool_id -> user_msg_index
+        tool_result_blocks: dict[str, dict] = {}  # tool_id -> block
+
+        for i, msg in enumerate(messages):
+            content = msg.get("content")
+            if not isinstance(content, list):
+                continue
+            for block in content:
+                if not isinstance(block, dict):
+                    continue
+                if msg.get("role") == "assistant" and block.get("type") == "tool_use":
+                    tid = block.get("id")
+                    if tid:
+                        tool_use_at[tid] = i
+                elif msg.get("role") == "user" and block.get("type") == "tool_result":
+                    tid = block.get("tool_use_id")
+                    if tid:
+                        tool_result_at[tid] = i
+                        tool_result_blocks[tid] = block
+
+        if not tool_use_at:
+            return messages
+
+        # Find tool_results that need relocation (wrong position or missing)
+        tids_to_relocate: set[str] = set()
+        for tid, asst_idx in tool_use_at.items():
+            if tid not in tool_result_at or tool_result_at[tid] != asst_idx + 1:
+                tids_to_relocate.add(tid)
+
+        if not tids_to_relocate:
+            return messages
+
+        print(f"[agent] Repairing tool_use/tool_result pairing")
+
+        # Build map of results needed at each target position (immediately after assistant)
+        results_to_add: dict[int, list[dict]] = {}
+        for tid in tids_to_relocate:
+            target = tool_use_at[tid] + 1
+            block = tool_result_blocks.get(tid) or {
+                "type": "tool_result",
+                "tool_use_id": tid,
+                "content": json.dumps({"error": "Tool call interrupted before completion", "success": False}),
+            }
+            results_to_add.setdefault(target, []).append(block)
+
+        # Rebuild messages
+        repaired: list[MessageParam] = []
+        for i, msg in enumerate(messages):
+            role = msg.get("role")
+            content = msg.get("content")
+
+            if role == "user":
+                # Start with any tool_results that need to be at this position
+                new_content: list | str = list(results_to_add.get(i, []))
+
+                # Add original content, excluding relocated tool_results
+                if isinstance(content, list):
+                    for block in content:
+                        is_relocated = (
+                            isinstance(block, dict)
+                            and block.get("type") == "tool_result"
+                            and block.get("tool_use_id") in tids_to_relocate
+                        )
+                        if not is_relocated:
+                            new_content.append(block)
+                elif content:
+                    # String content - convert to text block if we have results, else keep as string
+                    if new_content:
+                        new_content.append({"type": "text", "text": content})
+                    else:
+                        new_content = content
+
+                if new_content:
+                    repaired.append({"role": "user", "content": new_content})
+            else:
+                repaired.append(msg)
+
+                # After assistant, insert user message if next message isn't a user
+                if role == "assistant" and (i + 1) in results_to_add:
+                    next_msg = messages[i + 1] if i + 1 < len(messages) else None
+                    if not next_msg or next_msg.get("role") != "user":
+                        repaired.append({"role": "user", "content": results_to_add[i + 1]})
+
+        return repaired
 
     async def refresh_cells_context(self) -> str:
         context_result, reactivity_result = await asyncio.gather(
