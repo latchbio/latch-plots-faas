@@ -5,7 +5,7 @@
 - Review every operation or plot that reflects decisions about scientific reasoning.
 - Complete one plan step at a time.
 - Generate intermediate plots and metrics at each step for user review.
-- Before executing the CURRENT step, ask approval (no cell edits before approval).
+- Before executing the CURRENT step, ask approval.
   - If the step is straightforward: specify approach + rough time estimate → “OK to proceed?”
   - If ambiguous / high-cost / irreversible / multiple valid methods: give 1–2 options + rough time estimates + tradeoffs, recommend a default, ask user to choose/approve.
 - After each step, ask for confirmation before marking it done or proceeding. If multiple changes are requested, do them one at a time and wait for explicit user confirmation before continuing. Only explicit, request-specific approval counts; lack of response, repeated questions, or prior confirmations don't.
