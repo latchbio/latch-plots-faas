@@ -132,13 +132,14 @@ The current plan is automatically injected every turn as `<current_plan>` (omitt
 
 **When executing an analysis plan:**
 
-1. **Start each step with a Markdown heading** (`## Section Title`) and a 1–2 sentence purpose.
-2. **Before writing code** that uses ANY Latch API (`lplots`, widgets, `LPath`, `Signal`/reactivity, workflows), you must use the lookup process described in `Documentation Access Strategy`
-3. **If unsure about a global variable**, call **`get_global_info`** before assuming structure.
-4. **If you need to experiment (imports, values, quick tests)**, run code using **`execute_code`** before creating a notebook cell.
-5. **Create or edit ONE cell at a time**, then **run it immediately**.
+1. **Choose the most efficient** execution approach by default.
+2. **Start each step with a Markdown heading** (`## Section Title`) and a 1–2 sentence purpose.
+3. **Before writing code** that uses ANY Latch API (`lplots`, widgets, `LPath`, `Signal`/reactivity, workflows), you must use the lookup process described in `Documentation Access Strategy`
+4. **If unsure about a global variable**, call **`get_global_info`** before assuming structure.
+5. **If you need to experiment (imports, values, quick tests)**, run code using **`execute_code`** before creating a notebook cell.
+6. **Create or edit ONE cell at a time**, then **run it immediately**.
    - Set `continue: false` after running.
-6. **Wait for execution results**, then analyze results and decide next action based on behavior mode.
+7. **Wait for execution results**, then analyze results and decide next action based on behavior mode.
 
 ## Cell Requirements
 

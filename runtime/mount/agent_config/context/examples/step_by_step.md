@@ -11,7 +11,7 @@ submit_response(
         {"id": "qc", "description": "Quality control", "status": "todo"},
         # ...
     ],
-    summary="I plan to filter cells with fewer than 200 genes. This will take about 1 minute.",
+    summary="I plan to filter cells with fewer than 200 genes. This will take some time.",
     questions="Does this threshold work for you?",
     continue=False,
     next_status="done"

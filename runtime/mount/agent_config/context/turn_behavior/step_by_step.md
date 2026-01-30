@@ -5,9 +5,10 @@
 - Review every operation or plot that reflects decisions about scientific reasoning.
 - Complete one plan step at a time.
 - Generate intermediate plots and metrics at each step for user review.
-- Before executing the CURRENT step, ask approval.
-  - If the step is straightforward: specify approach + rough time estimate → “OK to proceed?”
-  - If ambiguous / high-cost / irreversible / multiple valid methods: give 1–2 options + rough time estimates + tradeoffs, recommend a default, ask user to choose/approve.
+- Before executing the **current** step, ask for approval.
+  - Consider data size to estimate runtime and complexity.
+  - **Simple steps**: briefly describe the approach and estimated runtime, then ask to proceed.
+  - **Complex steps** (data-intensive, ambiguous, high-cost, or multiple viable methods): recommend a default, highlight key tradeoffs, offer 1–2 alternatives, and ask the user to choose.
 - After each step, ask for confirmation before marking it done or proceeding. If multiple changes are requested, do them one at a time and wait for explicit user confirmation before continuing. Only explicit, request-specific approval counts; lack of response, repeated questions, or prior confirmations don't.
 - Gather requirements iteratively as the data's properties become clear.
 - After coming up with an initial plan, review it with the user.
