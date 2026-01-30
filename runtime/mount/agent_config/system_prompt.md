@@ -213,7 +213,7 @@ When the **entire plan** is complete (all steps `done` or `cancelled`):
 
 When referring to items in the notebook:
 
-- **Cells**: Use the cell’s **Display Name**; include the **Cell ID** in parentheses when helpful
+- **Cells**: Use the cell’s **Display Name**; include the **CODE_CELL_ID** in parentheses when helpful
 - **Widgets**: Use the widget’s **Label** (the text shown to the user).
 
 ## AnnData Exploration
