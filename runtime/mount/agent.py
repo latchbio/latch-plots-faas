@@ -356,10 +356,9 @@ class AgentHarness:
         if not messages:
             return messages
 
-        # Collect tool_use and tool_result positions
-        tool_use_at: dict[str, int] = {}  # tool_id -> assistant_msg_index
-        tool_result_at: dict[str, int] = {}  # tool_id -> user_msg_index
-        tool_result_blocks: dict[str, dict] = {}  # tool_id -> block
+        tool_use_at: dict[str, int] = {}
+        tool_result_at: dict[str, int] = {}
+        tool_result_blocks: dict[str, dict] = {}
 
         for i, msg in enumerate(messages):
             content = msg.get("content")
@@ -381,7 +380,6 @@ class AgentHarness:
         if not tool_use_at:
             return messages
 
-        # Find tool_results that need relocation (wrong position or missing)
         tids_to_relocate: set[str] = set()
         for tid, asst_idx in tool_use_at.items():
             if tid not in tool_result_at or tool_result_at[tid] != asst_idx + 1:
@@ -390,30 +388,29 @@ class AgentHarness:
         if not tids_to_relocate:
             return messages
 
-        print(f"[agent] Repairing tool_use/tool_result pairing")
-
-        # Build map of results needed at each target position (immediately after assistant)
         results_to_add: dict[int, list[dict]] = {}
         for tid in tids_to_relocate:
             target = tool_use_at[tid] + 1
-            block = tool_result_blocks.get(tid) or {
-                "type": "tool_result",
-                "tool_use_id": tid,
-                "content": json.dumps({"error": "Tool call interrupted before completion", "success": False}),
-            }
+            if tid in tool_result_blocks:
+                block = tool_result_blocks[tid]
+                print(f"[agent] Relocating tool_result {tid} from position {tool_result_at[tid]} to {target}")
+            else:
+                block = {
+                    "type": "tool_result",
+                    "tool_use_id": tid,
+                    "content": json.dumps({"error": "Tool call interrupted before completion", "success": False}),
+                }
+                print(f"[agent] Creating synthetic tool_result for {tid} at position {target}")
             results_to_add.setdefault(target, []).append(block)
 
-        # Rebuild messages
         repaired: list[MessageParam] = []
         for i, msg in enumerate(messages):
             role = msg.get("role")
             content = msg.get("content")
 
             if role == "user":
-                # Start with any tool_results that need to be at this position
                 new_content: list | str = list(results_to_add.get(i, []))
 
-                # Add original content, excluding relocated tool_results
                 if isinstance(content, list):
                     for block in content:
                         is_relocated = (
@@ -424,7 +421,6 @@ class AgentHarness:
                         if not is_relocated:
                             new_content.append(block)
                 elif content:
-                    # String content - convert to text block if we have results, else keep as string
                     if new_content:
                         new_content.append({"type": "text", "text": content})
                     else:
@@ -435,7 +431,7 @@ class AgentHarness:
             else:
                 repaired.append(msg)
 
-                # After assistant, insert user message if next message isn't a user
+                # todo(tim): determine if this is needed
                 if role == "assistant" and (i + 1) in results_to_add:
                     next_msg = messages[i + 1] if i + 1 < len(messages) else None
                     if not next_msg or next_msg.get("role") != "user":
