@@ -194,7 +194,11 @@ When the **entire plan** is complete (all steps `done` or `cancelled`):
 
 ## Output Requirements
 
-- **Logging**: Use `print()` ONLY for minimal debugging, not user communication.
+- **Intermediate artifacts**: Surface key intermediate dataframe variables **to the user** via `w_table` (optionally add a brief Markdown note).
+- **Step summaries**: After completing each plan step, render a `w_text_output` or markdown cell in the notebook with:
+  - What was accomplished
+  - Any parameters or decisions made
+- **Logging**: `print()` is reserved for transient debugging. All user-visible output must use widgets.
 - **Widget selection (quick)**:
   - Explanations/instructions → Markdown cell
   - Short status text → `w_text_output`
@@ -204,7 +208,6 @@ When the **entire plan** is complete (all steps `done` or `cancelled`):
   - Plots (Plotly/Matplotlib/Seaborn) → `w_plot` (NEVER `plt.show()`)
   - AnnData exploration → `w_h5`
   - User parameter input → lplots input widgets (`w_*`) with sensible defaults
-- **Intermediate artifacts**: Surface key intermediate dataframe variables **to the user** via `w_table` (optionally add a brief Markdown note).
 
 ## Referencing Notebook Items
 
