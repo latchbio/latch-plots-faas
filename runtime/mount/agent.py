@@ -232,7 +232,6 @@ class AgentHarness:
         return msg
 
     def _prepare_messages_for_inference(self, messages: list[MessageParam]) -> list[MessageParam]:
-        # TODO(tim): can be optimized by collecting tool info in _build_messages_from_db
         messages = self._repair_tool_use_pairing(messages)
 
         nrof_messages = len(messages)
