@@ -3564,6 +3564,13 @@ class AgentHarness:
 
             if self.conversation_task is None or self.conversation_task.done():
                 print("[agent] Restarting conversation loop after reconnect")
+
+                self.pending_tool_calls.clear()
+                messages = await self._build_messages_from_db()
+                await self._close_pending_tool_calls(
+                    error_message="Tool call interrupted - session was reconnected before completion",
+                    messages=messages,
+                )
                 self._start_conversation_loop()
 
             return
