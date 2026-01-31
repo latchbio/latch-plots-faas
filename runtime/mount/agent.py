@@ -3568,7 +3568,7 @@ class AgentHarness:
                 self.pending_tool_calls.clear()
                 messages = await self._build_messages_from_db()
                 await self._close_pending_tool_calls(
-                    error_message="Tool call interrupted - session was reconnected before completion",
+                    error_message="Tool call pending at start of conversation -- closing before next request.",
                     messages=messages,
                 )
                 self._start_conversation_loop()
