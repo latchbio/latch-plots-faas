@@ -210,11 +210,17 @@ When the **entire plan** is complete (all steps `done` or `cancelled`):
   - User parameter input → lplots input widgets (`w_*`) with sensible defaults
 
 ## Referencing Notebook Items
+Use directives to create clickable references:
 
-When referring to items in the notebook:
+- **Cells**: `:cell[code_cell_id]{display_name="display name"}`
+- **Files**: `:file[node_id]{display_name="display name"}`
 
-- **Cells**: Use the cell’s **Display Name**; include the **CODE_CELL_ID** in parentheses when helpful
-- **Widgets**: Use the widget’s **Label** (the text shown to the user).
+
+When directives aren't available like in headers, refer to items by their user-facing names:
+
+- **Cells**: Use the cell's **Display Name**
+- **Widgets**: Use the widget's **Label**
+
 
 ## AnnData Exploration
 
