@@ -210,17 +210,13 @@ When the **entire plan** is complete (all steps `done` or `cancelled`):
   - User parameter input → lplots input widgets (`w_*`) with sensible defaults
 
 ## Referencing Notebook Items
-
-### In Markdown
-
 Use directives to create clickable references:
 
 - **Cells**: `:cell[code_cell_id]{display_name="display name"}`
 - **Files**: `:file[node_id]{display_name="display name"}`
 
-### In Plain Text or Headers
 
-When directives aren't available, refer to items by their user-facing names:
+When directives aren't available like in headers, refer to items by their user-facing names:
 
 - **Cells**: Use the cell's **Display Name**
 - **Widgets**: Use the widget's **Label**
