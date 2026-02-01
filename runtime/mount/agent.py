@@ -3486,6 +3486,10 @@ class AgentHarness:
                     await self.pending_messages.put({"type": "resume"})
             elif response.stop_reason == "max_tokens":
                 print("[agent] Hit max tokens")
+                await self._close_pending_tool_calls(
+                    error_message="Tool call cancelled because the model hit max_tokens before tool execution.",
+                    messages=await self._build_messages_from_db(),
+                )
                 await self._complete_turn()
             else:
                 print(f"[agent] Unknown stop reason: {response.stop_reason}")
