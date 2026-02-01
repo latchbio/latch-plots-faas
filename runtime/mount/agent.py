@@ -3490,6 +3490,15 @@ class AgentHarness:
                     error_message="Tool call cancelled because the model hit max_tokens before tool execution.",
                     messages=await self._build_messages_from_db(),
                 )
+                await self._insert_history(
+                    event_type="error",
+                    role="system",
+                    payload={
+                        "message": "The model hit the token limit before tool execution. Please retry or shorten the request.",
+                        "should_contact_support": False,
+                    },
+                    request_id=self.current_request_id,
+                )
                 await self._complete_turn()
             else:
                 print(f"[agent] Unknown stop reason: {response.stop_reason}")
