@@ -513,7 +513,7 @@ def _split_violin_groups(
     split_idx = np.flatnonzero(np.diff(cat_idx_sorted)) + 1
     groups = np.split(order_idx, split_idx)
     group_traces: list[dict[str, Any]] = []
-    for label, idxs in zip(order, groups):
+    for label, idxs in zip(order, groups, strict=True):
         child = deepcopy(trace)
         child[data_axis] = vals_arr[idxs]
 
@@ -1277,10 +1277,11 @@ class Kernel:
 
             x.__name__ = filename
 
-            self.active_cell_task = asyncio.create_task(
-                ctx.run(x, _cell_id=cell_id, code=code)
+            # todo(rteqs): figure out active cell stuff and task cancellation
+            fut = self.executor.submit(
+                lambda: asyncio.run(ctx.run(x, _cell_id=cell_id, code=code))
             )
-            await self.active_cell_task
+            self.active_cell_tasks[cell_id] = fut
 
         except (KeyboardInterrupt, asyncio.CancelledError, Exception):
             self.cell_status[cell_id] = "error"
@@ -1694,6 +1695,15 @@ class Kernel:
 
         return cell_reactivity
 
+    async def send_reactivity_summary(self, agent_tx_id: str | None = None) -> None:
+        cell_reactivity = self.get_reactivity_summary()
+
+        msg = {"type": "reactivity_summary", "cell_reactivity": cell_reactivity}
+        if agent_tx_id is not None:
+            msg["agent_tx_id"] = agent_tx_id
+
+        await self.send(msg)
+
     async def upload_ldata(
         self,
         *,
@@ -2055,6 +2065,7 @@ async def main() -> None:
 
     socket_io_thread = SocketIoThread(socket=sock)
     socket_io_thread.start()
+
     try:
         socket_io_thread.initialized.wait()
 
