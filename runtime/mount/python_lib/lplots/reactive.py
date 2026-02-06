@@ -319,15 +319,12 @@ class RCtx:
                                     cell_id=n.cell_id, code=n.code, _from_stub=True
                                 )
                             else:
-                                fut = _inject.kernel.executor.submit(
-                                    lambda: asyncio.create_task(
-                                        self.run(n.f, n.code, _cell_id=n.cell_id)
-                                    )
+                                task = asyncio.create_task(
+                                    self.run(n.f, n.code, _cell_id=n.cell_id)
                                 )
-                                _inject.kernel.active_cell_tasks[n.cell_id] = fut
+                                _inject.kernel.active_cell_task = task
                                 try:
-                                    # todo(rteqs): this is probably wrong
-                                    await fut.result()
+                                    await task
                                 except asyncio.CancelledError:
                                     if n.cell_id is not None:
                                         _inject.kernel.cell_status[n.cell_id] = "error"
