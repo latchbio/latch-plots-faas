@@ -1105,19 +1105,21 @@ class Kernel:
         self.nodes_with_widgets[ctx.cur_comp.id] = ctx.cur_comp
 
         if data["type"] == "plot" or data["type"] == "table":
-            src = data.get("source")
-            if src is not None:
-                src = self.make_output_value_msg(src=src, key_fields={})
 
-            _ = loop.create_task(
-                self.send({
+            async def f() -> None:
+                src = data.get("source")
+                if src is not None:
+                    src = await self.make_output_value_msg(src=src, key_fields={})
+
+                await self.send({
                     "type": "cell_value_viewer_init",
                     "key": key,
                     "value_viewer_key": data["value_viewer_key"],
                     "global_key": data["global_key"],
                     "source": src,
                 })
-            )
+
+            _ = loop.create_task(f())
 
         # todo(maximsmol): I don't think this is actually nullable anymore
         cell_id = ctx.cur_comp.cell_id
@@ -1540,7 +1542,7 @@ class Kernel:
         assert len(key_fields) == 1
 
         await self.send(
-            self.make_output_value_msg(
+            await self.make_output_value_msg(
                 src=src, key_fields=key_fields, cell_id=cell_id, viewer_id=viewer_id
             )
         )
