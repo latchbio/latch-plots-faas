@@ -9,6 +9,7 @@ import ast
 import asyncio
 import io
 import math
+import os
 import pprint
 import re
 import signal
@@ -17,6 +18,7 @@ import sys
 import traceback
 from base64 import b64decode
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import redirect_stderr, redirect_stdout
 from copy import copy, deepcopy
 from dataclasses import asdict, dataclass, field, fields
@@ -242,8 +244,7 @@ class TracedDict(dict[str, Signal[object] | object]):
         return self.touched - self.removed
 
 
-class ExitException(Exception):
-    ...
+class ExitException(Exception): ...
 
 
 KeyType = Literal["key", "ldata_node_id", "registry_table_id", "url"]
@@ -291,7 +292,7 @@ def filter_dataframe(
     if col == "index":
         col_vals = df.index
     elif is_multi_index_col(col) and isinstance(df.index, MultiIndex):
-        level = int(col.split("_")[-1])
+        level = int(col.rsplit("_", maxsplit=-1)[-1])
         col_vals = df.index.get_level_values(level)
     elif col in df.index.names:
         col_vals = df.index.get_level_values(col)
@@ -455,9 +456,9 @@ def paginate(*, df: DataFrame, pagination_settings: PaginationSettings) -> DataF
     return data
 
 
-def pagination_settings_dict_factory() -> (
-    defaultdict[str, defaultdict[str, PaginationSettings]]
-):
+def pagination_settings_dict_factory() -> defaultdict[
+    str, defaultdict[str, PaginationSettings]
+]:
     return defaultdict(lambda: defaultdict(PaginationSettings))
 
 
@@ -474,8 +475,9 @@ class CategorizedCellOutputs:
     figures: list[str] = field(default_factory=list)
     static_figures: list[str] = field(default_factory=list)
 
+
 def _split_violin_groups(
-    trace: dict[str, Any]
+    trace: dict[str, Any],
 ) -> tuple[list[dict[str, Any]] | None, bool]:
 
     orientation = trace.get("orientation", "v")
@@ -489,7 +491,9 @@ def _split_violin_groups(
 
     # note(tim): plotly makes this field base64
     if isinstance(data_field, dict) and "bdata" in data_field and "dtype" in data_field:
-        vals_arr = np.frombuffer(b64decode(data_field["bdata"]), dtype=np.dtype(data_field["dtype"]))
+        vals_arr = np.frombuffer(
+            b64decode(data_field["bdata"]), dtype=np.dtype(data_field["dtype"])
+        )
     else:
         vals_arr = np.asarray(data_field)
 
@@ -598,8 +602,8 @@ class RestoredGlobalInfo(TypedDict):
     msg: str
 
 
-snapshot_chunk_bytes = 64 * 2 ** 10
-snapshot_progress_interval_bytes = 10 * (2 ** 20)
+snapshot_chunk_bytes = 64 * 2**10
+snapshot_progress_interval_bytes = 10 * (2**20)
 
 
 @dataclass(kw_only=True)
@@ -646,12 +650,18 @@ class Kernel:
     restored_signals: dict[str, Signal[object]] = field(default_factory=dict)
     restored_globals: dict[str, object] = field(default_factory=dict)
 
+    # todo(rteqs): cpu_count tbd
+    executor: ThreadPoolExecutor = field(
+        default_factory=lambda: ThreadPoolExecutor(max_workers=os.cpu_count())
+    )
+
     def __post_init__(self) -> None:
         self.k_globals = TracedDict(self.duckdb)
         self.k_globals["exit"] = cell_exit
         self.k_globals.clear()
         pio.templates["graphpad_inspired_theme"] = graphpad_inspired_theme()
 
+        # todo(rteqs): figure out how to just kill the exact task from executor. we probably don't even need to do this anymore since the kernel is already running in a threadpool
         def sigint_handler(signum: int, frame: FrameType | None) -> None:
             if signum != signal.SIGINT:
                 return
@@ -664,7 +674,10 @@ class Kernel:
 
                 return
 
-            print(f"[kernel] SIGINT received but not interrupting: active_cell={self.active_cell}, status={self.cell_status.get(self.active_cell) if self.active_cell is not None else 'N/A'}", file=sys.stderr)
+            print(
+                f"[kernel] SIGINT received but not interrupting: active_cell={self.active_cell}, status={self.cell_status.get(self.active_cell) if self.active_cell is not None else 'N/A'}",
+                file=sys.stderr,
+            )
 
         signal.signal(signal.SIGINT, sigint_handler)
 
@@ -713,6 +726,7 @@ class Kernel:
         }
 
     # note(maximsmol): called by the reactive context
+    # todo(rteqs): we need to handle the case where there is multiple active cells
     async def set_active_cell(self, cell_id: str | None) -> None:
         # todo(maximsmol): I still believe this is correct
         # but we need to deal with the frontend clearing logs in weird ways
@@ -733,13 +747,11 @@ class Kernel:
             self.active_cell = cell_id
 
         self.cell_seq += 1
-        await self.send(
-            {
-                "type": "start_cell",
-                "cell_id": cell_id,
-                "run_sequencer": self.cell_seq,
-            }
-        )
+        await self.send({
+            "type": "start_cell",
+            "cell_id": cell_id,
+            "run_sequencer": self.cell_seq,
+        })
 
     async def send_global_updates(self) -> None:
         async with asyncio.TaskGroup() as tg:
@@ -842,14 +854,12 @@ class Kernel:
             ):
                 continue
 
-            await self.send(
-                {
-                    "type": "cell_widgets",
-                    "cell_id": cell_id,
-                    "widget_state": res,
-                    "updated_widgets": list(updated_widgets),
-                }
-            )
+            await self.send({
+                "type": "cell_widgets",
+                "cell_id": cell_id,
+                "widget_state": res,
+                "updated_widgets": list(updated_widgets),
+            })
 
         if clear_status:
             await self.set_active_cell(None)
@@ -866,7 +876,9 @@ class Kernel:
         # for x in unused_signals:
         #     del self.widget_signals[x]
 
-    async def update_kernel_snapshot_status(self, key: str, status: str, data: dict[str, int] | None = None) -> None:
+    async def update_kernel_snapshot_status(
+        self, key: str, status: str, data: dict[str, int] | None = None
+    ) -> None:
         assert key in {"save_kernel_snapshot", "load_kernel_snapshot"}
         self.snapshot_status = status
         msg = {"type": key, "status": status}
@@ -881,6 +893,7 @@ class Kernel:
         s_signals = {}
 
         try:
+
             def add_and_check_listeners(sig: Signal):
                 for lid, lis in sig._listeners.items():
                     if lid not in s_nodes:
@@ -917,7 +930,9 @@ class Kernel:
                 elif isinstance(val._value, BaseWidget):
                     collect_widget_signals(val._value)
                     if val._value._has_signal:
-                        assert val._value._signal.id in s_signals, f"missing {val._value._signal.id}"
+                        assert val._value._signal.id in s_signals, (
+                            f"missing {val._value._signal.id}"
+                        )
                         s_globals[k] = val._value.serialize()
                 else:
                     s_val, msg = safe_serialize_obj(val._value)
@@ -941,7 +956,9 @@ class Kernel:
 
             data = orjson.dumps(s_depens, default=orjson_encoder)
         except Exception:
-            await self.update_kernel_snapshot_status("save_kernel_snapshot", "error", {"error_msg": traceback.format_exc()})
+            await self.update_kernel_snapshot_status(
+                "save_kernel_snapshot", "error", {"error_msg": traceback.format_exc()}
+            )
             return
 
         total = len(data)
@@ -952,12 +969,16 @@ class Kernel:
                 end = min(start + snapshot_chunk_bytes, total)
                 f.write(data[start:end])
 
-                saved_since_last += (end - start)
+                saved_since_last += end - start
                 if end == total:
                     break
 
                 if saved_since_last >= snapshot_progress_interval_bytes:
-                    await self.update_kernel_snapshot_status("save_kernel_snapshot", "progress", {"progress_bytes": end, "total_bytes": total})
+                    await self.update_kernel_snapshot_status(
+                        "save_kernel_snapshot",
+                        "progress",
+                        {"progress_bytes": end, "total_bytes": total},
+                    )
                     saved_since_last = 0
 
         await self.update_kernel_snapshot_status("save_kernel_snapshot", "done")
@@ -970,7 +991,9 @@ class Kernel:
             return
 
         total = snapshot_f.stat().st_size
-        await self.update_kernel_snapshot_status("load_kernel_snapshot", "start", {"progress_bytes": 0, "total_bytes": total})
+        await self.update_kernel_snapshot_status(
+            "load_kernel_snapshot", "start", {"progress_bytes": 0, "total_bytes": total}
+        )
 
         data = bytearray()
         read_since_last = 0
@@ -987,7 +1010,11 @@ class Kernel:
                     break
 
                 if read_since_last >= snapshot_progress_interval_bytes:
-                    await self.update_kernel_snapshot_status("load_kernel_snapshot", "progress", {"progress_bytes":  len(data), "total_bytes": total})
+                    await self.update_kernel_snapshot_status(
+                        "load_kernel_snapshot",
+                        "progress",
+                        {"progress_bytes": len(data), "total_bytes": total},
+                    )
                     read_since_last = 0
 
         try:
@@ -1068,8 +1095,9 @@ class Kernel:
 
             self.nodes_with_widgets = nodes_with_widgets
         except Exception:
-
-            await self.update_kernel_snapshot_status("load_kernel_snapshot", "error", {"error_msg": traceback.format_exc()})
+            await self.update_kernel_snapshot_status(
+                "load_kernel_snapshot", "error", {"error_msg": traceback.format_exc()}
+            )
             return
 
         await self.update_kernel_snapshot_status("load_kernel_snapshot", "done")
@@ -1170,7 +1198,7 @@ class Kernel:
                             mode="exec",
                             flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT,
                         ),
-                        self.k_globals
+                        self.k_globals,
                     )
 
                     if asyncio.iscoroutine(result_value):
@@ -1260,7 +1288,9 @@ class Kernel:
 
             x.__name__ = filename
 
-            self.active_cell_task = asyncio.create_task(ctx.run(x, _cell_id=cell_id, code=code))
+            self.active_cell_task = asyncio.create_task(
+                ctx.run(x, _cell_id=cell_id, code=code)
+            )
             await self.active_cell_task
 
         except (KeyboardInterrupt, asyncio.CancelledError, Exception):
@@ -1302,26 +1332,22 @@ class Kernel:
         res = self.k_globals[key]
 
         if isinstance(res, BaseFigure):
-            await self.send(
-                {
-                    "type": "plot_data",
-                    "plot_id": plot_id,
-                    "key": key,
-                    # todo(maximsmol): get rid of the json reload
-                    "plotly_json": serialize_plotly_figure(res),
-                }
-            )
+            await self.send({
+                "type": "plot_data",
+                "plot_id": plot_id,
+                "key": key,
+                # todo(maximsmol): get rid of the json reload
+                "plotly_json": serialize_plotly_figure(res),
+            })
             return
 
         if not hasattr(res, "iloc"):
-            await self.send(
-                {
-                    "type": "plot_data",
-                    "plot_id": plot_id,
-                    "key": key,
-                    "error": "not a dataframe",
-                }
-            )
+            await self.send({
+                "type": "plot_data",
+                "plot_id": plot_id,
+                "key": key,
+                "error": "not a dataframe",
+            })
             return
 
         if hasattr(res, "compute"):
@@ -1544,19 +1570,13 @@ class Kernel:
             return {
                 "type": "DataFrame",
                 "columns": list(value.columns)[:50],
-                "dtypes": {
-                    str(k): str(v) for k, v in list(value.dtypes.items())[:50]
-                },
+                "dtypes": {str(k): str(v) for k, v in list(value.dtypes.items())[:50]},
                 "column_preview_truncated": len(value.columns) > 50,
                 "shape": value.shape,
             }
 
         if isinstance(value, pd.Series):
-            return {
-                "type": "Series",
-                "dtype": str(value.dtype),
-                "shape": value.shape,
-            }
+            return {"type": "Series", "dtype": str(value.dtype), "shape": value.shape}
 
         if isinstance(value, ad.AnnData):
             obs_dtypes_full = {str(k): str(v) for k, v in value.obs.dtypes.items()}
@@ -1577,10 +1597,7 @@ class Kernel:
                 "obsm_keys": list(value.obsm.keys()) if hasattr(value, "obsm") else [],
             }
 
-        return {
-            "type": type(value).__name__,
-            "repr": str(value)[:1000]
-        }
+        return {"type": type(value).__name__, "repr": str(value)[:1000]}
 
     async def send_globals_summary(self, agent_tx_id: str | None = None) -> None:
         summary = {}
@@ -1617,7 +1634,9 @@ class Kernel:
 
             producer_cell_id = getattr(sig, "_producer_cell_id", None)
             if producer_cell_id is not None:
-                cell_defined_global_names.setdefault(producer_cell_id, []).append(var_name)
+                cell_defined_global_names.setdefault(producer_cell_id, []).append(
+                    var_name
+                )
 
             value = sig.sample()
             if isinstance(value, Signal):
@@ -1668,20 +1687,16 @@ class Kernel:
         for cell_id in self.cell_rnodes:
             defined = sorted(set(cell_defined_global_names.get(cell_id, [])))
             dep_signal_ids = cell_dependencies.get(cell_id, set())
-            dep_signal_names = sorted(
-                {
-                    global_signal_names[sig_id]
-                    for sig_id in dep_signal_ids
-                    if sig_id in global_signal_names
-                }
-            )
-            dep_cells = sorted(
-                {
-                    producer
-                    for sig_id in dep_signal_ids
-                    if (producer := signal_producers.get(sig_id)) is not None
-                }
-            )
+            dep_signal_names = sorted({
+                global_signal_names[sig_id]
+                for sig_id in dep_signal_ids
+                if sig_id in global_signal_names
+            })
+            dep_cells = sorted({
+                producer
+                for sig_id in dep_signal_ids
+                if (producer := signal_producers.get(sig_id)) is not None
+            })
             cell_reactivity[cell_id] = {
                 "signals_defined": defined,
                 "depends_on_signals": dep_signal_names,
@@ -1693,10 +1708,7 @@ class Kernel:
     async def send_reactivity_summary(self, agent_tx_id: str | None = None) -> None:
         cell_reactivity = self.get_reactivity_summary()
 
-        msg = {
-            "type": "reactivity_summary",
-            "cell_reactivity": cell_reactivity,
-        }
+        msg = {"type": "reactivity_summary", "cell_reactivity": cell_reactivity}
         if agent_tx_id is not None:
             msg["agent_tx_id"] = agent_tx_id
 
@@ -1738,11 +1750,7 @@ class Kernel:
         # todo(rteqs): stream directly to LData without temp file
         LPath(urljoins(dst, local_path.name)).upload_from(local_path)
 
-    async def accept(self) -> None:
-        # print("[kernel] accept")
-        msg = await self.conn.recv()
-        # print("[kernel] <", msg)
-
+    async def accept(self, msg: dict) -> None:
         if msg["type"] == "init":
             self.cell_output_selections = msg["cell_output_selections"]
             self.plot_data_selections = msg["plot_data_selections"]
@@ -1869,7 +1877,7 @@ class Kernel:
 
             await self.send({
                 "type": "reset_kernel_globals_complete",
-                "agent_tx_id": msg.get("agent_tx_id")
+                "agent_tx_id": msg.get("agent_tx_id"),
             })
             return
 
@@ -2003,7 +2011,7 @@ class Kernel:
             await self.send({
                 "type": "execute_code_response",
                 "agent_tx_id": agent_tx_id,
-                **result
+                **result,
             })
             return
 
@@ -2016,7 +2024,7 @@ class Kernel:
                     "type": "get_global_info_response",
                     "agent_tx_id": agent_tx_id,
                     "status": "error",
-                    "error": f"Global variable '{key}' not found"
+                    "error": f"Global variable '{key}' not found",
                 })
                 return
 
@@ -2024,7 +2032,7 @@ class Kernel:
                 "type": "get_global_info_response",
                 "agent_tx_id": agent_tx_id,
                 "status": "success",
-                "info": self._get_single_global_info(self.k_globals[key])
+                "info": self._get_single_global_info(self.k_globals[key]),
             })
             return
 
@@ -2070,20 +2078,17 @@ async def main() -> None:
         _inject.kernel = k
 
         stdout_writer = SocketWriter(conn=k.conn, kernel=k, name="stdout")
-        sys.stdout = text_socket_writer(
-            stdout_writer
-        )
+        sys.stdout = text_socket_writer(stdout_writer)
 
         stderr_writer = SocketWriter(conn=k.conn, kernel=k, name="stderr")
-        sys.stderr = text_socket_writer(
-            stderr_writer
-        )
+        sys.stderr = text_socket_writer(stderr_writer)
 
         await k.send({"type": "ready"})
 
         while not shutdown_requested:
             try:
-                await k.accept()
+                msg = await k.conn.recv()
+                k.executor.submit(asyncio.run, k.accept(msg))
             except Exception:
                 traceback.print_exc()
                 continue
