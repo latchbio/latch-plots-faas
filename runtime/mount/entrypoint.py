@@ -399,7 +399,8 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                     query="""
                         mutation UpsertPlotCellValueViewer(
                             $notebookId: BigInt!,
-                            $widgetConnectionKey: String!
+                            $widgetConnectionKey: String!,
+                            $data: String
                         ) {
                             upsertPlotCellValueViewer(
                                 input: {
