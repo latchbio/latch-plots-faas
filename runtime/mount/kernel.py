@@ -658,10 +658,14 @@ class Kernel:
         default_factory=lambda: ThreadPoolExecutor(max_workers=os.cpu_count())
     )
 
+    # active_cell: str | None
+    thread_local: threading.local = field(default_factory=threading.local)
+
     def __post_init__(self) -> None:
         self.k_globals = TracedDict(self.duckdb)
         self.k_globals["exit"] = cell_exit
         self.k_globals.clear()
+        self.thread_local.active_cell = None
         pio.templates["graphpad_inspired_theme"] = graphpad_inspired_theme()
 
         # todo(rteqs): figure out how to just kill the exact task from executor. we probably don't even need to do this anymore since the kernel is already running in a threadpool
@@ -756,7 +760,7 @@ class Kernel:
         sys.stderr.flush()
 
         if cell_id is not None:
-            self.active_cell = cell_id
+            self.thread_local.active_cel = self.active_cell = cell_id
 
         await self.send({
             "type": "start_cell",
