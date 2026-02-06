@@ -9,7 +9,6 @@ import ast
 import asyncio
 import io
 import math
-import os
 import pprint
 import re
 import signal
@@ -18,7 +17,6 @@ import sys
 import traceback
 from base64 import b64decode
 from collections import defaultdict
-from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import redirect_stderr, redirect_stdout
 from copy import copy, deepcopy
 from dataclasses import asdict, dataclass, field, fields
@@ -554,7 +552,7 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
                             precalc_violin(group_trace)
                             orientation = trace.get("orientation", "v")
                             data_axis = "y" if orientation == "v" else "x"
-
+                            
                             # note(tim): plotly has weird issues if this is not provided
                             group_trace[data_axis] = []
 
@@ -615,8 +613,8 @@ class Kernel:
     cell_status: dict[str, str] = field(default_factory=dict)
     snapshot_status: KernelSnapshotStatus = "done"
 
-    # active_cell: str | None = None
-    active_cell_tasks: dict[str, Future[None]] = field(default_factory=dict)
+    active_cell: str | None = None
+    active_cell_task: asyncio.Task[Any] | None = None
 
     widget_signals: dict[str, Signal[Any]] = field(default_factory=dict)
     nodes_with_widgets: dict[str, Node] = field(default_factory=dict)
@@ -649,35 +647,25 @@ class Kernel:
     restored_signals: dict[str, Signal[object]] = field(default_factory=dict)
     restored_globals: dict[str, object] = field(default_factory=dict)
 
-    executor: ThreadPoolExecutor = field(
-        default_factory=lambda: ThreadPoolExecutor(max_workers=os.cpu_count())
-    )
-
     def __post_init__(self) -> None:
         self.k_globals = TracedDict(self.duckdb)
         self.k_globals["exit"] = cell_exit
         self.k_globals.clear()
         pio.templates["graphpad_inspired_theme"] = graphpad_inspired_theme()
 
-        # todo(rteqs): figure out how to just kill the exact task from executor. we probably don't even need to do this anymore
         def sigint_handler(signum: int, frame: FrameType | None) -> None:
             if signum != signal.SIGINT:
                 return
 
-            for task in self.active_cell_tasks.values():
-                if not task.done():
-                    task.cancel()
+            if self.active_cell_task is not None and not self.active_cell_task.done():
+                self.active_cell_task.cancel()
 
-            if asyncio.current_task() not in self.active_cell_tasks:
-                raise KeyboardInterrupt
+                if asyncio.current_task() == self.active_cell_task:
+                    raise KeyboardInterrupt
 
-            if len(self.active_cell_tasks) > 0:
                 return
 
-            print(
-                f"[kernel] SIGINT received but not interrupting: active_cell={self.active_cell}, status={self.cell_status.get(self.active_cell) if self.active_cell is not None else 'N/A'}",
-                file=sys.stderr,
-            )
+            print(f"[kernel] SIGINT received but not interrupting: active_cell={self.active_cell}, status={self.cell_status.get(self.active_cell) if self.active_cell is not None else 'N/A'}", file=sys.stderr)
 
         signal.signal(signal.SIGINT, sigint_handler)
 
@@ -726,7 +714,6 @@ class Kernel:
         }
 
     # note(maximsmol): called by the reactive context
-    # todo(rteqs): we need to handle the case where there is multiple active cells
     async def set_active_cell(self, cell_id: str | None) -> None:
         # todo(maximsmol): I still believe this is correct
         # but we need to deal with the frontend clearing logs in weird ways
@@ -1281,13 +1268,13 @@ class Kernel:
             fut = self.executor.submit(
                 lambda: asyncio.run(ctx.run(x, _cell_id=cell_id, code=code))
             )
-            fut.add_done_callback(lambda _: self.active_cell_tasks.pop(cell_id))
             self.active_cell_tasks[cell_id] = fut
 
-        # todo(rteqs): except and finally needs to be reworked
-        except Exception:
+        except (KeyboardInterrupt, asyncio.CancelledError, Exception):
             self.cell_status[cell_id] = "error"
             await self.send_cell_result(cell_id)
+        finally:
+            self.active_cell_task = None
 
     async def send_cell_result(self, cell_id: str) -> None:
         await self.send_global_updates()
