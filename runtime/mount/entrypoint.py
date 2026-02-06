@@ -394,6 +394,12 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
             elif msg["type"] == "cell_value_viewer_init":
                 assert plots_ctx_manager.notebook_id is not None
 
+                data = msg.get("source")
+                if data is not None:
+                    data = orjson.dumps(
+                        msg, option=orjson.OPT_SERIALIZE_NUMPY, default=orjson_encoder
+                    ).decode()
+
                 resp = await gql_query(
                     auth=auth,
                     query="""
@@ -416,7 +422,7 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                     variables={
                         "notebookId": plots_ctx_manager.notebook_id,
                         "widgetConnectionKey": msg["value_viewer_key"],
-                        "data": msg.get("source"),
+                        "data": data,
                     },
                 )
 
