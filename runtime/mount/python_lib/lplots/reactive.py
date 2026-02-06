@@ -345,7 +345,7 @@ class RCtx:
 
     @property
     @asynccontextmanager
-    async def transaction(self) -> AsyncGenerator[None]:
+    async def transaction(self) -> AsyncGenerator[None, None]:
         if self.in_tx:
             yield
             return
