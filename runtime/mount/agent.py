@@ -168,6 +168,8 @@ class AgentHarness:
                                 "tool_use_id": block.get("tool_use_id"),
                                 "content": json.dumps(result)
                             })
+                        else:
+                            truncated_blocks.append(block)
                         continue
 
                     result_str = block_content
@@ -3182,9 +3184,17 @@ class AgentHarness:
 
             print("[agent] run_agent_loop: building messages from DB...")
             build_start = time.time()
-            api_messages = self._prepare_messages_for_inference(
-                await self._build_messages_from_db()
+
+            raw_messages = await self._build_messages_from_db()
+            repaired = await self._close_pending_tool_calls(
+                error_message="Tool call pending at start of turn -- closing before inference.",
+                messages=raw_messages,
             )
+            if repaired:
+                print("[agent] run_agent_loop: repaired pending tool calls, rebuilding messages from DB...")
+                raw_messages = await self._build_messages_from_db()
+
+            api_messages = self._prepare_messages_for_inference(raw_messages)
             build_elapsed = time.time() - build_start
             print(f"[agent] run_agent_loop: built {len(api_messages) if api_messages else 0} messages in {build_elapsed:.3f}s")
 
@@ -3491,7 +3501,7 @@ class AgentHarness:
                 print(f"[agent] Unknown stop reason: {response.stop_reason}")
                 await self._complete_turn()
 
-    async def _close_pending_tool_calls(self, *, error_message: str, messages: list[MessageParam]) -> None:
+    async def _close_pending_tool_calls(self, *, error_message: str, messages: list[MessageParam]) -> bool:
         tool_use_ids = set()
         tool_result_ids = set()
 
@@ -3534,6 +3544,9 @@ class AgentHarness:
                 },
             )
             await self._notify_history_updated()
+            return True
+
+        return False
 
     _context_init_task: asyncio.Task | None = None
 
