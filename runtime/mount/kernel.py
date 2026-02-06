@@ -1118,7 +1118,7 @@ class Kernel:
                     "source": src,
                 })
 
-            _ = loop.create_task(f(src=data.pop("source")))
+            _ = loop.create_task(f(src=data.pop("source", None)))
 
         # todo(maximsmol): I don't think this is actually nullable anymore
         cell_id = ctx.cur_comp.cell_id
