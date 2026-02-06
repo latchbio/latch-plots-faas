@@ -1105,12 +1105,13 @@ class Kernel:
         self.nodes_with_widgets[ctx.cur_comp.id] = ctx.cur_comp
 
         if data["type"] == "plot" or data["type"] == "table":
-            loop.create_task(
+            _ = loop.create_task(
                 self.send({
                     "type": "cell_value_viewer_init",
                     "key": key,
                     "value_viewer_key": data["value_viewer_key"],
                     "global_key": data["global_key"],
+                    "source": data.get("source"),
                 })
             )
 

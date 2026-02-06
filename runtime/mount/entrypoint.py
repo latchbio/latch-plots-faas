@@ -404,7 +404,8 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                             upsertPlotCellValueViewer(
                                 input: {
                                     argNotebookId: $notebookId,
-                                    argWidgetConnectionKey: $widgetConnectionKey
+                                    argWidgetConnectionKey: $widgetConnectionKey,
+                                    argViewerData: $data
                                 }
                             ) {
                                 bigInt
@@ -414,12 +415,14 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                     variables={
                         "notebookId": plots_ctx_manager.notebook_id,
                         "widgetConnectionKey": msg["value_viewer_key"],
+                        "data": msg.get("source"),
                     },
                 )
 
                 data = validate(resp, PlotUpsertValueViewerGQLResp)
                 viewer_id = data.data.upsertPlotCellValueViewer.bigInt
-                if viewer_id is not None:
+
+                if msg["global_key"] is not None and viewer_id is not None:
                     await conn_k.send({
                         "type": "get_global",
                         "viewer_id": viewer_id,
