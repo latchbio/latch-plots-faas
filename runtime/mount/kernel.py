@@ -1105,9 +1105,9 @@ class Kernel:
         self.nodes_with_widgets[ctx.cur_comp.id] = ctx.cur_comp
 
         if data["type"] == "plot" or data["type"] == "table":
+            src = data.pop("source")
 
             async def f() -> None:
-                src = data.get("source")
                 if src is not None:
                     src = await self.make_output_value_msg(src=src, key_fields={})
 
