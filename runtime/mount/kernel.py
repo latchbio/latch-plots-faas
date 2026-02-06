@@ -1105,9 +1105,8 @@ class Kernel:
         self.nodes_with_widgets[ctx.cur_comp.id] = ctx.cur_comp
 
         if data["type"] == "plot" or data["type"] == "table":
-            src = data.pop("source")
 
-            async def f() -> None:
+            async def f(*, src: object) -> None:
                 if src is not None:
                     src = await self.make_output_value_msg(src=src, key_fields={})
 
@@ -1119,7 +1118,7 @@ class Kernel:
                     "source": src,
                 })
 
-            _ = loop.create_task(f())
+            _ = loop.create_task(f(src=data.pop("source")))
 
         # todo(maximsmol): I don't think this is actually nullable anymore
         cell_id = ctx.cur_comp.cell_id
