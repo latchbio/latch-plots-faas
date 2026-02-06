@@ -15,6 +15,7 @@ import re
 import signal
 import socket
 import sys
+import threading
 import traceback
 from base64 import b64decode
 from collections import defaultdict
@@ -611,6 +612,8 @@ class Kernel:
     conn: SocketIoThread
 
     cell_seq: int = 0
+    cell_seq_lock: threading.Lock = field(default_factory=threading.Lock)
+
     cell_rnodes: dict[str, Node] = field(default_factory=dict)
     k_globals: TracedDict = field(init=False)
     cell_status: dict[str, str] = field(default_factory=dict)
@@ -681,9 +684,18 @@ class Kernel:
 
         signal.signal(signal.SIGINT, sigint_handler)
 
+    def next_cell_seq(self) -> int:
+        with self.cell_seq_lock:
+            self.cell_seq += 1
+            return self.cell_seq
+
+    def get_cell_seq(self) -> int:
+        with self.cell_seq_lock:
+            return self.cell_seq
+
     def debug_state(self) -> dict[str, object]:
         return {
-            "cell_seq": self.cell_seq,
+            "cell_seq": self.get_cell_seq(),
             "cell_rnodes": {k: v.debug_state() for k, v in self.cell_rnodes.items()},
             "k_globals": {
                 "touched": list(self.k_globals.touched),
@@ -746,11 +758,10 @@ class Kernel:
         if cell_id is not None:
             self.active_cell = cell_id
 
-        self.cell_seq += 1
         await self.send({
             "type": "start_cell",
             "cell_id": cell_id,
-            "run_sequencer": self.cell_seq,
+            "run_sequencer": self.next_cell_seq(),
         })
 
     async def send_global_updates(self) -> None:
