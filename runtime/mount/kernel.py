@@ -1105,13 +1105,17 @@ class Kernel:
         self.nodes_with_widgets[ctx.cur_comp.id] = ctx.cur_comp
 
         if data["type"] == "plot" or data["type"] == "table":
+            src = data.get("source")
+            if src is not None:
+                src = self.make_output_value_msg(src=src, key_fields={})
+
             _ = loop.create_task(
                 self.send({
                     "type": "cell_value_viewer_init",
                     "key": key,
                     "value_viewer_key": data["value_viewer_key"],
                     "global_key": data["global_key"],
-                    "source": data.get("source"),
+                    "source": src,
                 })
             )
 
@@ -1389,63 +1393,36 @@ class Kernel:
 
         raise ValueError("Both cell_id and viewer_id are null")
 
-    async def send_output_value(
+    async def make_output_value_msg(
         self,
-        key: str | None = None,
-        ldata_node_id: str | None = None,
-        registry_table_id: str | None = None,
-        url: str | None = None,
+        src: Any,
+        key_fields: dict[str, str],
         *,
         cell_id: str | None = None,
         viewer_id: str | None = None,
-    ) -> None:
-        res: Any
-        key_fields: dict[str, str] | None = None
-
-        if key is not None:
-            res = self.k_globals[key]
-            key_fields = {"key": key}
-        elif ldata_node_id is not None:
-            res = self.ldata_dataframes[ldata_node_id]
-            key_fields = {"ldata_node_id": ldata_node_id}
-        elif registry_table_id is not None:
-            res = self.registry_dataframes[registry_table_id]
-            key_fields = {"registry_table_id": registry_table_id}
-        elif url is not None:
-            res = self.url_dataframes[url]
-            key_fields = {"url": url}
-        else:
-            raise RuntimeError(
-                "Requested value without key, ldata_node_id, registry_table_id or url"
-            )
-
-        id_fields: dict[str, str] | None = None
+    ) -> object:
+        id_fields: dict[str, str] = {}
         if cell_id is not None:
             id_fields = {"cell_id": cell_id}
 
         if viewer_id is not None:
             id_fields = {"viewer_id": viewer_id}
 
-        assert id_fields is not None
-        assert key_fields is not None
-        assert len(key_fields) == 1
-
-        if isinstance(res, BaseFigure):
-            await self.send({
+        if isinstance(src, BaseFigure):
+            return {
                 "type": "output_value",
                 **(id_fields),
                 **(key_fields),
                 "plotly_json": orjson.dumps(
-                    serialize_plotly_figure(res),
+                    serialize_plotly_figure(src),
                     option=orjson.OPT_SERIALIZE_NUMPY,
                     default=orjson_encoder,
                 ).decode(),
-            })
-            return
+            }
 
-        if hasattr(res, "iloc"):
-            if isinstance(res, Series):
-                res = pd.DataFrame(res)
+        if hasattr(src, "iloc"):
+            if isinstance(src, Series):
+                src = pd.DataFrame(src)
 
             pagination_settings = self.lookup_pagination_settings(
                 cell_id=cell_id,
@@ -1455,30 +1432,30 @@ class Kernel:
             sort_settings = pagination_settings.sort_settings
             row_filters = pagination_settings.row_filters
 
-            res = filter_and_sort(df=res, pagination_settings=pagination_settings)
+            src = filter_and_sort(df=src, pagination_settings=pagination_settings)
 
             if viewer_id is not None:
                 async with ctx.transaction:
                     filtered_dataframe_name = f"df_{viewer_id}"
-                    self.k_globals[filtered_dataframe_name] = res
+                    self.k_globals[filtered_dataframe_name] = src
 
             page_size = pagination_settings.page_size
             page_idx = pagination_settings.page_idx
 
-            num_pages = math.ceil(len(res) / page_size)
+            num_pages = math.ceil(len(src) / page_size)
             h = page_size
 
-            data = paginate(df=res, pagination_settings=pagination_settings)
+            data = paginate(df=src, pagination_settings=pagination_settings)
 
             # we don't want to repeat the column names
             # so we use the "split" format
             # but we still want the schema
-            await self.send({
+            return {
                 "type": "output_value",
                 **(id_fields),
                 **(key_fields),
                 "dataframe_json": {
-                    "type": "pandas" if not hasattr(res, "compute") else "dask",
+                    "type": "pandas" if not hasattr(src, "compute") else "dask",
                     "schema": build_table_schema(data, version=False),
                     "data": data.to_dict(orient="split"),
                     # todo(maximsmol): this seems useless?
@@ -1492,10 +1469,9 @@ class Kernel:
                     ),
                     **({"row_filters": row_filters} if row_filters is not None else {}),
                 },
-            })
-            return
+            }
 
-        if hasattr(res, "__dataframe__"):
+        if hasattr(src, "__dataframe__"):
             # dataframe interchange object
             # https://pandas.pydata.org/pandas-docs/stable/reference/api/pandas.DataFrame.__dataframe__.html
             # there is a lot to implement here so it's not really supported right now
@@ -1505,9 +1481,9 @@ class Kernel:
             # reference implementation:
             # https://github.com/pandas-dev/pandas/blob/v2.2.2/pandas/core/interchange/from_dataframe.py#L33-L73
 
-            data = res.__dataframe__()
+            data = src.__dataframe__()
 
-            await self.send({
+            return {
                 "type": "output_value",
                 **(id_fields),
                 **(key_fields),
@@ -1515,27 +1491,59 @@ class Kernel:
                     "num_columns": data.num_columns(),
                     "num_rows": data.num_rows(),
                 },
-            })
-            return
+            }
 
-        if isinstance(res, Figure) or (
-            hasattr(res, "figure") and isinstance(res.figure, Figure)
+        if isinstance(src, Figure) or (
+            hasattr(src, "figure") and isinstance(src.figure, Figure)
         ):
-            await self.send({
-                "type": "output_value",
-                **(id_fields),
-                **(key_fields),
-                "webp": res,
-            })
-            return
+            return {"type": "output_value", **(id_fields), **(key_fields), "webp": src}
 
-        data = pprint.pformat(res)
-        await self.send({
+        data = pprint.pformat(src)
+        return {
             "type": "output_value",
             **(id_fields),
             **(key_fields),
             "string": data[:10000],
-        })
+        }
+
+    async def send_output_value(
+        self,
+        key: str | None = None,
+        ldata_node_id: str | None = None,
+        registry_table_id: str | None = None,
+        url: str | None = None,
+        *,
+        cell_id: str | None = None,
+        viewer_id: str | None = None,
+    ) -> None:
+        src: Any
+        key_fields: dict[str, str] | None = None
+
+        if key is not None:
+            src = self.k_globals[key]
+            key_fields = {"key": key}
+        elif ldata_node_id is not None:
+            src = self.ldata_dataframes[ldata_node_id]
+            key_fields = {"ldata_node_id": ldata_node_id}
+        elif registry_table_id is not None:
+            src = self.registry_dataframes[registry_table_id]
+            key_fields = {"registry_table_id": registry_table_id}
+        elif url is not None:
+            src = self.url_dataframes[url]
+            key_fields = {"url": url}
+        else:
+            raise RuntimeError(
+                "Requested value without key, ldata_node_id, registry_table_id or url"
+            )
+
+        assert key_fields is not None
+        assert len(key_fields) == 1
+
+        await self.send(
+            self.make_output_value_msg(
+                src=src, key_fields=key_fields, cell_id=cell_id, viewer_id=viewer_id
+            )
+        )
 
     @staticmethod
     def _get_single_global_info(value: object) -> dict:

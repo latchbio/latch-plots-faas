@@ -422,14 +422,19 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                 data = validate(resp, PlotUpsertValueViewerGQLResp)
                 viewer_id = data.data.upsertPlotCellValueViewer.bigInt
 
-                if msg["global_key"] is not None and viewer_id is not None:
+                if viewer_id is None:
+                    continue
+
+                if msg["global_key"] is not None:
                     await conn_k.send({
                         "type": "get_global",
                         "viewer_id": viewer_id,
                         "key": msg["global_key"],
                     })
 
-                continue
+                    continue
+
+                msg = {"type": "output_value", "viewer_id": viewer_id}
 
             elif msg["type"] == "plot_data":
                 await gql_query(
