@@ -617,6 +617,11 @@ class Kernel:
     cell_rnodes: dict[str, Node] = field(default_factory=dict)
     k_globals: TracedDict = field(init=False)
     cell_status: dict[str, str] = field(default_factory=dict)
+
+    cell_locks: defaultdict[str, threading.Lock] = field(
+        default_factory=lambda: defaultdict(threading.Lock)
+    )
+
     snapshot_status: KernelSnapshotStatus = "done"
 
     active_cell: str | None = None
@@ -1224,85 +1229,86 @@ class Kernel:
     async def exec(self, *, cell_id: str, code: str, _from_stub: bool = False) -> None:
         filename = f"<cell {cell_id}>"
 
-        try:
-            # if not _from_stub:
-            #     assert ctx.cur_comp is None
-            #     assert not ctx.in_tx
+        with self.cell_locks[cell_id]:
+            try:
+                # if not _from_stub:
+                #     assert ctx.cur_comp is None
+                #     assert not ctx.in_tx
 
-            self.cell_status[cell_id] = "running"
-
-            comp = self.cell_rnodes.get(cell_id)
-            if comp is not None and not _from_stub:
-                comp.dispose()
-                del self.cell_rnodes[cell_id]
-
-            # https://stackoverflow.com/questions/33908794/get-value-of-last-expression-in-exec-call
-            parsed = compile(
-                source=code,
-                filename=filename,
-                mode="exec",
-                flags=ast.PyCF_ONLY_AST | ast.PyCF_ALLOW_TOP_LEVEL_AWAIT,
-            )
-
-            stmts = list(ast.iter_child_nodes(parsed))
-            if len(stmts) == 0:
-                self.cell_status[cell_id] = "ok"
-                self.k_globals.clear()
-                await self.send_cell_result(cell_id)
-                return
-
-            async def x() -> None:
-                # fixme(maximsmol): a cell should also be considered running if a
-                # child reactive node is running
-                #
-                # the only complication is to tell when it has *finished*
-                # running so we can set the status & send results + flush logs
                 self.cell_status[cell_id] = "running"
 
-                try:
-                    assert ctx.cur_comp is not None
+                comp = self.cell_rnodes.get(cell_id)
+                if comp is not None and not _from_stub:
+                    comp.dispose()
+                    del self.cell_rnodes[cell_id]
 
-                    self.cell_rnodes[cell_id] = ctx.cur_comp
+                # https://stackoverflow.com/questions/33908794/get-value-of-last-expression-in-exec-call
+                parsed = compile(
+                    source=code,
+                    filename=filename,
+                    mode="exec",
+                    flags=ast.PyCF_ONLY_AST | ast.PyCF_ALLOW_TOP_LEVEL_AWAIT,
+                )
+
+                stmts = list(ast.iter_child_nodes(parsed))
+                if len(stmts) == 0:
+                    self.cell_status[cell_id] = "ok"
                     self.k_globals.clear()
+                    await self.send_cell_result(cell_id)
+                    return
+
+                async def x() -> None:
+                    # fixme(maximsmol): a cell should also be considered running if a
+                    # child reactive node is running
+                    #
+                    # the only complication is to tell when it has *finished*
+                    # running so we can set the status & send results + flush logs
+                    self.cell_status[cell_id] = "running"
 
                     try:
-                        res = eval(  # noqa: S307
-                            compile(
-                                parsed,
-                                filename=filename,
-                                mode="exec",
-                                flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT,
-                            ),
-                            self.k_globals,
-                        )
-                        if asyncio.iscoroutine(res):
-                            res = await res
-                    except ExitException:
-                        ...
+                        assert ctx.cur_comp is not None
 
-                    self.cell_status[cell_id] = "ok"
-                    await self.send_cell_result(cell_id)
+                        self.cell_rnodes[cell_id] = ctx.cur_comp
+                        self.k_globals.clear()
 
-                except (KeyboardInterrupt, Exception):
-                    self.cell_status[cell_id] = "error"
-                    await self.send_cell_result(cell_id)
+                        try:
+                            res = eval(  # noqa: S307
+                                compile(
+                                    parsed,
+                                    filename=filename,
+                                    mode="exec",
+                                    flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT,
+                                ),
+                                self.k_globals,
+                            )
+                            if asyncio.iscoroutine(res):
+                                res = await res
+                        except ExitException:
+                            ...
 
-                finally:
-                    sys.stdout.flush()
-                    sys.stderr.flush()
+                        self.cell_status[cell_id] = "ok"
+                        await self.send_cell_result(cell_id)
 
-            x.__name__ = filename
+                    except (KeyboardInterrupt, Exception):
+                        self.cell_status[cell_id] = "error"
+                        await self.send_cell_result(cell_id)
 
-            self.active_cell_task = asyncio.create_task(
-                ctx.run(x, _cell_id=cell_id, code=code)
-            )
-            await self.active_cell_task
+                    finally:
+                        sys.stdout.flush()
+                        sys.stderr.flush()
 
-        except (KeyboardInterrupt, asyncio.CancelledError, Exception):
-            self.cell_status[cell_id] = "error"
-            await self.send_cell_result(cell_id)
-        finally:
-            self.active_cell_task = None
+                x.__name__ = filename
+
+                self.active_cell_task = asyncio.create_task(
+                    ctx.run(x, _cell_id=cell_id, code=code)
+                )
+                await self.active_cell_task
+
+            except (KeyboardInterrupt, asyncio.CancelledError, Exception):
+                self.cell_status[cell_id] = "error"
+                await self.send_cell_result(cell_id)
+            finally:
+                self.active_cell_task = None
 
     async def send_cell_result(self, cell_id: str) -> None:
         await self.send_global_updates()
@@ -1849,10 +1855,11 @@ class Kernel:
             cell_id = msg["cell_id"]
 
             node = self.cell_rnodes.get(cell_id)
-            if node is not None:
-                node.dispose()
-                del self.cell_rnodes[cell_id]
-                del self.cell_status[cell_id]
+            with self.cell_locks[cell_id]:
+                if node is not None:
+                    node.dispose()
+                    del self.cell_rnodes[cell_id]
+                    del self.cell_status[cell_id]
 
             return
 
