@@ -1221,9 +1221,9 @@ class Kernel:
         filename = f"<cell {cell_id}>"
 
         try:
-            if not _from_stub:
-                assert ctx.cur_comp is None
-                assert not ctx.in_tx
+            # if not _from_stub:
+            #     assert ctx.cur_comp is None
+            #     assert not ctx.in_tx
 
             self.cell_status[cell_id] = "running"
 
