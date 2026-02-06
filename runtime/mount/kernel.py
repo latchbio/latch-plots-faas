@@ -242,7 +242,8 @@ class TracedDict(dict[str, Signal[object] | object]):
         return self.touched - self.removed
 
 
-class ExitException(Exception): ...
+class ExitException(Exception):
+    ...
 
 
 KeyType = Literal["key", "ldata_node_id", "registry_table_id", "url"]
@@ -454,9 +455,9 @@ def paginate(*, df: DataFrame, pagination_settings: PaginationSettings) -> DataF
     return data
 
 
-def pagination_settings_dict_factory() -> defaultdict[
-    str, defaultdict[str, PaginationSettings]
-]:
+def pagination_settings_dict_factory() -> (
+    defaultdict[str, defaultdict[str, PaginationSettings]]
+):
     return defaultdict(lambda: defaultdict(PaginationSettings))
 
 
@@ -473,10 +474,10 @@ class CategorizedCellOutputs:
     figures: list[str] = field(default_factory=list)
     static_figures: list[str] = field(default_factory=list)
 
-
 def _split_violin_groups(
-    trace: dict[str, Any],
+    trace: dict[str, Any]
 ) -> tuple[list[dict[str, Any]] | None, bool]:
+
     orientation = trace.get("orientation", "v")
     data_axis = "y" if orientation == "v" else "x"
     index_axis = "x" if orientation == "v" else "y"
@@ -488,9 +489,7 @@ def _split_violin_groups(
 
     # note(tim): plotly makes this field base64
     if isinstance(data_field, dict) and "bdata" in data_field and "dtype" in data_field:
-        vals_arr = np.frombuffer(
-            b64decode(data_field["bdata"]), dtype=np.dtype(data_field["dtype"])
-        )
+        vals_arr = np.frombuffer(b64decode(data_field["bdata"]), dtype=np.dtype(data_field["dtype"]))
     else:
         vals_arr = np.asarray(data_field)
 
@@ -513,7 +512,7 @@ def _split_violin_groups(
     split_idx = np.flatnonzero(np.diff(cat_idx_sorted)) + 1
     groups = np.split(order_idx, split_idx)
     group_traces: list[dict[str, Any]] = []
-    for label, idxs in zip(order, groups, strict=True):
+    for label, idxs in zip(order, groups):
         child = deepcopy(trace)
         child[data_axis] = vals_arr[idxs]
 
@@ -552,7 +551,7 @@ def serialize_plotly_figure(x: BaseFigure) -> object:
                             precalc_violin(group_trace)
                             orientation = trace.get("orientation", "v")
                             data_axis = "y" if orientation == "v" else "x"
-                            
+
                             # note(tim): plotly has weird issues if this is not provided
                             group_trace[data_axis] = []
 
@@ -599,8 +598,8 @@ class RestoredGlobalInfo(TypedDict):
     msg: str
 
 
-snapshot_chunk_bytes = 64 * 2**10
-snapshot_progress_interval_bytes = 10 * (2**20)
+snapshot_chunk_bytes = 64 * 2 ** 10
+snapshot_progress_interval_bytes = 10 * (2 ** 20)
 
 
 @dataclass(kw_only=True)
@@ -734,11 +733,13 @@ class Kernel:
             self.active_cell = cell_id
 
         self.cell_seq += 1
-        await self.send({
-            "type": "start_cell",
-            "cell_id": cell_id,
-            "run_sequencer": self.cell_seq,
-        })
+        await self.send(
+            {
+                "type": "start_cell",
+                "cell_id": cell_id,
+                "run_sequencer": self.cell_seq,
+            }
+        )
 
     async def send_global_updates(self) -> None:
         async with asyncio.TaskGroup() as tg:
@@ -841,12 +842,14 @@ class Kernel:
             ):
                 continue
 
-            await self.send({
-                "type": "cell_widgets",
-                "cell_id": cell_id,
-                "widget_state": res,
-                "updated_widgets": list(updated_widgets),
-            })
+            await self.send(
+                {
+                    "type": "cell_widgets",
+                    "cell_id": cell_id,
+                    "widget_state": res,
+                    "updated_widgets": list(updated_widgets),
+                }
+            )
 
         if clear_status:
             await self.set_active_cell(None)
@@ -863,9 +866,7 @@ class Kernel:
         # for x in unused_signals:
         #     del self.widget_signals[x]
 
-    async def update_kernel_snapshot_status(
-        self, key: str, status: str, data: dict[str, int] | None = None
-    ) -> None:
+    async def update_kernel_snapshot_status(self, key: str, status: str, data: dict[str, int] | None = None) -> None:
         assert key in {"save_kernel_snapshot", "load_kernel_snapshot"}
         self.snapshot_status = status
         msg = {"type": key, "status": status}
@@ -880,7 +881,6 @@ class Kernel:
         s_signals = {}
 
         try:
-
             def add_and_check_listeners(sig: Signal):
                 for lid, lis in sig._listeners.items():
                     if lid not in s_nodes:
@@ -917,9 +917,7 @@ class Kernel:
                 elif isinstance(val._value, BaseWidget):
                     collect_widget_signals(val._value)
                     if val._value._has_signal:
-                        assert val._value._signal.id in s_signals, (
-                            f"missing {val._value._signal.id}"
-                        )
+                        assert val._value._signal.id in s_signals, f"missing {val._value._signal.id}"
                         s_globals[k] = val._value.serialize()
                 else:
                     s_val, msg = safe_serialize_obj(val._value)
@@ -943,9 +941,7 @@ class Kernel:
 
             data = orjson.dumps(s_depens, default=orjson_encoder)
         except Exception:
-            await self.update_kernel_snapshot_status(
-                "save_kernel_snapshot", "error", {"error_msg": traceback.format_exc()}
-            )
+            await self.update_kernel_snapshot_status("save_kernel_snapshot", "error", {"error_msg": traceback.format_exc()})
             return
 
         total = len(data)
@@ -956,30 +952,25 @@ class Kernel:
                 end = min(start + snapshot_chunk_bytes, total)
                 f.write(data[start:end])
 
-                saved_since_last += end - start
+                saved_since_last += (end - start)
                 if end == total:
                     break
 
                 if saved_since_last >= snapshot_progress_interval_bytes:
-                    await self.update_kernel_snapshot_status(
-                        "save_kernel_snapshot",
-                        "progress",
-                        {"progress_bytes": end, "total_bytes": total},
-                    )
+                    await self.update_kernel_snapshot_status("save_kernel_snapshot", "progress", {"progress_bytes": end, "total_bytes": total})
                     saved_since_last = 0
 
         await self.update_kernel_snapshot_status("save_kernel_snapshot", "done")
 
     async def load_kernel_snapshot(self) -> None:
+
         snapshot_f = snapshot_dir / snapshot_f_name
         if not snapshot_f.exists():
             await self.update_kernel_snapshot_status("load_kernel_snapshot", "done")
             return
 
         total = snapshot_f.stat().st_size
-        await self.update_kernel_snapshot_status(
-            "load_kernel_snapshot", "start", {"progress_bytes": 0, "total_bytes": total}
-        )
+        await self.update_kernel_snapshot_status("load_kernel_snapshot", "start", {"progress_bytes": 0, "total_bytes": total})
 
         data = bytearray()
         read_since_last = 0
@@ -996,11 +987,7 @@ class Kernel:
                     break
 
                 if read_since_last >= snapshot_progress_interval_bytes:
-                    await self.update_kernel_snapshot_status(
-                        "load_kernel_snapshot",
-                        "progress",
-                        {"progress_bytes": len(data), "total_bytes": total},
-                    )
+                    await self.update_kernel_snapshot_status("load_kernel_snapshot", "progress", {"progress_bytes":  len(data), "total_bytes": total})
                     read_since_last = 0
 
         try:
@@ -1081,9 +1068,8 @@ class Kernel:
 
             self.nodes_with_widgets = nodes_with_widgets
         except Exception:
-            await self.update_kernel_snapshot_status(
-                "load_kernel_snapshot", "error", {"error_msg": traceback.format_exc()}
-            )
+
+            await self.update_kernel_snapshot_status("load_kernel_snapshot", "error", {"error_msg": traceback.format_exc()})
             return
 
         await self.update_kernel_snapshot_status("load_kernel_snapshot", "done")
@@ -1184,7 +1170,7 @@ class Kernel:
                             mode="exec",
                             flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT,
                         ),
-                        self.k_globals,
+                        self.k_globals
                     )
 
                     if asyncio.iscoroutine(result_value):
@@ -1274,11 +1260,8 @@ class Kernel:
 
             x.__name__ = filename
 
-            # todo(rteqs): figure out active cell stuff and task cancellation
-            fut = self.executor.submit(
-                lambda: asyncio.run(ctx.run(x, _cell_id=cell_id, code=code))
-            )
-            self.active_cell_tasks[cell_id] = fut
+            self.active_cell_task = asyncio.create_task(ctx.run(x, _cell_id=cell_id, code=code))
+            await self.active_cell_task
 
         except (KeyboardInterrupt, asyncio.CancelledError, Exception):
             self.cell_status[cell_id] = "error"
@@ -1319,22 +1302,26 @@ class Kernel:
         res = self.k_globals[key]
 
         if isinstance(res, BaseFigure):
-            await self.send({
-                "type": "plot_data",
-                "plot_id": plot_id,
-                "key": key,
-                # todo(maximsmol): get rid of the json reload
-                "plotly_json": serialize_plotly_figure(res),
-            })
+            await self.send(
+                {
+                    "type": "plot_data",
+                    "plot_id": plot_id,
+                    "key": key,
+                    # todo(maximsmol): get rid of the json reload
+                    "plotly_json": serialize_plotly_figure(res),
+                }
+            )
             return
 
         if not hasattr(res, "iloc"):
-            await self.send({
-                "type": "plot_data",
-                "plot_id": plot_id,
-                "key": key,
-                "error": "not a dataframe",
-            })
+            await self.send(
+                {
+                    "type": "plot_data",
+                    "plot_id": plot_id,
+                    "key": key,
+                    "error": "not a dataframe",
+                }
+            )
             return
 
         if hasattr(res, "compute"):
@@ -1557,13 +1544,19 @@ class Kernel:
             return {
                 "type": "DataFrame",
                 "columns": list(value.columns)[:50],
-                "dtypes": {str(k): str(v) for k, v in list(value.dtypes.items())[:50]},
+                "dtypes": {
+                    str(k): str(v) for k, v in list(value.dtypes.items())[:50]
+                },
                 "column_preview_truncated": len(value.columns) > 50,
                 "shape": value.shape,
             }
 
         if isinstance(value, pd.Series):
-            return {"type": "Series", "dtype": str(value.dtype), "shape": value.shape}
+            return {
+                "type": "Series",
+                "dtype": str(value.dtype),
+                "shape": value.shape,
+            }
 
         if isinstance(value, ad.AnnData):
             obs_dtypes_full = {str(k): str(v) for k, v in value.obs.dtypes.items()}
@@ -1584,7 +1577,10 @@ class Kernel:
                 "obsm_keys": list(value.obsm.keys()) if hasattr(value, "obsm") else [],
             }
 
-        return {"type": type(value).__name__, "repr": str(value)[:1000]}
+        return {
+            "type": type(value).__name__,
+            "repr": str(value)[:1000]
+        }
 
     async def send_globals_summary(self, agent_tx_id: str | None = None) -> None:
         summary = {}
@@ -1621,9 +1617,7 @@ class Kernel:
 
             producer_cell_id = getattr(sig, "_producer_cell_id", None)
             if producer_cell_id is not None:
-                cell_defined_global_names.setdefault(producer_cell_id, []).append(
-                    var_name
-                )
+                cell_defined_global_names.setdefault(producer_cell_id, []).append(var_name)
 
             value = sig.sample()
             if isinstance(value, Signal):
@@ -1674,16 +1668,20 @@ class Kernel:
         for cell_id in self.cell_rnodes:
             defined = sorted(set(cell_defined_global_names.get(cell_id, [])))
             dep_signal_ids = cell_dependencies.get(cell_id, set())
-            dep_signal_names = sorted({
-                global_signal_names[sig_id]
-                for sig_id in dep_signal_ids
-                if sig_id in global_signal_names
-            })
-            dep_cells = sorted({
-                producer
-                for sig_id in dep_signal_ids
-                if (producer := signal_producers.get(sig_id)) is not None
-            })
+            dep_signal_names = sorted(
+                {
+                    global_signal_names[sig_id]
+                    for sig_id in dep_signal_ids
+                    if sig_id in global_signal_names
+                }
+            )
+            dep_cells = sorted(
+                {
+                    producer
+                    for sig_id in dep_signal_ids
+                    if (producer := signal_producers.get(sig_id)) is not None
+                }
+            )
             cell_reactivity[cell_id] = {
                 "signals_defined": defined,
                 "depends_on_signals": dep_signal_names,
@@ -1695,7 +1693,10 @@ class Kernel:
     async def send_reactivity_summary(self, agent_tx_id: str | None = None) -> None:
         cell_reactivity = self.get_reactivity_summary()
 
-        msg = {"type": "reactivity_summary", "cell_reactivity": cell_reactivity}
+        msg = {
+            "type": "reactivity_summary",
+            "cell_reactivity": cell_reactivity,
+        }
         if agent_tx_id is not None:
             msg["agent_tx_id"] = agent_tx_id
 
@@ -1868,7 +1869,7 @@ class Kernel:
 
             await self.send({
                 "type": "reset_kernel_globals_complete",
-                "agent_tx_id": msg.get("agent_tx_id"),
+                "agent_tx_id": msg.get("agent_tx_id")
             })
             return
 
@@ -2002,7 +2003,7 @@ class Kernel:
             await self.send({
                 "type": "execute_code_response",
                 "agent_tx_id": agent_tx_id,
-                **result,
+                **result
             })
             return
 
@@ -2015,7 +2016,7 @@ class Kernel:
                     "type": "get_global_info_response",
                     "agent_tx_id": agent_tx_id,
                     "status": "error",
-                    "error": f"Global variable '{key}' not found",
+                    "error": f"Global variable '{key}' not found"
                 })
                 return
 
@@ -2023,7 +2024,7 @@ class Kernel:
                 "type": "get_global_info_response",
                 "agent_tx_id": agent_tx_id,
                 "status": "success",
-                "info": self._get_single_global_info(self.k_globals[key]),
+                "info": self._get_single_global_info(self.k_globals[key])
             })
             return
 
@@ -2062,7 +2063,6 @@ async def main() -> None:
 
     socket_io_thread = SocketIoThread(socket=sock)
     socket_io_thread.start()
-
     try:
         socket_io_thread.initialized.wait()
 
@@ -2070,10 +2070,14 @@ async def main() -> None:
         _inject.kernel = k
 
         stdout_writer = SocketWriter(conn=k.conn, kernel=k, name="stdout")
-        sys.stdout = text_socket_writer(stdout_writer)
+        sys.stdout = text_socket_writer(
+            stdout_writer
+        )
 
         stderr_writer = SocketWriter(conn=k.conn, kernel=k, name="stderr")
-        sys.stderr = text_socket_writer(stderr_writer)
+        sys.stderr = text_socket_writer(
+            stderr_writer
+        )
 
         await k.send({"type": "ready"})
 
