@@ -354,9 +354,48 @@ class AgentHarness:
             elif t == "cancellation":
                 anthropic_messages.append({"role": "user", "content": "[Request cancelled by user]"})
 
-        print(f"[agent] Built {len(anthropic_messages)} messages from DB")
+        reordered: list[MessageParam] = []
+        pending_tool_ids: set[str] = set()
+        deferred: list[MessageParam] = []
 
-        return anthropic_messages
+        for msg in anthropic_messages:
+            role = msg.get("role")
+            content = msg.get("content")
+
+            if role == "assistant" and isinstance(content, list):
+                for block in content:
+                    if isinstance(block, dict) and block.get("type") == "tool_use":
+                        tool_id = block.get("id")
+                        if tool_id is not None:
+                            pending_tool_ids.add(tool_id)
+
+            if len(pending_tool_ids) > 0 and role == "user":
+                is_tool_result_msg = isinstance(content, list) and any(
+                    isinstance(b, dict) and b.get("type") == "tool_result"
+                    for b in content
+                )
+                if is_tool_result_msg:
+                    reordered.append(msg)
+                    for block in content:
+                        if isinstance(block, dict) and block.get("type") == "tool_result":
+                            tool_result_id = block.get("tool_use_id")
+                            if tool_result_id is not None:
+                                pending_tool_ids.discard(tool_result_id)
+                    if len(pending_tool_ids) == 0:
+                        reordered.extend(deferred)
+                        deferred.clear()
+                    continue
+
+                deferred.append(msg)
+                continue
+
+            reordered.append(msg)
+
+        reordered.extend(deferred)
+
+        print(f"[agent] Built {len(reordered)} messages from DB")
+
+        return reordered
 
     async def refresh_cells_context(self) -> str:
         context_result, reactivity_result = await asyncio.gather(
