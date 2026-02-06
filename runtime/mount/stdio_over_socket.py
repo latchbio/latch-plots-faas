@@ -90,7 +90,7 @@ class SocketWriter(RawIOBase):
             )
 
         with self._buffer_lock:
-            self._buffer.append((data, self.kernel.active_cell))
+            self._buffer.append((data, self.kernel.thread_local.active_cell))
 
         return len(b)
 
