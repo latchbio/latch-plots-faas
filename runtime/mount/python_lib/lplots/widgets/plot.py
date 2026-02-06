@@ -82,7 +82,7 @@ def w_plot(
             "appearance": appearance,
         },
     )
-    emit_state = res._state
+    emit_state = {**res._state}
     if global_key is None:
         emit_state["source"] = source
     _emit.emit_widget(key, emit_state)
