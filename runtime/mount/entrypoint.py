@@ -397,7 +397,7 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                 data = msg.get("source")
                 if data is not None:
                     data = orjson.dumps(
-                        msg, option=orjson.OPT_SERIALIZE_NUMPY, default=orjson_encoder
+                        data, option=orjson.OPT_SERIALIZE_NUMPY, default=orjson_encoder
                     ).decode()
 
                 resp = await gql_query(
