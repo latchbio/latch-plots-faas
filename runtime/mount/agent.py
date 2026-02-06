@@ -378,7 +378,9 @@ class AgentHarness:
                     reordered.append(msg)
                     for block in content:
                         if isinstance(block, dict) and block.get("type") == "tool_result":
-                            pending_tool_ids.discard(block.get("tool_use_id"))
+                            tool_result_id = block.get("tool_use_id")
+                            if tool_result_id is not None:
+                                pending_tool_ids.discard(tool_result_id)
                     if len(pending_tool_ids) == 0:
                         reordered.extend(deferred)
                         deferred.clear()
