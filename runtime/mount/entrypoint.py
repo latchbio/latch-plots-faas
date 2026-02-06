@@ -77,7 +77,9 @@ pod_session_id = (latch_p / "session-id").read_text()
 notebook_id_file = latch_p / "notebook-id"
 notebook_id = None
 with contextlib.suppress(Exception):
-    notebook_id = notebook_id_file.read_text().strip() if notebook_id_file.exists() else None
+    notebook_id = (
+        notebook_id_file.read_text().strip() if notebook_id_file.exists() else None
+    )
 
 plots_ctx_manager = PlotsContextManager()
 
@@ -106,7 +108,7 @@ async def handle_user_disconnect_fallback() -> None:
                 "type": "agent_action_response",
                 "tx_id": tx_id,
                 "status": "error",
-                "error": "User disconnected and backend browser not available"
+                "error": "User disconnected and backend browser not available",
             })
 
 
@@ -418,13 +420,11 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                 data = validate(resp, PlotUpsertValueViewerGQLResp)
                 viewer_id = data.data.upsertPlotCellValueViewer.bigInt
                 if viewer_id is not None:
-                    await conn_k.send(
-                        {
-                            "type": "get_global",
-                            "viewer_id": viewer_id,
-                            "key": msg["global_key"],
-                        }
-                    )
+                    await conn_k.send({
+                        "type": "get_global",
+                        "viewer_id": viewer_id,
+                        "key": msg["global_key"],
+                    })
 
                 continue
 
@@ -459,15 +459,19 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                 tx_id = msg.get("agent_tx_id")
 
                 if a_proc.conn_a is not None:
-                    print(f"[entrypoint] Routing globals response to agent (tx_id={tx_id})")
+                    print(
+                        f"[entrypoint] Routing globals response to agent (tx_id={tx_id})"
+                    )
                     await a_proc.conn_a.send({
                         "type": "agent_action_response",
                         "tx_id": tx_id,
                         "status": "success",
-                        "summary": msg.get("summary", {})
+                        "summary": msg.get("summary", {}),
                     })
                 else:
-                    print("[entrypoint] Could not route globals response: agent not connected")
+                    print(
+                        "[entrypoint] Could not route globals response: agent not connected"
+                    )
 
                 continue
 
@@ -475,7 +479,9 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                 tx_id = msg.get("agent_tx_id")
 
                 if a_proc.conn_a is not None:
-                    print(f"[entrypoint] Routing reactivity response to agent (tx_id={tx_id})")
+                    print(
+                        f"[entrypoint] Routing reactivity response to agent (tx_id={tx_id})"
+                    )
                     await a_proc.conn_a.send({
                         "type": "agent_action_response",
                         "tx_id": tx_id,
@@ -488,7 +494,9 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                 tx_id = msg.get("agent_tx_id")
 
                 if a_proc.conn_a is not None:
-                    print(f"[entrypoint] Routing execute_code response to agent (tx_id={tx_id})")
+                    print(
+                        f"[entrypoint] Routing execute_code response to agent (tx_id={tx_id})"
+                    )
                     await a_proc.conn_a.send({
                         "type": "agent_action_response",
                         "tx_id": tx_id,
@@ -497,7 +505,7 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                         "stdout": msg.get("stdout"),
                         "stderr": msg.get("stderr"),
                         "exception": msg.get("exception"),
-                        "error": msg.get("error")
+                        "error": msg.get("error"),
                     })
                     continue
 
@@ -505,13 +513,15 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                 tx_id = msg.get("agent_tx_id")
 
                 if a_proc.conn_a is not None:
-                    print(f"[entrypoint] Routing get_global_info response to agent (tx_id={tx_id})")
+                    print(
+                        f"[entrypoint] Routing get_global_info response to agent (tx_id={tx_id})"
+                    )
                     await a_proc.conn_a.send({
                         "type": "agent_action_response",
                         "tx_id": tx_id,
                         "status": msg.get("status", "error"),
                         "info": msg.get("info"),
-                        "error": msg.get("error")
+                        "error": msg.get("error"),
                     })
                     continue
 
@@ -536,20 +546,24 @@ async def handle_agent_messages(conn_a: SocketIo) -> None:
         if msg_type == "agent_action":
             print(f"[entrypoint]       > (action={action})")
 
-        if msg_type == "agent_action" and msg.get("action") == "request_reactivity_summary":
+        if (
+            msg_type == "agent_action"
+            and msg.get("action") == "request_reactivity_summary"
+        ):
             if k_proc.conn_k is not None:
-
                 await k_proc.conn_k.send({
                     "type": "reactivity_summary",
-                    "agent_tx_id": tx_id
+                    "agent_tx_id": tx_id,
                 })
             else:
-                print("[entrypoint] Kernel not connected, cannot route reactivity request")
+                print(
+                    "[entrypoint] Kernel not connected, cannot route reactivity request"
+                )
                 await conn_a.send({
                     "type": "agent_action_response",
                     "tx_id": msg.get("tx_id"),
                     "status": "error",
-                    "error": "Kernel not connected"
+                    "error": "Kernel not connected",
                 })
             continue
 
@@ -560,14 +574,14 @@ async def handle_agent_messages(conn_a: SocketIo) -> None:
                 await k_proc.conn_k.send({
                     "type": "execute_code",
                     "code": code,
-                    "agent_tx_id": tx_id
+                    "agent_tx_id": tx_id,
                 })
             else:
                 await conn_a.send({
                     "type": "agent_action_response",
                     "tx_id": msg.get("tx_id"),
                     "status": "error",
-                    "error": "Kernel not connected"
+                    "error": "Kernel not connected",
                 })
             continue
 
@@ -578,23 +592,26 @@ async def handle_agent_messages(conn_a: SocketIo) -> None:
                 await k_proc.conn_k.send({
                     "type": "get_global_info",
                     "key": key,
-                    "agent_tx_id": tx_id
+                    "agent_tx_id": tx_id,
                 })
             else:
                 await conn_a.send({
                     "type": "agent_action_response",
                     "tx_id": msg.get("tx_id"),
                     "status": "error",
-                    "error": "Kernel not connected"
+                    "error": "Kernel not connected",
                 })
             continue
 
         if msg_type == "agent_action":
-            force_backend_browser_retry = msg.get("params", {}).get("force_backend_browser_retry", False)
+            force_backend_browser_retry = msg.get("params", {}).get(
+                "force_backend_browser_retry", False
+            )
 
             if action in {
                 "smart_ui_spotlight",
-                "h5_filter_by", "h5_color_by",
+                "h5_filter_by",
+                "h5_color_by",
                 "h5_set_selected_obsm_key",
                 "h5_set_background_image",
                 "h5_open_image_aligner",
@@ -609,7 +626,9 @@ async def handle_agent_messages(conn_a: SocketIo) -> None:
                     target_ctx = user_agent_ctx
                     track_for_disconnect = False
                 else:
-                    print(f"[entrypoint] User browser unavailable for user-specific action: {action}")
+                    print(
+                        f"[entrypoint] User browser unavailable for user-specific action: {action}"
+                    )
                     await conn_a.send({
                         "type": "agent_action_response",
                         "tx_id": tx_id,
@@ -621,7 +640,7 @@ async def handle_agent_messages(conn_a: SocketIo) -> None:
                             without relying on user input, or inform the user they need to be on the
                             page to proceed.
                             """
-                        )
+                        ),
                     })
                     continue
             elif force_backend_browser_retry:
@@ -629,12 +648,14 @@ async def handle_agent_messages(conn_a: SocketIo) -> None:
                     target_ctx = action_handler_ctx
                     track_for_disconnect = False
                 else:
-                    print(f"[entrypoint] Backend browser not connected for forced action: {action}")
+                    print(
+                        f"[entrypoint] Backend browser not connected for forced action: {action}"
+                    )
                     await conn_a.send({
                         "type": "agent_action_response",
                         "tx_id": tx_id,
                         "status": "error",
-                        "error": "Backend browser not connected. Cannot execute browser actions."
+                        "error": "Backend browser not connected. Cannot execute browser actions.",
                     })
                     continue
             elif user_agent_ctx is not None:
@@ -649,7 +670,7 @@ async def handle_agent_messages(conn_a: SocketIo) -> None:
                     "type": "agent_action_response",
                     "tx_id": tx_id,
                     "status": "error",
-                    "error": "No browser connected. Cannot execute browser actions."
+                    "error": "No browser connected. Cannot execute browser actions.",
                 })
                 continue
         else:
@@ -676,7 +697,7 @@ async def handle_agent_messages(conn_a: SocketIo) -> None:
                         "type": "agent_action_response",
                         "tx_id": tx_id,
                         "status": "error",
-                        "error": f"Failed to forward action: {e}"
+                        "error": f"Failed to forward action: {e}",
                     })
 
 
@@ -756,24 +777,20 @@ async def start_kernel_proc() -> None:
 
     await add_pod_event(auth=auth_token_sdk, event_type="runtime_ready")
     await ready_ev.wait()
-    await conn_k.send(
-        {
-            "type": "init",
-            "widget_states": k_state.widget_states,
-            "cell_output_selections": k_state.cell_output_selections,
-            "plot_data_selections": k_state.plot_data_selections,
-            "viewer_cell_data": k_state.viewer_cell_data,
-            "plot_configs": k_state.plot_configs,
-            "session_snapshot_mode": session_snapshot_mode,
-        }
-    )
+    await conn_k.send({
+        "type": "init",
+        "widget_states": k_state.widget_states,
+        "cell_output_selections": k_state.cell_output_selections,
+        "plot_data_selections": k_state.plot_data_selections,
+        "viewer_cell_data": k_state.viewer_cell_data,
+        "plot_configs": k_state.plot_configs,
+        "session_snapshot_mode": session_snapshot_mode,
+    })
 
 
 async def start_agent_proc() -> None:
     conn_a = a_proc.conn_a = await SocketIo.from_socket(sock_a)
-    async_tasks.append(
-        asyncio.create_task(handle_agent_messages(a_proc.conn_a))
-    )
+    async_tasks.append(asyncio.create_task(handle_agent_messages(a_proc.conn_a)))
 
     log_path = Path("/var/log/agent.log")
     log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -823,13 +840,17 @@ async def stop_agent_proc() -> None:
             except ProcessLookupError:
                 pass
         else:
-            print(f"[entrypoint] Agent process already exited with code {proc.returncode}")
+            print(
+                f"[entrypoint] Agent process already exited with code {proc.returncode}"
+            )
 
     if a_proc.log_file is not None:
         a_proc.log_file.close()
 
 
-async def start_headless_browser(notebook_id: str, local_storage: dict[str, str]) -> None:
+async def start_headless_browser(
+    notebook_id: str, local_storage: dict[str, str]
+) -> None:
     global headless_browser, headless_browser_notebook_id
 
     if headless_browser is not None:
@@ -841,16 +862,17 @@ async def start_headless_browser(notebook_id: str, local_storage: dict[str, str]
         notebook_url = f"https://console.latch.bio/plots/{notebook_id}"
 
         headless_browser = HeadlessBrowser()
-        await headless_browser.start(
-            notebook_url,
-            local_storage=local_storage,
-        )
+        await headless_browser.start(notebook_url, local_storage=local_storage)
 
         try:
             await asyncio.wait_for(action_handler_ready_ev.wait(), timeout=30)
-            print("[entrypoint] Headless browser action_handler connected successfully!")
+            print(
+                "[entrypoint] Headless browser action_handler connected successfully!"
+            )
         except TimeoutError:
-            print("[entrypoint] Timed out waiting for action_handler websocket connection")
+            print(
+                "[entrypoint] Timed out waiting for action_handler websocket connection"
+            )
 
     except Exception as e:
         print(f"[entrypoint] Error starting headless browser: {e}")
@@ -870,7 +892,9 @@ async def restart_headless_browser() -> None:
     local_storage = latest_local_storage
 
     if notebook_id is None or local_storage is None:
-        print("[entrypoint] Cannot restart headless browser: missing notebook_id or local_storage")
+        print(
+            "[entrypoint] Cannot restart headless browser: missing notebook_id or local_storage"
+        )
         return
 
     print("[entrypoint] Restarting headless browser after disconnect...")
