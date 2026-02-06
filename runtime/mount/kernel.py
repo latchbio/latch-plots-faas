@@ -760,7 +760,7 @@ class Kernel:
         sys.stderr.flush()
 
         if cell_id is not None:
-            self.thread_local.active_cel = self.active_cell = cell_id
+            self.thread_local.active_cell = self.active_cell = cell_id
 
         await self.send({
             "type": "start_cell",
