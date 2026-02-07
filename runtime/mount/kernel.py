@@ -1313,6 +1313,10 @@ class Kernel:
                 del self.fut_by_cell[cell_id]
 
     async def stop_cell(self, cell_id: str) -> None:
+        print(f"[kernel] stopping cell {cell_id}")
+        print(f"[kernel] cell status: {self.cell_status[cell_id]}")
+        print(f"[kernel] fut by cell: {self.fut_by_cell}")
+
         if self.cell_status[cell_id] != "running":
             return
 
