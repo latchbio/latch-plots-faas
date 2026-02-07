@@ -1,6 +1,5 @@
 import re
 import secrets
-import signal
 from contextlib import suppress
 from dataclasses import dataclass
 
@@ -90,15 +89,13 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
 
     notebook_id = auth_msg.notebook_id
 
-    s.set_attributes(
-        {
-            "notebook_id": notebook_id,
-            "pod_id": pod_id,
-            "pod_session_id": pod_session_id,
-            "sess_hash": sess_hash,
-            "connection_idx": connection_idx,
-        }
-    )
+    s.set_attributes({
+        "notebook_id": notebook_id,
+        "pod_id": pod_id,
+        "pod_session_id": pod_session_id,
+        "sess_hash": sess_hash,
+        "connection_idx": connection_idx,
+    })
 
     auth_header_regex_match = auth_header_regex.match(auth_msg.token)
     auth0_sub: str | None = None
@@ -162,16 +159,14 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
         await ready_ev.wait()
 
         await ctx.send_message(
-            orjson.dumps(
-                {
-                    "type": "ready",
-                    "connection_idx": connection_idx,
-                    "cell_status": cell_status,
-                    "cell_sequencers": cell_sequencers,
-                    "cell_outputs": cell_last_run_outputs,
-                    "kernel_snapshot_status": kernel_snapshot_state.status,
-                }
-            ).decode()
+            orjson.dumps({
+                "type": "ready",
+                "connection_idx": connection_idx,
+                "cell_status": cell_status,
+                "cell_sequencers": cell_sequencers,
+                "cell_outputs": cell_last_run_outputs,
+                "kernel_snapshot_status": kernel_snapshot_state.status,
+            }).decode()
         )
 
         connection_idx += 1
@@ -189,28 +184,19 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
                 and not is_agent_session
             ):
                 await ctx.send_message(
-                    orjson.dumps(
-                        {
-                            "type": "not_session_owner_error",
-                            "data": {"message": "user is not session owner"},
-                        }
-                    ).decode()
+                    orjson.dumps({
+                        "type": "not_session_owner_error",
+                        "data": {"message": "user is not session owner"},
+                    }).decode()
                 )
                 continue
 
             if msg["type"] == "dispose_cell":
                 cell_id = msg["cell_id"]
 
-                if cell_status.get(cell_id) == "running" and k_proc.proc is not None:
-                    k_proc.proc.send_signal(signal=signal.SIGINT)
-
                 cell_status.pop(cell_id, None)
                 cell_last_run_outputs.pop(cell_id, None)
                 cell_sequencers.pop(cell_id, None)
-
-            if msg["type"] == "stop_cell" and k_proc.proc is not None:
-                k_proc.proc.send_signal(signal=signal.SIGINT)
-                continue
 
             if msg["type"] == "override_session_owner":
                 await plots_ctx_manager.override_session_owner(msg["user_key"])

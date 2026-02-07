@@ -19,7 +19,7 @@ import threading
 import traceback
 from base64 import b64decode
 from collections import defaultdict
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import redirect_stderr, redirect_stdout
 from copy import copy, deepcopy
 from dataclasses import asdict, dataclass, field, fields
@@ -665,6 +665,7 @@ class Kernel:
 
     # active_cell: str | None
     thread_local: threading.local = field(default_factory=threading.local)
+    fut_by_cell: dict[str, Future[Any]] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         self.k_globals = TracedDict(self.duckdb)
@@ -674,24 +675,24 @@ class Kernel:
         pio.templates["graphpad_inspired_theme"] = graphpad_inspired_theme()
 
         # todo(rteqs): figure out how to just kill the exact task from executor. we probably don't even need to do this anymore since the kernel is already running in a threadpool
-        def sigint_handler(signum: int, frame: FrameType | None) -> None:
-            if signum != signal.SIGINT:
-                return
+        # def sigint_handler(signum: int, frame: FrameType | None) -> None:
+        #     if signum != signal.SIGINT:
+        #         return
 
-            if self.active_cell_task is not None and not self.active_cell_task.done():
-                self.active_cell_task.cancel()
+        #     if self.active_cell_task is not None and not self.active_cell_task.done():
+        #         self.active_cell_task.cancel()
 
-                if asyncio.current_task() == self.active_cell_task:
-                    raise KeyboardInterrupt
+        #         if asyncio.current_task() == self.active_cell_task:
+        #             raise KeyboardInterrupt
 
-                return
+        #         return
 
-            print(
-                f"[kernel] SIGINT received but not interrupting: active_cell={self.active_cell}, status={self.cell_status.get(self.active_cell) if self.active_cell is not None else 'N/A'}",
-                file=sys.stderr,
-            )
+        #     print(
+        #         f"[kernel] SIGINT received but not interrupting: active_cell={self.active_cell}, status={self.cell_status.get(self.active_cell) if self.active_cell is not None else 'N/A'}",
+        #         file=sys.stderr,
+        #     )
 
-        signal.signal(signal.SIGINT, sigint_handler)
+        # signal.signal(signal.SIGINT, sigint_handler)
 
     def next_cell_seq(self) -> int:
         with self.cell_seq_lock:
@@ -1309,6 +1310,20 @@ class Kernel:
                 await self.send_cell_result(cell_id)
             finally:
                 self.active_cell_task = None
+                del self.fut_by_cell[cell_id]
+
+    async def stop_cell(self, cell_id: str) -> None:
+        if self.cell_status[cell_id] != "running":
+            return
+
+        if cell_id not in self.fut_by_cell:
+            return
+
+        self.fut_by_cell[cell_id].cancel()
+
+        with self.cell_locks[cell_id]:
+            self.cell_status[cell_id] = "error"
+            await self.send_cell_result(cell_id)
 
     async def send_cell_result(self, cell_id: str) -> None:
         await self.send_global_updates()
@@ -2101,7 +2116,10 @@ async def main() -> None:
         while not shutdown_requested:
             try:
                 msg = await k.conn.recv()
-                k.executor.submit(asyncio.run, k.accept(msg))
+                fut = k.executor.submit(asyncio.run, k.accept(msg))
+                if msg["type"] == "run_cell":
+                    k.fut_by_cell[msg["cell_id"]] = fut
+
             except Exception:
                 traceback.print_exc()
                 continue
