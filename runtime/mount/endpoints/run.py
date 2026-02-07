@@ -1,8 +1,8 @@
 import re
 import secrets
-import signal
 from contextlib import suppress
 from dataclasses import dataclass
+import signal
 
 import aiohttp
 import jwt
