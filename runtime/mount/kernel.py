@@ -1883,6 +1883,8 @@ class Kernel:
         if msg["type"] == "dispose_cell":
             cell_id = msg["cell_id"]
 
+            await self.stop_cell(cell_id)
+
             node = self.cell_rnodes.get(cell_id)
             with self.cell_locks[cell_id]:
                 if node is not None:
@@ -1890,6 +1892,10 @@ class Kernel:
                     del self.cell_rnodes[cell_id]
                     del self.cell_status[cell_id]
 
+            return
+
+        if msg["type"] == "stop_cell":
+            await self.stop_cell(msg["cell_id"])
             return
 
         if msg["type"] == "reset_kernel_globals":
