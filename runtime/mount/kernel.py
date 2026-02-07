@@ -1323,7 +1323,8 @@ class Kernel:
         if cell_id not in self.fut_by_cell:
             return
 
-        self.fut_by_cell[cell_id].cancel()
+        res = self.fut_by_cell[cell_id].cancel()
+        print(f"[kernel] cancel result: {res}")
 
         with self.cell_locks[cell_id]:
             self.cell_status[cell_id] = "error"
