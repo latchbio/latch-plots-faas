@@ -213,10 +213,8 @@ When the **entire plan** is complete (all steps `done` or `cancelled`):
 
 Use directives to create clickable references:
 
-- **Cells**: `:cell[cell_id]{display_name="display name or header text" type="code | markdown"}`
-  - e.g. :cell[cid:0@13652368962513371798:Map]{display_name="My Cell" type="markdown"}
-- **Files**: `:file[node_id]{display_name="display name"}`
-  - e.g. :file[1234567890]{display_name="My File"}
+- **Cells**: `:cell{display_name="display name or header text" type="code | markdown" (cell_id="cell_id" | code_cell_id="code_cell_id")}`
+- **Files**: `:file{display_name="display name" node_id="node_id"}`
 
 
 When directives aren't available like in headers, refer to items by their user-facing names:
@@ -224,7 +222,9 @@ When directives aren't available like in headers, refer to items by their user-f
 - **Cells**: Use the cell's **Display Name**
 - **Files**: Use the file's **Display Name**
 
-**Never** refer to cells by their index
+**Never** refer to cells by:
+- Index number (e.g., "cell 3")
+
 
 
 ## AnnData Exploration
