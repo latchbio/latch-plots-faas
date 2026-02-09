@@ -7,6 +7,7 @@ if __name__ == "__main__":
 
 import ast
 import asyncio
+import ctypes
 import io
 import math
 import os
@@ -628,7 +629,10 @@ class Kernel:
     active_cell: str | None = None
     active_cell_task: asyncio.Task[Any] | None = None
 
-    running_cells: dict[str, asyncio.Task[Any]] = field(default_factory=dict)
+    # todo(rteqs): use typeddict
+    running_cells: dict[str, tuple[asyncio.Task[Any], int]] = field(
+        default_factory=dict
+    )
 
     widget_signals: dict[str, Signal[Any]] = field(default_factory=dict)
     nodes_with_widgets: dict[str, Node] = field(default_factory=dict)
@@ -1305,7 +1309,10 @@ class Kernel:
                 self.active_cell_task = asyncio.create_task(
                     ctx.run(x, _cell_id=cell_id, code=code)
                 )
-                self.running_cells[cell_id] = self.active_cell_task
+                self.running_cells[cell_id] = (
+                    self.active_cell_task,
+                    threading.get_ident(),
+                )
                 await self.active_cell_task
 
             except (KeyboardInterrupt, asyncio.CancelledError, Exception):
@@ -1323,8 +1330,13 @@ class Kernel:
         if self.cell_status[cell_id] != "running" or cell_id not in self.running_cells:
             return
 
-        res = self.running_cells[cell_id].cancel()
+        task, thread_id = self.running_cells[cell_id]
+        res = task.cancel()
         print(f"[kernel] cancel result: {res}")
+
+        ctypes.pythonapi.PyThreadState_SetAsyncExc(
+            ctypes.c_ulong(thread_id), ctypes.py_object(SystemExit)
+        )
 
         with self.cell_locks[cell_id]:
             self.cell_status[cell_id] = "error"
