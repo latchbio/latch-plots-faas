@@ -19,7 +19,7 @@ import threading
 import traceback
 from base64 import b64decode
 from collections import defaultdict
-from concurrent.futures import Future, ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import redirect_stderr, redirect_stdout
 from copy import copy, deepcopy
 from dataclasses import asdict, dataclass, field, fields
@@ -624,8 +624,11 @@ class Kernel:
 
     snapshot_status: KernelSnapshotStatus = "done"
 
+    # todo(rteqs): remove this
     active_cell: str | None = None
     active_cell_task: asyncio.Task[Any] | None = None
+
+    running_cells: dict[str, asyncio.Task[Any]] = field(default_factory=dict)
 
     widget_signals: dict[str, Signal[Any]] = field(default_factory=dict)
     nodes_with_widgets: dict[str, Node] = field(default_factory=dict)
@@ -665,7 +668,6 @@ class Kernel:
 
     # active_cell: str | None
     thread_local: threading.local = field(default_factory=threading.local)
-    fut_by_cell: dict[str, Future[Any]] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         self.k_globals = TracedDict(self.duckdb)
@@ -1303,6 +1305,7 @@ class Kernel:
                 self.active_cell_task = asyncio.create_task(
                     ctx.run(x, _cell_id=cell_id, code=code)
                 )
+                self.running_cells[cell_id] = self.active_cell_task
                 await self.active_cell_task
 
             except (KeyboardInterrupt, asyncio.CancelledError, Exception):
@@ -1310,20 +1313,17 @@ class Kernel:
                 await self.send_cell_result(cell_id)
             finally:
                 self.active_cell_task = None
-                del self.fut_by_cell[cell_id]
+                self.running_cells.pop(cell_id)
 
     async def stop_cell(self, cell_id: str) -> None:
         print(f"[kernel] stopping cell {cell_id}")
         print(f"[kernel] cell status: {self.cell_status[cell_id]}")
-        print(f"[kernel] fut by cell: {self.fut_by_cell}")
+        print(f"[kernel] running cells: {self.running_cells.keys()}")
 
-        if self.cell_status[cell_id] != "running":
+        if self.cell_status[cell_id] != "running" or cell_id not in self.running_cells:
             return
 
-        if cell_id not in self.fut_by_cell:
-            return
-
-        res = self.fut_by_cell[cell_id].cancel()
+        res = self.running_cells[cell_id].cancel()
         print(f"[kernel] cancel result: {res}")
 
         with self.cell_locks[cell_id]:
@@ -2127,9 +2127,7 @@ async def main() -> None:
         while not shutdown_requested:
             try:
                 msg = await k.conn.recv()
-                fut = k.executor.submit(asyncio.run, k.accept(msg))
-                if msg["type"] == "run_cell":
-                    k.fut_by_cell[msg["cell_id"]] = fut
+                k.executor.submit(asyncio.run, k.accept(msg))
 
             except Exception:
                 traceback.print_exc()
