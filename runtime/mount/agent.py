@@ -3498,7 +3498,6 @@ class AgentHarness:
                     event_type="error",
                     role="system",
                     payload=error_payload,
-                    request_id=self.current_request_id,
                 )
                 await self.send({
                     "type": "agent_stream_complete",
