@@ -210,9 +210,10 @@ When the **entire plan** is complete (all steps `done` or `cancelled`):
   - User parameter input → lplots input widgets (`w_*`) with sensible defaults
 
 ## Referencing Notebook Items
+
 Use directives to create clickable references:
 
-- **Cells**: `:cell[code_cell_id]{display_name="display name"}`
+- **Cells**: `:cell[cell_id]{display_name="display name"}`
 - **Files**: `:file[node_id]{display_name="display name"}`
 
 
