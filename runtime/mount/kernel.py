@@ -1300,7 +1300,7 @@ class Kernel:
                         print("[kernel] eval ok. sending cell result")
                         await self.send_cell_result(cell_id)
 
-                    except (KeyboardInterrupt, Exception, StopCellException):
+                    except (KeyboardInterrupt, Exception, SystemExit):
                         print("[kernel] eval error. sending cell result")
                         self.cell_status[cell_id] = "error"
                         await self.send_cell_result(cell_id)
@@ -1320,12 +1320,7 @@ class Kernel:
                 )
                 await self.active_cell_task
 
-            except (
-                KeyboardInterrupt,
-                asyncio.CancelledError,
-                Exception,
-                StopCellException,
-            ):
+            except (KeyboardInterrupt, asyncio.CancelledError, Exception, SystemExit):
                 self.cell_status[cell_id] = "error"
                 await self.send_cell_result(cell_id)
             finally:
@@ -1341,11 +1336,11 @@ class Kernel:
             return
 
         task, thread_id = self.running_cells[cell_id]
-        task.cancel()
+        res = task.cancel()
         print(f"[kernel] cancel result: {res}")
 
         ctypes.pythonapi.PyThreadState_SetAsyncExc(
-            ctypes.c_ulong(thread_id), ctypes.py_object(StopCellException)
+            ctypes.c_ulong(thread_id), ctypes.py_object(SystemExit)
         )
 
         with self.cell_locks[cell_id]:
