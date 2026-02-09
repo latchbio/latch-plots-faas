@@ -213,14 +213,18 @@ When the **entire plan** is complete (all steps `done` or `cancelled`):
 
 Use directives to create clickable references:
 
-- **Cells**: `:cell[cell_id]{display_name="display name" type="code | markdown"}`
+- **Cells**: `:cell[cell_id]{display_name="display name or header text" type="code | markdown"}`
+  - e.g. :cell[cid:0@13652368962513371798:Map]{display_name="My Cell" type="markdown"}
 - **Files**: `:file[node_id]{display_name="display name"}`
+  - e.g. :file[1234567890]{display_name="My File"}
 
 
 When directives aren't available like in headers, refer to items by their user-facing names:
 
 - **Cells**: Use the cell's **Display Name**
-- **Widgets**: Use the widget's **Label**
+- **Files**: Use the file's **Display Name**
+
+**Never** refer to cells by their index
 
 
 ## AnnData Exploration
