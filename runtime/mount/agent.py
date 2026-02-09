@@ -3491,7 +3491,7 @@ class AgentHarness:
                     messages=await self._build_messages_from_db(),
                 )
                 error_payload = {
-                    "message": "The model hit the token limit before tool execution. Please retry or shorten the request.",
+                    "message": "The model reached the response token limit for this turn. Please retry or shorten the request.",
                     "should_contact_support": False,
                 }
                 await self._insert_history(
