@@ -149,6 +149,7 @@ class Filter(TypedDict):
 ColSelections = tuple[str, list[str | int | float]]
 DataframeSelections = list[tuple[ColSelections, ColSelections]]
 
+class StopCellException(Exception): ...
 
 @dataclass
 class PaginationSettings:
@@ -1296,7 +1297,7 @@ class Kernel:
                         self.cell_status[cell_id] = "ok"
                         await self.send_cell_result(cell_id)
 
-                    except (KeyboardInterrupt, Exception):
+                    except (KeyboardInterrupt, Exception, StopCellException):
                         self.cell_status[cell_id] = "error"
                         await self.send_cell_result(cell_id)
 
@@ -1315,7 +1316,7 @@ class Kernel:
                 )
                 await self.active_cell_task
 
-            except (KeyboardInterrupt, asyncio.CancelledError, Exception):
+            except (KeyboardInterrupt, asyncio.CancelledError, Exception, StopCellException):
                 self.cell_status[cell_id] = "error"
                 await self.send_cell_result(cell_id)
             finally:
@@ -1323,19 +1324,19 @@ class Kernel:
                 self.running_cells.pop(cell_id)
 
     async def stop_cell(self, cell_id: str) -> None:
-        print(f"[kernel] stopping cell {cell_id}")
-        print(f"[kernel] cell status: {self.cell_status[cell_id]}")
-        print(f"[kernel] running cells: {self.running_cells.keys()}")
+        # print(f"[kernel] stopping cell {cell_id}")
+        # print(f"[kernel] cell status: {self.cell_status[cell_id]}")
+        # print(f"[kernel] running cells: {self.running_cells.keys()}")
 
         if self.cell_status[cell_id] != "running" or cell_id not in self.running_cells:
             return
 
         task, thread_id = self.running_cells[cell_id]
-        res = task.cancel()
-        print(f"[kernel] cancel result: {res}")
+        task.cancel()
+        # print(f"[kernel] cancel result: {res}")
 
         ctypes.pythonapi.PyThreadState_SetAsyncExc(
-            ctypes.c_ulong(thread_id), ctypes.py_object(SystemExit)
+            ctypes.c_ulong(thread_id), ctypes.py_object(StopCellException)
         )
 
         with self.cell_locks[cell_id]:
