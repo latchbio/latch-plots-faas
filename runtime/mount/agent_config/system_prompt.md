@@ -213,7 +213,7 @@ When the **entire plan** is complete (all steps `done` or `cancelled`):
 
 Use directives to create clickable references:
 
-- **Cells**: `:cell[cell_id]{display_name="display name"}`
+- **Cells**: `:cell[cell_id]{display_name="display name" type="code | markdown"}`
 - **Files**: `:file[node_id]{display_name="display name"}`
 
 
