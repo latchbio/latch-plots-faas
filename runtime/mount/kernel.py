@@ -1300,7 +1300,7 @@ class Kernel:
                         print("[kernel] eval ok. sending cell result")
                         await self.send_cell_result(cell_id)
 
-                    except (KeyboardInterrupt, Exception, SystemExit):
+                    except (KeyboardInterrupt, Exception, SystemExit, StopCellException):
                         print("[kernel] eval error. sending cell result")
                         self.cell_status[cell_id] = "error"
                         await self.send_cell_result(cell_id)
@@ -1320,7 +1320,7 @@ class Kernel:
                 )
                 await self.active_cell_task
 
-            except (KeyboardInterrupt, asyncio.CancelledError, Exception, SystemExit):
+            except (KeyboardInterrupt, asyncio.CancelledError, Exception, SystemExit, StopCellException):
                 self.cell_status[cell_id] = "error"
                 await self.send_cell_result(cell_id)
             finally:
@@ -1339,14 +1339,10 @@ class Kernel:
         res = task.cancel()
         print(f"[kernel] cancel result: {res}")
 
+        # todo(rteqs): dangerous stuff. need to figure out how to safely unlock everything we locked
         ctypes.pythonapi.PyThreadState_SetAsyncExc(
-            ctypes.c_ulong(thread_id), ctypes.py_object(SystemExit)
+            ctypes.c_ulong(thread_id), ctypes.py_object(StopCellException)
         )
-
-        with self.cell_locks[cell_id]:
-            print("[kernel] stop cell acquired lock ")
-            self.cell_status[cell_id] = "error"
-            await self.send_cell_result(cell_id)
 
     async def send_cell_result(self, cell_id: str) -> None:
         await self.send_global_updates()
