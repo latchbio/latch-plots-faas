@@ -231,7 +231,9 @@ class RCtx:
     def in_tx(self) -> bool:
         return self.thread_local.in_tx
 
-
+    def __post_init__(self) -> None:
+        self.thread_local.cur_comp = None
+        self.thread_local.in_tx = False
 
     async def run(
         self,
