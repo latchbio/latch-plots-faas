@@ -160,18 +160,22 @@ class PaginationSettings:
 
 
 class TracedDict(dict[str, Signal[object] | object]):
-    touched: set[str]
-    removed: set[str]
+    # touched: set[str]
+    # removed: set[str]
+    thread_local: threading.local
 
     dataframes: Signal[set[str]]
 
     item_write_counter: defaultdict[str, int]
 
     def __init__(self) -> None:
-        self.touched = set()
-        self.removed = set()
+        # self.touched = set()
+        # self.removed = set()
+        self.thread_local = threading.local()
+        self.thread_local.touched = set()
+        self.thread_local.removed = set()
 
-        self.dataframes = Signal(set())
+        self._dataframes = Signal(set())
         self.item_write_counter = defaultdict(int)
 
     def __getitem__(self, __key: str) -> object:
@@ -199,10 +203,10 @@ class TracedDict(dict[str, Signal[object] | object]):
         if __key == "__builtins__":
             return super().__setitem__(__key, __value)
 
-        dfs = self.dataframes.sample()
+        dfs = self._dataframes.sample()
         if hasattr(__value, "iloc") and __key not in dfs:
             dfs.add(__key)
-            self.dataframes(dfs)
+            self._dataframes(dfs)
 
         if __key in self:
             sig = super().__getitem__(__key)
@@ -227,12 +231,20 @@ class TracedDict(dict[str, Signal[object] | object]):
         if __key in self.item_write_counter:
             del self.item_write_counter[__key]
 
-        dfs = self.dataframes.sample()
+        dfs = self._dataframes.sample()
         if __key in dfs:
             dfs.remove(__key)
-            self.dataframes(dfs)
+            self._dataframes(dfs)
 
         return super().__delitem__(__key)
+
+    @property
+    def touched(self) -> set[str]:
+        return self.thread_local.touched
+
+    @property
+    def removed(self) -> set[str]:
+        return self.thread_local.removed
 
     def clear(self) -> None:
         self.touched.clear()
@@ -242,6 +254,10 @@ class TracedDict(dict[str, Signal[object] | object]):
     @property
     def available(self) -> set[str]:
         return self.touched - self.removed
+
+    def dataframes(self) -> Signal[set[str]]:
+        # todo(rteqs): this needs to be locked eventually
+        return self.dataframes
 
 
 class ExitException(Exception): ...
