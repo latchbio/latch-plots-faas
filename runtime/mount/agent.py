@@ -409,7 +409,7 @@ class AgentHarness:
                 cell_lines.append("---")
                 continue
 
-            cell_lines.append(f"\n## Cell {cell_name} [{index}] (in {current_tab_name})")
+            cell_lines.append(f"\n## Cell {cell_name} [{index}]")
             if cell_type == "code":
                 cell_lines.append(f"DISPLAY_NAME: {cell_name}")
             cell_lines.append(f"BELONGS_TO_TAB: {current_tab_name}")  # noqa: FURB113

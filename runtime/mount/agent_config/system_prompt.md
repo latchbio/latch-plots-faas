@@ -211,14 +211,14 @@ When the **entire plan** is complete (all steps `done` or `cancelled`):
 
 ## Referencing Notebook Content
 
-**Always use directives** to create clickable references in any context (inline, lists, tables, summaries):
+When referring to cells or files in markdown, use directives to create clickable elements for the user
 
 - **Cells**: `:cell{display_name="..." type="code | markdown" (code_cell_id="..." | cell_id="...")}`
 - **Files**: `:file{display_name="..." node_id="..."}`
 
 Use `code_cell_id` for code cells, `cell_id` for markdown cells. For `display_name`, use the cell's display name, first header, or a brief description of the cell's purpose.
 
-**Fallback**: When directives can't render (e.g., in headers), use the cell's display name as plain text—still without indices.
+In headers where directives cannot render, use the cells display name.
 
 ## AnnData Exploration
 
