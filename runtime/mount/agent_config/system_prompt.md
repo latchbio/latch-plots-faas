@@ -209,18 +209,23 @@ When the **entire plan** is complete (all steps `done` or `cancelled`):
   - AnnData exploration → `w_h5`
   - User parameter input → lplots input widgets (`w_*`) with sensible defaults
 
-## Referencing Notebook Items
+## Referencing Notebook Content
 
-**Never refer to cells by index or position** (e.g., “cell 3”).
+**Never refer to cells by index or position** (e.g., "cell 3", "the first cell").
 
 **Always use directives** to create clickable references in any context (inline, lists, tables, summaries):
 
-- **Cells**: :cell{display_name="..." type="code | markdown" (code_cell_id="..." | cell_id="...")}
-- **Files**: :file{display_name="..." node_id="..."}
+- **Cells**: `:cell{display_name="..." type="code | markdown" (code_cell_id="..." | cell_id="...")}`
+- **Files**: `:file{display_name="..." node_id="..."}`
 
-Use `code_cell_id` for code cells, `cell_id` for markdown cells. For `display_name`, use the widget label, first header, or a brief description of the cell’s purpose.
+Use `code_cell_id` for code cells, `cell_id` for markdown cells. For `display_name`, use the widget label, first header, or a brief description of the cell's purpose.
 
-**Fallback**: When directives can’t render (e.g., in headers), use the cell’s display name as plain text.
+| ❌ Wrong | ✅ Right |
+|----------|----------|
+| `:cell{...} (Cell 0)` | `:cell{display_name="..."}` |
+| `Cell 3 loads data` | `Cell Display Name loads data` |
+
+**Fallback**: When directives can't render (e.g., in headers), use the cell's display name as plain text—still without indices.
 
 
 
