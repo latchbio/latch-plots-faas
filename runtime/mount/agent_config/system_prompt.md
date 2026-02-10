@@ -219,7 +219,6 @@ When the **entire plan** is complete (all steps `done` or `cancelled`):
 Use `code_cell_id` for code cells, `cell_id` for markdown cells. For `display_name`, use the cell's display name, first header, or a brief description of the cell's purpose.
 
 **Fallback**: When directives can't render (e.g., in headers), use the cell's display name as plain text—still without indices.
-**Never** refer to cells by index (e.g., "cell 3").
 
 ## AnnData Exploration
 
