@@ -1217,10 +1217,6 @@ class Kernel:
 
         with self.cell_locks[cell_id]:
             try:
-                # if not _from_stub:
-                #     assert ctx.cur_comp is None
-                #     assert not ctx.in_tx
-
                 self.cell_status[cell_id] = "running"
 
                 comp = self.cell_rnodes.get(cell_id)

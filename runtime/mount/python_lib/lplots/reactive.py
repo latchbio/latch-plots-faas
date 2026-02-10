@@ -210,14 +210,28 @@ class Node:
 
 @dataclass
 class RCtx:
-    cur_comp: Node | None = None
+    # todo(rteqs): dictionary to reference each comp
+    # todo(rteqs): run queue needs to be amended to support running multiple cells at once
+
+    # cur_comp: Node | None = None
 
     updated_signals: dict[str, "Signal"] = field(default_factory=dict)
     signals_updated_from_code: dict[str, "Signal"] = field(default_factory=dict)
     stale_nodes: dict[str, Node] = field(default_factory=dict)
     prev_updated_signals: dict[str, "Signal"] = field(default_factory=dict)
 
-    in_tx: bool = False
+    # in_tx: bool = False
+    thread_local: threading.local = field(default_factory=threading.local)
+
+    @property
+    def cur_comp(self) -> Node | None:
+        return self.thread_local.cur_comp
+
+    @property
+    def in_tx(self) -> bool:
+        return self.thread_local.in_tx
+
+
 
     async def run(
         self,
@@ -238,7 +252,7 @@ class RCtx:
             await _inject.kernel.set_active_cell(_cell_id)
 
         async with self.transaction:
-            self.cur_comp = Node(
+            self.thread_local.cur_comp = Node(
                 f=f, parent=self.cur_comp, cell_id=_cell_id, _id=None, code=code
             )
 
@@ -247,7 +261,7 @@ class RCtx:
                     return await f()
                 return f()
             finally:
-                self.cur_comp = self.cur_comp.parent
+                self.thread_local.cur_comp = self.thread_local.cur_comp.parent
 
     async def _tick(self) -> None:
         tick_updated_signals = {
@@ -305,7 +319,7 @@ class RCtx:
             if len(to_dispose) > 0:
                 async with self.transaction:
                     for n, p in to_dispose.values():
-                        self.cur_comp = p
+                        self.thread_local.cur_comp = p
 
                         try:
                             with _inject.kernel.cell_locks[n.cell_id]:
@@ -344,7 +358,7 @@ class RCtx:
                         except Exception:
                             print_exc()
                         finally:
-                            self.cur_comp = None
+                            self.thread_local.cur_comp = None
 
         finally:
             await _inject.kernel.on_tick_finished(tick_updated_signals)
@@ -360,10 +374,10 @@ class RCtx:
             return
 
         try:
-            self.in_tx = True
+            self.thread_local.in_tx = True
             yield
         finally:
-            self.in_tx = False
+            self.thread_local.in_tx = False
             await self._tick()
 
 
