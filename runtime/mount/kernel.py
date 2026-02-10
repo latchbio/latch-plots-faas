@@ -753,7 +753,6 @@ class Kernel:
         if cell_id is not None:
             self.thread_local.active_cell = cell_id
 
-        print(f"[kernel] {self.thread_local.active_cell=}")
         await self.send({
             "type": "start_cell",
             "cell_id": cell_id,
@@ -868,8 +867,9 @@ class Kernel:
                 "updated_widgets": list(updated_widgets),
             })
 
-        if clear_status:
-            await self.set_active_cell(None)
+        # todo(rteqs): do we need this? we already have cell_result to clear the status
+        # if clear_status:
+        #     await self.set_active_cell(None)
         self.cells_with_pending_widget_updates.clear()
 
         await self.send_run_queue([])
