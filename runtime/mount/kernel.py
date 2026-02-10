@@ -1314,7 +1314,8 @@ class Kernel:
         task.cancel()
         # print(f"[kernel] cancel result: {res}")
 
-        # todo(rteqs): dangerous stuff. need to figure out how to safely unlock everything we locked
+        # todo(rteqs): dangerous stuff. this interrupts the thread in the middle of a frame.
+        # we can potentially run into deadlocks if we leak resources. Figure out a way to do gracefully
         ctypes.pythonapi.PyThreadState_SetAsyncExc(
             ctypes.c_ulong(thread_id), ctypes.py_object(StopCellError)
         )
