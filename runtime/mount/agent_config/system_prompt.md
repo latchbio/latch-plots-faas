@@ -211,7 +211,6 @@ When the **entire plan** is complete (all steps `done` or `cancelled`):
 
 ## Referencing Notebook Content
 
-**Never refer to cells by index or position** (e.g., "cell 3", "the first cell").
 
 **Always use directives** to create clickable references in any context (inline, lists, tables, summaries):
 
@@ -219,11 +218,6 @@ When the **entire plan** is complete (all steps `done` or `cancelled`):
 - **Files**: `:file{display_name="..." node_id="..."}`
 
 Use `code_cell_id` for code cells, `cell_id` for markdown cells. For `display_name`, use the widget label, first header, or a brief description of the cell's purpose.
-
-| ❌ Wrong | ✅ Right |
-|----------|----------|
-| `:cell{...} (Cell 0)` | `:cell{display_name="..."}` |
-| `Cell 3 loads data` | `Cell Display Name loads data` |
 
 **Fallback**: When directives can't render (e.g., in headers), use the cell's display name as plain text—still without indices.
 
