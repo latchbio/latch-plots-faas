@@ -211,7 +211,6 @@ When the **entire plan** is complete (all steps `done` or `cancelled`):
 
 ## Referencing Notebook Content
 
-**Don't use indices or positions** (e.g., "cell 3", "the first cell").
 **Always use directives** to create clickable references in any context (inline, lists, tables, summaries):
 
 - **Cells**: `:cell{display_name="..." type="code | markdown" (code_cell_id="..." | cell_id="...")}`
