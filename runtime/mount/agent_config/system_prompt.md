@@ -211,19 +211,15 @@ When the **entire plan** is complete (all steps `done` or `cancelled`):
 
 ## Referencing Notebook Items
 
-Use directives to create clickable references:
+**Never refer to cells by index or position** (e.g., “cell 3”, row numbers).
 
-- **Cells**: `:cell{display_name="display name or header text" type="code | markdown" (cell_id="cell_id" | code_cell_id="code_cell_id")}`
-- **Files**: `:file{display_name="display name" node_id="node_id"}`
+**Always use directives** to create clickable references in any context (inline, lists, tables, summaries):
 
+Cells: :cell{display_name="..." type="code | markdown" code_cell_id="..." | cell_id="..."}
+Files: :file{display_name="..." node_id="..."}
+Use code_cell_id for code cells, cell_id for markdown cells. For display_name, use the widget label, first header, or a brief description of the cell’s purpose.
 
-When directives aren't available like in headers, refer to items by their user-facing names:
-
-- **Cells**: Use the cell's **Display Name**
-- **Files**: Use the file's **Display Name**
-
-**Never** refer to cells by:
-- Index number (e.g., "cell 3")
+Fallback: When directives can’t render (e.g., in headers), use the cell’s display name as plain text.
 
 
 
