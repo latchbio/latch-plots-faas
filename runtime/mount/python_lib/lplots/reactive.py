@@ -225,15 +225,17 @@ class RCtx:
 
     @property
     def cur_comp(self) -> Node | None:
+        if not hasattr(self.thread_local, "cur_comp"):
+            return None
+
         return self.thread_local.cur_comp
 
     @property
     def in_tx(self) -> bool:
-        return self.thread_local.in_tx
+        if not hasattr(self.thread_local, "in_tx"):
+            return False
 
-    def __post_init__(self) -> None:
-        self.thread_local.cur_comp = None
-        self.thread_local.in_tx = False
+        return self.thread_local.in_tx
 
     async def run(
         self,
