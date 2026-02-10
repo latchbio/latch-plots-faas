@@ -164,7 +164,7 @@ class TracedDict(dict[str, Signal[object] | object]):
     # removed: set[str]
     thread_local: threading.local
 
-    dataframes: Signal[set[str]]
+    _dataframes: Signal[set[str]]
 
     item_write_counter: defaultdict[str, int]
 
@@ -257,7 +257,7 @@ class TracedDict(dict[str, Signal[object] | object]):
 
     def dataframes(self) -> Signal[set[str]]:
         # todo(rteqs): this needs to be locked eventually
-        return self.dataframes
+        return self._dataframes
 
 
 class ExitException(Exception): ...
