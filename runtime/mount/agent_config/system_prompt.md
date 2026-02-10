@@ -216,11 +216,10 @@ When the **entire plan** is complete (all steps `done` or `cancelled`):
 - **Cells**: `:cell{display_name="..." type="code | markdown" (code_cell_id="..." | cell_id="...")}`
 - **Files**: `:file{display_name="..." node_id="..."}`
 
-Use `code_cell_id` for code cells, `cell_id` for markdown cells. For `display_name`, use the widget label, first header, or a brief description of the cell's purpose.
+Use `code_cell_id` for code cells, `cell_id` for markdown cells. For `display_name`, use the cell's display name, first header, or a brief description of the cell's purpose.
 
 **Fallback**: When directives can't render (e.g., in headers), use the cell's display name as plain text—still without indices.
-
-
+**Never** refer to cells by index (e.g., "cell 3").
 
 ## AnnData Exploration
 
