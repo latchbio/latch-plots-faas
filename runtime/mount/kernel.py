@@ -166,15 +166,13 @@ class TracedDict(dict[str, Signal[object] | object]):
     dataframes: Signal[set[str]]
 
     item_write_counter: defaultdict[str, int]
-    duckdb: DuckDBPyConnection
 
-    def __init__(self, duckdb: DuckDBPyConnection) -> None:
+    def __init__(self) -> None:
         self.touched = set()
         self.removed = set()
 
         self.dataframes = Signal(set())
         self.item_write_counter = defaultdict(int)
-        self.duckdb = duckdb
 
     def __getitem__(self, __key: str) -> object:
         if __key == "__builtins__":
@@ -673,7 +671,7 @@ class Kernel:
     thread_local: threading.local = field(default_factory=threading.local)
 
     def __post_init__(self) -> None:
-        self.k_globals = TracedDict(self.duckdb)
+        self.k_globals = TracedDict()
         self.k_globals["exit"] = cell_exit
         self.k_globals.clear()
         self.thread_local.active_cell = None
@@ -811,7 +809,7 @@ class Kernel:
         await self.send({"type": "run_queue", "queue": queue})
 
     async def on_tick_finished(
-        self, updated_signals: dict[int, Signal[object]], clear_status: bool = True
+        self, updated_signals: dict[int, Signal[object]]
     ) -> None:
         # todo(maximsmol): this can be optimizied
         # 1. we can just update nodes that actually re-ran last tick instead of everything
@@ -1142,7 +1140,7 @@ class Kernel:
             s._apply_updates()
 
         self.conn.call_fut(
-            self.on_tick_finished(ctx.signals_updated_from_code, clear_status=False)
+            self.on_tick_finished(ctx.signals_updated_from_code)
         ).result()
 
     def on_dispose(self, node: Node) -> None:
