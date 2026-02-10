@@ -628,10 +628,6 @@ class Kernel:
 
     snapshot_status: KernelSnapshotStatus = "done"
 
-    # todo(rteqs): remove this
-    active_cell: str | None = None
-    active_cell_task: asyncio.Task[Any] | None = None
-
     # todo(rteqs): use typeddict
     running_cells: dict[str, tuple[asyncio.Task[Any], int]] = field(
         default_factory=dict
@@ -673,7 +669,7 @@ class Kernel:
         default_factory=lambda: ThreadPoolExecutor(max_workers=os.cpu_count())
     )
 
-    # active_cell: str | None
+    # { active_cell: str | None }
     thread_local: threading.local = field(default_factory=threading.local)
 
     def __post_init__(self) -> None:
@@ -682,26 +678,6 @@ class Kernel:
         self.k_globals.clear()
         self.thread_local.active_cell = None
         pio.templates["graphpad_inspired_theme"] = graphpad_inspired_theme()
-
-        # todo(rteqs): figure out how to just kill the exact task from executor. we probably don't even need to do this anymore since the kernel is already running in a threadpool
-        # def sigint_handler(signum: int, frame: FrameType | None) -> None:
-        #     if signum != signal.SIGINT:
-        #         return
-
-        #     if self.active_cell_task is not None and not self.active_cell_task.done():
-        #         self.active_cell_task.cancel()
-
-        #         if asyncio.current_task() == self.active_cell_task:
-        #             raise KeyboardInterrupt
-
-        #         return
-
-        #     print(
-        #         f"[kernel] SIGINT received but not interrupting: active_cell={self.active_cell}, status={self.cell_status.get(self.active_cell) if self.active_cell is not None else 'N/A'}",
-        #         file=sys.stderr,
-        #     )
-
-        # signal.signal(signal.SIGINT, sigint_handler)
 
     def next_cell_seq(self) -> int:
         with self.cell_seq_lock:
@@ -722,7 +698,7 @@ class Kernel:
                 "dataframes": list(self.k_globals.dataframes.sample()),
             },
             "cell_status": self.cell_status,
-            "active_cell": self.active_cell,
+            "running_cells": list(self.running_cells.keys()),
             "widget_signals": {
                 k: v.serialize(short_val=True) for k, v in self.widget_signals.items()
             },
@@ -775,7 +751,7 @@ class Kernel:
         sys.stderr.flush()
 
         if cell_id is not None:
-            self.thread_local.active_cell = self.active_cell = cell_id
+            self.thread_local.active_cell = cell_id
 
         await self.send({
             "type": "start_cell",
@@ -1311,14 +1287,9 @@ class Kernel:
 
                 x.__name__ = filename
 
-                self.active_cell_task = asyncio.create_task(
-                    ctx.run(x, _cell_id=cell_id, code=code)
-                )
-                self.running_cells[cell_id] = (
-                    self.active_cell_task,
-                    threading.get_ident(),
-                )
-                await self.active_cell_task
+                task = asyncio.create_task(ctx.run(x, _cell_id=cell_id, code=code))
+                self.running_cells[cell_id] = (task, threading.get_ident())
+                await task
 
             except (
                 KeyboardInterrupt,
@@ -1329,7 +1300,6 @@ class Kernel:
                 self.cell_status[cell_id] = "error"
                 await self.send_cell_result(cell_id)
             finally:
-                self.active_cell_task = None
                 self.running_cells.pop(cell_id)
 
     async def stop_cell(self, cell_id: str) -> None:
@@ -1909,6 +1879,7 @@ class Kernel:
             return
 
         if msg["type"] == "reset_kernel_globals":
+            # todo(rteqs): kernel lock?
             builtins = self.k_globals.get("__builtins__")
             exit_fn = self.k_globals.get("exit")
 
