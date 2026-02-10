@@ -34,8 +34,6 @@ T = TypeVar("T")
 
 ready_ev = asyncio.Event()
 
-active_cell: str | None = None
-
 
 class CellOutputs(TypedDict):
     outputs: list[str]
@@ -312,7 +310,7 @@ async def add_pod_event(*, auth: str, event_type: str) -> None:
 
 
 async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
-    global active_cell, latest_reactivity_summary
+    global latest_reactivity_summary
 
     print("Starting kernel message listener")
     while True:
@@ -334,10 +332,6 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                 cell_id = msg["cell_id"]
 
                 if cell_id is not None:
-                    # note: active_cell is set to None when on_tick_finished is called to tell console to mark all cells as ran.
-                    # active_cell is not overwritten here becuase kernel_stdio messages require an active_cell field,
-                    # if active_cell is None in kernel_stdio, console will display an error
-                    active_cell = cell_id
                     cell_sequencers[cell_id] = msg["run_sequencer"]
                     cell_status[cell_id] = "running"
 
