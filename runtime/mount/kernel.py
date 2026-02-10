@@ -240,10 +240,16 @@ class TracedDict(dict[str, Signal[object] | object]):
 
     @property
     def touched(self) -> set[str]:
+        if not hasattr(self.thread_local, "touched"):
+            self.thread_local.touched = set()
+
         return self.thread_local.touched
 
     @property
     def removed(self) -> set[str]:
+        if not hasattr(self.thread_local, "removed"):
+            self.thread_local.removed = set()
+
         return self.thread_local.removed
 
     def clear(self) -> None:
