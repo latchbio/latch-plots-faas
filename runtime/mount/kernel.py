@@ -753,6 +753,7 @@ class Kernel:
         if cell_id is not None:
             self.thread_local.active_cell = cell_id
 
+        print(f"[kernel] {self.thread_local.active_cell=}")
         await self.send({
             "type": "start_cell",
             "cell_id": cell_id,
