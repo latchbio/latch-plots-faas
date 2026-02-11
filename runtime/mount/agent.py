@@ -408,7 +408,6 @@ class AgentHarness:
             return "Latch Plots is unable to provide context for this notebook due to an unknown error. Please inform the user that Latch Plots is having an issue and they should report it to support."
 
         reactivity_available: bool = reactivity_result.get("status") == "success"
-        reactivity_err: str = reactivity_result.get("error") if isinstance(reactivity_result.get("error"), str) else "unknown"
         if not reactivity_available:
             print(f"[agent] Reactivity summary unavailable: {reactivity_result.get('error', 'unknown')}")
         context = context_result.get("context", {})
