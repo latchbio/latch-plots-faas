@@ -410,6 +410,7 @@ class AgentHarness:
         reactivity_available: bool = reactivity_result.get("status") == "success"
         if not reactivity_available:
             print(f"[agent] Reactivity summary unavailable: {reactivity_result.get('error', 'unknown')}")
+
         context = context_result.get("context", {})
         self.latest_notebook_context = context
 
