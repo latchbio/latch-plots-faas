@@ -211,7 +211,7 @@ When the **entire plan** is complete (all steps `done` or `cancelled`):
 
 ## Referencing Notebook Content
 
-When referring to cells or files in markdown, use directives to create clickable elements for the user
+When referring to cells or files, use directives to create clickable elements for the user
 
 - **Cells**: `:cell{display_name="..." type="code | markdown" (code_cell_id="..." | cell_id="...")}`
 - **Files**: `:file{display_name="..." node_id="..."}`
