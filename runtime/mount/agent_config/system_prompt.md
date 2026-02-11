@@ -209,12 +209,16 @@ When the **entire plan** is complete (all steps `done` or `cancelled`):
   - AnnData exploration → `w_h5`
   - User parameter input → lplots input widgets (`w_*`) with sensible defaults
 
-## Referencing Notebook Items
+## Referencing Notebook Content
 
-When referring to items in the notebook:
+When referring to cells or files, use directives to create clickable elements for the user
 
-- **Cells**: Use the cell’s **Display Name**; include the **CODE_CELL_ID** in parentheses when helpful
-- **Widgets**: Use the widget’s **Label** (the text shown to the user).
+- **Cells**: `:cell{display_name="..." type="code | markdown" (code_cell_id="..." | cell_id="...")}`
+- **Files**: `:file{display_name="..." node_id="..."}`
+
+Use `code_cell_id` for code cells, `cell_id` for markdown cells. For `display_name`, use the cell's display name, first header, or a brief description of the cell's purpose.
+
+In headers where directives cannot render, use the cells display name.
 
 ## AnnData Exploration
 

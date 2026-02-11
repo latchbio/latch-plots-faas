@@ -438,6 +438,11 @@ class AgentHarness:
             status = cell.get("status", "idle")
             tf_id = cell.get("tf_id", None)
 
+            if cell_type == "code":
+                cell_name = cell.get("display_name", "Unknown Code Cell")
+            else:
+                cell_name = cell_type
+
             if cell_type == "tabMarker":
                 if source:
                     current_tab_name = source.strip() or f"Tab {index}"
@@ -452,8 +457,10 @@ class AgentHarness:
                 cell_lines.append("---")
                 continue
 
-            cell_lines.append(f"\n## Cell [{index}] (in {current_tab_name})")  # noqa: FURB113
-            cell_lines.append(f"BELONGS_TO_TAB: {current_tab_name}")
+            cell_lines.append(f"\n## Cell {cell_name} [{index}]")
+            if cell_type == "code":
+                cell_lines.append(f"DISPLAY_NAME: {cell_name}")
+            cell_lines.append(f"BELONGS_TO_TAB: {current_tab_name}")  # noqa: FURB113
             cell_lines.append(f"CELL_ID: {cell_id}")
             cell_lines.append(f"CELL_INDEX: {index}")
             cell_lines.append(f"TYPE: {cell_type}")
