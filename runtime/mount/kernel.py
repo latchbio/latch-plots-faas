@@ -856,6 +856,10 @@ class Kernel:
         self.cells_with_pending_widget_updates.clear()
 
         await self.send_run_queue([])
+        await self.send({
+            "type": "reactivity_summary_update",
+            "cell_reactivity": self.get_reactivity_summary(),
+        })
 
         # fixme(rteqs): cleanup signals in some other way. the below does not work because widget signals
         # are restored on `init` but there are no corresponding `rnodes`

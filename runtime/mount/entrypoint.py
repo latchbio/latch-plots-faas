@@ -54,6 +54,7 @@ class CellOutputs(TypedDict):
 cell_status: dict[str, str] = {}
 cell_sequencers: dict[str, int] = {}
 cell_last_run_outputs: dict[str, CellOutputs] = {}
+latest_reactivity_summary: dict[str, dict[str, list[str]]] | None = None
 
 
 @dataclass
@@ -230,7 +231,7 @@ async def add_pod_event(*, auth: str, event_type: str) -> None:
 
 
 async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
-    global active_cell
+    global active_cell, latest_reactivity_summary
 
     print("Starting kernel message listener")
     while True:
@@ -470,6 +471,12 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
             elif msg["type"] in {"load_kernel_snapshot", "save_kernel_snapshot"}:
                 kernel_snapshot_state.status = msg["status"]
 
+            elif msg["type"] == "reactivity_summary_update":
+                latest = msg.get("cell_reactivity")
+                if isinstance(latest, dict):
+                    latest_reactivity_summary = latest
+                continue
+
             elif msg["type"] == "globals_summary" and "agent_tx_id" in msg:
                 tx_id = msg.get("agent_tx_id")
 
@@ -565,20 +572,20 @@ async def handle_agent_messages(conn_a: SocketIo) -> None:
             msg_type == "agent_action"
             and msg.get("action") == "request_reactivity_summary"
         ):
-            if k_proc.conn_k is not None:
-                await k_proc.conn_k.send({
-                    "type": "reactivity_summary",
-                    "agent_tx_id": tx_id,
-                })
-            else:
-                print(
-                    "[entrypoint] Kernel not connected, cannot route reactivity request"
-                )
+            if latest_reactivity_summary is None:
+                print("[entrypoint] Reactivity snapshot not ready yet")
                 await conn_a.send({
                     "type": "agent_action_response",
                     "tx_id": msg.get("tx_id"),
                     "status": "error",
-                    "error": "Kernel not connected",
+                    "error": "Reactivity snapshot not ready yet",
+                })
+            else:
+                await conn_a.send({
+                    "type": "agent_action_response",
+                    "tx_id": msg.get("tx_id"),
+                    "status": "success",
+                    "cell_reactivity": latest_reactivity_summary,
                 })
             continue
 
@@ -717,6 +724,10 @@ async def handle_agent_messages(conn_a: SocketIo) -> None:
 
 
 async def start_kernel_proc() -> None:
+    global latest_reactivity_summary
+
+    latest_reactivity_summary = None
+
     await add_pod_event(auth=auth_token_sdk, event_type="runtime_starting")
     conn_k = k_proc.conn_k = await SocketIo.from_socket(sock)
     async_tasks.append(
