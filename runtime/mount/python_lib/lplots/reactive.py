@@ -212,48 +212,46 @@ class Node:
 class RCtx:
     # todo(rteqs): run queue needs to be amended to support running multiple cells at once
     thread_local: threading.local = field(default_factory=threading.local)
-    updated_signals: dict[str, "Signal"] = field(default_factory=dict)
-    signals_updated_from_code: dict[str, "Signal"] = field(default_factory=dict)
 
     @property
     def cur_comp(self) -> Node | None:
         if not hasattr(self.thread_local, "cur_comp"):
-            return None
+            self.thread_local.cur_comp = None
 
         return self.thread_local.cur_comp
 
     @property
     def in_tx(self) -> bool:
         if not hasattr(self.thread_local, "in_tx"):
-            return False
+            self.thread_local.in_tx = False
 
         return self.thread_local.in_tx
 
-    # @property
-    # def updated_signals(self) -> dict[str, "Signal"]:
-    #     if not hasattr(self.thread_local, "updated_signals"):
-    #         return {}
+    @property
+    def updated_signals(self) -> dict[str, "Signal"]:
+        if not hasattr(self.thread_local, "updated_signals"):
+            self.thread_local.updated_signals = {}
 
-    #     return self.thread_local.updated_signals
+        return self.thread_local.updated_signals
 
-    # @property
-    # def signals_updated_from_code(self) -> dict[str, "Signal"]:
-    #     if not hasattr(self.thread_local, "signals_updated_from_code"):
-    #         return {}
+    @property
+    def signals_updated_from_code(self) -> dict[str, "Signal"]:
+        if not hasattr(self.thread_local, "signals_updated_from_code"):
+            self.thread_local.signals_updated_from_code = {}
 
-    #     return self.thread_local.signals_updated_from_code
+        return self.thread_local.signals_updated_from_code
 
     @property
     def stale_nodes(self) -> dict[str, Node]:
         if not hasattr(self.thread_local, "stale_nodes"):
-            return {}
+            self.thread_local.stale_nodes = {}
 
         return self.thread_local.stale_nodes
 
     @property
     def prev_updated_signals(self) -> dict[str, "Signal"]:
         if not hasattr(self.thread_local, "prev_updated_signals"):
-            return {}
+            self.thread_local.prev_updated_signals = {}
 
         return self.thread_local.prev_updated_signals
 
@@ -292,7 +290,7 @@ class RCtx:
             **self.signals_updated_from_code,
             **self.updated_signals,
         }
-        self.signals_updated_from_code = {}
+        self.thread_local.signals_updated_from_code = {}
 
         try:
             stack_depth = 1
@@ -315,7 +313,7 @@ class RCtx:
                 s._apply_updates()
 
             self.thread_local.prev_updated_signals = self.updated_signals
-            self.updated_signals = {}
+            self.thread_local.updated_signals = {}
 
             to_dispose: dict[str, tuple[Node, Node | None]] = {}
             for n in self.stale_nodes.values():
