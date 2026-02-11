@@ -410,7 +410,7 @@ class AgentHarness:
         reactivity_available: bool = reactivity_result.get("status") == "success"
         reactivity_err: str = reactivity_result.get("error") if isinstance(reactivity_result.get("error"), str) else "unknown"
         if not reactivity_available:
-            print(f"[agent] Reactivity summary unavailable: {reactivity_err}")
+            print(f"[agent] Reactivity summary unavailable:\n  {reactivity_result.get('error', 'unknown')}")
 
         context = context_result.get("context", {})
         self.latest_notebook_context = context
@@ -482,12 +482,7 @@ class AgentHarness:
             cell_lines.append("\nREACTIVITY:")
 
             if not reactivity_available:
-                if reactivity_err != "unknown":
-                    cell_lines.append(
-                        f'- Not available: {reactivity_err[:200] + "...[truncated]" if len(reactivity_err) > 200 else reactivity_err}'
-                    )
-                else:
-                    cell_lines.append("- Not available.")
+                cell_lines.append("- Reactivity summary unavailable.")
                 continue
 
             cell_reactivity: dict[str, dict[str, Iterable[str]]] = reactivity_result.get("cell_reactivity", {})
