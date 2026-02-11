@@ -212,6 +212,8 @@ class Node:
 class RCtx:
     # todo(rteqs): run queue needs to be amended to support running multiple cells at once
     thread_local: threading.local = field(default_factory=threading.local)
+    run_queue: list[str] = field(default_factory=list)
+    run_queue_lock: threading.Lock = field(default_factory=threading.Lock)
 
     @property
     def cur_comp(self) -> Node | None:
@@ -327,13 +329,13 @@ class RCtx:
 
             self.thread_local.stale_nodes = {}
 
-            run_queue: list[str] = []
-            for n, _p in to_dispose.values():
-                if n.cell_id is not None and n.cell_id not in run_queue:
-                    run_queue.append(n.cell_id)
+            with self.run_queue_lock:
+                for n, _p in to_dispose.values():
+                    if n.cell_id is not None and n.cell_id not in self.run_queue:
+                        self.run_queue.append(n.cell_id)
 
-            if len(run_queue) > 0:
-                await _inject.kernel.send_run_queue(run_queue)
+                if len(self.run_queue) > 0:
+                    await _inject.kernel.send_run_queue(self.run_queue)
 
             for n, _p in to_dispose.values():
                 n.dispose()
@@ -345,9 +347,15 @@ class RCtx:
 
                         try:
                             with _inject.kernel.cell_locks[n.cell_id]:
-                                if n.cell_id is not None and n.cell_id in run_queue:
-                                    run_queue.remove(n.cell_id)
-                                    await _inject.kernel.send_run_queue(run_queue)
+                                with self.run_queue_lock:
+                                    if (
+                                        n.cell_id is not None
+                                        and n.cell_id in self.run_queue
+                                    ):
+                                        self.run_queue.remove(n.cell_id)
+                                        await _inject.kernel.send_run_queue(
+                                            self.run_queue
+                                        )
 
                                 if n._is_stub:
                                     n._is_stub = False
