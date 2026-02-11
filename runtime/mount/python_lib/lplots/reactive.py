@@ -210,7 +210,6 @@ class Node:
 
 @dataclass
 class RCtx:
-    # todo(rteqs): run queue needs to be amended to support running multiple cells at once
     thread_local: threading.local = field(default_factory=threading.local)
 
     @property

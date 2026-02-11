@@ -241,7 +241,6 @@ class TracedDict(dict[str, Signal[object] | object]):
         with self._dict_lock.read_lock(), key_lock.read_lock():
             yield
 
-    # todo(rteqs): need to work this out if metadata lock will cause a deadlock
     @contextmanager
     def _item_wlock(self, __key: str) -> Generator[None, None, None]:
         with self._key_locks_mutex:
@@ -736,6 +735,11 @@ snapshot_chunk_bytes = 64 * 2**10
 snapshot_progress_interval_bytes = 10 * (2**20)
 
 
+class RunningCell(TypedDict):
+    task: asyncio.Task[Any]
+    thread_id: int
+
+
 @dataclass(kw_only=True)
 class Kernel:
     conn: SocketIoThread
@@ -753,10 +757,7 @@ class Kernel:
 
     snapshot_status: KernelSnapshotStatus = "done"
 
-    # todo(rteqs): use typeddict
-    running_cells: dict[str, tuple[asyncio.Task[Any], int]] = field(
-        default_factory=dict
-    )
+    running_cells: dict[str, RunningCell] = field(default_factory=dict)
 
     widget_signals: dict[str, Signal[Any]] = field(default_factory=dict)
     nodes_with_widgets: dict[str, Node] = field(default_factory=dict)
@@ -789,7 +790,6 @@ class Kernel:
     restored_signals: dict[str, Signal[object]] = field(default_factory=dict)
     restored_globals: dict[str, object] = field(default_factory=dict)
 
-    # todo(rteqs): cpu_count tbd
     executor: ThreadPoolExecutor = field(
         default_factory=lambda: ThreadPoolExecutor(max_workers=os.cpu_count())
     )
@@ -1436,7 +1436,9 @@ class Kernel:
                         await self.run_queue_remove(cell_id)
 
                     task = asyncio.create_task(ctx.run(x, _cell_id=cell_id, code=code))
-                    self.running_cells[cell_id] = (task, threading.get_ident())
+                    self.running_cells[cell_id] = RunningCell(
+                        task=task, thread_id=threading.get_ident()
+                    )
                     await task
 
             except (
@@ -1451,19 +1453,16 @@ class Kernel:
                 self.running_cells.pop(cell_id)
 
     async def stop_cell(self, cell_id: str) -> None:
-        # print(f"[kernel] stopping cell {cell_id}")
-        # print(f"[kernel] cell status: {self.cell_status[cell_id]}")
-        # print(f"[kernel] running cells: {self.running_cells.keys()}")
-
         if self.cell_status[cell_id] != "running" or cell_id not in self.running_cells:
             return
 
-        task, thread_id = self.running_cells[cell_id]
+        running_cell = self.running_cells[cell_id]
+        task = running_cell["task"]
+        thread_id = running_cell["thread_id"]
         task.cancel()
-        # print(f"[kernel] cancel result: {res}")
 
         # todo(rteqs): dangerous stuff. this interrupts the thread in the middle of a frame.
-        # we can potentially run into deadlocks if we leak resources. Figure out a way to do gracefully
+        # we can potentially run into deadlocks if we leak resources. Figure out a way to do this gracefully
         ctypes.pythonapi.PyThreadState_SetAsyncExc(
             ctypes.c_ulong(thread_id), ctypes.py_object(StopCellError)
         )
@@ -2028,7 +2027,6 @@ class Kernel:
             return
 
         if msg["type"] == "reset_kernel_globals":
-            # todo(rteqs): kernel lock?
             builtins = self.k_globals.get("__builtins__")
             exit_fn = self.k_globals.get("exit")
 
