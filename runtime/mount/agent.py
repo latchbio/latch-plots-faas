@@ -408,8 +408,9 @@ class AgentHarness:
             return "Latch Plots is unable to provide context for this notebook due to an unknown error. Please inform the user that Latch Plots is having an issue and they should report it to support."
 
         reactivity_available: bool = reactivity_result.get("status") == "success"
+        reactivity_err: str = reactivity_result.get("error", "unknown")
         if not reactivity_available:
-            print(f"[agent] Reactivity summary unavailable (cell likely running): {reactivity_result.get('error', 'unknown')}")
+            print(f"[agent] Reactivity summary unavailable: {reactivity_err}")
 
         context = context_result.get("context", {})
         self.latest_notebook_context = context
@@ -481,7 +482,13 @@ class AgentHarness:
             cell_lines.append("\nREACTIVITY:")
 
             if not reactivity_available:
-                cell_lines.append("- Not available: kernel busy (cell likely executing).")
+                if reactivity_err != "unknown":
+                    cell_lines.append(
+                        f'- Not available: reactivity summary unavailable: '
+                        f'{reactivity_err[:100] + "...[truncated]" if len(reactivity_err) > 100 else reactivity_err}'
+                    )                
+                else:
+                    cell_lines.append(f"- Not available: reactivity summary unavailable.")
                 continue
 
             cell_reactivity: dict[str, dict[str, Iterable[str]]] = reactivity_result.get("cell_reactivity", {})
