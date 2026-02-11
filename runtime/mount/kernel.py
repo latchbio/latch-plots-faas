@@ -208,6 +208,7 @@ class RWLock:
         finally:
             self._release_write()
 
+
 # todo(rteqs): we really want to release the locks at the end of the transaction. this would require us to do some lock upgrading mechanism and also
 # deadlock detection/prevention algorithm. alternatively, we just let it race and make sure the user knows that we don't provide such guarantees.
 class TracedDict(dict[str, Signal[object] | object]):
@@ -990,12 +991,7 @@ class Kernel:
                 "updated_widgets": list(updated_widgets),
             })
 
-        # todo(rteqs): do we need this? we already have cell_result to clear the status
-        # if clear_status:
-        #     await self.set_active_cell(None)
         self.cells_with_pending_widget_updates.clear()
-
-        await self.send_run_queue([])
 
         # fixme(rteqs): cleanup signals in some other way. the below does not work because widget signals
         # are restored on `init` but there are no corresponding `rnodes`
