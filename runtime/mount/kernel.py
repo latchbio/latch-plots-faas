@@ -20,8 +20,9 @@ import threading
 import traceback
 from base64 import b64decode
 from collections import defaultdict
+from collections.abc import Generator, Iterator
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import redirect_stderr, redirect_stdout
+from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from copy import copy, deepcopy
 from dataclasses import asdict, dataclass, field, fields
 from io import TextIOWrapper
@@ -159,84 +160,159 @@ class PaginationSettings:
     selections: DataframeSelections | None = None
 
 
+class RWLock:
+    def __init__(self) -> None:
+        self.cond = threading.Condition(threading.Lock())
+        self.readers: int = 0
+        self.writers: int = 0
+        self.writting: bool = False
+
+    def _acquire_read(self) -> None:
+        with self.cond:
+            while self.writting or self.writers > 0:
+                self.cond.wait()
+            self.readers += 1
+
+    def _release_read(self) -> None:
+        with self.cond:
+            self.readers -= 1
+            if self.readers == 0:
+                self.cond.notify_all()
+
+    def _acquire_write(self) -> None:
+        with self.cond:
+            self.writers += 1
+            while self.readers > 0 or self.writting:
+                self.cond.wait()
+            self.writers -= 1
+            self.writting = True
+
+    def _release_write(self) -> None:
+        with self.cond:
+            self.writting = False
+            self.cond.notify_all()
+
+    @contextmanager
+    def read_lock(self) -> Generator[None, None, None]:
+        self._acquire_read()
+        try:
+            yield
+        finally:
+            self._release_read()
+
+    @contextmanager
+    def write_lock(self) -> Generator[None, None, None]:
+        self._acquire_write()
+        try:
+            yield
+        finally:
+            self._release_write()
+
+# todo(rteqs): make this wait-free
 class TracedDict(dict[str, Signal[object] | object]):
-    # touched: set[str]
-    # removed: set[str]
     thread_local: threading.local
 
     _dataframes: Signal[set[str]]
 
-    item_write_counter: defaultdict[str, int]
+    _dict_lock: RWLock
+    _key_locks: defaultdict[str, RWLock]
+    _key_locks_mutex: threading.Lock
+    _metadata_lock: threading.Lock
 
     def __init__(self) -> None:
-        # self.touched = set()
-        # self.removed = set()
+        self._dict_lock = RWLock()
+        self._key_locks = defaultdict(lambda: RWLock())
+        self._key_locks_mutex = threading.Lock()
+        self._metadata_lock = threading.Lock()
+
         self.thread_local = threading.local()
         self.thread_local.touched = set()
         self.thread_local.removed = set()
 
         self._dataframes = Signal(set())
-        self.item_write_counter = defaultdict(int)
+
+    @contextmanager
+    def _item_rlock(self, __key: str) -> Generator[None, None, None]:
+        with self._key_locks_mutex:
+            key_lock = self._key_locks[__key]
+
+        with self._dict_lock.read_lock(), key_lock.read_lock():
+            yield
+
+    # todo(rteqs): need to work this out if metadata lock will cause a deadlock
+    @contextmanager
+    def _item_wlock(self, __key: str) -> Generator[None, None, None]:
+        with self._key_locks_mutex:
+            key_lock = self._key_locks[__key]
+
+        with self._dict_lock.read_lock(), key_lock.write_lock(), self._metadata_lock:
+            yield
 
     def __getitem__(self, __key: str) -> object:
-        if __key == "__builtins__":
-            return super().__getitem__("__builtins__")
+        with self._item_rlock(__key):
+            if __key == "__builtins__":
+                return super().__getitem__("__builtins__")
 
-        return self.getitem_signal(__key).sample()
+            return self.getitem_signal(__key).sample()
 
     def getitem_signal(self, __key: str) -> Signal[object]:
-        return super().__getitem__(__key)
+        with self._item_rlock(__key):
+            return super().__getitem__(__key)
 
     def get_signal(self, __key: str) -> Signal[object] | None:
-        if __key not in self:
-            return None
-
-        return self.getitem_signal(__key)
-
-    def _direct_set(self, __key: str, __value: object) -> None:
-        return super().__setitem__(__key, __value)
-
-    def __setitem__(self, __key: str, __value: object) -> None:
-        self.touched.add(__key)
-        self.item_write_counter[__key] += 1
-
-        if __key == "__builtins__":
-            return super().__setitem__(__key, __value)
-
-        dfs = self._dataframes.sample()
-        if hasattr(__value, "iloc") and __key not in dfs:
-            dfs.add(__key)
-            self._dataframes(dfs)
-
-        if __key in self:
-            sig = super().__getitem__(__key)
-
-            old = sig.sample()
-            if isinstance(__value, Signal) and isinstance(old, Signal):
-                # allow simply setting `sig = Signal(val)`
-                # without having to check `if "sig" in globals()`
-                # to define a signal without losing its subscribers on re-runs
-                old(__value.sample())
+        with self._item_rlock(__key):
+            if super().__contains__(__key):
                 return None
 
-            sig(__value)
-            sig._apply_updates()
-            return None
+            return self.getitem_signal(__key)
 
-        return super().__setitem__(__key, Signal(__value))
+    def _direct_set(self, __key: str, __value: object) -> None:
+        with self._item_wlock(__key):
+            return super().__setitem__(__key, __value)
+
+    def __setitem__(self, __key: str, __value: object) -> None:
+        with self._item_wlock(__key):
+            self.touched.add(__key)
+            self.item_write_counter[__key] += 1
+
+            if __key == "__builtins__":
+                return super().__setitem__(__key, __value)
+
+            dfs = self._dataframes.sample()
+            if hasattr(__value, "iloc") and __key not in dfs:
+                dfs.add(__key)
+                self._dataframes(dfs)
+
+            if super().__contains__(__key):
+                sig = super().__getitem__(__key)
+
+                old = sig.sample()
+                if isinstance(__value, Signal) and isinstance(old, Signal):
+                    # allow simply setting `sig = Signal(val)`
+                    # without having to check `if "sig" in globals()`
+                    # to define a signal without losing its subscribers on re-runs
+                    old(__value.sample())
+                    return None
+
+                sig(__value)
+                sig._apply_updates()
+                return None
+
+            return super().__setitem__(__key, Signal(__value))
 
     def __delitem__(self, __key: str) -> None:
-        self.touched.add(__key)
-        self.removed.add(__key)
-        if __key in self.item_write_counter:
-            del self.item_write_counter[__key]
+        with self._item_wlock(__key), self._metadata_lock:
+            self.touched.add(__key)
+            self.removed.add(__key)
+            if __key in self.item_write_counter:
+                del self.item_write_counter[__key]
 
-        dfs = self._dataframes.sample()
-        if __key in dfs:
-            dfs.remove(__key)
-            self._dataframes(dfs)
+            dfs = self._dataframes.sample()
+            if __key in dfs:
+                dfs.remove(__key)
+                self._dataframes(dfs)
 
-        return super().__delitem__(__key)
+            return super().__delitem__(__key)
 
     @property
     def touched(self) -> set[str]:
@@ -252,6 +328,13 @@ class TracedDict(dict[str, Signal[object] | object]):
 
         return self.thread_local.removed
 
+    @property
+    def item_write_counter(self) -> defaultdict[str, int]:
+        if not hasattr(self.thread_local, "item_write_counter"):
+            self.thread_local.item_write_counter = defaultdict(int)
+
+        return self.thread_local.item_write_counter
+
     def clear(self) -> None:
         self.touched.clear()
         self.removed.clear()
@@ -262,8 +345,27 @@ class TracedDict(dict[str, Signal[object] | object]):
         return self.touched - self.removed
 
     def dataframes(self) -> Signal[set[str]]:
-        # todo(rteqs): this needs to be locked eventually
-        return self._dataframes
+        with self._metadata_lock:
+            return self._dataframes
+
+    # todo(rteqs): figure out how to type dict_items
+    def items(self):
+        with self._dict_lock.write_lock():
+            return super().items()
+
+    def __iter__(self) -> Iterator[str]:
+        with self._dict_lock.write_lock():
+            return iter(super().keys())
+
+    def __len__(self) -> int:
+        with self._dict_lock.write_lock():
+            return super().__len__()
+
+    def __contains__(self, __key: object) -> bool:
+        with self._dict_lock.read_lock():
+            return super().__contains__(__key)
+
+    # todo(rteqs): do we need to override all methods?
 
 
 class ExitException(Exception): ...
