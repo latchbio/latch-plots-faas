@@ -210,18 +210,17 @@ class Node:
 
 @dataclass
 class RCtx:
-    # todo(rteqs): dictionary to reference each comp
     # todo(rteqs): run queue needs to be amended to support running multiple cells at once
-
-    # cur_comp: Node | None = None
-
-    updated_signals: dict[str, "Signal"] = field(default_factory=dict)
-    signals_updated_from_code: dict[str, "Signal"] = field(default_factory=dict)
-    stale_nodes: dict[str, Node] = field(default_factory=dict)
-    prev_updated_signals: dict[str, "Signal"] = field(default_factory=dict)
-
-    # in_tx: bool = False
     thread_local: threading.local = field(default_factory=threading.local)
+
+    def __post_init__(self) -> None:
+        self.thread_local.cur_comp = None
+        self.thread_local.in_tx = False
+        self.thread_local.updated_signals = {}
+        self.thread_local.signals_updated_from_code = {}
+        self.thread_local.stale_nodes = {}
+        self.thread_local.prev_updated_signals = {}
+        self.thread_local.stale_nodes = {}
 
     @property
     def cur_comp(self) -> Node | None:
@@ -236,6 +235,34 @@ class RCtx:
             return False
 
         return self.thread_local.in_tx
+
+    @property
+    def updated_signals(self) -> dict[str, "Signal"]:
+        if not hasattr(self.thread_local, "updated_signals"):
+            return {}
+
+        return self.thread_local.updated_signals
+
+    @property
+    def signals_updated_from_code(self) -> dict[str, "Signal"]:
+        if not hasattr(self.thread_local, "signals_updated_from_code"):
+            return {}
+
+        return self.thread_local.signals_updated_from_code
+
+    @property
+    def stale_nodes(self) -> dict[str, Node]:
+        if not hasattr(self.thread_local, "stale_nodes"):
+            return {}
+
+        return self.thread_local.stale_nodes
+
+    @property
+    def prev_updated_signals(self) -> dict[str, "Signal"]:
+        if not hasattr(self.thread_local, "prev_updated_signals"):
+            return {}
+
+        return self.thread_local.prev_updated_signals
 
     async def run(
         self,
@@ -269,10 +296,10 @@ class RCtx:
 
     async def _tick(self) -> None:
         tick_updated_signals = {
-            **self.signals_updated_from_code,
+            **self.thread_local.signals_updated_from_code,
             **self.updated_signals,
         }
-        self.signals_updated_from_code = {}
+        self.thread_local.signals_updated_from_code = {}
 
         try:
             stack_depth = 1
@@ -294,8 +321,8 @@ class RCtx:
             for s in self.updated_signals.values():
                 s._apply_updates()
 
-            self.prev_updated_signals = self.updated_signals
-            self.updated_signals = {}
+            self.thread_local.prev_updated_signals = self.thread_local.updated_signals
+            self.thread_local.updated_signals = {}
 
             to_dispose: dict[str, tuple[Node, Node | None]] = {}
             for n in self.stale_nodes.values():
@@ -307,7 +334,7 @@ class RCtx:
 
                 to_dispose[fsa.id] = (fsa, fsa.parent)
 
-            self.stale_nodes = {}
+            self.thread_local.stale_nodes = {}
 
             run_queue: list[str] = []
             for n, _p in to_dispose.values():
@@ -366,7 +393,7 @@ class RCtx:
 
         finally:
             await _inject.kernel.on_tick_finished(tick_updated_signals)
-            self.prev_updated_signals = {}
+            self.thread_local.prev_updated_signals = {}
             for sig in live_signals.values():
                 sig._ui_update = False
 
