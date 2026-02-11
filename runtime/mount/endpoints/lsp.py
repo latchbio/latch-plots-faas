@@ -47,8 +47,7 @@ async def lsp_proxy(ctx: Context) -> HandlerResult:
     stderr_pipe = asyncio.subprocess.PIPE
 
     proc = await asyncio.subprocess.create_subprocess_exec(
-        # todo(rteqs): change this back to plots-faas
-        "/opt/mamba/envs/free-threading/bin/pyright-langserver",
+        "/opt/mamba/envs/plots-faas/bin/pyright-langserver",
         "--stdio",
         stdin=stdin_pipe,
         stdout=stdout_pipe,
