@@ -212,6 +212,7 @@ class Node:
 class RCtx:
     # todo(rteqs): run queue needs to be amended to support running multiple cells at once
     thread_local: threading.local = field(default_factory=threading.local)
+    updated_signals: dict[str, "Signal"] = field(default_factory=dict)
 
     @property
     def cur_comp(self) -> Node | None:
@@ -227,12 +228,12 @@ class RCtx:
 
         return self.thread_local.in_tx
 
-    @property
-    def updated_signals(self) -> dict[str, "Signal"]:
-        if not hasattr(self.thread_local, "updated_signals"):
-            return {}
+    # @property
+    # def updated_signals(self) -> dict[str, "Signal"]:
+    #     if not hasattr(self.thread_local, "updated_signals"):
+    #         return {}
 
-        return self.thread_local.updated_signals
+    #     return self.thread_local.updated_signals
 
     @property
     def signals_updated_from_code(self) -> dict[str, "Signal"]:
@@ -313,7 +314,7 @@ class RCtx:
                 s._apply_updates()
 
             self.thread_local.prev_updated_signals = self.updated_signals
-            self.thread_local.updated_signals = {}
+            self.updated_signals = {}
 
             to_dispose: dict[str, tuple[Node, Node | None]] = {}
             for n in self.stale_nodes.values():
