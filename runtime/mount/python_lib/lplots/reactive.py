@@ -213,6 +213,7 @@ class RCtx:
     # todo(rteqs): run queue needs to be amended to support running multiple cells at once
     thread_local: threading.local = field(default_factory=threading.local)
     updated_signals: dict[str, "Signal"] = field(default_factory=dict)
+    signals_updated_from_code: dict[str, "Signal"] = field(default_factory=dict)
 
     @property
     def cur_comp(self) -> Node | None:
@@ -235,12 +236,12 @@ class RCtx:
 
     #     return self.thread_local.updated_signals
 
-    @property
-    def signals_updated_from_code(self) -> dict[str, "Signal"]:
-        if not hasattr(self.thread_local, "signals_updated_from_code"):
-            return {}
+    # @property
+    # def signals_updated_from_code(self) -> dict[str, "Signal"]:
+    #     if not hasattr(self.thread_local, "signals_updated_from_code"):
+    #         return {}
 
-        return self.thread_local.signals_updated_from_code
+    #     return self.thread_local.signals_updated_from_code
 
     @property
     def stale_nodes(self) -> dict[str, Node]:
@@ -291,7 +292,7 @@ class RCtx:
             **self.signals_updated_from_code,
             **self.updated_signals,
         }
-        self.thread_local.signals_updated_from_code = {}
+        self.signals_updated_from_code = {}
 
         try:
             stack_depth = 1
