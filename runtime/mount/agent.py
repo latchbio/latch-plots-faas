@@ -484,7 +484,7 @@ class AgentHarness:
             if not reactivity_available:
                 if reactivity_err != "unknown":
                     cell_lines.append(
-                        f'- Not available: {reactivity_err[:100] + "...[truncated]" if len(reactivity_err) > 100 else reactivity_err}'
+                        f'- Not available: {reactivity_err[:200] + "...[truncated]" if len(reactivity_err) > 200 else reactivity_err}'
                     )
                 else:
                     cell_lines.append("- Not available.")
