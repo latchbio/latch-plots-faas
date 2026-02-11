@@ -22,7 +22,7 @@ from base64 import b64decode
 from collections import defaultdict
 from collections.abc import Generator, Iterator
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import contextmanager, redirect_stderr, redirect_stdout
+from contextlib import contextmanager, nullcontext, redirect_stderr, redirect_stdout
 from copy import copy, deepcopy
 from dataclasses import asdict, dataclass, field, fields
 from io import TextIOWrapper
@@ -346,6 +346,7 @@ class TracedDict(dict[str, Signal[object] | object]):
     def available(self) -> set[str]:
         return self.touched - self.removed
 
+    @property
     def dataframes(self) -> Signal[set[str]]:
         with self._metadata_lock:
             return self._dataframes
@@ -793,6 +794,10 @@ class Kernel:
         default_factory=lambda: ThreadPoolExecutor(max_workers=os.cpu_count())
     )
 
+    run_queue: list[str] = field(default_factory=list)
+    run_queue_lock: threading.Lock = field(default_factory=threading.Lock)
+    exec_lock: threading.Lock = field(default_factory=threading.Lock)
+
     # { active_cell: str | None }
     thread_local: threading.local = field(default_factory=threading.local)
 
@@ -933,6 +938,19 @@ class Kernel:
 
     async def send_run_queue(self, queue: list[str]) -> None:
         await self.send({"type": "run_queue", "queue": queue})
+
+    async def run_queue_append(self, cell_id: str) -> None:
+        with self.run_queue_lock:
+            self.run_queue.append(cell_id)
+            await self.send_run_queue(self.run_queue)
+
+    async def run_queue_remove(self, cell_id: str) -> None:
+        with self.run_queue_lock:
+            if cell_id not in self.run_queue:
+                return
+
+            self.run_queue.remove(cell_id)
+            await self.send_run_queue(self.run_queue)
 
     async def on_tick_finished(
         self, updated_signals: dict[int, Signal[object]]
@@ -1332,7 +1350,17 @@ class Kernel:
             "error": error_msg,
         }
 
-    async def exec(self, *, cell_id: str, code: str, _from_stub: bool = False) -> None:
+    async def exec(
+        self,
+        *,
+        cell_id: str,
+        code: str,
+        _from_stub: bool = False,
+        serialized: bool = True,
+    ) -> None:
+        if serialized:
+            await self.run_queue_append(cell_id)
+
         filename = f"<cell {cell_id}>"
 
         with self.cell_locks[cell_id]:
@@ -1403,9 +1431,13 @@ class Kernel:
 
                 x.__name__ = filename
 
-                task = asyncio.create_task(ctx.run(x, _cell_id=cell_id, code=code))
-                self.running_cells[cell_id] = (task, threading.get_ident())
-                await task
+                with self.exec_lock if serialized else nullcontext():
+                    if serialized:
+                        await self.run_queue_remove(cell_id)
+
+                    task = asyncio.create_task(ctx.run(x, _cell_id=cell_id, code=code))
+                    self.running_cells[cell_id] = (task, threading.get_ident())
+                    await task
 
             except (
                 KeyboardInterrupt,
