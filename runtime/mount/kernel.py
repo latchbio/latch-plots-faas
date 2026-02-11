@@ -208,7 +208,8 @@ class RWLock:
         finally:
             self._release_write()
 
-# todo(rteqs): make this wait-free
+# todo(rteqs): we really want to release the locks at the end of the transaction. this would require us to do some lock upgrading mechanism and also
+# deadlock detection/prevention algorithm. alternatively, we just let it race and make sure the user knows that we don't provide such guarantees.
 class TracedDict(dict[str, Signal[object] | object]):
     thread_local: threading.local
 
