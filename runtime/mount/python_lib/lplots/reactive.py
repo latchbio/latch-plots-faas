@@ -212,8 +212,6 @@ class Node:
 class RCtx:
     # todo(rteqs): run queue needs to be amended to support running multiple cells at once
     thread_local: threading.local = field(default_factory=threading.local)
-    run_queue: list[str] = field(default_factory=list)
-    run_queue_lock: threading.Lock = field(default_factory=threading.Lock)
 
     @property
     def cur_comp(self) -> Node | None:
@@ -329,13 +327,18 @@ class RCtx:
 
             self.thread_local.stale_nodes = {}
 
-            with self.run_queue_lock:
-                for n, _p in to_dispose.values():
-                    if n.cell_id is not None and n.cell_id not in self.run_queue:
-                        self.run_queue.append(n.cell_id)
+            run_queue = _inject.kernel.run_queue
+            run_queue_lock = _inject.kernel.run_queue_lock
 
-                if len(self.run_queue) > 0:
-                    await _inject.kernel.send_run_queue(self.run_queue)
+            to_queue = []
+            for n, _p in to_dispose.values():
+                if n.cell_id is not None and n.cell_id not in run_queue:
+                    to_queue.append(n.cell_id)
+
+            if len(to_queue) > 0:
+                with run_queue_lock:
+                    run_queue.extend(to_queue)
+                    await _inject.kernel.send_run_queue(run_queue)
 
             for n, _p in to_dispose.values():
                 n.dispose()
@@ -347,22 +350,18 @@ class RCtx:
 
                         try:
                             with _inject.kernel.cell_locks[n.cell_id]:
-                                with self.run_queue_lock:
-                                    if (
-                                        n.cell_id is not None
-                                        and n.cell_id in self.run_queue
-                                    ):
-                                        self.run_queue.remove(n.cell_id)
-                                        await _inject.kernel.send_run_queue(
-                                            self.run_queue
-                                        )
+                                if n.cell_id is not None:
+                                    await _inject.kernel.run_queue_remove(n.cell_id)
 
                                 if n._is_stub:
                                     n._is_stub = False
                                     assert n.cell_id is not None
                                     # reconstruct the function with globals
                                     await _inject.kernel.exec(
-                                        cell_id=n.cell_id, code=n.code, _from_stub=True
+                                        cell_id=n.cell_id,
+                                        code=n.code,
+                                        _from_stub=True,
+                                        serialized=False,
                                     )
                                 else:
                                     task = asyncio.create_task(
