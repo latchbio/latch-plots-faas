@@ -45,6 +45,7 @@ def setup_environment_and_paths():
         "domain": "localhost",
         "AGENT_DEBUG": "1",
         "LATCH_SANDBOX_ROOT": str(latch_dir),
+        "PYTHON_GIL": "0",
     })
 
     import pathlib
