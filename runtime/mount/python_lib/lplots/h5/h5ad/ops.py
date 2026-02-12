@@ -511,14 +511,15 @@ def save_h5ad_to_latch(
     else:
         dest_lpath = latch_path
 
-    dest_name = dest_lpath.path
-    if dest_name is None or not dest_name.endswith(".h5ad"):
+    dest_path = dest_lpath.path
+    if dest_path is None or not dest_path.endswith(".h5ad"):
         raise ValueError(
-            f"Destination path must have .h5ad extension, got: {dest_name}"
+            f"Destination path must have .h5ad extension, got: {dest_path}"
         )
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        local_path = LocalPath(tmpdir) / dest_name
+        filename = LocalPath(dest_path).name
+        local_path = LocalPath(tmpdir) / filename
         adata.write_h5ad(local_path)
         dest_lpath.upload_from(local_path)
 
