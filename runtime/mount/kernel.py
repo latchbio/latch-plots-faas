@@ -52,7 +52,7 @@ from lplots.persistence import (
     small_repr,
     unable_to_unserialize_symbol,
 )
-from lplots.reactive import Node, Signal, get_rctx, live_nodes, live_signals
+from lplots.reactive import Node, Signal, ctx, live_nodes, live_signals
 from lplots.themes import graphpad_inspired_theme
 from lplots.utils.nothing import Nothing
 from lplots.widgets._emit import WidgetState
@@ -1245,7 +1245,6 @@ class Kernel:
         await self.update_kernel_snapshot_status("load_kernel_snapshot", "done")
 
     def get_widget_value(self, key: str) -> Signal[object]:
-        ctx = get_rctx()
         assert ctx.cur_comp is not None
 
         key = f"{ctx.cur_comp.name_path()}/{key}"
@@ -1256,7 +1255,6 @@ class Kernel:
         return self.widget_signals[key]
 
     def emit_widget(self, key: str, data: WidgetState) -> None:
-        ctx = get_rctx()
         assert ctx.cur_comp is not None
         assert loop is not None
 
@@ -1279,7 +1277,6 @@ class Kernel:
             self.cells_with_pending_widget_updates.add(cell_id)
 
     def submit_widget_state(self) -> None:
-        ctx = get_rctx()
         for s in ctx.updated_signals.values():
             s._apply_updates()
 
@@ -1328,7 +1325,7 @@ class Kernel:
         error_msg = None
 
         try:
-            async with get_rctx().transaction:
+            async with ctx.transaction:
                 with redirect_stdout(stdout_capture), redirect_stderr(stderr_capture):
                     result_value = eval(  # noqa: S307
                         compile(
@@ -1363,7 +1360,6 @@ class Kernel:
         _from_stub: bool = False,
         serialized: bool = True,
     ) -> None:
-        ctx = get_rctx()
         if serialized:
             await self.run_queue_append(cell_id)
 
@@ -1652,7 +1648,7 @@ class Kernel:
             res = filter_and_sort(df=res, pagination_settings=pagination_settings)
 
             if viewer_id is not None:
-                async with get_rctx().transaction:
+                async with ctx.transaction:
                     filtered_dataframe_name = f"df_{viewer_id}"
                     self.k_globals[filtered_dataframe_name] = res
 
@@ -1921,8 +1917,6 @@ class Kernel:
         LPath(urljoins(dst, local_path.name)).upload_from(local_path)
 
     async def accept(self, msg: dict) -> None:
-        ctx = get_rctx()
-
         if msg["type"] == "init":
             self.cell_output_selections = msg["cell_output_selections"]
             self.plot_data_selections = msg["plot_data_selections"]
