@@ -1,5 +1,5 @@
 from .. import _inject
-from ..reactive import Signal, get_rctx
+from ..reactive import Signal, ctx
 
 
 def use_state_key(key: str | None = None) -> str:
@@ -9,7 +9,6 @@ def use_state_key(key: str | None = None) -> str:
 
         return key
 
-    ctx = get_rctx()
     assert ctx.cur_comp is not None
 
     res = ctx.cur_comp.widget_state_idx
