@@ -164,32 +164,34 @@ class RWLock:
     def __init__(self) -> None:
         self.cond = threading.Condition(threading.Lock())
         self.readers: int = 0
-        self.writers: int = 0
-        self.writting: bool = False
+        self.writers_waiting: int = 0
+        self.writing: bool = False
 
     def _acquire_read(self) -> None:
         with self.cond:
-            while self.writting or self.writers > 0:
+            while self.writing or self.writers_waiting > 0:
                 self.cond.wait()
             self.readers += 1
 
     def _release_read(self) -> None:
         with self.cond:
+            assert self.readers > 0
             self.readers -= 1
             if self.readers == 0:
                 self.cond.notify_all()
 
     def _acquire_write(self) -> None:
         with self.cond:
-            self.writers += 1
-            while self.readers > 0 or self.writting:
+            self.writers_waiting += 1
+            while self.readers > 0 or self.writing:
                 self.cond.wait()
-            self.writers -= 1
-            self.writting = True
+            self.writers_waiting -= 1
+            self.writing = True
 
     def _release_write(self) -> None:
         with self.cond:
-            self.writting = False
+            assert self.writing
+            self.writing = False
             self.cond.notify_all()
 
     @contextmanager
