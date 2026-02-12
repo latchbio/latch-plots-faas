@@ -1,4 +1,5 @@
 import asyncio
+import traceback
 from base64 import b64encode
 from collections.abc import Awaitable, Callable
 from typing import Any, overload
@@ -561,10 +562,10 @@ async def process_h5ad_request(
                 return make_response(
                     data={"saved_to": str(dest), "latch_path": latch_path}
                 )
-            except ValueError as e:
-                return make_response(error=str(e))
-            except Exception as e:
-                return make_response(error=f"Failed to save to Latch: {e}")
+            except ValueError:
+                return make_response(error=traceback.format_exc())
+            except ExceptionGroup:
+                return make_response(error=f"Failed to save to Latch: {traceback.format_exc()}")
 
         case _:
             return make_response(error=f"Invalid operation: {op}")

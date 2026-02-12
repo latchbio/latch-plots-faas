@@ -511,7 +511,7 @@ def save_h5ad_to_latch(
     else:
         dest_lpath = latch_path
 
-    dest_name = dest_lpath.name()
+    dest_name = dest_lpath.path
     if dest_name is None or not dest_name.endswith(".h5ad"):
         raise ValueError(
             f"Destination path must have .h5ad extension, got: {dest_name}"
