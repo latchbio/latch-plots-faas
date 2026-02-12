@@ -1358,9 +1358,9 @@ class Kernel:
         cell_id: str,
         code: str,
         _from_stub: bool = False,
-        serialized: bool = True,
+        parallel: bool = False,
     ) -> None:
-        if serialized:
+        if not parallel:
             await self.run_queue_append(cell_id)
 
         filename = f"<cell {cell_id}>"
@@ -1433,8 +1433,8 @@ class Kernel:
 
                 x.__name__ = filename
 
-                with self.exec_lock if serialized else nullcontext():
-                    if serialized:
+                with self.exec_lock if not parallel else nullcontext():
+                    if not parallel:
                         await self.run_queue_remove(cell_id)
 
                     task = asyncio.create_task(ctx.run(x, _cell_id=cell_id, code=code))
@@ -2007,7 +2007,7 @@ class Kernel:
             return
 
         if msg["type"] == "run_cell":
-            await self.exec(cell_id=msg["cell_id"], code=msg["code"])
+            await self.exec(cell_id=msg["cell_id"], code=msg["code"], parallel=msg.get("parallel", False))
             return
 
         if msg["type"] == "dispose_cell":

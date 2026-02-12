@@ -361,7 +361,7 @@ class RCtx:
                                         cell_id=n.cell_id,
                                         code=n.code,
                                         _from_stub=True,
-                                        serialized=False,
+                                        parallel=False,
                                     )
                                 else:
                                     task = asyncio.create_task(
