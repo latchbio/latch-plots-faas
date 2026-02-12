@@ -497,21 +497,6 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
 
                 continue
 
-            elif msg["type"] == "reactivity_summary" and "agent_tx_id" in msg:
-                tx_id = msg.get("agent_tx_id")
-
-                if a_proc.conn_a is not None:
-                    print(
-                        f"[entrypoint] Routing reactivity response to agent (tx_id={tx_id})"
-                    )
-                    await a_proc.conn_a.send({
-                        "type": "agent_action_response",
-                        "tx_id": tx_id,
-                        "status": "success",
-                        "cell_reactivity": msg.get("cell_reactivity", {}),
-                    })
-                    continue
-
             elif msg["type"] == "execute_code_response" and "agent_tx_id" in msg:
                 tx_id = msg.get("agent_tx_id")
 

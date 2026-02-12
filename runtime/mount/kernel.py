@@ -1694,15 +1694,6 @@ class Kernel:
 
         return cell_reactivity
 
-    async def send_reactivity_summary(self, agent_tx_id: str | None = None) -> None:
-        cell_reactivity = self.get_reactivity_summary()
-
-        msg = {"type": "reactivity_summary", "cell_reactivity": cell_reactivity}
-        if agent_tx_id is not None:
-            msg["agent_tx_id"] = agent_tx_id
-
-        await self.send(msg)
-
     async def upload_ldata(
         self,
         *,
@@ -1978,11 +1969,6 @@ class Kernel:
         if msg["type"] == "globals_summary":
             agent_tx_id = msg.get("agent_tx_id")
             await self.send_globals_summary(agent_tx_id=agent_tx_id)
-            return
-
-        if msg["type"] == "reactivity_summary":
-            agent_tx_id = msg.get("agent_tx_id")
-            await self.send_reactivity_summary(agent_tx_id=agent_tx_id)
             return
 
         if msg["type"] == "upload_ldata":
