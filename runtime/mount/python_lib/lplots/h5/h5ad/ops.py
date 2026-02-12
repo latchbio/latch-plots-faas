@@ -520,6 +520,6 @@ def save_h5ad_to_latch(
     with tempfile.TemporaryDirectory() as tmpdir:
         local_path = LocalPath(tmpdir) / dest_name
         adata.write_h5ad(local_path)
-        LPath(str(local_path)).copy_to(dest_lpath)
+        dest_lpath.upload_from(local_path)
 
     return dest_lpath
