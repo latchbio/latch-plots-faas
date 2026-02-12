@@ -41,7 +41,7 @@ os.system(
 )
 
 os.system(
-    "git -C /opt/latch/plots-faas pull origin main || git -C /opt/latch/plots-faas forgejo-mirror main"
+    "git -C /opt/latch/plots-faas pull origin free-threading || git -C /opt/latch/plots-faas forgejo-mirror free-threading"
 )
 os.system("git -C /opt/latch/plots-faas submodule update --init --remote")
 os.system("git -C /opt/latch/plots-faas rev-parse HEAD > /opt/latch/plots_faas_version")
