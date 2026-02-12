@@ -573,12 +573,12 @@ async def handle_agent_messages(conn_a: SocketIo) -> None:
             and msg.get("action") == "request_reactivity_summary"
         ):
             if latest_reactivity_summary is None:
-                print("[entrypoint] Reactivity snapshot not ready yet")
+                print("[entrypoint] Reactivity summary not ready yet")
                 await conn_a.send({
                     "type": "agent_action_response",
                     "tx_id": msg.get("tx_id"),
                     "status": "error",
-                    "error": "Reactivity snapshot not ready yet",
+                    "error": "Reactivity summary not ready yet",
                 })
             else:
                 await conn_a.send({
