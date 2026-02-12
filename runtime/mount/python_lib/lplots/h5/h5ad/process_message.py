@@ -565,7 +565,7 @@ async def process_h5ad_request(
             except ValueError:
                 return make_response(error=traceback.format_exc())
             except ExceptionGroup:
-                return make_response(error=f"Failed to save to Latch: {traceback.format_exc()}")
+                return make_response(error=traceback.format_exc())
 
         case _:
             return make_response(error=f"Invalid operation: {op}")
