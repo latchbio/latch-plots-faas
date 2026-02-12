@@ -208,6 +208,7 @@ class Node:
             f.write(f"{self.parent.id} -> {self.id};\n")
 
 
+# todo(rteqs): create one RCtx per thread
 @dataclass
 class RCtx:
     thread_local: threading.local = field(default_factory=threading.local)
