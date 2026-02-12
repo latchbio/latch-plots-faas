@@ -489,7 +489,7 @@ class AgentHarness:
             is_reactivity_ready = status in reactivity_ready_statuses
 
             if not is_reactivity_ready:
-                cell_lines.append("- Not available: run this cell to establish reactive dependencies.")
+                cell_lines.append("- Reactivity summary not ready.")
                 continue
 
             if reactivity_meta is None:
