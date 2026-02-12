@@ -3,6 +3,7 @@ import inspect
 import sys
 import threading
 import uuid
+from collections import defaultdict
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
@@ -210,49 +211,12 @@ class Node:
 
 @dataclass
 class RCtx:
-    thread_local: threading.local = field(default_factory=threading.local)
-
-    @property
-    def cur_comp(self) -> Node | None:
-        if not hasattr(self.thread_local, "cur_comp"):
-            self.thread_local.cur_comp = None
-
-        return self.thread_local.cur_comp
-
-    @property
-    def in_tx(self) -> bool:
-        if not hasattr(self.thread_local, "in_tx"):
-            self.thread_local.in_tx = False
-
-        return self.thread_local.in_tx
-
-    @property
-    def updated_signals(self) -> dict[str, "Signal"]:
-        if not hasattr(self.thread_local, "updated_signals"):
-            self.thread_local.updated_signals = {}
-
-        return self.thread_local.updated_signals
-
-    @property
-    def signals_updated_from_code(self) -> dict[str, "Signal"]:
-        if not hasattr(self.thread_local, "signals_updated_from_code"):
-            self.thread_local.signals_updated_from_code = {}
-
-        return self.thread_local.signals_updated_from_code
-
-    @property
-    def stale_nodes(self) -> dict[str, Node]:
-        if not hasattr(self.thread_local, "stale_nodes"):
-            self.thread_local.stale_nodes = {}
-
-        return self.thread_local.stale_nodes
-
-    @property
-    def prev_updated_signals(self) -> dict[str, "Signal"]:
-        if not hasattr(self.thread_local, "prev_updated_signals"):
-            self.thread_local.prev_updated_signals = {}
-
-        return self.thread_local.prev_updated_signals
+    cur_comp: Node | None = None
+    in_tx: bool = False
+    updated_signals: dict[str, "Signal"] = field(default_factory=dict)
+    signals_updated_from_code: dict[str, "Signal"] = field(default_factory=dict)
+    stale_nodes: dict[str, Node] = field(default_factory=dict)
+    prev_updated_signals: dict[str, "Signal"] = field(default_factory=dict)
 
     async def run(
         self,
@@ -273,7 +237,7 @@ class RCtx:
             await _inject.kernel.set_active_cell(_cell_id)
 
         async with self.transaction:
-            self.thread_local.cur_comp = Node(
+            self.cur_comp = Node(
                 f=f, parent=self.cur_comp, cell_id=_cell_id, _id=None, code=code
             )
 
@@ -282,14 +246,14 @@ class RCtx:
                     return await f()
                 return f()
             finally:
-                self.thread_local.cur_comp = self.thread_local.cur_comp.parent
+                self.cur_comp = self.cur_comp.parent
 
     async def _tick(self) -> None:
         tick_updated_signals = {
             **self.signals_updated_from_code,
             **self.updated_signals,
         }
-        self.thread_local.signals_updated_from_code = {}
+        self.signals_updated_from_code = {}
 
         try:
             stack_depth = 1
@@ -311,8 +275,8 @@ class RCtx:
             for s in self.updated_signals.values():
                 s._apply_updates()
 
-            self.thread_local.prev_updated_signals = self.updated_signals
-            self.thread_local.updated_signals = {}
+            self.prev_updated_signals = self.updated_signals
+            self.updated_signals = {}
 
             to_dispose: dict[str, tuple[Node, Node | None]] = {}
             for n in self.stale_nodes.values():
@@ -324,7 +288,7 @@ class RCtx:
 
                 to_dispose[fsa.id] = (fsa, fsa.parent)
 
-            self.thread_local.stale_nodes = {}
+            self.stale_nodes = {}
 
             run_queue = _inject.kernel.run_queue
             run_queue_lock = _inject.kernel.run_queue_lock
@@ -345,7 +309,7 @@ class RCtx:
             if len(to_dispose) > 0:
                 async with self.transaction:
                     for n, p in to_dispose.values():
-                        self.thread_local.cur_comp = p
+                        self.cur_comp = p
 
                         try:
                             with _inject.kernel.cell_locks[n.cell_id]:
@@ -386,11 +350,11 @@ class RCtx:
                         except Exception:
                             print_exc()
                         finally:
-                            self.thread_local.cur_comp = None
+                            self.cur_comp = None
 
         finally:
             await _inject.kernel.on_tick_finished(tick_updated_signals)
-            self.thread_local.prev_updated_signals = {}
+            self.prev_updated_signals = {}
             for sig in live_signals.values():
                 sig._ui_update = False
 
@@ -402,14 +366,18 @@ class RCtx:
             return
 
         try:
-            self.thread_local.in_tx = True
+            self.in_tx = True
             yield
         finally:
-            self.thread_local.in_tx = False
+            self.in_tx = False
             await self._tick()
 
 
-ctx = RCtx()
+reactive_contexts: defaultdict[int, RCtx] = defaultdict(RCtx)
+
+
+def get_rctx() -> RCtx:
+    return reactive_contexts[threading.get_ident()]
 
 
 class Updater(Generic[T]):
@@ -438,6 +406,8 @@ class Signal(Generic[T]):
         _id: str | None = None,
         _load_error_msg: str | None = None,
     ) -> None:
+        ctx = get_rctx()
+
         if _id is None:
             self._id = str(uuid.uuid4())
         else:
@@ -516,6 +486,7 @@ class Signal(Generic[T]):
     def __call__(
         self, /, upd: T | Updater[T] | Nothing = Nothing.x, *, _ui_update: bool = False
     ) -> T | None:
+        ctx = get_rctx()
         assert ctx.in_tx
 
         if upd is Nothing.x:
@@ -541,6 +512,7 @@ class Signal(Generic[T]):
         return None
 
     def _mark_listeners(self) -> None:
+        ctx = get_rctx()
         for x in self._listeners.values():
             x.stale = True
             ctx.stale_nodes[x.id] = x
