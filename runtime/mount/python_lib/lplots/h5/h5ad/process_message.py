@@ -13,6 +13,7 @@ from .ops import (
     mutate_obs_by_lasso,
     mutate_obs_by_value,
     pil_image_cache,
+    save_h5ad_to_latch,
 )
 
 ad = auto_install.ad
@@ -546,6 +547,24 @@ async def process_h5ad_request(
             return make_response(
                 data={"image": f"data:image/png;base64,{quote_plus(b64encode(img))}"}
             )
+
+        case "save_to_latch":
+            if "latch_path" not in msg:
+                return make_response(error="`latch_path` key missing from message")
+
+            latch_path = msg["latch_path"]
+            if not isinstance(latch_path, str):
+                return make_response(error="`latch_path` must be a string")
+
+            try:
+                dest = save_h5ad_to_latch(adata, latch_path)
+                return make_response(
+                    data={"saved_to": str(dest), "latch_path": latch_path}
+                )
+            except ValueError as e:
+                return make_response(error=str(e))
+            except Exception as e:
+                return make_response(error=f"Failed to save to Latch: {e}")
 
         case _:
             return make_response(error=f"Invalid operation: {op}")

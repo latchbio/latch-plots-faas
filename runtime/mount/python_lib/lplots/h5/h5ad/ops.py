@@ -1,11 +1,14 @@
 import base64
+import tempfile
 from dataclasses import dataclass
 from io import BytesIO
+from pathlib import Path as LocalPath
 from typing import Any, Literal, TypedDict
 
 import aiohttp
 import numpy as np
 import pandas as pd
+from latch.ldata.path import LPath
 from matplotlib.path import Path
 from numpy.typing import NDArray
 from PIL import Image
@@ -496,3 +499,27 @@ def mutate_obs_by_value(
         adata.obs[obs_key] = adata.obs[obs_key].cat.remove_categories(
             coerced_old_obs_value
         )
+
+
+def save_h5ad_to_latch(
+    adata: ad.AnnData,
+    latch_path: str | LPath,
+) -> LPath:
+
+    if isinstance(latch_path, str):
+        dest_lpath = LPath(latch_path)
+    else:
+        dest_lpath = latch_path
+
+    dest_name = dest_lpath.name()
+    if dest_name is None or not dest_name.endswith(".h5ad"):
+        raise ValueError(
+            f"Destination path must have .h5ad extension, got: {dest_name}"
+        )
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        local_path = LocalPath(tmpdir) / dest_name
+        adata.write_h5ad(local_path)
+        LPath(str(local_path)).copy_to(dest_lpath)
+
+    return dest_lpath
