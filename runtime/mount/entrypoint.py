@@ -472,9 +472,9 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                 kernel_snapshot_state.status = msg["status"]
 
             elif msg["type"] == "reactivity_summary_update":
-                latest = msg.get("cell_reactivity")
-                if isinstance(latest, dict):
-                    latest_reactivity_summary = latest
+                cell_reactivity = msg.get("cell_reactivity")
+                if isinstance(cell_reactivity, dict):
+                    latest_reactivity_summary = cell_reactivity
                 continue
 
             elif msg["type"] == "globals_summary" and "agent_tx_id" in msg:
