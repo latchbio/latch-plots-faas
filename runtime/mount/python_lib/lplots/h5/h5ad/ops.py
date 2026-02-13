@@ -2,7 +2,7 @@ import base64
 import tempfile
 from dataclasses import dataclass
 from io import BytesIO
-from pathlib import Path as LocalPath
+from pathlib import Path
 from typing import Any, Literal, TypedDict
 
 import aiohttp
@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 import scipy as sp
 from latch.ldata.path import LPath
-from matplotlib.path import Path
+from matplotlib.path import Path as MplPath
 from numpy.typing import NDArray
 from PIL import Image
 
@@ -446,7 +446,7 @@ def mutate_obs_by_lasso(
     if len(lasso_points) < 3:
         return
 
-    polygon = Path(lasso_points)
+    polygon = MplPath(lasso_points)
     mask = polygon.contains_points(embedding) & generate_filter_mask(
         adata, filters if filters is not None else []
     )
@@ -507,24 +507,21 @@ def mutate_obs_by_value(
 
 def save_h5ad_to_latch(
     adata: ad.AnnData,
-    latch_path: str | LPath,
+    latch_path: str,
 ) -> LPath:
 
-    if isinstance(latch_path, str):
-        dest_lpath = LPath(latch_path)
-    else:
-        dest_lpath = latch_path
-
+    dest_lpath = LPath(latch_path)
     dest_path = dest_lpath.path
+
     if dest_path is None or not dest_path.endswith(".h5ad"):
         raise ValueError(
             f"Destination path must have .h5ad extension, got: {dest_path}"
         )
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        filename = LocalPath(dest_path).name
-        local_path = LocalPath(tmpdir) / filename
-        adata.write_h5ad(local_path)
+    with tempfile.NamedTemporaryFile(suffix=".h5ad", delete=True) as tmp:
+        # todo(manske): stream this instead of writing to a temp file
+        adata.write_h5ad(tmp.name)
+        local_path = Path(tmp.name)
         dest_lpath.upload_from(local_path)
 
     return dest_lpath

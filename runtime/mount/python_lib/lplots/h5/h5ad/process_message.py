@@ -550,21 +550,20 @@ async def process_h5ad_request(
             )
 
         case "save_to_latch":
-            if "latch_path" not in msg:
-                return make_response(error="`latch_path` key missing from message")
-
-            latch_path = msg["latch_path"]
-            if not isinstance(latch_path, str):
-                return make_response(error="`latch_path` must be a string")
-
             try:
+                if "latch_path" not in msg:
+                    return make_response(error="`latch_path` key missing from message")
+
+                latch_path = msg["latch_path"]
+                if not isinstance(latch_path, str):
+                    return make_response(error="`latch_path` must be a string")
+
                 dest = save_h5ad_to_latch(adata, latch_path)
                 return make_response(
                     data={"saved_to": str(dest), "latch_path": latch_path}
                 )
-            except ValueError:
-                return make_response(error=traceback.format_exc())
-            except ExceptionGroup:
+
+            except Exception:
                 return make_response(error=traceback.format_exc())
 
         case _:
