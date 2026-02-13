@@ -409,7 +409,7 @@ class AgentHarness:
 
         reactivity_available: bool = reactivity_result.get("status") == "success"
         if not reactivity_available:
-            print(f"[agent] Reactivity summary unavailable (cell likely running): {reactivity_result.get('error', 'unknown')}")
+            print(f"[agent] Reactivity summary unavailable: {reactivity_result.get('error', 'unknown')}")
 
         context = context_result.get("context", {})
         self.latest_notebook_context = context
@@ -488,7 +488,7 @@ class AgentHarness:
             cell_lines.append("\nREACTIVITY:")
 
             if not reactivity_available:
-                cell_lines.append("- Not available: kernel busy (cell likely executing).")
+                cell_lines.append("- Reactivity summary unavailable.")
                 continue
 
             cell_reactivity: dict[str, dict[str, Iterable[str]]] = reactivity_result.get("cell_reactivity", {})
@@ -496,7 +496,7 @@ class AgentHarness:
             is_reactivity_ready = status in reactivity_ready_statuses
 
             if not is_reactivity_ready:
-                cell_lines.append("- Not available: run this cell to establish reactive dependencies.")
+                cell_lines.append("- Reactivity summary not ready.")
                 continue
 
             if reactivity_meta is None:
