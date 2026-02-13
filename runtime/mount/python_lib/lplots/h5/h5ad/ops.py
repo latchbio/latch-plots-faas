@@ -507,10 +507,13 @@ def mutate_obs_by_value(
 
 def save_h5ad_to_latch(
     adata: ad.AnnData,
-    latch_path: str,
+    latch_path: str | LPath,
 ) -> LPath:
 
-    dest_lpath = LPath(latch_path)
+    if isinstance(latch_path, str):
+        dest_lpath = LPath(latch_path)
+    else:
+        dest_lpath = latch_path
     dest_path = dest_lpath.path
 
     if dest_path is None or not dest_path.endswith(".h5ad"):
