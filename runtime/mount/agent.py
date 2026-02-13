@@ -3136,6 +3136,7 @@ class AgentHarness:
 
         except APIStatusError as e:
             print(f"[agent] Stream error (status={e.status_code}): {e}")
+
             should_clear_history = "prompt is too long" in str(e).lower()
             should_contact_support = 400 <= e.status_code < 500 and e.status_code != 429
 
