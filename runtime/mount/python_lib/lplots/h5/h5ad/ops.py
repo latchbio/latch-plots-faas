@@ -8,6 +8,7 @@ from typing import Any, Literal, TypedDict
 import aiohttp
 import numpy as np
 import pandas as pd
+import scipy as sp
 from latch.ldata.path import LPath
 from matplotlib.path import Path
 from numpy.typing import NDArray
@@ -185,6 +186,9 @@ class Context:
 
             if datum is None:
                 continue
+
+            if isinstance(datum, sp.sparse.csr_matrix):
+                datum = datum.toarray()
 
             data.append(datum)
 

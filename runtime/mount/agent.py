@@ -168,6 +168,8 @@ class AgentHarness:
                                 "tool_use_id": block.get("tool_use_id"),
                                 "content": json.dumps(result)
                             })
+                        else:
+                            truncated_blocks.append(block)
                         continue
 
                     result_str = block_content
@@ -306,6 +308,13 @@ class AgentHarness:
                 role = payload.get("role")
                 content = payload.get("content")
 
+                display_widgets = payload.get("display_widgets")
+                if role == "user" and display_widgets is not None and isinstance(content, str):
+                    for widget in display_widgets:
+                        ref_pattern = f"@({widget['widgetKey']}|{widget['id']})"
+                        inline_widget = f"<Widget label=\"{widget['label']}\" type=\"{widget['widgetType']}\" widget_key=\"{widget['widgetKey']}\" cell=\"{widget['cellDisplayName']}\"/>"
+                        content = content.replace(ref_pattern, inline_widget)
+
                 if (role == "user" and isinstance(content, dict) and content.get("type") == "cell_result"):
                     exception = content.get("exception")
                     logs = content.get("logs")
@@ -345,9 +354,48 @@ class AgentHarness:
             elif t == "cancellation":
                 anthropic_messages.append({"role": "user", "content": "[Request cancelled by user]"})
 
-        print(f"[agent] Built {len(anthropic_messages)} messages from DB")
+        reordered: list[MessageParam] = []
+        pending_tool_ids: set[str] = set()
+        deferred: list[MessageParam] = []
 
-        return anthropic_messages
+        for msg in anthropic_messages:
+            role = msg.get("role")
+            content = msg.get("content")
+
+            if role == "assistant" and isinstance(content, list):
+                for block in content:
+                    if isinstance(block, dict) and block.get("type") == "tool_use":
+                        tool_id = block.get("id")
+                        if tool_id is not None:
+                            pending_tool_ids.add(tool_id)
+
+            if len(pending_tool_ids) > 0 and role == "user":
+                is_tool_result_msg = isinstance(content, list) and any(
+                    isinstance(b, dict) and b.get("type") == "tool_result"
+                    for b in content
+                )
+                if is_tool_result_msg:
+                    reordered.append(msg)
+                    for block in content:
+                        if isinstance(block, dict) and block.get("type") == "tool_result":
+                            tool_result_id = block.get("tool_use_id")
+                            if tool_result_id is not None:
+                                pending_tool_ids.discard(tool_result_id)
+                    if len(pending_tool_ids) == 0:
+                        reordered.extend(deferred)
+                        deferred.clear()
+                    continue
+
+                deferred.append(msg)
+                continue
+
+            reordered.append(msg)
+
+        reordered.extend(deferred)
+
+        print(f"[agent] Built {len(reordered)} messages from DB")
+
+        return reordered
 
     async def refresh_cells_context(self) -> str:
         context_result, reactivity_result = await asyncio.gather(
@@ -390,6 +438,11 @@ class AgentHarness:
             status = cell.get("status", "idle")
             tf_id = cell.get("tf_id", None)
 
+            if cell_type == "code":
+                cell_name = cell.get("display_name", "Unknown Code Cell")
+            else:
+                cell_name = cell_type
+
             if cell_type == "tabMarker":
                 if source:
                     current_tab_name = source.strip() or f"Tab {index}"
@@ -404,8 +457,10 @@ class AgentHarness:
                 cell_lines.append("---")
                 continue
 
-            cell_lines.append(f"\n## Cell [{index}] (in {current_tab_name})")  # noqa: FURB113
-            cell_lines.append(f"BELONGS_TO_TAB: {current_tab_name}")
+            cell_lines.append(f"\n## Cell {cell_name} [{index}]")
+            if cell_type == "code":
+                cell_lines.append(f"DISPLAY_NAME: {cell_name}")
+            cell_lines.append(f"BELONGS_TO_TAB: {current_tab_name}")  # noqa: FURB113
             cell_lines.append(f"CELL_ID: {cell_id}")
             cell_lines.append(f"CELL_INDEX: {index}")
             cell_lines.append(f"TYPE: {cell_type}")
@@ -3175,9 +3230,17 @@ class AgentHarness:
 
             print("[agent] run_agent_loop: building messages from DB...")
             build_start = time.time()
-            api_messages = self._prepare_messages_for_inference(
-                await self._build_messages_from_db()
+
+            raw_messages = await self._build_messages_from_db()
+            repaired = await self._close_pending_tool_calls(
+                error_message="Tool call pending at start of turn -- closing before inference.",
+                messages=raw_messages,
             )
+            if repaired:
+                print("[agent] run_agent_loop: repaired pending tool calls, rebuilding messages from DB...")
+                raw_messages = await self._build_messages_from_db()
+
+            api_messages = self._prepare_messages_for_inference(raw_messages)
             build_elapsed = time.time() - build_start
             print(f"[agent] run_agent_loop: built {len(api_messages) if api_messages else 0} messages in {build_elapsed:.3f}s")
 
@@ -3479,12 +3542,29 @@ class AgentHarness:
                     await self.pending_messages.put({"type": "resume"})
             elif response.stop_reason == "max_tokens":
                 print("[agent] Hit max tokens")
+                await self._close_pending_tool_calls(
+                    error_message="Tool call cancelled because the model hit max_tokens before tool execution.",
+                    messages=await self._build_messages_from_db(),
+                )
+                error_payload = {
+                    "message": "The model reached the response token limit for this turn. Please retry or shorten the request.",
+                    "should_contact_support": False,
+                }
+                await self._insert_history(
+                    event_type="error",
+                    role="system",
+                    payload=error_payload,
+                )
+                await self.send({
+                    "type": "agent_stream_complete",
+                    "error": error_payload,
+                })
                 await self._complete_turn()
             else:
                 print(f"[agent] Unknown stop reason: {response.stop_reason}")
                 await self._complete_turn()
 
-    async def _close_pending_tool_calls(self, *, error_message: str, messages: list[MessageParam]) -> None:
+    async def _close_pending_tool_calls(self, *, error_message: str, messages: list[MessageParam]) -> bool:
         tool_use_ids = set()
         tool_result_ids = set()
 
@@ -3527,6 +3607,9 @@ class AgentHarness:
                 },
             )
             await self._notify_history_updated()
+            return True
+
+        return False
 
     _context_init_task: asyncio.Task | None = None
 
@@ -3557,6 +3640,13 @@ class AgentHarness:
 
             if self.conversation_task is None or self.conversation_task.done():
                 print("[agent] Restarting conversation loop after reconnect")
+
+                self.pending_tool_calls.clear()
+                messages = await self._build_messages_from_db()
+                await self._close_pending_tool_calls(
+                    error_message="Tool call pending at start of conversation -- closing before next request.",
+                    messages=messages,
+                )
                 self._start_conversation_loop()
 
             return
@@ -3687,9 +3777,6 @@ class AgentHarness:
         full_query = query
         if contextual_node_data:
             full_query = f"{query} \n\nHere is the context of the selected nodes the user would like to use: <ContextualNodeData>{json.dumps(contextual_node_data)}</ContextualNodeData>"
-        if selected_widgets is not None:
-            full_query = f"{full_query} \n\nHere is the list of widgets the user is referencing: <SelectedWidgets>{json.dumps(selected_widgets)}</SelectedWidgets>"
-
         await self.pending_messages.put({
             "type": "user_query",
             "content": full_query,
