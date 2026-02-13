@@ -23,6 +23,9 @@ alignment_is_running = False
 
 contexts: dict[str, Context] = {}
 
+# Track init_data request numbers per widget_session_key to cancel stale requests
+_init_data_request_num: dict[str, int] = {}
+
 
 async def process_h5ad_request(
     msg: dict[str, Any],
@@ -78,6 +81,14 @@ async def process_h5ad_request(
 
     match op:
         case "init_data":
+            # Track this request and cancel any previous pending init_data for this key
+            current_request_num = _init_data_request_num.get(widget_session_key, 0) + 1
+            _init_data_request_num[widget_session_key] = current_request_num
+
+            def is_request_stale() -> bool:
+                """Check if a newer init_data request has superseded this one."""
+                return _init_data_request_num.get(widget_session_key) != current_request_num
+
             init_obsm_key = msg.get("obsm_key")
             possible_obsm_keys = adata.obsm_keys()
             if init_obsm_key is None:
@@ -115,19 +126,39 @@ async def process_h5ad_request(
             filters = msg.get("filters")
             recomputed_index = ctx.compute_index(filters=filters, max_cells=max_cells)
 
+            # Yield to event loop and check if request is stale
+            await asyncio.sleep(0)
+            if is_request_stale():
+                return None
+
             obsm = None
             if init_obsm_key is not None:
                 obsm = ctx.get_obsm(init_obsm_key)
 
+            # Check again after potentially expensive obsm fetch
+            await asyncio.sleep(0)
+            if is_request_stale():
+                return None
+
             obs = None
             if init_obs_key is not None:
                 obs = ctx.get_obs(init_obs_key, max_cells=max_cells)
+
+            # Check again after potentially expensive obs fetch
+            await asyncio.sleep(0)
+            if is_request_stale():
+                return None
 
             gene_column = None
             if init_var_key is not None and init_obs_key is None:
                 gene_column = ctx.get_obs_vector(init_var_key)
 
             var_index, var_names = get_var_index(obj_id, adata)
+
+            # Final check before building response
+            await asyncio.sleep(0)
+            if is_request_stale():
+                return None
 
             global alignment_is_running
 
