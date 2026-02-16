@@ -3141,7 +3141,7 @@ class AgentHarness:
             should_contact_support = 400 <= e.status_code < 500 and e.status_code != 429
 
             if should_clear_history:
-                user_message = "This conversation is too long for the agent to continue right now. Clear history and try again."
+                user_message = "This conversation is too long for the agent to continue. Clear history and try again."
             elif should_contact_support:
                 user_message = "An unexpected error occurred. Please try again."
             else:
