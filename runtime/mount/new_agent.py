@@ -573,7 +573,7 @@ class AgentHarness:
                     "mcp__notebook-tools__edit_cell",
                     "mcp__notebook-tools__run_cell",
                 ],
-                permission_mode="bypassPermissions",
+                permission_mode="acceptEdits",
                 model="claude-opus-4-5-20251101",
                 max_thinking_tokens=4096,
                 env=sdk_env,
