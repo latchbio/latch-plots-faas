@@ -122,7 +122,9 @@ class AgentHarness:
 
     async def send(self, msg: dict[str, object]) -> None:
         msg_type = msg.get("type", "unknown")
-        if msg_type != "agent_stream_delta":
+        if msg_type == "agent_error":
+            print(f"[agent] Sending message: agent_error payload={json.dumps(msg)}")
+        elif msg_type != "agent_stream_delta":
             print(f"[agent] Sending message: {msg_type}")
 
         await self.conn.send(msg)
@@ -486,7 +488,18 @@ class AgentHarness:
 
         try:
             print(f"[agent] starting SDK query (request_id={request_id})")
-            await self.client.query(prompt=prompt, session_id=session_id)
+            try:
+                await asyncio.wait_for(
+                    self.client.query(prompt=prompt, session_id=session_id), timeout=10.0
+                )
+            except TimeoutError:
+                await self.send({
+                    "type": "agent_error",
+                    "error": "Timed out submitting prompt to Claude runtime",
+                    "fatal": False,
+                })
+                return
+            print(f"[agent] SDK query submitted (request_id={request_id})")
             receive_iter = self.client.receive_response().__aiter__()
             while True:
                 try:
@@ -507,6 +520,10 @@ class AgentHarness:
                     # Fallback path if partial stream events are disabled.
                     await self._emit_assistant_fallback(msg)
                 elif isinstance(msg, ResultMessage):
+                    print(
+                        "[agent] SDK result message "
+                        f"subtype={msg.subtype} is_error={msg.is_error} result={msg.result!r}"
+                    )
                     if isinstance(msg.usage, dict):
                         await self._send_usage_update(msg.usage)
                     if msg.is_error:
@@ -600,7 +617,7 @@ class AgentHarness:
                     "mcp__notebook-tools__run_cell",
                 ],
                 permission_mode="acceptEdits",
-                model="claude-opus-4-5-20251101",
+                model="claude-sonnet-4-5",
                 max_thinking_tokens=4096,
                 env=sdk_env,
                 stderr=_sdk_stderr,
