@@ -48,6 +48,7 @@ os.system("git -C /opt/latch/plots-faas rev-parse HEAD > /opt/latch/plots_faas_v
 os.chdir("/opt/latch/plots-faas")
 
 os.system("/opt/mamba/envs/plots-faas/bin/pip install --upgrade latch")
+os.system("/opt/mamba/envs/plots-faas/bin/pip install --upgrade claude-agent-sdk")
 
 technology_docs = Path("/opt/latch/plots-faas/runtime/mount/agent_config/context/technology_docs")
 for sp_requirements in technology_docs.glob("*/requirements.txt"):

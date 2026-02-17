@@ -6,11 +6,15 @@ from typing import Any
 from claude_agent_sdk import create_sdk_mcp_server, tool
 from lplots import _inject
 
-h = _inject.agent
-
-
 def ok(d: dict) -> dict[str, Any]:
     return {"content": [{"type": "text", "text": json.dumps(d)}]}
+
+
+def harness():
+    h = _inject.agent
+    if h is None:
+        raise RuntimeError("Agent harness is not initialized")
+    return h
 
 
 @tool(
@@ -34,6 +38,7 @@ def ok(d: dict) -> dict[str, Any]:
     },
 )
 async def create_cell(args: dict[str, Any]) -> dict[str, Any]:
+    h = harness()
     position = args["position"]
     code = args["code"]
     title = args["title"]
@@ -103,6 +108,7 @@ async def create_cell(args: dict[str, Any]) -> dict[str, Any]:
     },
 )
 async def create_markdown_cell(args: dict[str, Any]) -> dict[str, Any]:
+    h = harness()
     position = args["position"]
     code = args["code"]
     title = args["title"]
@@ -157,6 +163,7 @@ async def create_markdown_cell(args: dict[str, Any]) -> dict[str, Any]:
     },
 )
 async def edit_cell(args: dict[str, Any]) -> dict[str, Any]:
+    h = harness()
     cell_id = args["cell_id"]
     new_code = args["new_code"]
     title = args["title"]
@@ -191,6 +198,45 @@ async def edit_cell(args: dict[str, Any]) -> dict[str, Any]:
         "success": False,
     })
 
+
+@tool(
+    "run_cell",
+    "Run an existing code cell.",
+    {
+        "type": "object",
+        "properties": {
+            "cell_id": {"type": "string", "description": "ID of the cell to run"},
+            "title": {"type": "string", "description": "Name of the cell to run"},
+            "action_summary": {
+                "type": "string",
+                "description": "Summary of the purpose of the run.",
+            },
+        },
+        "required": ["cell_id", "title", "action_summary"],
+    },
+)
+async def run_cell(args: dict[str, Any]) -> dict[str, Any]:
+    h = harness()
+    cell_id = args["cell_id"]
+    title = args["title"]
+    action_summary = args["action_summary"]
+
+    await h.send({
+        "type": "agent_action",
+        "action": "run_cell",
+        "params": {"cell_id": cell_id},
+    })
+    h.executing_cells.add(str(cell_id))
+
+    return ok({
+        "tool_name": "run_cell",
+        "summary": f"Cell {cell_id} execution started",
+        "cell_id": cell_id,
+        "cell_name": title,
+        "message": action_summary,
+        "success": True,
+    })
+
 # todo(rteqs): every other tool in the current harness
 
 # todo(rteqs): idk splitting them actually helps, i.e. one big mcp server or multiple small. maybe for subagents that we want to limit capability so context window stays small
@@ -198,6 +244,7 @@ notebook_tools = [
     create_cell,
     create_markdown_cell,
     edit_cell,
+    run_cell,
     # delete_cell,
     # run_cell,
     # stop_cell,
