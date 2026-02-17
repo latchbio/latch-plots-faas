@@ -365,18 +365,25 @@ class AgentHarness:
     async def handle_init(self, msg: dict[str, object]) -> None:
         self.init_tools()
 
+        system_prompt_path = context_root.parent / "system_prompt.md"
+        self.system_prompt = system_prompt_path.read_text()
+
         self.client = ClaudeSDKClient(
             options=ClaudeAgentOptions(
+                system_prompt=self.system_prompt,
                 include_partial_messages=True,
+                # mcp_servers=
                 allowed_tools=[
                     "Bash",
                     "Read",
-                ],  # todo(rteqs): all our mcp servers and all built-in tools
+                    # "mcp__notebook-tools__crate_cell" # note: example
+                    # todo(rteqs): all our mcp servers and all built-in tools
+                ],
+                permission_mode="bypassPermissions",
+                model="claude-opus-4-5-20251101",  # todo(rteqs): use 4.6 for auto compaction
+                max_thinking_tokens=4096,
             )
         )
-
-        system_prompt_path = context_root.parent / "system_prompt.md"
-        self.system_prompt = system_prompt_path.read_text()
 
         await self.send({"type": "agent_status", "status": "ready"})
         print("[agent] Initialization complete")
@@ -474,6 +481,8 @@ class AgentHarness:
         }
 
     async def update_system_prompt(self, msg: dict[str, object]) -> dict:
+        assert self.client is not None
+
         new_content = msg.get("content")
         if not isinstance(new_content, str):
             return {"status": "error", "error": "Invalid content"}
@@ -481,6 +490,7 @@ class AgentHarness:
         system_prompt_path = context_root.parent / "system_prompt.md"
         system_prompt_path.write_text(new_content)
         self.system_prompt = new_content
+        self.client.options.system_prompt = new_content
 
         full_prompt = await self.get_full_prompt()
         return {"status": "success", **full_prompt}
