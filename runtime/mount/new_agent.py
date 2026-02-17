@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import socket
+import subprocess  # noqa: S404
 import sys
 import time
 import traceback
@@ -13,16 +14,30 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
-from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
-from claude_agent_sdk.types import (
-    AssistantMessage,
-    ResultMessage,
-    StreamEvent,
-    SystemMessage,
-    TextBlock,
-    ThinkingBlock,
-    ToolUseBlock,
-)
+try:
+    from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
+    from claude_agent_sdk.types import (
+        AssistantMessage,
+        ResultMessage,
+        StreamEvent,
+        SystemMessage,
+        TextBlock,
+        ThinkingBlock,
+        ToolUseBlock,
+    )
+except ImportError:
+    print("[agent] claude_agent_sdk missing, installing...", flush=True)
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", "claude-agent-sdk"])
+    from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
+    from claude_agent_sdk.types import (
+        AssistantMessage,
+        ResultMessage,
+        StreamEvent,
+        SystemMessage,
+        TextBlock,
+        ThinkingBlock,
+        ToolUseBlock,
+    )
 from lplots import _inject
 from socketio_thread import SocketIoThread
 from utils import auth_token_sdk, nucleus_url
