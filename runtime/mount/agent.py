@@ -3137,9 +3137,12 @@ class AgentHarness:
         except APIStatusError as e:
             print(f"[agent] Stream error (status={e.status_code}): {e}")
 
+            should_clear_history = "prompt is too long" in str(e).lower()
             should_contact_support = 400 <= e.status_code < 500 and e.status_code != 429
 
-            if should_contact_support:
+            if should_clear_history:
+                user_message = "This conversation is too long for the agent to continue. Clear history and try again."
+            elif should_contact_support:
                 user_message = "An unexpected error occurred. Please try again."
             else:
                 user_message = "Our model provider is experiencing a temporary issue. Please try again in a few minutes."
@@ -3147,6 +3150,7 @@ class AgentHarness:
             error_payload = {
                 "message": user_message,
                 "should_contact_support": should_contact_support,
+                "should_clear_history": should_clear_history,
             }
 
             await self._insert_history(
