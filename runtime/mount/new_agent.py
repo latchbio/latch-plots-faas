@@ -100,15 +100,6 @@ class AgentHarness:
 
         await self.conn.send(msg)
 
-    async def _notify_history_updated(self, *, request_id: str | None = None) -> None:
-        await self.send({
-            "type": "agent_history_updated",
-            "session_id": str(self.agent_session_id)
-            if self.agent_session_id is not None
-            else None,
-            **({"request_id": request_id} if request_id else {}),
-        })
-
     async def refresh_cells_context(self) -> str:
         context_result, reactivity_result = await asyncio.gather(
             self.atomic_operation("get_context"),
@@ -239,12 +230,6 @@ class AgentHarness:
             )
 
         return "\n".join(cell_lines)
-
-    async def _mark_all_history_removed(self) -> None:
-        assert self.client is not None
-
-        await self.client.query(prompt="/slash")
-        await self._notify_history_updated()
 
     async def atomic_operation(
         self, action: str, params: dict | None = None, timeout: float = 10.0
@@ -399,6 +384,7 @@ class AgentHarness:
         # todo(rteqs): planning stuff
 
     async def handle_query(self, msg: dict[str, object]) -> None:
+        assert self.client is not None
         query = msg.get("query", "")
         request_id = msg.get("request_id")
         contextual_node_data = msg.get("contextual_node_data")
@@ -419,15 +405,17 @@ class AgentHarness:
         if contextual_node_data:
             full_query = f"{query} \n\nHere is the context of the selected nodes the user would like to use: <ContextualNodeData>{json.dumps(contextual_node_data)}</ContextualNodeData>"
 
-        await self.pending_messages.put({
-            "type": "user_query",
-            "content": full_query,
-            "request_id": request_id,
-            "display_query": query,
-            "display_nodes": contextual_node_data,
-            "display_widgets": selected_widgets,
-            "template_version_id": template_version_id,
-        })
+        # await self.client.query({
+        #     "type": "user_query",
+        #     "content": full_query,
+        #     "request_id": request_id,
+        #     "display_query": query,
+        #     "display_nodes": contextual_node_data,
+        #     "display_widgets": selected_widgets,
+        #     "template_version_id": template_version_id,
+        # })
+        # todo(rteqs): inject context
+        await self.client.query(prompt=str(full_query))
 
         print(f"[agent] Message queued successfully (request_id={request_id})")
 
@@ -440,19 +428,20 @@ class AgentHarness:
 
         await self.client.interrupt()
 
-        self._start_conversation_loop()
-
     async def handle_clear_history(self) -> None:
-        await self._mark_all_history_removed()
+        assert self.client is not None
 
-        self.current_plan = None
-        self.pause_until_user_query = False
-
-        self._start_conversation_loop()
+        await self.client.query(prompt="/slash")
+        await self.send({
+            "type": "agent_history_updated",
+            "session_id": str(self.agent_session_id)
+            if self.agent_session_id is not None
+            else None,
+            "request_id": None,
+        })
 
     async def get_full_prompt(self) -> dict:
         self.system_prompt = (context_root.parent / "system_prompt.md").read_text()
-        messages = await self._build_messages_from_db()
 
         def build_tree(path: Path, prefix: str = "") -> list[str]:
             lines = []
@@ -470,12 +459,11 @@ class AgentHarness:
         tree_lines.extend(build_tree(context_root, "  "))
         tree_content = "\n".join(tree_lines)
 
-        truncated_messages = self._prepare_messages_for_inference(messages)
-
+        # fixme(rteqs): figure out what to do here
         return {
             "system_prompt": self.system_prompt,
-            "messages": messages,
-            "truncated_messages": truncated_messages,
+            # "messages": messages,
+            # "truncated_messages": truncated_messages,
             "model": self.mode_config.get(
                 self.mode, ("claude-opus-4-5-20251101", 1024)
             )[0],
@@ -497,7 +485,7 @@ class AgentHarness:
         full_prompt = await self.get_full_prompt()
         return {"status": "success", **full_prompt}
 
-    # todo(rteqs): rip a generator for handle_query 
+    # todo(rteqs): rip a generator for handle_query
     async def accept(self) -> None:
         msg = await self.conn.recv()
         msg_type = msg.get("type")
