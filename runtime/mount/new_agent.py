@@ -485,8 +485,22 @@ class AgentHarness:
         })
 
         try:
+            print(f"[agent] starting SDK query (request_id={request_id})")
             await self.client.query(prompt=prompt, session_id=session_id)
-            async for msg in self.client.receive_response():
+            receive_iter = self.client.receive_response().__aiter__()
+            while True:
+                try:
+                    msg = await asyncio.wait_for(receive_iter.__anext__(), timeout=90.0)
+                except StopAsyncIteration:
+                    break
+                except TimeoutError:
+                    await self.send({
+                        "type": "agent_error",
+                        "error": "Timed out waiting for model response from Claude runtime",
+                        "fatal": False,
+                    })
+                    break
+
                 if isinstance(msg, StreamEvent):
                     await self._handle_stream_event(msg.event)
                 elif isinstance(msg, AssistantMessage):
@@ -503,6 +517,8 @@ class AgentHarness:
                         })
                 elif isinstance(msg, SystemMessage):
                     continue
+
+            print(f"[agent] finished SDK query (request_id={request_id})")
         except Exception as e:
             await self.send({
                 "type": "agent_error",
@@ -549,6 +565,11 @@ class AgentHarness:
     _context_init_task: asyncio.Task | None = None
 
     async def handle_init(self, msg: dict[str, object]) -> None:
+        if self.client is not None:
+            print("[agent] SDK client already initialized; skipping re-init")
+            await self.send({"type": "agent_status", "status": "ready"})
+            return
+
         self.init_tools()
 
         system_prompt_path = context_root.parent / "system_prompt.md"
@@ -561,6 +582,11 @@ class AgentHarness:
             "ANTHROPIC_AUTH_TOKEN": sdk_auth_token,
             "ANTHROPIC_API_KEY": sdk_auth_token,
         }
+
+        def _sdk_stderr(line: str) -> None:
+            stripped = line.rstrip()
+            if stripped != "":
+                print(f"[claude] {stripped}", flush=True)
 
         self.client = ClaudeSDKClient(
             options=ClaudeAgentOptions(
@@ -577,9 +603,16 @@ class AgentHarness:
                 model="claude-opus-4-5-20251101",
                 max_thinking_tokens=4096,
                 env=sdk_env,
+                stderr=_sdk_stderr,
             )
         )
         await self.client.connect()
+
+        try:
+            mcp_status = await self.client.get_mcp_status()
+            print(f"[agent] MCP status: {json.dumps(mcp_status)}")
+        except Exception as e:
+            print(f"[agent] Failed to fetch MCP status: {e!s}")
 
         await self.send({"type": "agent_status", "status": "ready"})
         print("[agent] Initialization complete")
