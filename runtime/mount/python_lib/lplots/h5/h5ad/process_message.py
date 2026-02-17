@@ -89,6 +89,11 @@ async def process_h5ad_request(
                 """Check if a newer init_data request has superseded this one."""
                 return _init_data_request_num.get(widget_session_key) != current_request_num
 
+            def make_cancelled_response() -> dict[str, Any]:
+                return make_response(
+                    error="init_data request canceled because a newer request was received"
+                )
+
             init_obsm_key = msg.get("obsm_key")
             possible_obsm_keys = adata.obsm_keys()
             if init_obsm_key is None:
@@ -129,7 +134,7 @@ async def process_h5ad_request(
             # Yield to event loop and check if request is stale
             await asyncio.sleep(0)
             if is_request_stale():
-                return None
+                return make_cancelled_response()
 
             obsm = None
             if init_obsm_key is not None:
@@ -138,7 +143,7 @@ async def process_h5ad_request(
             # Check again after potentially expensive obsm fetch
             await asyncio.sleep(0)
             if is_request_stale():
-                return None
+                return make_cancelled_response()
 
             obs = None
             if init_obs_key is not None:
@@ -147,7 +152,7 @@ async def process_h5ad_request(
             # Check again after potentially expensive obs fetch
             await asyncio.sleep(0)
             if is_request_stale():
-                return None
+                return make_cancelled_response()
 
             gene_column = None
             if init_var_key is not None and init_obs_key is None:
@@ -158,7 +163,7 @@ async def process_h5ad_request(
             # Final check before building response
             await asyncio.sleep(0)
             if is_request_stale():
-                return None
+                return make_cancelled_response()
 
             global alignment_is_running
 
