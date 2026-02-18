@@ -221,6 +221,7 @@ async def run_cell(args: dict[str, Any]) -> dict[str, Any]:
     title = args["title"]
     action_summary = args["action_summary"]
 
+    print(f"[tool] run_cell id={cell_id} title={title!r}")
     await h.send({
         "type": "agent_action",
         "action": "run_cell",
