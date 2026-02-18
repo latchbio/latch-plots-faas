@@ -761,6 +761,8 @@ class AgentHarness:
                     "mcp__notebook-tools__create_markdown_cell",
                     "mcp__notebook-tools__edit_cell",
                     "mcp__notebook-tools__run_cell",
+                    "mcp__notebook-tools__update_plan",
+                    "mcp__notebook-tools__submit_response",
                 ],
                 permission_mode="acceptEdits",
                 model="claude-sonnet-4-5",

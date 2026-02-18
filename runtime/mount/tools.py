@@ -6,6 +6,18 @@ from typing import Any
 from claude_agent_sdk import create_sdk_mcp_server, tool
 from lplots import _inject
 
+
+VALID_NEXT_STATUSES = {
+    "executing",
+    "fixing",
+    "thinking",
+    "awaiting_user_response",
+    "awaiting_cell_execution",
+    "awaiting_user_widget_input",
+    "done",
+}
+
+
 def ok(d: dict) -> dict[str, Any]:
     return {"content": [{"type": "text", "text": json.dumps(d)}]}
 
@@ -238,6 +250,202 @@ async def run_cell(args: dict[str, Any]) -> dict[str, Any]:
         "success": True,
     })
 
+
+@tool(
+    "update_plan",
+    "Update the in-memory execution plan shown in the agent UI.",
+    {
+        "type": "object",
+        "properties": {
+            "plan": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "id": {"type": "string"},
+                        "description": {"type": "string"},
+                        "status": {
+                            "type": "string",
+                            "enum": ["todo", "in_progress", "done", "cancelled"],
+                        },
+                    },
+                    "required": ["id", "description", "status"],
+                },
+            },
+            "plan_diff": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "id": {"type": "string"},
+                        "action": {
+                            "type": "string",
+                            "enum": ["add", "update", "complete", "remove"],
+                        },
+                        "description": {"type": "string"},
+                    },
+                    "required": ["id", "action"],
+                },
+            },
+            "plan_update_overview": {"type": "string"},
+        },
+        "required": ["plan", "plan_diff", "plan_update_overview"],
+    },
+)
+async def update_plan(args: dict[str, Any]) -> dict[str, Any]:
+    h = harness()
+    try:
+        plan_items = args.get("plan", [])
+        plan_diff = args.get("plan_diff", [])
+        plan_update_overview = args.get("plan_update_overview", "")
+
+        if not isinstance(plan_items, list):
+            return ok({
+                "tool_name": "update_plan",
+                "success": False,
+                "summary": "Invalid plan: expected list",
+            })
+        if not isinstance(plan_diff, list):
+            return ok({
+                "tool_name": "update_plan",
+                "success": False,
+                "summary": "Invalid plan_diff: expected list",
+            })
+
+        h.current_plan = {"steps": plan_items}
+
+        print(f"[tool] update_plan: {plan_update_overview}")
+        for item in plan_items:
+            if isinstance(item, dict):
+                print(
+                    f"  [{item.get('status')}] {item.get('id')}: {item.get('description')}"
+                )
+        for diff in plan_diff:
+            if isinstance(diff, dict):
+                print(f"  diff: [{diff.get('action')}] {diff.get('id')}")
+
+        summary = (
+            plan_update_overview if isinstance(plan_update_overview, str) and plan_update_overview.strip() != "" else "Plan updated"
+        )
+        return ok({
+            "tool_name": "update_plan",
+            "success": True,
+            "summary": summary,
+        })
+    except Exception as e:
+        print(f"[tool] update_plan error: {e!s}")
+        return ok({
+            "tool_name": "update_plan",
+            "success": False,
+            "summary": f"Error updating plan: {e!s}",
+        })
+
+
+@tool(
+    "submit_response",
+    (
+        "Submit user-facing structured response and set next_status. "
+        "At least one of summary or questions is required."
+    ),
+    {
+        "type": "object",
+        "properties": {
+            "summary": {"type": "string"},
+            "questions": {"type": "string"},
+            "next_status": {"type": "string", "enum": sorted(VALID_NEXT_STATUSES)},
+            "expected_widgets": {
+                "type": "array",
+                "items": {"type": "string"},
+            },
+            "continue": {"type": "boolean", "default": False},
+        },
+        "required": ["next_status"],
+    },
+)
+async def submit_response(args: dict[str, Any]) -> dict[str, Any]:
+    h = harness()
+    try:
+        summary = args.get("summary")
+        if summary is not None and not isinstance(summary, str):
+            summary = None
+
+        questions = args.get("questions")
+        if questions is not None and not isinstance(questions, str):
+            questions = None
+
+        if (summary is None or summary.strip() == "") and (
+            questions is None or questions.strip() == ""
+        ):
+            return ok({
+                "tool_name": "submit_response",
+                "success": False,
+                "summary": "Please provide at least one of summary or questions.",
+            })
+
+        next_status = args.get("next_status")
+        if not isinstance(next_status, str) or next_status not in VALID_NEXT_STATUSES:
+            return ok({
+                "tool_name": "submit_response",
+                "success": False,
+                "summary": "Please provide a valid next_status.",
+            })
+
+        should_continue = bool(args.get("continue", False))
+
+        expected_widgets_arg = args.get("expected_widgets", [])
+        expected_widgets: list[str] = []
+        if isinstance(expected_widgets_arg, list):
+            expected_widgets = [
+                str(widget_key)
+                for widget_key in expected_widgets_arg
+                if isinstance(widget_key, str) and widget_key.strip() != ""
+            ]
+
+        print("[tool] submit_response called with:")
+        print(f"  - next_status: {next_status}")
+        print(f"  - summary: {summary}")
+        print(f"  - questions: {questions}")
+        print(f"  - continue: {should_continue}")
+        print(f"  - expected_widgets: {expected_widgets}")
+        if should_continue:
+            print(
+                "[tool] submit_response: continue=true retained for compatibility; "
+                "SDK runtime controls actual turn continuation."
+            )
+
+        # Compatibility with old harness semantics.
+        if should_continue and h.executing_cells:
+            h.should_auto_continue = False
+            h.pending_auto_continue = True
+        else:
+            h.should_auto_continue = should_continue
+            h.pending_auto_continue = False
+
+        terminal_statuses = {"done", "awaiting_user_response"}
+        h.pause_until_user_query = (
+            not should_continue and next_status in terminal_statuses
+        )
+
+        h.current_status = next_status
+        if next_status == "awaiting_user_widget_input":
+            h.expected_widgets = {widget_key: None for widget_key in expected_widgets}
+        else:
+            h.expected_widgets.clear()
+
+        return ok({
+            "tool_name": "submit_response",
+            "success": True,
+            "summary": "Response submitted successfully",
+            "next_status": next_status,
+        })
+    except Exception as e:
+        print(f"[tool] submit_response error: {e!s}")
+        return ok({
+            "tool_name": "submit_response",
+            "success": False,
+            "summary": f"Error submitting response: {e!s}",
+        })
+
 # todo(rteqs): every other tool in the current harness
 
 # todo(rteqs): idk splitting them actually helps, i.e. one big mcp server or multiple small. maybe for subagents that we want to limit capability so context window stays small
@@ -246,6 +454,8 @@ notebook_tools = [
     create_markdown_cell,
     edit_cell,
     run_cell,
+    update_plan,
+    submit_response,
     # delete_cell,
     # run_cell,
     # stop_cell,
