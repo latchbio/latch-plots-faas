@@ -8,6 +8,7 @@ import time
 import traceback
 import uuid
 from collections.abc import Callable, Iterable
+from contextlib import suppress
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -99,7 +100,7 @@ class AgentHarness:
     pending_messages: asyncio.Queue = field(default_factory=asyncio.Queue)
     conversation_task: asyncio.Task | None = None
     conversation_running: bool = False
-    agent_session_id: int | None = None
+    agent_session_id: str | None = None
     latest_notebook_context: dict = field(default_factory=dict)
     current_status: str | None = None
     expected_widgets: dict[str, object | None] = field(default_factory=dict)
@@ -111,6 +112,7 @@ class AgentHarness:
     in_memory_history: list[dict] = field(default_factory=list)
     mcp_servers: dict[str, object] = field(default_factory=dict)
     current_query_task: asyncio.Task | None = None
+    open_stream_blocks: dict[int, str] = field(default_factory=dict)
 
     mode_config: dict[Mode, tuple[str, int | None]] = field(
         default_factory=lambda: {
@@ -360,10 +362,96 @@ class AgentHarness:
             "context_limit": 200_000,
         })
 
+    def _current_sdk_session_id(self) -> str:
+        return self.agent_session_id or "default"
+
+    @staticmethod
+    def _normalize_session_id(raw_session_id: object) -> str | None:
+        if raw_session_id is None:
+            return None
+        session_id = str(raw_session_id).strip()
+        if session_id == "":
+            return None
+        return session_id
+
+    async def _close_open_stream_blocks(self) -> None:
+        if len(self.open_stream_blocks) == 0:
+            return
+
+        pending_blocks = sorted(self.open_stream_blocks)
+        print(f"[agent] Closing {len(pending_blocks)} dangling stream block(s): {pending_blocks}")
+        for block_index in pending_blocks:
+            await self.send({"type": "agent_stream_block_stop", "block_index": block_index})
+        self.open_stream_blocks.clear()
+
+    async def _wait_for_running_query_to_stop(self, timeout_seconds: float = 2.0) -> bool:
+        if self.current_query_task is None or self.current_query_task.done():
+            return True
+
+        try:
+            await asyncio.wait_for(self.current_query_task, timeout=timeout_seconds)
+            return True
+        except TimeoutError:
+            self.current_query_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await self.current_query_task
+            return False
+        except asyncio.CancelledError:
+            return True
+
+    async def _reset_for_new_session(self) -> None:
+        if len(self.pending_operations) > 0:
+            print(f"[agent] Failing {len(self.pending_operations)} pending operation(s) for new session")
+            for future in self.pending_operations.values():
+                if not future.done():
+                    future.set_result({
+                        "status": "error",
+                        "error": "Operation interrupted due to session change. Retry in the new session.",
+                    })
+            self.pending_operations.clear()
+
+        self.pause_until_user_query = False
+        self.executing_cells.clear()
+        self.pending_tool_calls.clear()
+        self.expected_widgets.clear()
+        self.open_stream_blocks.clear()
+        self.current_request_id = None
+
+        while not self.pending_messages.empty():
+            with suppress(asyncio.QueueEmpty):
+                self.pending_messages.get_nowait()
+
+    async def _run_control_query(
+        self,
+        *,
+        prompt: str,
+        timeout_submit_seconds: float = 10.0,
+        timeout_response_seconds: float = 30.0,
+    ) -> ResultMessage | None:
+        assert self.client is not None
+        session_id = self._current_sdk_session_id()
+        await asyncio.wait_for(
+            self.client.query(prompt=prompt, session_id=session_id),
+            timeout=timeout_submit_seconds,
+        )
+
+        receive_iter = self.client.receive_response().__aiter__()
+        while True:
+            try:
+                msg = await asyncio.wait_for(
+                    receive_iter.__anext__(),
+                    timeout=timeout_response_seconds,
+                )
+            except StopAsyncIteration:
+                return None
+            if isinstance(msg, ResultMessage):
+                return msg
+
     async def _handle_stream_event(self, event: dict[str, Any]) -> None:
         event_type = event.get("type")
 
         if event_type == "message_start":
+            self.open_stream_blocks.clear()
             usage = event.get("message", {}).get("usage")
             if isinstance(usage, dict):
                 await self._send_usage_update(usage)
@@ -373,6 +461,10 @@ class AgentHarness:
             block_index = int(event.get("index", -1))
             block = event.get("content_block", {})
             block_type = block.get("type", "unknown")
+            if block_index >= 0:
+                if block_index in self.open_stream_blocks:
+                    await self.send({"type": "agent_stream_block_stop", "block_index": block_index})
+                self.open_stream_blocks[block_index] = str(block_type)
             payload: dict[str, object] = {
                 "type": "agent_stream_block_start",
                 "block_index": block_index,
@@ -381,6 +473,10 @@ class AgentHarness:
             if block_type == "tool_use":
                 payload["block_id"] = str(block.get("id", ""))
                 payload["block_name"] = str(block.get("name", ""))
+                print(
+                    "[agent] tool_use block started "
+                    f"index={block_index} name={payload['block_name']} id={payload['block_id']}"
+                )
             await self.send(payload)
             return
 
@@ -388,6 +484,20 @@ class AgentHarness:
             block_index = int(event.get("index", -1))
             delta = event.get("delta", {})
             delta_type = delta.get("type")
+            block_type_by_delta = {
+                "text_delta": "text",
+                "thinking_delta": "thinking",
+                "input_json_delta": "tool_use",
+            }
+            if block_index >= 0 and block_index not in self.open_stream_blocks:
+                inferred_block_type = block_type_by_delta.get(str(delta_type), "unknown")
+                self.open_stream_blocks[block_index] = inferred_block_type
+                await self.send({
+                    "type": "agent_stream_block_start",
+                    "block_index": block_index,
+                    "block_type": inferred_block_type,
+                })
+
             if delta_type == "text_delta":
                 await self.send({
                     "type": "agent_stream_delta",
@@ -412,9 +522,12 @@ class AgentHarness:
             return
 
         if event_type == "content_block_stop":
+            block_index = int(event.get("index", -1))
+            if block_index in self.open_stream_blocks:
+                self.open_stream_blocks.pop(block_index, None)
             await self.send({
                 "type": "agent_stream_block_stop",
-                "block_index": int(event.get("index", -1)),
+                "block_index": block_index,
             })
             return
 
@@ -422,6 +535,13 @@ class AgentHarness:
             usage = event.get("usage")
             if isinstance(usage, dict):
                 await self._send_usage_update(usage)
+            return
+
+        if event_type == "message_stop":
+            message_usage = event.get("message", {}).get("usage")
+            if isinstance(message_usage, dict):
+                await self._send_usage_update(message_usage)
+            await self._close_open_stream_blocks()
             return
 
     async def _emit_assistant_fallback(self, msg: AssistantMessage) -> None:
@@ -477,9 +597,8 @@ class AgentHarness:
         assert self.client is not None
 
         self.current_request_id = request_id
-        session_id = (
-            str(self.agent_session_id) if self.agent_session_id is not None else "default"
-        )
+        session_id = self._current_sdk_session_id()
+        self.open_stream_blocks.clear()
 
         await self.send({
             "type": "agent_stream_start",
@@ -487,7 +606,9 @@ class AgentHarness:
         })
 
         try:
-            print(f"[agent] starting SDK query (request_id={request_id})")
+            print(
+                f"[agent] starting SDK query (request_id={request_id}, session_id={session_id})"
+            )
             try:
                 await asyncio.wait_for(
                     self.client.query(prompt=prompt, session_id=session_id), timeout=10.0
@@ -543,6 +664,7 @@ class AgentHarness:
                 "fatal": False,
             })
         finally:
+            await self._close_open_stream_blocks()
             self.current_request_id = None
             self.current_query_task = None
             await self.send({"type": "agent_stream_complete"})
@@ -582,7 +704,19 @@ class AgentHarness:
     _context_init_task: asyncio.Task | None = None
 
     async def handle_init(self, msg: dict[str, object]) -> None:
+        new_session_id = self._normalize_session_id(msg.get("session_id"))
+        session_changed = new_session_id is not None and new_session_id != self.agent_session_id
+        if session_changed:
+            print(f"[agent] Session initialized/changed: {new_session_id}")
+            self.agent_session_id = new_session_id
+
         if self.client is not None:
+            if session_changed:
+                if self.current_query_task is not None and not self.current_query_task.done():
+                    print("[agent] Interrupting running query due to session change")
+                    await self.client.interrupt()
+                    await self._wait_for_running_query_to_stop()
+                await self._reset_for_new_session()
             print("[agent] SDK client already initialized; skipping re-init")
             await self.send({"type": "agent_status", "status": "ready"})
             return
@@ -634,6 +768,7 @@ class AgentHarness:
             )
         )
         await self.client.connect()
+        self.initialized = True
 
         try:
             mcp_status = await self.client.get_mcp_status()
@@ -642,7 +777,10 @@ class AgentHarness:
             print(f"[agent] Failed to fetch MCP status: {e!s}")
 
         await self.send({"type": "agent_status", "status": "ready"})
-        print("[agent] Initialization complete")
+        print(
+            "[agent] Initialization complete "
+            f"(session_id={self._current_sdk_session_id()})"
+        )
 
         # todo(rteqs): planning stuff
 
@@ -680,7 +818,10 @@ class AgentHarness:
             self._run_query(prompt=str(full_query), request_id=request_id)
         )
 
-        print(f"[agent] Message queued successfully (request_id={request_id})")
+        print(
+            "[agent] Message queued successfully "
+            f"(request_id={request_id}, session_id={self._current_sdk_session_id()})"
+        )
 
     async def handle_cancel(self, msg: dict[str, object]) -> None:
         # todo(rteqs): idk if we stil need a request id
@@ -689,25 +830,65 @@ class AgentHarness:
 
         assert self.client is not None
 
-        await self.client.interrupt()
+        if self.current_query_task is None or self.current_query_task.done():
+            await self.send({
+                "type": "agent_error",
+                "error": "No active query to cancel.",
+                "fatal": False,
+            })
+            return
 
-        if self.current_query_task is not None and not self.current_query_task.done():
-            try:
-                await asyncio.wait_for(self.current_query_task, timeout=2.0)
-            except TimeoutError:
-                self.current_query_task.cancel()
-            except asyncio.CancelledError:
-                pass
+        await self.client.interrupt()
+        completed_gracefully = await self._wait_for_running_query_to_stop()
+        if completed_gracefully:
+            print(f"[agent] Cancel completed for request {request_id}")
+        else:
+            print(f"[agent] Cancel forced task cancellation for request {request_id}")
 
     async def handle_clear_history(self) -> None:
         assert self.client is not None
 
-        await self.client.query(prompt="/clear")
+        if self.current_query_task is not None and not self.current_query_task.done():
+            await self.send({
+                "type": "agent_error",
+                "error": "Cannot clear history while a query is running. Cancel first.",
+                "fatal": False,
+            })
+            return
+
+        print(f"[agent] Clearing SDK session history (session_id={self._current_sdk_session_id()})")
+        try:
+            result = await self._run_control_query(prompt="/clear")
+            if result is not None:
+                print(
+                    "[agent] Clear history result "
+                    f"subtype={result.subtype} is_error={result.is_error} result={result.result!r}"
+                )
+                if result.is_error:
+                    await self.send({
+                        "type": "agent_error",
+                        "error": result.result or "Failed to clear history",
+                        "fatal": False,
+                    })
+                    return
+        except TimeoutError:
+            await self.send({
+                "type": "agent_error",
+                "error": "Timed out while clearing history.",
+                "fatal": False,
+            })
+            return
+        except Exception as e:
+            await self.send({
+                "type": "agent_error",
+                "error": f"Failed to clear history: {e!s}",
+                "fatal": False,
+            })
+            return
+
         await self.send({
             "type": "agent_history_updated",
-            "session_id": str(self.agent_session_id)
-            if self.agent_session_id is not None
-            else None,
+            "session_id": self.agent_session_id,
             "request_id": None,
         })
 
