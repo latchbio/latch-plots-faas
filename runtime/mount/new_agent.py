@@ -40,7 +40,7 @@ except ImportError:
     )
 from lplots import _inject
 from socketio_thread import SocketIoThread
-from utils import auth_token_sdk, nucleus_url
+from utils import auth_token_sdk, nucleus_url, sdk_token
 
 sys.stdout.reconfigure(line_buffering=True)
 
@@ -592,13 +592,23 @@ class AgentHarness:
         system_prompt_path = context_root.parent / "system_prompt.md"
         self.system_prompt = system_prompt_path.read_text()
 
-        sdk_base_url = f"{nucleus_url}/infer/plots-agent/anthropic"
-        sdk_auth_token = auth_token_sdk
-        sdk_env = {
-            "ANTHROPIC_BASE_URL": sdk_base_url,
-            "ANTHROPIC_AUTH_TOKEN": sdk_auth_token,
-            "ANTHROPIC_API_KEY": sdk_auth_token,
-        }
+        direct_anthropic_key = os.environ.get("AGENT_SDK_DIRECT_ANTHROPIC_KEY", "").strip()
+        if direct_anthropic_key != "":
+            # Direct mode: bypass Nucleus proxy and call Anthropic directly.
+            sdk_env = {
+                "ANTHROPIC_AUTH_TOKEN": direct_anthropic_key,
+                "ANTHROPIC_API_KEY": direct_anthropic_key,
+            }
+            print("[agent] SDK gateway mode: direct-anthropic")
+        else:
+            sdk_base_url = f"{nucleus_url}/infer/plots-agent/anthropic"
+            sdk_auth_token = sdk_token if sdk_token != "" else auth_token_sdk
+            sdk_env = {
+                "ANTHROPIC_BASE_URL": sdk_base_url,
+                "ANTHROPIC_AUTH_TOKEN": sdk_auth_token,
+                "ANTHROPIC_API_KEY": sdk_auth_token,
+            }
+            print(f"[agent] SDK gateway mode: nucleus-proxy ({sdk_base_url})")
 
         def _sdk_stderr(line: str) -> None:
             stripped = line.rstrip()
