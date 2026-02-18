@@ -653,6 +653,8 @@ class AgentHarness:
                             "error": msg.result or "Claude query failed",
                             "fatal": False,
                         })
+                    # ResultMessage is terminal for the current query.
+                    break
                 elif isinstance(msg, SystemMessage):
                     continue
 
