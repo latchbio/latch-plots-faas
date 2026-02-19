@@ -709,6 +709,35 @@ class AgentHarness:
             self.current_query_task = None
             await self.send({"type": "agent_stream_complete"})
 
+    async def _run_query_with_turn_prompt(
+        self,
+        *,
+        query: str,
+        request_id: str | None,
+    ) -> None:
+        assert self.client is not None
+
+        try:
+            turn_system_prompt = self._compose_turn_system_prompt()
+            self.client.options.system_prompt = turn_system_prompt
+            turn_prompt = await self._build_turn_prompt(query)
+            print(
+                "[agent] Turn prompt ready "
+                f"(behavior={self.behavior.value}, "
+                f"has_plan={self.current_plan is not None}, "
+                f"notebook_chars={len(self.latest_notebook_state or '')})"
+            )
+        except Exception as e:
+            await self.send({
+                "type": "agent_error",
+                "error": f"Failed to build turn prompt: {e!s}",
+                "fatal": False,
+            })
+            self.current_query_task = None
+            return
+
+        await self._run_query(prompt=turn_prompt, request_id=request_id)
+
     # async def _run_quick_inference(self, prompt: str) -> str:
     #     messages = [
     #         {
@@ -856,26 +885,8 @@ class AgentHarness:
             })
             return
 
-        try:
-            turn_system_prompt = self._compose_turn_system_prompt()
-            self.client.options.system_prompt = turn_system_prompt
-            turn_prompt = await self._build_turn_prompt(str(full_query))
-            print(
-                "[agent] Turn prompt ready "
-                f"(behavior={self.behavior.value}, "
-                f"has_plan={self.current_plan is not None}, "
-                f"notebook_chars={len(self.latest_notebook_state or '')})"
-            )
-        except Exception as e:
-            await self.send({
-                "type": "agent_error",
-                "error": f"Failed to build turn prompt: {e!s}",
-                "fatal": False,
-            })
-            return
-
         self.current_query_task = asyncio.create_task(
-            self._run_query(prompt=turn_prompt, request_id=request_id)
+            self._run_query_with_turn_prompt(query=str(full_query), request_id=request_id)
         )
 
         print(
