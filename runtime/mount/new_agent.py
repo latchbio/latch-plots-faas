@@ -262,6 +262,44 @@ class AgentHarness:
 
         return "\n".join(cell_lines)
 
+    def _behavior_file_name(self) -> str:
+        return (
+            "proactive.md"
+            if self.behavior == Behavior.proactive
+            else "step_by_step.md"
+        )
+
+    def _compose_turn_system_prompt(self) -> str:
+        self.system_prompt = (context_root.parent / "system_prompt.md").read_text()
+        assert self.system_prompt is not None
+
+        behavior_file = self._behavior_file_name()
+        turn_behavior_content = (context_root / "turn_behavior" / behavior_file).read_text()
+        examples_content = (context_root / "examples" / behavior_file).read_text()
+
+        final_system_prompt = self.system_prompt.replace(
+            "TURN_BEHAVIOR_PLACEHOLDER",
+            f"<turn_behavior>\n{turn_behavior_content}\n</turn_behavior>",
+        )
+        return final_system_prompt.replace(
+            "EXAMPLES_PLACEHOLDER",
+            f"<examples>\n{examples_content}\n</examples>",
+        )
+
+    async def _build_turn_prompt(self, user_query: str) -> str:
+        notebook_state = await self.refresh_cells_context()
+        self.latest_notebook_state = notebook_state
+
+        context_blocks = [
+            f"<current_notebook_state>\n{notebook_state}\n</current_notebook_state>"
+        ]
+        if self.current_plan is not None:
+            plan_content = json.dumps(self.current_plan, indent=2)
+            context_blocks.append(f"<current_plan>\n{plan_content}\n</current_plan>")
+
+        context_blocks.append(f"<user_request>\n{user_query}\n</user_request>")
+        return "\n\n".join(context_blocks)
+
     async def atomic_operation(
         self, action: str, params: dict | None = None, timeout: float = 10.0
     ) -> dict:
@@ -818,8 +856,26 @@ class AgentHarness:
             })
             return
 
+        try:
+            turn_system_prompt = self._compose_turn_system_prompt()
+            self.client.options.system_prompt = turn_system_prompt
+            turn_prompt = await self._build_turn_prompt(str(full_query))
+            print(
+                "[agent] Turn prompt ready "
+                f"(behavior={self.behavior.value}, "
+                f"has_plan={self.current_plan is not None}, "
+                f"notebook_chars={len(self.latest_notebook_state or '')})"
+            )
+        except Exception as e:
+            await self.send({
+                "type": "agent_error",
+                "error": f"Failed to build turn prompt: {e!s}",
+                "fatal": False,
+            })
+            return
+
         self.current_query_task = asyncio.create_task(
-            self._run_query(prompt=str(full_query), request_id=request_id)
+            self._run_query(prompt=turn_prompt, request_id=request_id)
         )
 
         print(
