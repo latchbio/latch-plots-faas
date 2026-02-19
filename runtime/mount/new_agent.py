@@ -287,11 +287,17 @@ class AgentHarness:
         )
 
     async def _build_turn_prompt(self, user_query: str) -> str:
+        behavior_file = self._behavior_file_name()
+        turn_behavior_content = (context_root / "turn_behavior" / behavior_file).read_text()
+        examples_content = (context_root / "examples" / behavior_file).read_text()
+
         notebook_state = await self.refresh_cells_context()
         self.latest_notebook_state = notebook_state
 
         context_blocks = [
-            f"<current_notebook_state>\n{notebook_state}\n</current_notebook_state>"
+            f"<turn_behavior>\n{turn_behavior_content}\n</turn_behavior>",
+            f"<examples>\n{examples_content}\n</examples>",
+            f"<current_notebook_state>\n{notebook_state}\n</current_notebook_state>",
         ]
         if self.current_plan is not None:
             plan_content = json.dumps(self.current_plan, indent=2)
@@ -718,8 +724,6 @@ class AgentHarness:
         assert self.client is not None
 
         try:
-            turn_system_prompt = self._compose_turn_system_prompt()
-            self.client.options.system_prompt = turn_system_prompt
             turn_prompt = await self._build_turn_prompt(query)
             print(
                 "[agent] Turn prompt ready "
@@ -792,8 +796,7 @@ class AgentHarness:
 
         self.init_tools()
 
-        system_prompt_path = context_root.parent / "system_prompt.md"
-        self.system_prompt = system_prompt_path.read_text()
+        self.system_prompt = self._compose_turn_system_prompt()
 
         direct_anthropic_key = os.environ.get("AGENT_SDK_DIRECT_ANTHROPIC_KEY", "").strip()
         if direct_anthropic_key != "":
