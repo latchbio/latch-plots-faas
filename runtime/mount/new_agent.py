@@ -31,6 +31,7 @@ except ImportError:
         StreamEvent,
         SystemMessage,
     )
+from tools import MCP_ALLOWED_TOOL_NAMES, MCP_SERVER_NAME, agent_tools_mcp
 from lplots import _inject
 from socketio_thread import SocketIoThread
 from utils import auth_token_sdk, gql_query, nucleus_url, sdk_token
@@ -58,6 +59,7 @@ if sandbox_root:
 
 
 context_root = Path(__file__).parent / "agent_config" / "context"
+SDK_BUILTIN_ALLOWED_TOOLS = ["Read", "Grep", "Glob", "Edit", "Write", "Bash"]
 
 
 class Mode(Enum):
@@ -102,7 +104,12 @@ class AgentHarness:
     buffer: list[str] = field(default_factory=list)
     summarize_tasks: set[asyncio.Task] = field(default_factory=set)
     in_memory_history: list[dict] = field(default_factory=list)
-    mcp_servers: dict[str, object] = field(default_factory=dict)
+    mcp_servers: dict[str, object] = field(
+        default_factory=lambda: {MCP_SERVER_NAME: agent_tools_mcp}
+    )
+    mcp_allowed_tools: list[str] = field(
+        default_factory=lambda: list(MCP_ALLOWED_TOOL_NAMES)
+    )
     current_query_task: asyncio.Task | None = None
     open_stream_blocks: dict[int, str] = field(default_factory=dict)
 
@@ -468,11 +475,6 @@ class AgentHarness:
 
         self.mode = mode
         print(f"[agent] Mode changed to {mode.value}")
-
-    def init_tools(self) -> None:
-        from tools import notebook_mcp
-
-        self.mcp_servers = {"notebook-tools": notebook_mcp}
 
     async def _send_usage_update(self, usage: dict[str, Any]) -> None:
         await self.send({
@@ -919,8 +921,6 @@ class AgentHarness:
             await self.send({"type": "agent_status", "status": "ready"})
             return
 
-        self.init_tools()
-
         self.system_prompt = self._compose_turn_system_prompt()
 
         direct_anthropic_key = os.environ.get("AGENT_SDK_DIRECT_ANTHROPIC_KEY", "").strip()
@@ -952,12 +952,8 @@ class AgentHarness:
                 include_partial_messages=True,
                 mcp_servers=self.mcp_servers,
                 allowed_tools=[
-                    "mcp__notebook-tools__create_cell",
-                    "mcp__notebook-tools__create_markdown_cell",
-                    "mcp__notebook-tools__edit_cell",
-                    "mcp__notebook-tools__run_cell",
-                    "mcp__notebook-tools__update_plan",
-                    "mcp__notebook-tools__submit_response",
+                    *self.mcp_allowed_tools,
+                    *SDK_BUILTIN_ALLOWED_TOOLS,
                 ],
                 permission_mode="acceptEdits",
                 model="claude-sonnet-4-5",
