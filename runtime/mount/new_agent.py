@@ -1140,11 +1140,11 @@ class AgentHarness:
         tree_lines.extend(build_tree(context_root, "  "))
         tree_content = "\n".join(tree_lines)
 
-        # fixme(rteqs): figure out what to do here
+        # todo(tim): fix messages/truncated_messages/model
         return {
             "system_prompt": self.system_prompt,
-            # "messages": messages,
-            # "truncated_messages": truncated_messages,
+            "messages": [],
+            "truncated_messages": [],
             "model": self.mode_config.get(
                 self.mode, ("claude-opus-4-5-20251101", 1024)
             )[0],
