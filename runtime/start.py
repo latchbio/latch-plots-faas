@@ -35,6 +35,19 @@ env_vars = {
     "PATH": "/opt/mamba/envs/plots-faas/bin:" + os.environ["PATH"],
 }
 
+# Pass through selected agent toggles from parent env.
+for key in ("AGENT_SDK_DIRECT_ANTHROPIC_KEY", "AGENT_SKIP_DB_HISTORY"):
+    value = os.environ.get(key)
+    if value:
+        env_vars[key] = value
+
+# SSH-only fallback: allow mounting a direct Anthropic key via file for spike testing.
+direct_key_path = latch_p / "agent-sdk-direct-anthropic-key"
+if direct_key_path.exists():
+    direct_key = direct_key_path.read_text().strip()
+    if direct_key != "":
+        env_vars["AGENT_SDK_DIRECT_ANTHROPIC_KEY"] = direct_key
+
 os.system(
     "git -C /opt/latch/plots-faas remote add forgejo-mirror https://git.latch.bio/LatchBio/latch-plots-faas.git"
 )
@@ -48,6 +61,7 @@ os.system("git -C /opt/latch/plots-faas rev-parse HEAD > /opt/latch/plots_faas_v
 os.chdir("/opt/latch/plots-faas")
 
 os.system("/opt/mamba/envs/plots-faas/bin/pip install --upgrade latch")
+os.system("/opt/mamba/envs/plots-faas/bin/pip install --upgrade claude-agent-sdk")
 
 technology_docs = Path("/opt/latch/plots-faas/runtime/mount/agent_config/context/technology_docs")
 for sp_requirements in technology_docs.glob("*/requirements.txt"):
