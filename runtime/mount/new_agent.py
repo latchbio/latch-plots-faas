@@ -18,6 +18,7 @@ from typing import Any
 try:
     from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
     from claude_agent_sdk.types import (
+        AssistantMessage,
         ResultMessage,
         StreamEvent,
         SystemMessage,
@@ -27,6 +28,7 @@ except ImportError:
     subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", "claude-agent-sdk"])
     from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
     from claude_agent_sdk.types import (
+        AssistantMessage,
         ResultMessage,
         StreamEvent,
         SystemMessage,
@@ -490,8 +492,7 @@ class AgentHarness:
     def _current_sdk_session_id(self) -> str:
         return self.agent_session_id or "default"
 
-    @staticmethod
-    def _normalize_session_id(raw_session_id: object) -> str | None:
+    def _normalize_session_id(self, raw_session_id: object) -> str | None:
         if raw_session_id is None:
             return None
         session_id = str(raw_session_id).strip()
@@ -692,6 +693,64 @@ class AgentHarness:
             await self._close_open_stream_blocks()
             return
 
+    def _assistant_message_blocks_to_history(
+        self,
+        content: list[object],
+    ) -> dict[int, dict[str, object]]:
+        blocks: dict[int, dict[str, object]] = {}
+
+        for idx, block in enumerate(content):
+            block_type = getattr(block, "type", None)
+            if block_type == "text":
+                blocks[idx] = {
+                    "type": "text",
+                    "text": str(getattr(block, "text", "")),
+                }
+                continue
+
+            if block_type == "thinking":
+                thinking_block: dict[str, object] = {
+                    "type": "thinking",
+                    "thinking": str(getattr(block, "thinking", "")),
+                }
+                summary = getattr(block, "summary", None)
+                if isinstance(summary, str) and summary != "":
+                    thinking_block["summary"] = summary
+                blocks[idx] = thinking_block
+                continue
+
+            if block_type == "tool_use":
+                raw_input = getattr(block, "input", None)
+                parsed_input: dict[str, object]
+                if isinstance(raw_input, dict):
+                    parsed_input = raw_input
+                else:
+                    parsed_input = {}
+                blocks[idx] = {
+                    "type": "tool_use",
+                    "id": str(getattr(block, "id", "")),
+                    "name": str(getattr(block, "name", "")),
+                    "input": parsed_input,
+                }
+                continue
+
+            if block_type == "tool_result":
+                tool_result_block: dict[str, object] = {
+                    "type": "tool_result",
+                    "tool_use_id": str(getattr(block, "tool_use_id", "")),
+                }
+                raw_content = getattr(block, "content", None)
+                if isinstance(raw_content, (str, list)):
+                    tool_result_block["content"] = raw_content
+                elif raw_content is not None:
+                    tool_result_block["content"] = str(raw_content)
+                is_error = getattr(block, "is_error", None)
+                if isinstance(is_error, bool):
+                    tool_result_block["is_error"] = is_error
+                blocks[idx] = tool_result_block
+
+        return blocks
+
     async def _run_query(
         self,
         *,
@@ -748,6 +807,10 @@ class AgentHarness:
                     await self._handle_stream_event(
                         msg.event, collected_assistant_blocks=assistant_blocks_by_index
                     )
+                elif isinstance(msg, AssistantMessage):
+                    rebuilt_blocks = self._assistant_message_blocks_to_history(msg.content)
+                    if len(rebuilt_blocks) > 0:
+                        assistant_blocks_by_index = rebuilt_blocks
                 elif isinstance(msg, ResultMessage):
                     print(
                         "[agent] SDK result message "
@@ -798,7 +861,7 @@ class AgentHarness:
                         try:
                             parsed_input = json.loads(input_json)
                         except Exception:
-                            parsed_input = input_json
+                            parsed_input = {}
 
                     assistant_content.append({
                         "type": "tool_use",
