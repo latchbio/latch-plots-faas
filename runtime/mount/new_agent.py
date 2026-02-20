@@ -18,30 +18,22 @@ from typing import Any
 try:
     from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
     from claude_agent_sdk.types import (
-        AssistantMessage,
         ResultMessage,
         StreamEvent,
         SystemMessage,
-        TextBlock,
-        ThinkingBlock,
-        ToolUseBlock,
     )
 except ImportError:
     print("[agent] claude_agent_sdk missing, installing...", flush=True)
     subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", "claude-agent-sdk"])
     from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
     from claude_agent_sdk.types import (
-        AssistantMessage,
         ResultMessage,
         StreamEvent,
         SystemMessage,
-        TextBlock,
-        ThinkingBlock,
-        ToolUseBlock,
     )
 from lplots import _inject
 from socketio_thread import SocketIoThread
-from utils import auth_token_sdk, nucleus_url, sdk_token
+from utils import auth_token_sdk, gql_query, nucleus_url, sdk_token
 
 sys.stdout.reconfigure(line_buffering=True)
 
@@ -130,6 +122,93 @@ class AgentHarness:
             print(f"[agent] Sending message: {msg_type}")
 
         await self.conn.send(msg)
+
+    async def _notify_history_updated(self, *, request_id: str | None = None) -> None:
+        payload: dict[str, object] = {
+            "type": "agent_history_updated",
+            "session_id": self.agent_session_id,
+        }
+        if request_id is not None:
+            payload["request_id"] = request_id
+        await self.send(payload)
+
+    async def _insert_history(
+        self,
+        *,
+        event_type: str = "anthropic_message",
+        role: str = "user",
+        payload: dict[str, object],
+        request_id: str | None = None,
+        tx_id: str | None = None,
+        template_version_id: str | None = None,
+    ) -> None:
+        event_payload: dict[str, object] = {
+            "type": event_type,
+            "role": role,
+            "timestamp": int(time.time() * 1000),
+            **payload,
+        }
+
+        if skip_db_history:
+            self.in_memory_history.append({
+                "payload": event_payload,
+                "request_id": request_id,
+                "template_version_id": template_version_id,
+            })
+            await self._notify_history_updated(request_id=request_id)
+            return
+
+        if self.agent_session_id is None:
+            print("[agent] Skipping history write: missing agent_session_id")
+            return
+
+        variables = {
+            "sessionId": str(self.agent_session_id),
+            "eventType": event_type,
+            "payload": event_payload,
+            "requestId": request_id,
+            "txId": tx_id,
+            "templateVersionId": (
+                str(template_version_id) if template_version_id is not None else None
+            ),
+        }
+
+        await gql_query(
+            auth=auth_token_sdk,
+            query="""
+                mutation CreateAgentHistory($sessionId: BigInt!, $eventType: String!, $payload: JSON!, $requestId: String, $txId: String, $templateVersionId: BigInt) {
+                    createAgentHistory(input: {agentHistory: {sessionId: $sessionId, eventType: $eventType, payload: $payload, requestId: $requestId, txId: $txId, templateVersionId: $templateVersionId}}) {
+                        clientMutationId
+                    }
+                }
+            """,
+            variables=variables,
+        )
+
+        await self._notify_history_updated(request_id=request_id)
+
+    async def _mark_all_history_removed(self) -> None:
+        if skip_db_history:
+            self.in_memory_history.clear()
+            await self._notify_history_updated()
+            return
+
+        if self.agent_session_id is None:
+            print("[agent] Skipping clear history: missing agent_session_id")
+            return
+
+        await gql_query(
+            auth=auth_token_sdk,
+            query="""
+                mutation ClearAgentHistory($sessionId: BigInt!) {
+                    clearAgentHistory(input: {argSessionId: $sessionId}) {
+                        clientMutationId
+                    }
+                }
+            """,
+            variables={"sessionId": str(self.agent_session_id)},
+        )
+        await self._notify_history_updated()
 
     async def refresh_cells_context(self) -> str:
         context_result, reactivity_result = await asyncio.gather(
@@ -491,7 +570,12 @@ class AgentHarness:
             if isinstance(msg, ResultMessage):
                 return msg
 
-    async def _handle_stream_event(self, event: dict[str, Any]) -> None:
+    async def _handle_stream_event(
+        self,
+        event: dict[str, Any],
+        *,
+        collected_assistant_blocks: dict[int, dict[str, object]] | None = None,
+    ) -> None:
         event_type = event.get("type")
 
         if event_type == "message_start":
@@ -509,6 +593,23 @@ class AgentHarness:
                 if block_index in self.open_stream_blocks:
                     await self.send({"type": "agent_stream_block_stop", "block_index": block_index})
                 self.open_stream_blocks[block_index] = str(block_type)
+
+            if collected_assistant_blocks is not None and block_index >= 0:
+                if block_type == "text":
+                    collected_assistant_blocks[block_index] = {"type": "text", "text": ""}
+                elif block_type == "thinking":
+                    collected_assistant_blocks[block_index] = {
+                        "type": "thinking",
+                        "thinking": "",
+                    }
+                elif block_type == "tool_use":
+                    collected_assistant_blocks[block_index] = {
+                        "type": "tool_use",
+                        "id": str(block.get("id", "")),
+                        "name": str(block.get("name", "")),
+                        "input_json": "",
+                    }
+
             payload: dict[str, object] = {
                 "type": "agent_stream_block_start",
                 "block_index": block_index,
@@ -528,19 +629,6 @@ class AgentHarness:
             block_index = int(event.get("index", -1))
             delta = event.get("delta", {})
             delta_type = delta.get("type")
-            block_type_by_delta = {
-                "text_delta": "text",
-                "thinking_delta": "thinking",
-                "input_json_delta": "tool_use",
-            }
-            if block_index >= 0 and block_index not in self.open_stream_blocks:
-                inferred_block_type = block_type_by_delta.get(str(delta_type), "unknown")
-                self.open_stream_blocks[block_index] = inferred_block_type
-                await self.send({
-                    "type": "agent_stream_block_start",
-                    "block_index": block_index,
-                    "block_type": inferred_block_type,
-                })
 
             if delta_type == "text_delta":
                 await self.send({
@@ -563,6 +651,20 @@ class AgentHarness:
                     "block_type": "tool_use",
                     "delta": str(delta.get("partial_json", "")),
                 })
+
+            if collected_assistant_blocks is not None and block_index >= 0:
+                existing = collected_assistant_blocks.get(block_index)
+                if existing is not None:
+                    if delta_type == "text_delta":
+                        existing["text"] = str(existing.get("text", "")) + str(delta.get("text", ""))
+                    elif delta_type == "thinking_delta":
+                        existing["thinking"] = str(existing.get("thinking", "")) + str(
+                            delta.get("thinking", "")
+                        )
+                    elif delta_type == "input_json_delta":
+                        existing["input_json"] = str(existing.get("input_json", "")) + str(
+                            delta.get("partial_json", "")
+                        )
             return
 
         if event_type == "content_block_stop":
@@ -588,50 +690,6 @@ class AgentHarness:
             await self._close_open_stream_blocks()
             return
 
-    async def _emit_assistant_fallback(self, msg: AssistantMessage) -> None:
-        for idx, block in enumerate(msg.content):
-            if isinstance(block, TextBlock):
-                await self.send({
-                    "type": "agent_stream_block_start",
-                    "block_index": idx,
-                    "block_type": "text",
-                })
-                await self.send({
-                    "type": "agent_stream_delta",
-                    "block_index": idx,
-                    "block_type": "text",
-                    "delta": block.text,
-                })
-                await self.send({"type": "agent_stream_block_stop", "block_index": idx})
-            elif isinstance(block, ThinkingBlock):
-                await self.send({
-                    "type": "agent_stream_block_start",
-                    "block_index": idx,
-                    "block_type": "thinking",
-                })
-                await self.send({
-                    "type": "agent_stream_delta",
-                    "block_index": idx,
-                    "block_type": "thinking",
-                    "delta": block.thinking,
-                })
-                await self.send({"type": "agent_stream_block_stop", "block_index": idx})
-            elif isinstance(block, ToolUseBlock):
-                await self.send({
-                    "type": "agent_stream_block_start",
-                    "block_index": idx,
-                    "block_type": "tool_use",
-                    "block_id": block.id,
-                    "block_name": block.name,
-                })
-                await self.send({
-                    "type": "agent_stream_delta",
-                    "block_index": idx,
-                    "block_type": "tool_use",
-                    "delta": json.dumps(block.input),
-                })
-                await self.send({"type": "agent_stream_block_stop", "block_index": idx})
-
     async def _run_query(
         self,
         *,
@@ -643,6 +701,9 @@ class AgentHarness:
         self.current_request_id = request_id
         session_id = self._current_sdk_session_id()
         self.open_stream_blocks.clear()
+        run_started_at = time.perf_counter()
+        assistant_blocks_by_index: dict[int, dict[str, object]] = {}
+        terminal_error: str | None = None
 
         await self.send({
             "type": "agent_stream_start",
@@ -658,9 +719,10 @@ class AgentHarness:
                     self.client.query(prompt=prompt, session_id=session_id), timeout=10.0
                 )
             except TimeoutError:
+                terminal_error = "Timed out submitting prompt to Claude runtime"
                 await self.send({
                     "type": "agent_error",
-                    "error": "Timed out submitting prompt to Claude runtime",
+                    "error": terminal_error,
                     "fatal": False,
                 })
                 return
@@ -677,13 +739,13 @@ class AgentHarness:
                         "error": "Timed out waiting for model response from Claude runtime",
                         "fatal": False,
                     })
+                    terminal_error = "Timed out waiting for model response from Claude runtime"
                     break
 
                 if isinstance(msg, StreamEvent):
-                    await self._handle_stream_event(msg.event)
-                elif isinstance(msg, AssistantMessage):
-                    # Fallback path if partial stream events are disabled.
-                    await self._emit_assistant_fallback(msg)
+                    await self._handle_stream_event(
+                        msg.event, collected_assistant_blocks=assistant_blocks_by_index
+                    )
                 elif isinstance(msg, ResultMessage):
                     print(
                         "[agent] SDK result message "
@@ -692,24 +754,87 @@ class AgentHarness:
                     if isinstance(msg.usage, dict):
                         await self._send_usage_update(msg.usage)
                     if msg.is_error:
+                        terminal_error = msg.result if msg.result is not None else "Claude query failed"
                         await self.send({
                             "type": "agent_error",
-                            "error": msg.result or "Claude query failed",
+                            "error": terminal_error,
                             "fatal": False,
                         })
-                    # ResultMessage is terminal for the current query.
+                    # todo(tim): reconsider if needed 
+                    elif (
+                        len(assistant_blocks_by_index) == 0
+                        and isinstance(msg.result, str)
+                        and msg.result != ""
+                    ):
+                        assistant_blocks_by_index[0] = {
+                            "type": "text",
+                            "text": msg.result,
+                        }
                     break
                 elif isinstance(msg, SystemMessage):
                     continue
 
             print(f"[agent] finished SDK query (request_id={request_id})")
         except Exception as e:
+            terminal_error = f"Agent SDK query failed: {e!s}"
             await self.send({
                 "type": "agent_error",
-                "error": f"Agent SDK query failed: {e!s}",
+                "error": terminal_error,
                 "fatal": False,
             })
         finally:
+            duration_seconds = time.perf_counter() - run_started_at
+            assistant_content: list[dict[str, object]] = []
+            for idx in sorted(assistant_blocks_by_index):
+                block = assistant_blocks_by_index[idx]
+                if block.get("type") == "tool_use" and "input" not in block:
+                    input_json = str(block.get("input_json", ""))
+                    parsed_input: object
+                    if input_json == "":
+                        parsed_input = {}
+                    else:
+                        try:
+                            parsed_input = json.loads(input_json)
+                        except Exception:
+                            parsed_input = input_json
+
+                    assistant_content.append({
+                        "type": "tool_use",
+                        "id": str(block.get("id", "")),
+                        "name": str(block.get("name", "")),
+                        "input": parsed_input,
+                    })
+                    continue
+
+                assistant_content.append(block)
+
+            if len(assistant_content) > 0:
+                try:
+                    await self._insert_history(
+                        role="assistant",
+                        payload={
+                            "content": assistant_content,
+                            "duration": duration_seconds,
+                        },
+                        request_id=request_id,
+                    )
+                except Exception as e:
+                    print(f"[agent] Failed to persist assistant history: {e!s}")
+
+            if terminal_error is not None:
+                try:
+                    await self._insert_history(
+                        event_type="error",
+                        role="system",
+                        payload={
+                            "message": terminal_error,
+                            "should_contact_support": False,
+                        },
+                        request_id=request_id,
+                    )
+                except Exception as e:
+                    print(f"[agent] Failed to persist error history: {e!s}")
+
             await self._close_open_stream_blocks()
             self.current_request_id = None
             self.current_query_task = None
@@ -861,7 +986,8 @@ class AgentHarness:
     async def handle_query(self, msg: dict[str, object]) -> None:
         assert self.client is not None
         query = msg.get("query", "")
-        request_id = msg.get("request_id")
+        raw_request_id = msg.get("request_id")
+        request_id = str(raw_request_id) if raw_request_id is not None else None
         contextual_node_data = msg.get("contextual_node_data")
         template_version_id = msg.get("template_version_id")
         selected_widgets = msg.get("selected_widgets")
@@ -887,6 +1013,29 @@ class AgentHarness:
                 "fatal": False,
             })
             return
+
+        try:
+            user_payload: dict[str, object] = {
+                "content": str(full_query),
+            }
+            if query is not None:
+                user_payload["display_query"] = query
+            if contextual_node_data is not None:
+                user_payload["display_nodes"] = contextual_node_data
+            if selected_widgets is not None:
+                user_payload["display_widgets"] = selected_widgets
+            await self._insert_history(
+                role="user",
+                payload=user_payload,
+                request_id=request_id if isinstance(request_id, str) else None,
+                template_version_id=(
+                    str(template_version_id)
+                    if template_version_id is not None
+                    else None
+                ),
+            )
+        except Exception as e:
+            print(f"[agent] Failed to persist user history: {e!s}")
 
         self.current_query_task = asyncio.create_task(
             self._run_query_with_turn_prompt(query=str(full_query), request_id=request_id)
@@ -918,6 +1067,16 @@ class AgentHarness:
             print(f"[agent] Cancel completed for request {request_id}")
         else:
             print(f"[agent] Cancel forced task cancellation for request {request_id}")
+
+        try:
+            await self._insert_history(
+                event_type="cancellation",
+                role="system",
+                payload={"reason": "Request cancelled by user"},
+                request_id=str(request_id),
+            )
+        except Exception as e:
+            print(f"[agent] Failed to persist cancellation history: {e!s}")
 
     async def handle_clear_history(self) -> None:
         assert self.client is not None
@@ -960,11 +1119,7 @@ class AgentHarness:
             })
             return
 
-        await self.send({
-            "type": "agent_history_updated",
-            "session_id": self.agent_session_id,
-            "request_id": None,
-        })
+        await self._mark_all_history_removed()
 
     async def get_full_prompt(self) -> dict:
         self.system_prompt = (context_root.parent / "system_prompt.md").read_text()
