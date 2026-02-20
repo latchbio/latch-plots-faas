@@ -74,7 +74,7 @@ The agent will use this guidance to decide when to read your documentation.
 
 When the agent needs specific information (e.g., user mentions "Vizgen"), it:
 1. Checks the `<workflow_intake>` or `<documentation_access>` section in its system prompt
-2. Uses `read_file` tool to load `technology_docs/vizgen.md`
+2. Uses `Grep`/`Read` to inspect `technology_docs/vizgen.md`
 3. Follows the documented steps from that file
 
 ## Testing Changes
