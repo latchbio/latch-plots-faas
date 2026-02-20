@@ -21,6 +21,7 @@ try:
         ResultMessage,
         StreamEvent,
         SystemMessage,
+        UserMessage,
     )
 except ImportError:
     print("[agent] claude_agent_sdk missing, installing...", flush=True)
@@ -30,6 +31,7 @@ except ImportError:
         ResultMessage,
         StreamEvent,
         SystemMessage,
+        UserMessage,
     )
 from tools import MCP_ALLOWED_TOOL_NAMES, MCP_SERVER_NAME, agent_tools_mcp
 from lplots import _inject
@@ -704,6 +706,7 @@ class AgentHarness:
         self.open_stream_blocks.clear()
         run_started_at = time.perf_counter()
         assistant_blocks_by_index: dict[int, dict[str, object]] = {}
+        tool_result_blocks: list[dict[str, object]] = []
         terminal_error: str | None = None
 
         await self.send({
@@ -747,6 +750,30 @@ class AgentHarness:
                     await self._handle_stream_event(
                         msg.event, collected_assistant_blocks=assistant_blocks_by_index
                     )
+                elif isinstance(msg, UserMessage):
+                    if isinstance(msg.content, list):
+                        for block in msg.content:
+                            if getattr(block, "type", None) != "tool_result":
+                                continue
+
+                            tool_result_payload: dict[str, object] = {
+                                "type": "tool_result",
+                                "tool_use_id": str(getattr(block, "tool_use_id", "")),
+                            }
+
+                            raw_content = getattr(block, "content", None)
+                            if isinstance(raw_content, (str, list)):
+                                tool_result_payload["content"] = raw_content
+                            elif raw_content is not None:
+                                tool_result_payload["content"] = str(raw_content)
+                            else:
+                                tool_result_payload["content"] = ""
+
+                            is_error = getattr(block, "is_error", None)
+                            if isinstance(is_error, bool):
+                                tool_result_payload["is_error"] = is_error
+
+                            tool_result_blocks.append(tool_result_payload)
                 elif isinstance(msg, ResultMessage):
                     print(
                         "[agent] SDK result message "
@@ -821,6 +848,17 @@ class AgentHarness:
                     )
                 except Exception as e:
                     print(f"[agent] Failed to persist assistant history: {e!s}")
+
+            if len(tool_result_blocks) > 0:
+                try:
+                    await self._insert_history(
+                        payload={
+                            "content": tool_result_blocks,
+                        },
+                        request_id=request_id,
+                    )
+                except Exception as e:
+                    print(f"[agent] Failed to persist tool_result history: {e!s}")
 
             if terminal_error is not None:
                 try:
