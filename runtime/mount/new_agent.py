@@ -956,8 +956,8 @@ class AgentHarness:
                     *SDK_BUILTIN_ALLOWED_TOOLS,
                 ],
                 permission_mode="acceptEdits",
-                model="claude-sonnet-4-5",
-                max_thinking_tokens=4096,
+                model="claude-opus-4-6",
+                thinking={"type": "adaptive"},
                 env=sdk_env,
                 stderr=_sdk_stderr,
             )
