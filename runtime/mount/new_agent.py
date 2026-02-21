@@ -18,20 +18,20 @@ from typing import Any
 try:
     from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
     from claude_agent_sdk.types import (
+        HookMatcher,
         ResultMessage,
         StreamEvent,
         SystemMessage,
-        UserMessage,
     )
 except ImportError:
     print("[agent] claude_agent_sdk missing, installing...", flush=True)
     subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", "claude-agent-sdk"])
     from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
     from claude_agent_sdk.types import (
+        HookMatcher,
         ResultMessage,
         StreamEvent,
         SystemMessage,
-        UserMessage,
     )
 from tools import MCP_ALLOWED_TOOL_NAMES, MCP_SERVER_NAME, agent_tools_mcp
 from lplots import _inject
@@ -195,6 +195,96 @@ class AgentHarness:
         )
 
         await self._notify_history_updated(request_id=request_id)
+
+    def _normalize_tool_result_content(
+        self, tool_response: object
+    ) -> str | list[dict[str, object]]:
+        if isinstance(tool_response, str):
+            return tool_response
+
+        if isinstance(tool_response, list):
+            normalized_blocks: list[dict[str, object]] = []
+            for item in tool_response:
+                if not isinstance(item, dict):
+                    return json.dumps(tool_response, default=str)
+
+                block_type = item.get("type")
+                if block_type == "text" and isinstance(item.get("text"), str):
+                    normalized_blocks.append({
+                        "type": "text",
+                        "text": item["text"],
+                    })
+                    continue
+
+                source = item.get("source")
+                if (
+                    block_type == "image"
+                    and isinstance(source, dict)
+                    and isinstance(source.get("type"), str)
+                    and isinstance(source.get("media_type"), str)
+                    and isinstance(source.get("data"), str)
+                ):
+                    normalized_blocks.append({
+                        "type": "image",
+                        "source": {
+                            "type": source["type"],
+                            "media_type": source["media_type"],
+                            "data": source["data"],
+                        },
+                    })
+                    continue
+
+                return json.dumps(tool_response, default=str)
+
+            if len(normalized_blocks) > 0:
+                return normalized_blocks
+
+            return json.dumps(tool_response, default=str)
+
+        if isinstance(tool_response, dict):
+            content = tool_response.get("content")
+            if isinstance(content, list):
+                normalized_content = self._normalize_tool_result_content(content)
+                if isinstance(normalized_content, list):
+                    return normalized_content
+            return json.dumps(tool_response, default=str)
+
+        return json.dumps(tool_response, default=str)
+
+    async def _persist_tool_result_post_tool_use(
+        self, input_data: Any, tool_use_id: str | None, _context: Any
+    ) -> dict[str, Any]:
+        if not isinstance(input_data, dict):
+            return {}
+        if input_data.get("hook_event_name") != "PostToolUse":
+            return {}
+        if tool_use_id is None:
+            return {}
+
+        normalized_tool_use_id = str(tool_use_id).strip()
+        if normalized_tool_use_id == "":
+            return {}
+
+        tool_response = input_data.get("tool_response")
+        payload_block: dict[str, object] = {
+            "type": "tool_result",
+            "tool_use_id": normalized_tool_use_id,
+            "content": self._normalize_tool_result_content(tool_response),
+        }
+        if isinstance(tool_response, dict):
+            success = tool_response.get("success")
+            if isinstance(success, bool):
+                payload_block["is_error"] = not success
+
+        try:
+            await self._insert_history(
+                payload={"content": [payload_block]},
+                request_id=self.current_request_id,
+            )
+        except Exception as e:
+            print(f"[agent] Failed to persist PostToolUse tool_result: {e!s}")
+
+        return {}
 
     async def _mark_all_history_removed(self) -> None:
         if skip_db_history:
@@ -706,7 +796,6 @@ class AgentHarness:
         self.open_stream_blocks.clear()
         run_started_at = time.perf_counter()
         assistant_blocks_by_index: dict[int, dict[str, object]] = {}
-        tool_result_blocks: list[dict[str, object]] = []
         terminal_error: str | None = None
 
         await self.send({
@@ -750,30 +839,6 @@ class AgentHarness:
                     await self._handle_stream_event(
                         msg.event, collected_assistant_blocks=assistant_blocks_by_index
                     )
-                elif isinstance(msg, UserMessage):
-                    if isinstance(msg.content, list):
-                        for block in msg.content:
-                            if getattr(block, "type", None) != "tool_result":
-                                continue
-
-                            tool_result_payload: dict[str, object] = {
-                                "type": "tool_result",
-                                "tool_use_id": str(getattr(block, "tool_use_id", "")),
-                            }
-
-                            raw_content = getattr(block, "content", None)
-                            if isinstance(raw_content, (str, list)):
-                                tool_result_payload["content"] = raw_content
-                            elif raw_content is not None:
-                                tool_result_payload["content"] = str(raw_content)
-                            else:
-                                tool_result_payload["content"] = ""
-
-                            is_error = getattr(block, "is_error", None)
-                            if isinstance(is_error, bool):
-                                tool_result_payload["is_error"] = is_error
-
-                            tool_result_blocks.append(tool_result_payload)
                 elif isinstance(msg, ResultMessage):
                     print(
                         "[agent] SDK result message "
@@ -848,17 +913,6 @@ class AgentHarness:
                     )
                 except Exception as e:
                     print(f"[agent] Failed to persist assistant history: {e!s}")
-
-            if len(tool_result_blocks) > 0:
-                try:
-                    await self._insert_history(
-                        payload={
-                            "content": tool_result_blocks,
-                        },
-                        request_id=request_id,
-                    )
-                except Exception as e:
-                    print(f"[agent] Failed to persist tool_result history: {e!s}")
 
             if terminal_error is not None:
                 try:
@@ -995,6 +1049,14 @@ class AgentHarness:
                 permission_mode="acceptEdits",
                 model="claude-opus-4-6",
                 thinking={"type": "adaptive"},
+                hooks={
+                    "PostToolUse": [
+                        HookMatcher(
+                            matcher=f"^mcp__{MCP_SERVER_NAME}__",
+                            hooks=[self._persist_tool_result_post_tool_use],
+                        )
+                    ]
+                },
                 env=sdk_env,
                 stderr=_sdk_stderr,
             )
