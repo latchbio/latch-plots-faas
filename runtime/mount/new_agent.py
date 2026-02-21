@@ -286,6 +286,46 @@ class AgentHarness:
 
         return {}
 
+    async def _persist_tool_use_pre_tool_use(
+        self, input_data: Any, tool_use_id: str | None, _context: Any
+    ) -> dict[str, Any]:
+        if not isinstance(input_data, dict):
+            return {}
+        if input_data.get("hook_event_name") != "PreToolUse":
+            return {}
+        if tool_use_id is None:
+            return {}
+
+        tool_name = input_data.get("tool_name")
+        if not isinstance(tool_name, str) or tool_name == "":
+            return {}
+
+        tool_input = input_data.get("tool_input")
+        if not isinstance(tool_input, dict):
+            tool_input = {}
+
+        normalized_tool_use_id = str(tool_use_id).strip()
+        if normalized_tool_use_id == "":
+            return {}
+
+        payload_block: dict[str, object] = {
+            "type": "tool_use",
+            "id": normalized_tool_use_id,
+            "name": tool_name,
+            "input": tool_input,
+        }
+
+        try:
+            await self._insert_history(
+                role="assistant",
+                payload={"content": [payload_block]},
+                request_id=self.current_request_id,
+            )
+        except Exception as e:
+            print(f"[agent] Failed to persist PreToolUse tool_use: {e!s}")
+
+        return {}
+
     async def _mark_all_history_removed(self) -> None:
         if skip_db_history:
             self.in_memory_history.clear()
@@ -695,13 +735,6 @@ class AgentHarness:
                         "type": "thinking",
                         "thinking": "",
                     }
-                elif block_type == "tool_use":
-                    collected_assistant_blocks[block_index] = {
-                        "type": "tool_use",
-                        "id": str(block.get("id", "")),
-                        "name": str(block.get("name", "")),
-                        "input_json": "",
-                    }
 
             payload: dict[str, object] = {
                 "type": "agent_stream_block_start",
@@ -753,10 +786,6 @@ class AgentHarness:
                     elif delta_type == "thinking_delta":
                         existing["thinking"] = str(existing.get("thinking", "")) + str(
                             delta.get("thinking", "")
-                        )
-                    elif delta_type == "input_json_delta":
-                        existing["input_json"] = str(existing.get("input_json", "")) + str(
-                            delta.get("partial_json", "")
                         )
             return
 
@@ -880,25 +909,6 @@ class AgentHarness:
             assistant_content: list[dict[str, object]] = []
             for idx in sorted(assistant_blocks_by_index):
                 block = assistant_blocks_by_index[idx]
-                if block.get("type") == "tool_use" and "input" not in block:
-                    input_json = str(block.get("input_json", ""))
-                    parsed_input: object
-                    if input_json == "":
-                        parsed_input = {}
-                    else:
-                        try:
-                            parsed_input = json.loads(input_json)
-                        except Exception:
-                            parsed_input = input_json
-
-                    assistant_content.append({
-                        "type": "tool_use",
-                        "id": str(block.get("id", "")),
-                        "name": str(block.get("name", "")),
-                        "input": parsed_input,
-                    })
-                    continue
-
                 assistant_content.append(block)
 
             if len(assistant_content) > 0:
@@ -1050,6 +1060,12 @@ class AgentHarness:
                 model="claude-opus-4-6",
                 thinking={"type": "adaptive"},
                 hooks={
+                    "PreToolUse": [
+                        HookMatcher(
+                            matcher=f"^mcp__{MCP_SERVER_NAME}__",
+                            hooks=[self._persist_tool_use_pre_tool_use],
+                        )
+                    ],
                     "PostToolUse": [
                         HookMatcher(
                             matcher=f"^mcp__{MCP_SERVER_NAME}__",
