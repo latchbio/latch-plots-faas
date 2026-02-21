@@ -825,7 +825,46 @@ class AgentHarness:
         self.open_stream_blocks.clear()
         run_started_at = time.perf_counter()
         assistant_blocks_by_index: dict[int, dict[str, object]] = {}
+        assistant_message_started_at: float | None = None
+        persisted_assistant_message_this_turn = False
         terminal_error: str | None = None
+
+        async def persist_current_assistant_message(
+            *, duration_seconds: float | None = None
+        ) -> bool:
+            nonlocal persisted_assistant_message_this_turn
+            if len(assistant_blocks_by_index) == 0:
+                return False
+
+            assistant_content: list[dict[str, object]] = []
+            for idx in sorted(assistant_blocks_by_index):
+                assistant_content.append(assistant_blocks_by_index[idx])
+
+            resolved_duration = duration_seconds
+            if resolved_duration is None:
+                duration_base = (
+                    assistant_message_started_at
+                    if assistant_message_started_at is not None
+                    else run_started_at
+                )
+                resolved_duration = max(0.0, time.perf_counter() - duration_base)
+
+            try:
+                await self._insert_history(
+                    role="assistant",
+                    payload={
+                        "content": assistant_content,
+                        "duration": resolved_duration,
+                    },
+                    request_id=request_id,
+                )
+                persisted_assistant_message_this_turn = True
+            except Exception as e:
+                print(f"[agent] Failed to persist assistant history: {e!s}")
+            finally:
+                assistant_blocks_by_index.clear()
+
+            return True
 
         await self.send({
             "type": "agent_stream_start",
@@ -865,9 +904,23 @@ class AgentHarness:
                     break
 
                 if isinstance(msg, StreamEvent):
+                    event_type = msg.event.get("type")
+                    if event_type == "message_start":
+                        assistant_blocks_by_index.clear()
+                        assistant_message_started_at = time.perf_counter()
                     await self._handle_stream_event(
                         msg.event, collected_assistant_blocks=assistant_blocks_by_index
                     )
+                    if event_type == "message_stop":
+                        message_duration_seconds: float | None = None
+                        if assistant_message_started_at is not None:
+                            message_duration_seconds = max(
+                                0.0, time.perf_counter() - assistant_message_started_at
+                            )
+                        await persist_current_assistant_message(
+                            duration_seconds=message_duration_seconds
+                        )
+                        assistant_message_started_at = None
                 elif isinstance(msg, ResultMessage):
                     print(
                         "[agent] SDK result message "
@@ -885,6 +938,7 @@ class AgentHarness:
                     # todo(tim): reconsider if needed 
                     elif (
                         len(assistant_blocks_by_index) == 0
+                        and not persisted_assistant_message_this_turn
                         and isinstance(msg.result, str)
                         and msg.result != ""
                     ):
@@ -892,6 +946,8 @@ class AgentHarness:
                             "type": "text",
                             "text": msg.result,
                         }
+                        if assistant_message_started_at is None:
+                            assistant_message_started_at = run_started_at
                     break
                 elif isinstance(msg, SystemMessage):
                     continue
@@ -905,24 +961,14 @@ class AgentHarness:
                 "fatal": False,
             })
         finally:
-            duration_seconds = time.perf_counter() - run_started_at
-            assistant_content: list[dict[str, object]] = []
-            for idx in sorted(assistant_blocks_by_index):
-                block = assistant_blocks_by_index[idx]
-                assistant_content.append(block)
-
-            if len(assistant_content) > 0:
-                try:
-                    await self._insert_history(
-                        role="assistant",
-                        payload={
-                            "content": assistant_content,
-                            "duration": duration_seconds,
-                        },
-                        request_id=request_id,
-                    )
-                except Exception as e:
-                    print(f"[agent] Failed to persist assistant history: {e!s}")
+            pending_duration_base = (
+                assistant_message_started_at
+                if assistant_message_started_at is not None
+                else run_started_at
+            )
+            await persist_current_assistant_message(
+                duration_seconds=max(0.0, time.perf_counter() - pending_duration_base)
+            )
 
             if terminal_error is not None:
                 try:
