@@ -78,7 +78,6 @@ class Behavior(Enum):
 @dataclass
 class AgentHarness:
     conn: SocketIoThread
-    initialized: bool = False
     client: ClaudeSDKClient | None = None
     mode: Mode = Mode.planning
     system_prompt: str | None = None
@@ -114,6 +113,7 @@ class AgentHarness:
     )
     current_query_task: asyncio.Task | None = None
     open_stream_blocks: dict[int, str] = field(default_factory=dict)
+    agent_session_metadata: dict[str, object] = field(default_factory=dict)
 
     mode_config: dict[Mode, tuple[str, int | None]] = field(
         default_factory=lambda: {
@@ -655,6 +655,149 @@ class AgentHarness:
         except asyncio.CancelledError:
             return True
 
+    async def _disconnect_sdk_client(self) -> None:
+        if self.client is None:
+            return
+        try:
+            await self.client.disconnect()
+        finally:
+            self.client = None
+
+    async def _load_agent_session_metadata(self, session_id: str) -> dict[str, object]:
+        response = await gql_query(
+            auth=auth_token_sdk,
+            query="""
+                query AgentSessionMetadata($id: BigInt!) {
+                    agentSession(id: $id) {
+                        metadata
+                    }
+                }
+            """,
+            variables={"id": session_id},
+        )
+
+        data = response.get("data")
+        if not isinstance(data, dict):
+            return {}
+        session = data.get("agentSession")
+        if not isinstance(session, dict):
+            return {}
+        metadata = session.get("metadata")
+        if not isinstance(metadata, dict):
+            return {}
+        return metadata
+
+    async def _persist_agent_session_metadata(self, metadata: dict[str, object]) -> None:
+        if self.agent_session_id is None:
+            return
+
+        await gql_query(
+            auth=auth_token_sdk,
+            query="""
+                mutation UpdateAgentSessionMetadata($id: BigInt!, $metadata: JSON) {
+                    updateAgentSession(input: {id: $id, patch: {metadata: $metadata}}) {
+                        clientMutationId
+                    }
+                }
+            """,
+            variables={
+                "id": self.agent_session_id,
+                "metadata": metadata,
+            },
+        )
+
+    async def _capture_claude_session_id(self, raw_session_id: object) -> None:
+        session_id = self._normalize_session_id(raw_session_id)
+        if session_id is None or self.agent_session_id is None:
+            return
+
+        existing = self._normalize_session_id(
+            self.agent_session_metadata.get("claude_session_id")
+        )
+        if existing == session_id:
+            return
+
+        merged_metadata = dict(self.agent_session_metadata)
+        merged_metadata["claude_session_id"] = session_id
+
+        try:
+            await self._persist_agent_session_metadata(merged_metadata)
+        except Exception as e:
+            print(f"[agent] Failed to persist Claude session id metadata: {e!s}")
+            return
+
+        self.agent_session_metadata = merged_metadata
+        print(
+            "[agent] Persisted Claude session id "
+            f"(db_session_id={self.agent_session_id}, claude_session_id={session_id})"
+        )
+
+    def _build_sdk_env(self) -> dict[str, str]:
+        direct_anthropic_key = os.environ.get("AGENT_SDK_DIRECT_ANTHROPIC_KEY", "").strip()
+        if direct_anthropic_key != "":
+            print("[agent] SDK gateway mode: direct-anthropic")
+            return {
+                "ANTHROPIC_AUTH_TOKEN": direct_anthropic_key,
+                "ANTHROPIC_API_KEY": direct_anthropic_key,
+            }
+
+        sdk_base_url = f"{nucleus_url}/infer/plots-agent/anthropic"
+        sdk_auth_token = sdk_token if sdk_token != "" else auth_token_sdk
+        print(f"[agent] SDK gateway mode: nucleus-proxy ({sdk_base_url})")
+        return {
+            "ANTHROPIC_BASE_URL": sdk_base_url,
+            "ANTHROPIC_AUTH_TOKEN": sdk_auth_token,
+            "ANTHROPIC_API_KEY": sdk_auth_token,
+        }
+
+    async def _connect_sdk_client(self, *, resume_session_id: str | None) -> None:
+        self.system_prompt = self._compose_turn_system_prompt()
+        sdk_env = self._build_sdk_env()
+
+        def _sdk_stderr(line: str) -> None:
+            stripped = line.rstrip()
+            if stripped != "":
+                print(f"[claude] {stripped}", flush=True)
+
+        self.client = ClaudeSDKClient(
+            options=ClaudeAgentOptions(
+                system_prompt=self.system_prompt,
+                include_partial_messages=True,
+                mcp_servers=self.mcp_servers,
+                allowed_tools=[
+                    *self.mcp_allowed_tools,
+                    *SDK_BUILTIN_ALLOWED_TOOLS,
+                ],
+                permission_mode="acceptEdits",
+                model="claude-opus-4-6",
+                thinking={"type": "adaptive"},
+                hooks={
+                    "PreToolUse": [
+                        HookMatcher(
+                            matcher=f"^mcp__{MCP_SERVER_NAME}__",
+                            hooks=[self._persist_tool_use_pre_tool_use],
+                        )
+                    ],
+                    "PostToolUse": [
+                        HookMatcher(
+                            matcher=f"^mcp__{MCP_SERVER_NAME}__",
+                            hooks=[self._persist_tool_result_post_tool_use],
+                        )
+                    ],
+                },
+                resume=resume_session_id,
+                env=sdk_env,
+                stderr=_sdk_stderr,
+            )
+        )
+        await self.client.connect()
+
+        try:
+            mcp_status = await self.client.get_mcp_status()
+            print(f"[agent] MCP status: {json.dumps(mcp_status)}")
+        except Exception as e:
+            print(f"[agent] Failed to fetch MCP status: {e!s}")
+
     async def _reset_for_new_session(self) -> None:
         if len(self.pending_operations) > 0:
             print(f"[agent] Failing {len(self.pending_operations)} pending operation(s) for new session")
@@ -676,6 +819,8 @@ class AgentHarness:
         while not self.pending_messages.empty():
             with suppress(asyncio.QueueEmpty):
                 self.pending_messages.get_nowait()
+
+        self.agent_session_metadata = {}
 
     async def _run_control_query(
         self,
@@ -700,7 +845,10 @@ class AgentHarness:
                 )
             except StopAsyncIteration:
                 return None
+            if isinstance(msg, StreamEvent):
+                await self._capture_claude_session_id(msg.session_id)
             if isinstance(msg, ResultMessage):
+                await self._capture_claude_session_id(msg.session_id)
                 return msg
 
     async def _handle_stream_event(
@@ -904,6 +1052,7 @@ class AgentHarness:
                     break
 
                 if isinstance(msg, StreamEvent):
+                    await self._capture_claude_session_id(msg.session_id)
                     event_type = msg.event.get("type")
                     if event_type == "message_start":
                         assistant_blocks_by_index.clear()
@@ -922,6 +1071,7 @@ class AgentHarness:
                         )
                         assistant_message_started_at = None
                 elif isinstance(msg, ResultMessage):
+                    await self._capture_claude_session_id(msg.session_id)
                     print(
                         "[agent] SDK result message "
                         f"subtype={msg.subtype} is_error={msg.is_error} result={msg.result!r}"
@@ -950,6 +1100,8 @@ class AgentHarness:
                             assistant_message_started_at = run_started_at
                     break
                 elif isinstance(msg, SystemMessage):
+                    if msg.subtype == "init":
+                        await self._capture_claude_session_id(msg.data.get("session_id"))
                     continue
 
             print(f"[agent] finished SDK query (request_id={request_id})")
@@ -1056,86 +1208,51 @@ class AgentHarness:
         if session_changed:
             print(f"[agent] Session initialized/changed: {new_session_id}")
             self.agent_session_id = new_session_id
+        elif self.agent_session_id is None:
+            self.agent_session_id = new_session_id
 
-        if self.client is not None:
-            if session_changed:
-                if self.current_query_task is not None and not self.current_query_task.done():
-                    print("[agent] Interrupting running query due to session change")
-                    await self.client.interrupt()
-                    await self._wait_for_running_query_to_stop()
-                await self._reset_for_new_session()
+        if self.agent_session_id is None:
+            print("[agent] Missing session_id in init; cannot initialize Claude SDK client")
+            await self.send({
+                "type": "agent_error",
+                "error": "Missing agent session id.",
+                "fatal": False,
+            })
+            return
+
+        if self.client is not None and not session_changed:
             print("[agent] SDK client already initialized; skipping re-init")
             await self.send({"type": "agent_status", "status": "ready"})
             return
 
-        self.system_prompt = self._compose_turn_system_prompt()
-
-        direct_anthropic_key = os.environ.get("AGENT_SDK_DIRECT_ANTHROPIC_KEY", "").strip()
-        if direct_anthropic_key != "":
-            # Direct mode: bypass Nucleus proxy and call Anthropic directly.
-            sdk_env = {
-                "ANTHROPIC_AUTH_TOKEN": direct_anthropic_key,
-                "ANTHROPIC_API_KEY": direct_anthropic_key,
-            }
-            print("[agent] SDK gateway mode: direct-anthropic")
-        else:
-            sdk_base_url = f"{nucleus_url}/infer/plots-agent/anthropic"
-            sdk_auth_token = sdk_token if sdk_token != "" else auth_token_sdk
-            sdk_env = {
-                "ANTHROPIC_BASE_URL": sdk_base_url,
-                "ANTHROPIC_AUTH_TOKEN": sdk_auth_token,
-                "ANTHROPIC_API_KEY": sdk_auth_token,
-            }
-            print(f"[agent] SDK gateway mode: nucleus-proxy ({sdk_base_url})")
-
-        def _sdk_stderr(line: str) -> None:
-            stripped = line.rstrip()
-            if stripped != "":
-                print(f"[claude] {stripped}", flush=True)
-
-        self.client = ClaudeSDKClient(
-            options=ClaudeAgentOptions(
-                system_prompt=self.system_prompt,
-                include_partial_messages=True,
-                mcp_servers=self.mcp_servers,
-                allowed_tools=[
-                    *self.mcp_allowed_tools,
-                    *SDK_BUILTIN_ALLOWED_TOOLS,
-                ],
-                permission_mode="acceptEdits",
-                model="claude-opus-4-6",
-                thinking={"type": "adaptive"},
-                hooks={
-                    "PreToolUse": [
-                        HookMatcher(
-                            matcher=f"^mcp__{MCP_SERVER_NAME}__",
-                            hooks=[self._persist_tool_use_pre_tool_use],
-                        )
-                    ],
-                    "PostToolUse": [
-                        HookMatcher(
-                            matcher=f"^mcp__{MCP_SERVER_NAME}__",
-                            hooks=[self._persist_tool_result_post_tool_use],
-                        )
-                    ]
-                },
-                env=sdk_env,
-                stderr=_sdk_stderr,
-            )
-        )
-        await self.client.connect()
-        self.initialized = True
+        if self.client is not None and session_changed:
+            if self.current_query_task is not None and not self.current_query_task.done():
+                print("[agent] Interrupting running query due to session change")
+                await self.client.interrupt()
+                await self._wait_for_running_query_to_stop()
+            await self._reset_for_new_session()
+            await self._disconnect_sdk_client()
 
         try:
-            mcp_status = await self.client.get_mcp_status()
-            print(f"[agent] MCP status: {json.dumps(mcp_status)}")
+            metadata = await self._load_agent_session_metadata(self.agent_session_id)
         except Exception as e:
-            print(f"[agent] Failed to fetch MCP status: {e!s}")
+            print(f"[agent] Failed to load agent session metadata: {e!s}")
+            metadata = {}
+        self.agent_session_metadata = metadata
+        resume_session_id = self._normalize_session_id(metadata.get("claude_session_id"))
+
+        if self.client is None:
+            await self._connect_sdk_client(resume_session_id=resume_session_id)
+            if resume_session_id is None:
+                print("[agent] SDK initialized without resume session")
+            else:
+                print(f"[agent] SDK initialized with resume session {resume_session_id}")
 
         await self.send({"type": "agent_status", "status": "ready"})
         print(
             "[agent] Initialization complete "
-            f"(session_id={self._current_sdk_session_id()})"
+            f"(db_session_id={self.agent_session_id}, "
+            f"claude_session_id={resume_session_id})"
         )
 
         # todo(rteqs): planning stuff
@@ -1501,9 +1618,9 @@ async def main() -> None:
 
         print("Agent shutting down...")
     finally:
-        if harness is not None and harness.client is not None:
+        if harness is not None:
             try:
-                await harness.client.disconnect()
+                await harness._disconnect_sdk_client()
             except Exception:
                 traceback.print_exc()
         socket_io_thread.shutdown.set()
