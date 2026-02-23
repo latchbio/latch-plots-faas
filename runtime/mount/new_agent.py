@@ -326,29 +326,6 @@ class AgentHarness:
 
         return {}
 
-    async def _mark_all_history_removed(self) -> None:
-        if skip_db_history:
-            self.in_memory_history.clear()
-            await self._notify_history_updated()
-            return
-
-        if self.agent_session_id is None:
-            print("[agent] Skipping clear history: missing agent_session_id")
-            return
-
-        await gql_query(
-            auth=auth_token_sdk,
-            query="""
-                mutation ClearAgentHistory($sessionId: BigInt!) {
-                    clearAgentHistory(input: {argSessionId: $sessionId}) {
-                        clientMutationId
-                    }
-                }
-            """,
-            variables={"sessionId": str(self.agent_session_id)},
-        )
-        await self._notify_history_updated()
-
     async def refresh_cells_context(self) -> str:
         context_result, reactivity_result = await asyncio.gather(
             self.atomic_operation("get_context"),
@@ -821,35 +798,6 @@ class AgentHarness:
                 self.pending_messages.get_nowait()
 
         self.agent_session_metadata = {}
-
-    async def _run_control_query(
-        self,
-        *,
-        prompt: str,
-        timeout_submit_seconds: float = 10.0,
-        timeout_response_seconds: float = 30.0,
-    ) -> ResultMessage | None:
-        assert self.client is not None
-        session_id = self._current_sdk_session_id()
-        await asyncio.wait_for(
-            self.client.query(prompt=prompt, session_id=session_id),
-            timeout=timeout_submit_seconds,
-        )
-
-        receive_iter = self.client.receive_response().__aiter__()
-        while True:
-            try:
-                msg = await asyncio.wait_for(
-                    receive_iter.__anext__(),
-                    timeout=timeout_response_seconds,
-                )
-            except StopAsyncIteration:
-                return None
-            if isinstance(msg, StreamEvent):
-                await self._capture_claude_session_id(msg.session_id)
-            if isinstance(msg, ResultMessage):
-                await self._capture_claude_session_id(msg.session_id)
-                return msg
 
     async def _handle_stream_event(
         self,
@@ -1352,49 +1300,6 @@ class AgentHarness:
         except Exception as e:
             print(f"[agent] Failed to persist cancellation history: {e!s}")
 
-    async def handle_clear_history(self) -> None:
-        assert self.client is not None
-
-        if self.current_query_task is not None and not self.current_query_task.done():
-            await self.send({
-                "type": "agent_error",
-                "error": "Cannot clear history while a query is running. Cancel first.",
-                "fatal": False,
-            })
-            return
-
-        print(f"[agent] Clearing SDK session history (session_id={self._current_sdk_session_id()})")
-        try:
-            result = await self._run_control_query(prompt="/clear")
-            if result is not None:
-                print(
-                    "[agent] Clear history result "
-                    f"subtype={result.subtype} is_error={result.is_error} result={result.result!r}"
-                )
-                if result.is_error:
-                    await self.send({
-                        "type": "agent_error",
-                        "error": result.result or "Failed to clear history",
-                        "fatal": False,
-                    })
-                    return
-        except TimeoutError:
-            await self.send({
-                "type": "agent_error",
-                "error": "Timed out while clearing history.",
-                "fatal": False,
-            })
-            return
-        except Exception as e:
-            await self.send({
-                "type": "agent_error",
-                "error": f"Failed to clear history: {e!s}",
-                "fatal": False,
-            })
-            return
-
-        await self._mark_all_history_removed()
-
     async def get_full_prompt(self) -> dict:
         self.system_prompt = (context_root.parent / "system_prompt.md").read_text()
 
@@ -1473,9 +1378,6 @@ class AgentHarness:
             request_id = msg.get("request_id", "unknown")
             print(f"[agent] Cancel: {request_id}")
             await self.handle_cancel(msg)
-        elif msg_type == "agent_clear_history":
-            print("[agent] Clear history request")
-            await self.handle_clear_history()
         elif msg_type == "agent_reset_kernel":
             print("[agent] Reset kernel globals request")
             result = await self.atomic_operation("reset_kernel_globals", {})
