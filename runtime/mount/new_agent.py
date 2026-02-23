@@ -632,6 +632,185 @@ class AgentHarness:
         except asyncio.CancelledError:
             return True
 
+    async def _stop_conversation_loop(self) -> None:
+        self.conversation_running = False
+        if self.conversation_task is None:
+            return
+        if not self.conversation_task.done():
+            self.conversation_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await self.conversation_task
+        self.conversation_task = None
+
+    def _start_conversation_loop(self) -> None:
+        if self.conversation_task is not None and not self.conversation_task.done():
+            return
+        self.conversation_task = asyncio.create_task(self.run_agent_loop())
+
+    async def _wait_for_message(self) -> tuple[str, str | None]:
+        print("[agent] _wait_for_message: waiting for message...")
+        while True:
+            msg = await self.pending_messages.get()
+            msg_type = msg.get("type")
+
+            if (
+                self.pause_until_user_query
+                and msg_type in {"resume", "cell_result", "set_widget_value"}
+            ):
+                print(f"[agent] Suppressing follow-up message type={msg_type}")
+                continue
+
+            if msg_type == "resume":
+                request_id = msg.get("request_id")
+                if isinstance(request_id, str):
+                    self.current_request_id = request_id
+                self.current_status = "thinking"
+                content = msg.get("content")
+                if isinstance(content, str) and content.strip() != "":
+                    return content, self.current_request_id
+                return "Continue with the next step.", self.current_request_id
+
+            if msg_type == "user_query":
+                request_id = msg.get("request_id")
+                self.current_request_id = request_id if isinstance(request_id, str) else None
+                self.current_status = "thinking"
+                self.pause_until_user_query = False
+
+                content = msg.get("content")
+                if isinstance(content, str) and content.strip() != "":
+                    return content, self.current_request_id
+                print("[agent] Ignoring user_query with empty content")
+                continue
+
+            if msg_type == "cell_result":
+                if self.current_request_id is None:
+                    print(
+                        f"[agent] Ignoring cell_result for {msg.get('cell_id')} - no active request"
+                    )
+                    continue
+
+                cell_id = msg.get("cell_id")
+                success = bool(msg.get("success", True))
+                cell_name = msg.get("display_name")
+                logs = msg.get("logs")
+
+                if success:
+                    result_message = f"Cell {cell_name} ({cell_id}) executed successfully."
+                else:
+                    exception = msg.get("exception", "Unknown error")
+                    result_message = (
+                        f"Cell {cell_name} ({cell_id}) execution failed. Exception: {exception}"
+                    )
+
+                try:
+                    await self._insert_history(
+                        role="user",
+                        payload={
+                            "content": result_message,
+                            "hidden": True,
+                        },
+                        request_id=self.current_request_id,
+                    )
+                except Exception as e:
+                    print(f"[agent] Failed to persist cell_result history: {e!s}")
+
+                logs_text = ""
+                if isinstance(logs, str) and logs.strip() != "":
+                    logs_text = f"\nRecent logs:\n{logs}"
+
+                if self.pending_auto_continue and len(self.executing_cells) == 0:
+                    self.pending_auto_continue = False
+                    return (
+                        "A requested cell finished running. Continue with the next step.\n"
+                        + result_message
+                        + logs_text,
+                        self.current_request_id,
+                    )
+
+                return (
+                    "Cell execution update:\n" + result_message + logs_text,
+                    self.current_request_id,
+                )
+
+            if msg_type == "set_widget_value":
+                if self.current_request_id is None:
+                    print("[agent] Ignoring set_widget_value - no active request")
+                    continue
+
+                data = msg.get("data", {})
+                if not isinstance(data, dict):
+                    data = {}
+                widget_info = ", ".join(f"{k}={v}" for k, v in data.items())
+                content = f"User provided input via widget(s): {widget_info}"
+
+                try:
+                    await self._insert_history(
+                        role="user",
+                        payload={
+                            "content": content,
+                            "hidden": True,
+                        },
+                        request_id=self.current_request_id,
+                    )
+                except Exception as e:
+                    print(f"[agent] Failed to persist widget history: {e!s}")
+
+                return content, self.current_request_id
+
+            print(f"[agent] Unknown pending message type={msg_type}, ignoring")
+
+    async def _complete_turn(self) -> None:
+        if self.current_request_id is None:
+            return
+
+        should_continue = self.should_auto_continue
+        self.should_auto_continue = False
+
+        if self.mode == Mode.executing:
+            self.set_mode(Mode.planning)
+
+        await self._notify_history_updated(request_id=self.current_request_id)
+
+        if should_continue:
+            print("[agent] Auto-continuing as requested by model")
+            await self.pending_messages.put({
+                "type": "resume",
+                "content": "Continue with the next step.",
+                "request_id": self.current_request_id,
+            })
+
+    async def run_agent_loop(self) -> None:
+        print("[agent] run_agent_loop: started")
+        self.conversation_running = True
+
+        while self.conversation_running:
+            try:
+                query, request_id = await self._wait_for_message()
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                print(f"[agent] _wait_for_message failed: {e!s}")
+                continue
+
+            if not self.conversation_running:
+                break
+
+            turn_task: asyncio.Task | None = None
+            try:
+                turn_task = asyncio.create_task(
+                    self._run_query_with_turn_prompt(query=query, request_id=request_id)
+                )
+                self.current_query_task = turn_task
+                await turn_task
+            except Exception as e:
+                print(f"[agent] run_agent_loop turn failed: {e!s}")
+            finally:
+                if turn_task is not None and self.current_query_task is turn_task:
+                    self.current_query_task = None
+                await self._complete_turn()
+
+        print("[agent] run_agent_loop: stopped")
+
     async def _disconnect_sdk_client(self) -> None:
         if self.client is None:
             return
@@ -776,6 +955,8 @@ class AgentHarness:
             print(f"[agent] Failed to fetch MCP status: {e!s}")
 
     async def _reset_for_new_session(self) -> None:
+        await self._stop_conversation_loop()
+
         if len(self.pending_operations) > 0:
             print(f"[agent] Failing {len(self.pending_operations)} pending operation(s) for new session")
             for future in self.pending_operations.values():
@@ -792,6 +973,9 @@ class AgentHarness:
         self.expected_widgets.clear()
         self.open_stream_blocks.clear()
         self.current_request_id = None
+        self.current_status = None
+        self.should_auto_continue = False
+        self.pending_auto_continue = False
 
         while not self.pending_messages.empty():
             with suppress(asyncio.QueueEmpty):
@@ -916,7 +1100,6 @@ class AgentHarness:
     ) -> None:
         assert self.client is not None
 
-        self.current_request_id = request_id
         session_id = self._current_sdk_session_id()
         self.open_stream_blocks.clear()
         run_started_at = time.perf_counter()
@@ -1085,8 +1268,6 @@ class AgentHarness:
                     print(f"[agent] Failed to persist error history: {e!s}")
 
             await self._close_open_stream_blocks()
-            self.current_request_id = None
-            self.current_query_task = None
             await self.send({"type": "agent_stream_complete"})
 
     async def _run_query_with_turn_prompt(
@@ -1171,6 +1352,7 @@ class AgentHarness:
         if self.client is not None and not session_changed:
             print("[agent] SDK client already initialized; skipping re-init")
             await self.send({"type": "agent_status", "status": "ready"})
+            self._start_conversation_loop()
             return
 
         if self.client is not None and session_changed:
@@ -1202,6 +1384,7 @@ class AgentHarness:
             f"(db_session_id={self.agent_session_id}, "
             f"claude_session_id={resume_session_id})"
         )
+        self._start_conversation_loop()
 
         # todo(rteqs): planning stuff
 
@@ -1228,14 +1411,6 @@ class AgentHarness:
         if contextual_node_data:
             full_query = f"{query} \n\nHere is the context of the selected nodes the user would like to use: <ContextualNodeData>{json.dumps(contextual_node_data)}</ContextualNodeData>"
 
-        if self.current_query_task is not None and not self.current_query_task.done():
-            await self.send({
-                "type": "agent_error",
-                "error": "A query is already running. Cancel it before starting another.",
-                "fatal": False,
-            })
-            return
-
         try:
             user_payload: dict[str, object] = {
                 "content": str(full_query),
@@ -1259,9 +1434,11 @@ class AgentHarness:
         except Exception as e:
             print(f"[agent] Failed to persist user history: {e!s}")
 
-        self.current_query_task = asyncio.create_task(
-            self._run_query_with_turn_prompt(query=str(full_query), request_id=request_id)
-        )
+        await self.pending_messages.put({
+            "type": "user_query",
+            "content": str(full_query),
+            "request_id": request_id if isinstance(request_id, str) else None,
+        })
 
         print(
             "[agent] Message queued successfully "
@@ -1299,6 +1476,13 @@ class AgentHarness:
             )
         except Exception as e:
             print(f"[agent] Failed to persist cancellation history: {e!s}")
+
+        self.should_auto_continue = False
+        self.pending_auto_continue = False
+        self.pause_until_user_query = True
+        self.expected_widgets.clear()
+        self.current_status = None
+        self.executing_cells.clear()
 
     async def get_full_prompt(self) -> dict:
         self.system_prompt = (context_root.parent / "system_prompt.md").read_text()
