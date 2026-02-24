@@ -1170,9 +1170,11 @@ class AgentHarness:
                     terminal_error = "Timed out waiting for model response from Claude runtime"
                     break
 
+                print(f"[agent] SDK message class={type(msg).__name__}")
                 if isinstance(msg, StreamEvent):
                     await self._capture_claude_session_id(msg.session_id)
                     event_type = msg.event.get("type")
+                    print(f"[agent] SDK stream event type={event_type}")
                     if event_type == "message_start":
                         assistant_blocks_by_index.clear()
                         assistant_message_started_at = time.perf_counter()
@@ -1233,6 +1235,22 @@ class AgentHarness:
                     continue
                 else:
                     await self._capture_claude_session_id(getattr(msg, "session_id", None))
+                    role = getattr(msg, "role", None)
+                    content = getattr(msg, "content", None)
+                    if isinstance(content, list):
+                        block_types = []
+                        for block in content:
+                            if isinstance(block, dict):
+                                block_types.append(str(block.get("type", "unknown")))
+                            else:
+                                block_types.append(str(getattr(block, "type", "unknown")))
+                        print(
+                            f"[agent] SDK message role={role!r} content_block_types={block_types}"
+                        )
+                    else:
+                        print(
+                            f"[agent] SDK message role={role!r} content_type={type(content).__name__}"
+                        )
                     await self._persist_tool_blocks_from_sdk_message(
                         msg=msg, request_id=request_id
                     )
