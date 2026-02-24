@@ -993,9 +993,6 @@ class AgentHarness:
 
         if event_type == "message_start":
             self.open_stream_blocks.clear()
-            usage = event.get("message", {}).get("usage")
-            if isinstance(usage, dict):
-                await self._send_usage_update(usage)
             return
 
         if event_type == "content_block_start":
@@ -1080,15 +1077,9 @@ class AgentHarness:
             return
 
         if event_type == "message_delta":
-            usage = event.get("usage")
-            if isinstance(usage, dict):
-                await self._send_usage_update(usage)
             return
 
         if event_type == "message_stop":
-            message_usage = event.get("message", {}).get("usage")
-            if isinstance(message_usage, dict):
-                await self._send_usage_update(message_usage)
             await self._close_open_stream_blocks()
             return
 
@@ -1107,6 +1098,7 @@ class AgentHarness:
         assistant_message_started_at: float | None = None
         persisted_assistant_message_this_turn = False
         terminal_error: str | None = None
+        usage_data: dict[str, Any] | None = None
 
         async def persist_current_assistant_message(
             *, duration_seconds: float | None = None
@@ -1188,6 +1180,17 @@ class AgentHarness:
                     if event_type == "message_start":
                         assistant_blocks_by_index.clear()
                         assistant_message_started_at = time.perf_counter()
+                        message_usage = msg.event.get("message", {}).get("usage")
+                        if isinstance(message_usage, dict):
+                            usage_data = message_usage
+                    elif event_type == "message_delta":
+                        delta_usage = msg.event.get("usage")
+                        if isinstance(delta_usage, dict):
+                            usage_data = delta_usage
+                    elif event_type == "message_stop":
+                        stop_usage = msg.event.get("message", {}).get("usage")
+                        if isinstance(stop_usage, dict):
+                            usage_data = stop_usage
                     await self._handle_stream_event(
                         msg.event, collected_assistant_blocks=assistant_blocks_by_index
                     )
@@ -1208,7 +1211,7 @@ class AgentHarness:
                         f"subtype={msg.subtype} is_error={msg.is_error} result={msg.result!r}"
                     )
                     if isinstance(msg.usage, dict):
-                        await self._send_usage_update(msg.usage)
+                        usage_data = msg.usage
                     if msg.is_error:
                         terminal_error = msg.result if msg.result is not None else "Claude query failed"
                         await self.send({
@@ -1268,6 +1271,8 @@ class AgentHarness:
                     print(f"[agent] Failed to persist error history: {e!s}")
 
             await self._close_open_stream_blocks()
+            if usage_data is not None:
+                await self._send_usage_update(usage_data)
             await self.send({"type": "agent_stream_complete"})
 
     async def _run_query_with_turn_prompt(
