@@ -18,7 +18,6 @@ from typing import Any
 try:
     from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
     from claude_agent_sdk.types import (
-        HookMatcher,
         ResultMessage,
         StreamEvent,
         SystemMessage,
@@ -28,7 +27,6 @@ except ImportError:
     subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", "claude-agent-sdk"])
     from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
     from claude_agent_sdk.types import (
-        HookMatcher,
         ResultMessage,
         StreamEvent,
         SystemMessage,
@@ -251,80 +249,92 @@ class AgentHarness:
 
         return json.dumps(tool_response, default=str)
 
-    async def _persist_tool_result_post_tool_use(
-        self, input_data: Any, tool_use_id: str | None, _context: Any
-    ) -> dict[str, Any]:
-        if not isinstance(input_data, dict):
-            return {}
-        if input_data.get("hook_event_name") != "PostToolUse":
-            return {}
-        if tool_use_id is None:
-            return {}
+    def _extract_tool_blocks_from_sdk_message(
+        self, msg: object
+    ) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
+        content = getattr(msg, "content", None)
+        if not isinstance(content, list):
+            return [], []
 
-        normalized_tool_use_id = str(tool_use_id).strip()
-        if normalized_tool_use_id == "":
-            return {}
+        tool_use_blocks: list[dict[str, object]] = []
+        tool_result_blocks: list[dict[str, object]] = []
 
-        tool_response = input_data.get("tool_response")
-        payload_block: dict[str, object] = {
-            "type": "tool_result",
-            "tool_use_id": normalized_tool_use_id,
-            "content": self._normalize_tool_result_content(tool_response),
-        }
-        if isinstance(tool_response, dict):
-            success = tool_response.get("success")
-            if isinstance(success, bool):
-                payload_block["is_error"] = not success
+        for raw_block in content:
+            if isinstance(raw_block, dict):
+                block_type = raw_block.get("type")
+                block_id = raw_block.get("id")
+                block_name = raw_block.get("name")
+                block_input = raw_block.get("input")
+                block_tool_use_id = raw_block.get("tool_use_id")
+                block_content = raw_block.get("content")
+                block_is_error = raw_block.get("is_error")
+            else:
+                block_type = getattr(raw_block, "type", None)
+                block_id = getattr(raw_block, "id", None)
+                block_name = getattr(raw_block, "name", None)
+                block_input = getattr(raw_block, "input", None)
+                block_tool_use_id = getattr(raw_block, "tool_use_id", None)
+                block_content = getattr(raw_block, "content", None)
+                block_is_error = getattr(raw_block, "is_error", None)
 
-        try:
-            await self._insert_history(
-                payload={"content": [payload_block]},
-                request_id=self.current_request_id,
-            )
-        except Exception as e:
-            print(f"[agent] Failed to persist PostToolUse tool_result: {e!s}")
+            if not isinstance(block_type, str):
+                continue
 
-        return {}
+            if block_type == "tool_use":
+                tool_use_id = str(block_id).strip() if block_id is not None else ""
+                tool_name = str(block_name).strip() if block_name is not None else ""
+                if tool_use_id == "" or tool_name == "":
+                    continue
+                tool_use_blocks.append({
+                    "type": "tool_use",
+                    "id": tool_use_id,
+                    "name": tool_name,
+                    "input": block_input if isinstance(block_input, dict) else {},
+                })
+                continue
 
-    async def _persist_tool_use_pre_tool_use(
-        self, input_data: Any, tool_use_id: str | None, _context: Any
-    ) -> dict[str, Any]:
-        if not isinstance(input_data, dict):
-            return {}
-        if input_data.get("hook_event_name") != "PreToolUse":
-            return {}
-        if tool_use_id is None:
-            return {}
+            if block_type == "tool_result":
+                tool_use_id = (
+                    str(block_tool_use_id).strip()
+                    if block_tool_use_id is not None
+                    else ""
+                )
+                if tool_use_id == "":
+                    continue
+                payload_block: dict[str, object] = {
+                    "type": "tool_result",
+                    "tool_use_id": tool_use_id,
+                    "content": self._normalize_tool_result_content(block_content),
+                }
+                if isinstance(block_is_error, bool):
+                    payload_block["is_error"] = block_is_error
+                tool_result_blocks.append(payload_block)
 
-        tool_name = input_data.get("tool_name")
-        if not isinstance(tool_name, str) or tool_name == "":
-            return {}
+        return tool_use_blocks, tool_result_blocks
 
-        tool_input = input_data.get("tool_input")
-        if not isinstance(tool_input, dict):
-            tool_input = {}
+    async def _persist_tool_blocks_from_sdk_message(
+        self, *, msg: object, request_id: str | None
+    ) -> None:
+        tool_use_blocks, tool_result_blocks = self._extract_tool_blocks_from_sdk_message(msg)
 
-        normalized_tool_use_id = str(tool_use_id).strip()
-        if normalized_tool_use_id == "":
-            return {}
+        if len(tool_use_blocks) > 0:
+            try:
+                await self._insert_history(
+                    role="assistant",
+                    payload={"content": tool_use_blocks},
+                    request_id=request_id,
+                )
+            except Exception as e:
+                print(f"[agent] Failed to persist message tool_use blocks: {e!s}")
 
-        payload_block: dict[str, object] = {
-            "type": "tool_use",
-            "id": normalized_tool_use_id,
-            "name": tool_name,
-            "input": tool_input,
-        }
-
-        try:
-            await self._insert_history(
-                role="assistant",
-                payload={"content": [payload_block]},
-                request_id=self.current_request_id,
-            )
-        except Exception as e:
-            print(f"[agent] Failed to persist PreToolUse tool_use: {e!s}")
-
-        return {}
+        if len(tool_result_blocks) > 0:
+            try:
+                await self._insert_history(
+                    payload={"content": tool_result_blocks},
+                    request_id=request_id,
+                )
+            except Exception as e:
+                print(f"[agent] Failed to persist message tool_result blocks: {e!s}")
 
     async def refresh_cells_context(self) -> str:
         context_result, reactivity_result = await asyncio.gather(
@@ -927,20 +937,6 @@ class AgentHarness:
                 permission_mode="acceptEdits",
                 model="claude-opus-4-6",
                 thinking={"type": "adaptive"},
-                hooks={
-                    "PreToolUse": [
-                        HookMatcher(
-                            matcher=f"^mcp__{MCP_SERVER_NAME}__",
-                            hooks=[self._persist_tool_use_pre_tool_use],
-                        )
-                    ],
-                    "PostToolUse": [
-                        HookMatcher(
-                            matcher=f"^mcp__{MCP_SERVER_NAME}__",
-                            hooks=[self._persist_tool_result_post_tool_use],
-                        )
-                    ],
-                },
                 resume=resume_session_id,
                 env=sdk_env,
                 stderr=_sdk_stderr,
@@ -1234,6 +1230,12 @@ class AgentHarness:
                 elif isinstance(msg, SystemMessage):
                     if msg.subtype == "init":
                         await self._capture_claude_session_id(msg.data.get("session_id"))
+                    continue
+                else:
+                    await self._capture_claude_session_id(getattr(msg, "session_id", None))
+                    await self._persist_tool_blocks_from_sdk_message(
+                        msg=msg, request_id=request_id
+                    )
                     continue
 
             print(f"[agent] finished SDK query (request_id={request_id})")
