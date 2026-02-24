@@ -1210,8 +1210,6 @@ class AgentHarness:
                         "[agent] SDK result message "
                         f"subtype={msg.subtype} is_error={msg.is_error} result={msg.result!r}"
                     )
-                    if isinstance(msg.usage, dict):
-                        usage_data = msg.usage
                     if msg.is_error:
                         terminal_error = msg.result if msg.result is not None else "Claude query failed"
                         await self.send({
