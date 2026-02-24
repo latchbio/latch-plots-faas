@@ -18,18 +18,26 @@ from typing import Any
 try:
     from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
     from claude_agent_sdk.types import (
+        AssistantMessage,
         ResultMessage,
         StreamEvent,
         SystemMessage,
+        ToolResultBlock,
+        ToolUseBlock,
+        UserMessage,
     )
 except ImportError:
     print("[agent] claude_agent_sdk missing, installing...", flush=True)
     subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", "claude-agent-sdk"])
     from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
     from claude_agent_sdk.types import (
+        AssistantMessage,
         ResultMessage,
         StreamEvent,
         SystemMessage,
+        ToolResultBlock,
+        ToolUseBlock,
+        UserMessage,
     )
 from tools import MCP_ALLOWED_TOOL_NAMES, MCP_SERVER_NAME, agent_tools_mcp
 from lplots import _inject
@@ -259,56 +267,35 @@ class AgentHarness:
         tool_use_blocks: list[dict[str, object]] = []
         tool_result_blocks: list[dict[str, object]] = []
 
-        for raw_block in content:
-            if isinstance(raw_block, dict):
-                block_type = raw_block.get("type")
-                block_id = raw_block.get("id")
-                block_name = raw_block.get("name")
-                block_input = raw_block.get("input")
-                block_tool_use_id = raw_block.get("tool_use_id")
-                block_content = raw_block.get("content")
-                block_is_error = raw_block.get("is_error")
-            else:
-                block_type = getattr(raw_block, "type", None)
-                block_id = getattr(raw_block, "id", None)
-                block_name = getattr(raw_block, "name", None)
-                block_input = getattr(raw_block, "input", None)
-                block_tool_use_id = getattr(raw_block, "tool_use_id", None)
-                block_content = getattr(raw_block, "content", None)
-                block_is_error = getattr(raw_block, "is_error", None)
-
-            if not isinstance(block_type, str):
-                continue
-
-            if block_type == "tool_use":
-                tool_use_id = str(block_id).strip() if block_id is not None else ""
-                tool_name = str(block_name).strip() if block_name is not None else ""
+        for block in content:
+            if isinstance(block, ToolUseBlock):
+                tool_use_id = str(block.id).strip()
+                tool_name = str(block.name).strip()
                 if tool_use_id == "" or tool_name == "":
                     continue
+                tool_input = block.input if isinstance(block.input, dict) else {}
                 tool_use_blocks.append({
                     "type": "tool_use",
                     "id": tool_use_id,
                     "name": tool_name,
-                    "input": block_input if isinstance(block_input, dict) else {},
+                    "input": tool_input,
                 })
                 continue
 
-            if block_type == "tool_result":
-                tool_use_id = (
-                    str(block_tool_use_id).strip()
-                    if block_tool_use_id is not None
-                    else ""
-                )
-                if tool_use_id == "":
-                    continue
-                payload_block: dict[str, object] = {
-                    "type": "tool_result",
-                    "tool_use_id": tool_use_id,
-                    "content": self._normalize_tool_result_content(block_content),
-                }
-                if isinstance(block_is_error, bool):
-                    payload_block["is_error"] = block_is_error
-                tool_result_blocks.append(payload_block)
+            if not isinstance(block, ToolResultBlock):
+                continue
+
+            tool_use_id = str(block.tool_use_id).strip()
+            if tool_use_id == "":
+                continue
+            payload_block: dict[str, object] = {
+                "type": "tool_result",
+                "tool_use_id": tool_use_id,
+                "content": self._normalize_tool_result_content(block.content),
+            }
+            if isinstance(block.is_error, bool):
+                payload_block["is_error"] = block.is_error
+            tool_result_blocks.append(payload_block)
 
         return tool_use_blocks, tool_result_blocks
 
@@ -316,11 +303,16 @@ class AgentHarness:
         self, *, msg: object, request_id: str | None
     ) -> None:
         tool_use_blocks, tool_result_blocks = self._extract_tool_blocks_from_sdk_message(msg)
+        message_role: str | None = None
+        if isinstance(msg, AssistantMessage):
+            message_role = "assistant"
+        elif isinstance(msg, UserMessage):
+            message_role = "user"
 
         if len(tool_use_blocks) > 0:
             try:
                 await self._insert_history(
-                    role="assistant",
+                    role=message_role or "assistant",
                     payload={"content": tool_use_blocks},
                     request_id=request_id,
                 )
@@ -330,6 +322,7 @@ class AgentHarness:
         if len(tool_result_blocks) > 0:
             try:
                 await self._insert_history(
+                    role=message_role or "user",
                     payload={"content": tool_result_blocks},
                     request_id=request_id,
                 )
@@ -1170,11 +1163,9 @@ class AgentHarness:
                     terminal_error = "Timed out waiting for model response from Claude runtime"
                     break
 
-                print(f"[agent] SDK message class={type(msg).__name__}")
                 if isinstance(msg, StreamEvent):
                     await self._capture_claude_session_id(msg.session_id)
                     event_type = msg.event.get("type")
-                    print(f"[agent] SDK stream event type={event_type}")
                     if event_type == "message_start":
                         assistant_blocks_by_index.clear()
                         assistant_message_started_at = time.perf_counter()
@@ -1235,22 +1226,6 @@ class AgentHarness:
                     continue
                 else:
                     await self._capture_claude_session_id(getattr(msg, "session_id", None))
-                    role = getattr(msg, "role", None)
-                    content = getattr(msg, "content", None)
-                    if isinstance(content, list):
-                        block_types = []
-                        for block in content:
-                            if isinstance(block, dict):
-                                block_types.append(str(block.get("type", "unknown")))
-                            else:
-                                block_types.append(str(getattr(block, "type", "unknown")))
-                        print(
-                            f"[agent] SDK message role={role!r} content_block_types={block_types}"
-                        )
-                    else:
-                        print(
-                            f"[agent] SDK message role={role!r} content_type={type(content).__name__}"
-                        )
                     await self._persist_tool_blocks_from_sdk_message(
                         msg=msg, request_id=request_id
                     )
