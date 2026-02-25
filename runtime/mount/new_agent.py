@@ -211,32 +211,19 @@ class AgentHarness:
         if isinstance(tool_response, list):
             normalized_blocks: list[dict[str, object]] = []
             for item in tool_response:
-                if not isinstance(item, dict):
-                    return json.dumps(tool_response, default=str)
+                if isinstance(item, dict):
+                    block_type = item.get("type")
+                    text_value = item.get("text")
+                else:
+                    block_type = getattr(item, "type", None)
+                    text_value = getattr(item, "text", None)
+                    if block_type is None and isinstance(text_value, str):
+                        block_type = "text"
 
-                block_type = item.get("type")
-                if block_type == "text" and isinstance(item.get("text"), str):
+                if block_type == "text" and isinstance(text_value, str):
                     normalized_blocks.append({
                         "type": "text",
-                        "text": item["text"],
-                    })
-                    continue
-
-                source = item.get("source")
-                if (
-                    block_type == "image"
-                    and isinstance(source, dict)
-                    and isinstance(source.get("type"), str)
-                    and isinstance(source.get("media_type"), str)
-                    and isinstance(source.get("data"), str)
-                ):
-                    normalized_blocks.append({
-                        "type": "image",
-                        "source": {
-                            "type": source["type"],
-                            "media_type": source["media_type"],
-                            "data": source["data"],
-                        },
+                        "text": text_value,
                     })
                     continue
 
@@ -256,6 +243,56 @@ class AgentHarness:
             return json.dumps(tool_response, default=str)
 
         return json.dumps(tool_response, default=str)
+
+    def _extract_tool_result_text(
+        self, content: str | list[dict[str, object]]
+    ) -> str | None:
+        if isinstance(content, str):
+            return content
+        for block in content:
+            if (
+                isinstance(block, dict)
+                and block.get("type") == "text"
+                and isinstance(block.get("text"), str)
+            ):
+                return block["text"]
+        return None
+
+    def _build_generic_tool_result_content(
+        self,
+        *,
+        tool_name: str,
+        content: str | list[dict[str, object]],
+        is_error: bool,
+    ) -> str | list[dict[str, object]]:
+        text_content = self._extract_tool_result_text(content)
+        if text_content is None:
+            return content
+
+        try:
+            parsed = json.loads(text_content)
+        except Exception:
+            parsed = None
+        if isinstance(parsed, dict) and isinstance(parsed.get("tool_name"), str):
+            return content
+
+        result_payload: dict[str, object] = {
+            "tool_name": tool_name,
+            "success": not is_error,
+            "summary": (
+                f"{tool_name} failed"
+                if is_error
+                else f"{tool_name} completed"
+            ),
+        }
+        if text_content.strip() != "":
+            result_payload["raw_output"] = text_content
+        if is_error:
+            result_payload["error"] = text_content
+            if text_content.strip() != "":
+                result_payload["summary"] = f"{tool_name} failed: {text_content[:200]}"
+
+        return [{"type": "text", "text": json.dumps(result_payload)}]
 
     def _extract_tool_blocks_from_sdk_message(
         self, msg: object
@@ -288,10 +325,11 @@ class AgentHarness:
             tool_use_id = str(block.tool_use_id).strip()
             if tool_use_id == "":
                 continue
+            normalized_content = self._normalize_tool_result_content(block.content)
             payload_block: dict[str, object] = {
                 "type": "tool_result",
                 "tool_use_id": tool_use_id,
-                "content": self._normalize_tool_result_content(block.content),
+                "content": normalized_content,
             }
             if isinstance(block.is_error, bool):
                 payload_block["is_error"] = block.is_error
@@ -300,7 +338,11 @@ class AgentHarness:
         return tool_use_blocks, tool_result_blocks
 
     async def _persist_tool_blocks_from_sdk_message(
-        self, *, msg: object, request_id: str | None
+        self,
+        *,
+        msg: object,
+        request_id: str | None,
+        tool_use_index: dict[str, str],
     ) -> None:
         tool_use_blocks, tool_result_blocks = self._extract_tool_blocks_from_sdk_message(msg)
         message_role: str | None = None
@@ -308,6 +350,15 @@ class AgentHarness:
             message_role = "assistant"
         elif isinstance(msg, UserMessage):
             message_role = "user"
+
+        for block in tool_use_blocks:
+            tool_use_id = block.get("id")
+            tool_name = block.get("name")
+            if not isinstance(tool_use_id, str) or tool_use_id == "":
+                continue
+            if not isinstance(tool_name, str) or tool_name == "":
+                continue
+            tool_use_index[tool_use_id] = tool_name
 
         if len(tool_use_blocks) > 0:
             try:
@@ -320,10 +371,35 @@ class AgentHarness:
                 print(f"[agent] Failed to persist message tool_use blocks: {e!s}")
 
         if len(tool_result_blocks) > 0:
+            tool_result_blocks_with_added_fields: list[dict[str, object]] = []
+            for block in tool_result_blocks:
+                tool_result_block_with_added_fields = dict(block)
+                tool_use_id = block.get("tool_use_id")
+                if isinstance(tool_use_id, str):
+                    tool_name = tool_use_index.get(tool_use_id)
+                    content = block.get("content")
+                    if (
+                        isinstance(tool_name, str)
+                        and (
+                            isinstance(content, str)
+                            or isinstance(content, list)
+                        )
+                    ):
+                        tool_result_block_with_added_fields["content"] = (
+                            self._build_generic_tool_result_content(
+                                tool_name=tool_name,
+                                content=content,
+                                is_error=bool(block.get("is_error", False)),
+                            )
+                        )
+                tool_result_blocks_with_added_fields.append(
+                    tool_result_block_with_added_fields
+                )
+
             try:
                 await self._insert_history(
                     role=message_role or "user",
-                    payload={"content": tool_result_blocks},
+                    payload={"content": tool_result_blocks_with_added_fields},
                     request_id=request_id,
                 )
             except Exception as e:
@@ -1088,6 +1164,7 @@ class AgentHarness:
         persisted_assistant_message_this_turn = False
         terminal_error: str | None = None
         usage_data: dict[str, Any] | None = None
+        tool_use_index: dict[str, str] = {}
 
         async def persist_current_assistant_message(
             *, duration_seconds: float | None = None
@@ -1227,7 +1304,7 @@ class AgentHarness:
                 else:
                     await self._capture_claude_session_id(getattr(msg, "session_id", None))
                     await self._persist_tool_blocks_from_sdk_message(
-                        msg=msg, request_id=request_id
+                        msg=msg, request_id=request_id, tool_use_index=tool_use_index
                     )
                     continue
 
