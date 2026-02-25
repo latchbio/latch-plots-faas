@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 try:
+    from anthropic import APIStatusError
     from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
     from claude_agent_sdk.types import (
         AssistantMessage,
@@ -29,6 +30,7 @@ try:
 except ImportError:
     print("[agent] claude_agent_sdk missing, installing...", flush=True)
     subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", "claude-agent-sdk"])
+    from anthropic import APIStatusError
     from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
     from claude_agent_sdk.types import (
         AssistantMessage,
@@ -1279,18 +1281,6 @@ class AgentHarness:
                     )
                     if msg.is_error:
                         terminal_error = msg.result if msg.result is not None else "Claude query failed"
-                        if (
-                            isinstance(msg.result, str)
-                            and "prompt is too long" in msg.result.lower()
-                        ):
-                            stream_complete_error = {
-                                "message": (
-                                    "This conversation is too long for the agent to continue. "
-                                    "Clear history and try again."
-                                ),
-                                "should_contact_support": False,
-                                "should_clear_history": True,
-                            }
                         await self.send({
                             "type": "agent_error",
                             "error": terminal_error,
@@ -1322,6 +1312,34 @@ class AgentHarness:
                     continue
 
             print(f"[agent] finished SDK query (request_id={request_id})")
+        except APIStatusError as e:
+            should_clear_history = "prompt is too long" in str(e).lower()
+            should_contact_support = 400 <= e.status_code < 500 and e.status_code != 429
+
+            if should_clear_history:
+                user_message = (
+                    "This conversation is too long for the agent to continue. "
+                    "Clear history and try again."
+                )
+            elif should_contact_support:
+                user_message = "An unexpected error occurred. Please try again."
+            else:
+                user_message = (
+                    "Our model provider is experiencing a temporary issue. "
+                    "Please try again in a few minutes."
+                )
+
+            stream_complete_error = {
+                "message": user_message,
+                "should_contact_support": should_contact_support,
+                "should_clear_history": should_clear_history,
+            }
+            terminal_error = f"API error: {e!s}"
+            await self.send({
+                "type": "agent_error",
+                "error": terminal_error,
+                "fatal": False,
+            })
         except Exception as e:
             terminal_error = f"Agent SDK query failed: {e!s}"
             await self.send({
