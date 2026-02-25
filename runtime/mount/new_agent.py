@@ -1163,6 +1163,7 @@ class AgentHarness:
         assistant_message_started_at: float | None = None
         persisted_assistant_message_this_turn = False
         terminal_error: str | None = None
+        stream_complete_error: dict[str, object] | None = None
         usage_data: dict[str, Any] | None = None
         tool_use_index: dict[str, str] = {}
 
@@ -1278,6 +1279,18 @@ class AgentHarness:
                     )
                     if msg.is_error:
                         terminal_error = msg.result if msg.result is not None else "Claude query failed"
+                        if (
+                            isinstance(msg.result, str)
+                            and "prompt is too long" in msg.result.lower()
+                        ):
+                            stream_complete_error = {
+                                "message": (
+                                    "This conversation is too long for the agent to continue. "
+                                    "Clear history and try again."
+                                ),
+                                "should_contact_support": False,
+                                "should_clear_history": True,
+                            }
                         await self.send({
                             "type": "agent_error",
                             "error": terminal_error,
@@ -1328,13 +1341,17 @@ class AgentHarness:
 
             if terminal_error is not None:
                 try:
+                    if stream_complete_error is not None:
+                        error_history_payload = stream_complete_error
+                    else:
+                        error_history_payload = {
+                            "message": terminal_error,
+                            "should_contact_support": False,
+                        }
                     await self._insert_history(
                         event_type="error",
                         role="system",
-                        payload={
-                            "message": terminal_error,
-                            "should_contact_support": False,
-                        },
+                        payload=error_history_payload,
                         request_id=request_id,
                     )
                 except Exception as e:
@@ -1343,7 +1360,10 @@ class AgentHarness:
             await self._close_open_stream_blocks()
             if usage_data is not None:
                 await self._send_usage_update(usage_data)
-            await self.send({"type": "agent_stream_complete"})
+            stream_complete_payload: dict[str, object] = {"type": "agent_stream_complete"}
+            if stream_complete_error is not None:
+                stream_complete_payload["error"] = stream_complete_error
+            await self.send(stream_complete_payload)
 
     async def _run_query_with_turn_prompt(
         self,
