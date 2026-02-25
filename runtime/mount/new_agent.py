@@ -1168,6 +1168,7 @@ class AgentHarness:
         stream_complete_error: dict[str, object] | None = None
         usage_data: dict[str, Any] | None = None
         tool_use_index: dict[str, str] = {}
+        assistant_error_type: str | None = None
 
         async def persist_current_assistant_message(
             *, duration_seconds: float | None = None
@@ -1293,9 +1294,37 @@ class AgentHarness:
                                 "should_contact_support": False,
                                 "should_clear_history": True,
                             }
+                        elif assistant_error_type in {
+                            "authentication_failed",
+                            "billing_error",
+                            "invalid_request",
+                        }:
+                            stream_complete_error = {
+                                "message": "An unexpected error occurred. Please try again.",
+                                "should_contact_support": True,
+                                "should_clear_history": False,
+                            }
+                        elif assistant_error_type in {
+                            "rate_limit",
+                            "server_error",
+                            "unknown",
+                        }:
+                            stream_complete_error = {
+                                "message": (
+                                    "Our model provider is experiencing a temporary issue. "
+                                    "Please try again in a few minutes."
+                                ),
+                                "should_contact_support": False,
+                                "should_clear_history": False,
+                            }
+
+                        if stream_complete_error is not None:
+                            agent_error_message = str(stream_complete_error["message"])
+                        else:
+                            agent_error_message = terminal_error
                         await self.send({
                             "type": "agent_error",
-                            "error": terminal_error,
+                            "error": agent_error_message,
                             "fatal": False,
                         })
                     # todo(tim): reconsider if needed 
@@ -1318,6 +1347,7 @@ class AgentHarness:
                     continue
                 else:
                     if isinstance(msg, AssistantMessage) and msg.error is not None:
+                        assistant_error_type = str(msg.error)
                         print(f"[agent] assistant message error={msg.error}")
                     await self._capture_claude_session_id(getattr(msg, "session_id", None))
                     await self._persist_tool_blocks_from_sdk_message(
@@ -1368,7 +1398,10 @@ class AgentHarness:
             if terminal_error is not None:
                 try:
                     if stream_complete_error is not None:
-                        error_history_payload = stream_complete_error
+                        error_history_payload = dict(stream_complete_error)
+                        error_history_payload["raw_error"] = terminal_error
+                        if assistant_error_type is not None:
+                            error_history_payload["assistant_error_type"] = assistant_error_type
                     else:
                         error_history_payload = {
                             "message": terminal_error,
