@@ -1281,6 +1281,18 @@ class AgentHarness:
                     )
                     if msg.is_error:
                         terminal_error = msg.result if msg.result is not None else "Claude query failed"
+                        if (
+                            isinstance(msg.result, str)
+                            and "prompt is too long" in msg.result.lower()
+                        ):
+                            stream_complete_error = {
+                                "message": (
+                                    "This conversation is too long for the agent to continue. "
+                                    "Clear history and try again."
+                                ),
+                                "should_contact_support": False,
+                                "should_clear_history": True,
+                            }
                         await self.send({
                             "type": "agent_error",
                             "error": terminal_error,
@@ -1305,6 +1317,8 @@ class AgentHarness:
                         await self._capture_claude_session_id(msg.data.get("session_id"))
                     continue
                 else:
+                    if isinstance(msg, AssistantMessage) and msg.error is not None:
+                        print(f"[agent] assistant message error={msg.error}")
                     await self._capture_claude_session_id(getattr(msg, "session_id", None))
                     await self._persist_tool_blocks_from_sdk_message(
                         msg=msg, request_id=request_id, tool_use_index=tool_use_index
@@ -1313,15 +1327,9 @@ class AgentHarness:
 
             print(f"[agent] finished SDK query (request_id={request_id})")
         except APIStatusError as e:
-            should_clear_history = "prompt is too long" in str(e).lower()
             should_contact_support = 400 <= e.status_code < 500 and e.status_code != 429
 
-            if should_clear_history:
-                user_message = (
-                    "This conversation is too long for the agent to continue. "
-                    "Clear history and try again."
-                )
-            elif should_contact_support:
+            if should_contact_support:
                 user_message = "An unexpected error occurred. Please try again."
             else:
                 user_message = (
@@ -1332,7 +1340,7 @@ class AgentHarness:
             stream_complete_error = {
                 "message": user_message,
                 "should_contact_support": should_contact_support,
-                "should_clear_history": should_clear_history,
+                "should_clear_history": False,
             }
             terminal_error = f"API error: {e!s}"
             await self.send({
