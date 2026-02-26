@@ -74,12 +74,6 @@ context_root = Path(__file__).parent / "agent_config" / "context"
 SDK_BUILTIN_ALLOWED_TOOLS = ["Read", "Grep", "Glob", "Edit", "Write", "Bash"]
 
 
-class Mode(Enum):
-    planning = "planning"
-    executing = "executing"
-    debugging = "debugging"
-
-
 class Behavior(Enum):
     proactive = "proactive"
     step_by_step = "step_by_step"
@@ -89,7 +83,6 @@ class Behavior(Enum):
 class AgentHarness:
     conn: SocketIoThread
     client: ClaudeSDKClient | None = None
-    mode: Mode = Mode.planning
     system_prompt: str | None = None
     pending_operations: dict[str, asyncio.Future] = field(default_factory=dict)
     executing_cells: set[str] = field(default_factory=set)
@@ -124,14 +117,6 @@ class AgentHarness:
     current_query_task: asyncio.Task | None = None
     open_stream_blocks: dict[int, str] = field(default_factory=dict)
     agent_session_metadata: dict[str, object] = field(default_factory=dict)
-
-    mode_config: dict[Mode, tuple[str, int | None]] = field(
-        default_factory=lambda: {
-            Mode.planning: ("claude-opus-4-6", 4096),
-            Mode.executing: ("claude-opus-4-6", 1024),
-            Mode.debugging: ("claude-opus-4-6", 2048),
-        }
-    )
 
     async def send(self, msg: dict[str, object]) -> None:
         msg_type = msg.get("type", "unknown")
@@ -735,14 +720,6 @@ class AgentHarness:
 
         self.operation_counter += 1
 
-        if self.mode == Mode.planning and action in {
-            "create_cell",
-            "edit_cell",
-            "run_cell",
-            "delete_cell",
-        }:
-            self.set_mode(Mode.executing)
-
         force_backend_browser_retry = params.get("force_backend_browser_retry", False)
 
         tx_id = f"tx_{uuid.uuid4().hex[:12]}"
@@ -803,13 +780,6 @@ class AgentHarness:
         fut = self.pending_operations.get(tx_id)
         if fut and not fut.done():
             fut.set_result(msg)
-
-    def set_mode(self, mode: Mode) -> None:
-        if mode == self.mode:
-            return
-
-        self.mode = mode
-        print(f"[agent] Mode changed to {mode.value}")
 
     async def _send_usage_update(self, usage: dict[str, Any]) -> None:
         await self.send({
@@ -991,9 +961,6 @@ class AgentHarness:
 
         should_continue = self.should_auto_continue
         self.should_auto_continue = False
-
-        if self.mode == Mode.executing:
-            self.set_mode(Mode.planning)
 
         await self._notify_history_updated(request_id=self.current_request_id)
 
@@ -1806,9 +1773,7 @@ class AgentHarness:
         return {
             "system_prompt": self.system_prompt,
             "messages": messages,
-            "model": self.mode_config.get(
-                self.mode, ("claude-opus-4-6", 1024)
-            )[0],
+            "model": "claude-opus-4-6",
             "cells": self.latest_notebook_state
             if self.latest_notebook_state is not None
             else "Interact with agent to populate notebook state.",
