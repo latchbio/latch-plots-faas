@@ -17,6 +17,7 @@ from typing import Any
 
 try:
     from anthropic import APIStatusError
+    from anthropic.types import MessageParam
     from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
     from claude_agent_sdk.types import (
         AssistantMessage,
@@ -31,6 +32,7 @@ except ImportError:
     print("[agent] claude_agent_sdk missing, installing...", flush=True)
     subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", "claude-agent-sdk"])
     from anthropic import APIStatusError
+    from anthropic.types import MessageParam
     from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
     from claude_agent_sdk.types import (
         AssistantMessage,
@@ -125,9 +127,9 @@ class AgentHarness:
 
     mode_config: dict[Mode, tuple[str, int | None]] = field(
         default_factory=lambda: {
-            Mode.planning: ("claude-opus-4-5-20251101", 4096),
-            Mode.executing: ("claude-opus-4-5-20251101", 1024),
-            Mode.debugging: ("claude-opus-4-5-20251101", 2048),
+            Mode.planning: ("claude-opus-4-6", 4096),
+            Mode.executing: ("claude-opus-4-6", 1024),
+            Mode.debugging: ("claude-opus-4-6", 2048),
         }
     )
 
@@ -148,6 +150,149 @@ class AgentHarness:
         if request_id is not None:
             payload["request_id"] = request_id
         await self.send(payload)
+
+    async def _fetch_history_from_db(self) -> list[dict[str, object]]:
+        if skip_db_history:
+            return self.in_memory_history
+
+        if self.agent_session_id is None:
+            return []
+
+        resp = await gql_query(
+            auth=auth_token_sdk,
+            query="""
+                query AgentHistory($sessionId: BigInt!) {
+                    agentHistories(condition: {sessionId: $sessionId, removed: false}, orderBy: ID_ASC) {
+                        nodes { id payload requestId templateVersionId }
+                    }
+                }
+            """,
+            variables={"sessionId": str(self.agent_session_id)},
+        )
+
+        nodes = resp.get("data", {}).get("agentHistories", {}).get("nodes", [])
+        return [{
+            "payload": node.get("payload"),
+            "request_id": node.get("requestId"),
+            "template_version_id": node.get("templateVersionId"),
+        } for node in nodes if isinstance(node, dict)]
+
+    async def _build_messages_from_db(self) -> list[MessageParam]:
+        history = await self._fetch_history_from_db()
+        anthropic_messages: list[MessageParam] = []
+
+        for item in history:
+            payload = item.get("payload")
+            if not isinstance(payload, dict):
+                continue
+
+            payload_type = payload.get("type")
+            if payload_type == "anthropic_message":
+                role = payload.get("role")
+                content = payload.get("content")
+
+                display_widgets = payload.get("display_widgets")
+                if role == "user" and display_widgets is not None and isinstance(content, str):
+                    for widget in display_widgets:
+                        ref_pattern = f"@({widget['widgetKey']}|{widget['id']})"
+                        inline_widget = (
+                            f"<Widget label=\"{widget['label']}\" type=\"{widget['widgetType']}\" "
+                            f"widget_key=\"{widget['widgetKey']}\" cell=\"{widget['cellDisplayName']}\"/>"
+                        )
+                        content = content.replace(ref_pattern, inline_widget)
+
+                if role == "user" and isinstance(content, dict) and content.get("type") == "cell_result":
+                    exception = content.get("exception")
+                    logs = content.get("logs")
+                    message = content.get("message", "Cell execution completed")
+
+                    content = str(message)
+                    if exception:
+                        content = f"{content}\n\nException: {exception}"
+                    if logs:
+                        content = f"{content}\n\nLogs:\n{logs}"
+
+                if isinstance(content, list):
+                    cleaned_content: list[object] = []
+                    for block in content:
+                        if isinstance(block, dict) and block.get("type") == "thinking_summary":
+                            continue
+
+                        if isinstance(block, dict) and block.get("type") == "tool_result":
+                            block_copy = dict(block)
+                            block_content = block_copy.get("content", "{}")
+                            if isinstance(block_content, str):
+                                try:
+                                    result = json.loads(block_content)
+                                except Exception:
+                                    cleaned_content.append(block_copy)
+                                    continue
+                                if isinstance(result, dict) and "original_code" in result:
+                                    result.pop("original_code", None)
+                                    block_copy["content"] = json.dumps(result, sort_keys=True)
+                            cleaned_content.append(block_copy)
+                            continue
+
+                        cleaned_content.append(block)
+                    content = cleaned_content
+
+                template_version_id = item.get("template_version_id")
+                if role == "user" and template_version_id is not None:
+                    checkpoint_content = (
+                        "[auto-generated metadata] "
+                        f"template_version_id={template_version_id}"
+                    )
+                    anthropic_messages.append({"role": "user", "content": checkpoint_content})
+
+                if role in {"user", "assistant"} and isinstance(content, (str, list)):
+                    anthropic_messages.append({"role": role, "content": content})
+            elif payload_type == "cancellation":
+                anthropic_messages.append({
+                    "role": "user",
+                    "content": "[Request cancelled by user]",
+                })
+
+        reordered: list[MessageParam] = []
+        pending_tool_ids: set[str] = set()
+        deferred: list[MessageParam] = []
+
+        for msg in anthropic_messages:
+            role = msg.get("role")
+            content = msg.get("content")
+
+            if role == "assistant" and isinstance(content, list):
+                for block in content:
+                    if isinstance(block, dict) and block.get("type") == "tool_use":
+                        tool_id = block.get("id")
+                        if tool_id is not None:
+                            pending_tool_ids.add(tool_id)
+
+            if len(pending_tool_ids) > 0 and role == "user":
+                is_tool_result_message = isinstance(content, list) and any(
+                    isinstance(block, dict) and block.get("type") == "tool_result"
+                    for block in content
+                )
+                if is_tool_result_message:
+                    reordered.append(msg)
+                    if isinstance(content, list):
+                        for block in content:
+                            if isinstance(block, dict) and block.get("type") == "tool_result":
+                                tool_result_id = block.get("tool_use_id")
+                                if tool_result_id is not None:
+                                    pending_tool_ids.discard(tool_result_id)
+                    if len(pending_tool_ids) == 0:
+                        reordered.extend(deferred)
+                        deferred.clear()
+                    continue
+
+                deferred.append(msg)
+                continue
+
+            reordered.append(msg)
+
+        reordered.extend(deferred)
+        print(f"[agent] Built {len(reordered)} messages from DB")
+        return reordered
 
     async def _insert_history(
         self,
@@ -1640,6 +1785,7 @@ class AgentHarness:
 
     async def get_full_prompt(self) -> dict:
         self.system_prompt = (context_root.parent / "system_prompt.md").read_text()
+        messages = await self._build_messages_from_db()
 
         def build_tree(path: Path, prefix: str = "") -> list[str]:
             lines = []
@@ -1657,13 +1803,11 @@ class AgentHarness:
         tree_lines.extend(build_tree(context_root, "  "))
         tree_content = "\n".join(tree_lines)
 
-        # todo(tim): fix messages/truncated_messages/model
         return {
             "system_prompt": self.system_prompt,
-            "messages": [],
-            "truncated_messages": [],
+            "messages": messages,
             "model": self.mode_config.get(
-                self.mode, ("claude-opus-4-5-20251101", 1024)
+                self.mode, ("claude-opus-4-6", 1024)
             )[0],
             "cells": self.latest_notebook_state
             if self.latest_notebook_state is not None
