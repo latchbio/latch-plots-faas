@@ -71,7 +71,16 @@ if sandbox_root:
 
 
 context_root = Path(__file__).parent / "agent_config" / "context"
-SDK_BUILTIN_ALLOWED_TOOLS = ["Read", "Grep", "Glob", "Edit", "Write", "Bash"]
+SDK_BUILTIN_ALLOWED_TOOLS = [
+    "Read",
+    "Grep",
+    "Glob",
+    "Edit",
+    "Write",
+    "Bash",
+    "WebFetch",
+    "WebSearch",
+]
 
 
 class Behavior(Enum):
