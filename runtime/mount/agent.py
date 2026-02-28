@@ -15,6 +15,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
+# todo(tim): clean up these imports once base image updated
 try:
     from anthropic import APIStatusError
     from anthropic.types import MessageParam
@@ -342,7 +343,8 @@ class AgentHarness:
         )
 
         await self._notify_history_updated(request_id=request_id)
-
+    
+    # todo(tim): clean up these type checks
     def _normalize_tool_result_content(
         self, tool_response: object
     ) -> str | list[dict[str, object]]:
@@ -373,14 +375,6 @@ class AgentHarness:
             if len(normalized_blocks) > 0:
                 return normalized_blocks
 
-            return json.dumps(tool_response, default=str)
-
-        if isinstance(tool_response, dict):
-            content = tool_response.get("content")
-            if isinstance(content, list):
-                normalized_content = self._normalize_tool_result_content(content)
-                if isinstance(normalized_content, list):
-                    return normalized_content
             return json.dumps(tool_response, default=str)
 
         return json.dumps(tool_response, default=str)

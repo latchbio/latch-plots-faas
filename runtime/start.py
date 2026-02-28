@@ -35,13 +35,12 @@ env_vars = {
     "PATH": "/opt/mamba/envs/plots-faas/bin:" + os.environ["PATH"],
 }
 
-# Pass through selected agent toggles from parent env.
-for key in ("AGENT_SDK_DIRECT_ANTHROPIC_KEY", "AGENT_SKIP_DB_HISTORY"):
+# todo(tim): clean up this key stuff once proxy working
+for key in ("AGENT_SDK_DIRECT_ANTHROPIC_KEY",):
     value = os.environ.get(key)
     if value:
         env_vars[key] = value
 
-# SSH-only fallback: allow mounting a direct Anthropic key via file for spike testing.
 direct_key_path = latch_p / "agent-sdk-direct-anthropic-key"
 if direct_key_path.exists():
     direct_key = direct_key_path.read_text().strip()
