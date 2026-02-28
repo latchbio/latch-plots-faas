@@ -1,28 +1,52 @@
 import asyncio
-import contextlib
 import json
 import os
-import re
 import socket
-import subprocess
+import subprocess  # noqa: S404
 import sys
 import time
 import traceback
 import uuid
 from collections.abc import Callable, Iterable
+from contextlib import suppress
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
+from typing import Any
 
-from agent_utils.auto_install import anthropic
-from anthropic import APIStatusError
-from anthropic.types import MessageParam, ToolParam
-from anthropic.types.beta.beta_message import BetaMessage
-from anthropic.types.message import Message
+try:
+    from anthropic import APIStatusError
+    from anthropic.types import MessageParam
+    from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
+    from claude_agent_sdk.types import (
+        AssistantMessage,
+        ResultMessage,
+        StreamEvent,
+        SystemMessage,
+        ToolResultBlock,
+        ToolUseBlock,
+        UserMessage,
+    )
+except ImportError:
+    print("[agent] claude_agent_sdk missing, installing...", flush=True)
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", "claude-agent-sdk"])
+    from anthropic import APIStatusError
+    from anthropic.types import MessageParam
+    from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
+    from claude_agent_sdk.types import (
+        AssistantMessage,
+        ResultMessage,
+        StreamEvent,
+        SystemMessage,
+        ToolResultBlock,
+        ToolUseBlock,
+        UserMessage,
+    )
+from tools import MCP_ALLOWED_TOOL_NAMES, MCP_SERVER_NAME, agent_tools_mcp
 from lplots import _inject
 from socketio_thread import SocketIoThread
-from utils import auth_token_sdk, gql_query, nucleus_url, pod_id
+from utils import auth_token_sdk, gql_query, nucleus_url, sdk_token
 
 sys.stdout.reconfigure(line_buffering=True)
 
@@ -35,6 +59,7 @@ reactivity_ready_statuses = {"ran", "ok", "success", "error"}
 sandbox_root = os.environ.get("LATCH_SANDBOX_ROOT")
 if sandbox_root:
     import pathlib
+
     original_path_new = pathlib.Path.__new__
 
     def patched_path_new(cls, *args, **kwargs):
@@ -46,12 +71,16 @@ if sandbox_root:
 
 
 context_root = Path(__file__).parent / "agent_config" / "context"
-
-
-class Mode(Enum):
-    planning = "planning"
-    executing = "executing"
-    debugging = "debugging"
+SDK_BUILTIN_ALLOWED_TOOLS = [
+    "Read",
+    "Grep",
+    "Glob",
+    "Edit",
+    "Write",
+    "Bash",
+    "WebFetch",
+    "WebSearch",
+]
 
 
 class Behavior(Enum):
@@ -62,13 +91,11 @@ class Behavior(Enum):
 @dataclass
 class AgentHarness:
     conn: SocketIoThread
-    initialized: bool = False
-    client: anthropic.AsyncAnthropic | None = None
-    mode: Mode = Mode.planning
+    client: ClaudeSDKClient | None = None
     system_prompt: str | None = None
     pending_operations: dict[str, asyncio.Future] = field(default_factory=dict)
     executing_cells: set[str] = field(default_factory=set)
-    tools: list[ToolParam] = field(default_factory=list)
+    tools: list[dict[str, object]] = field(default_factory=list)
     tool_map: dict[str, Callable] = field(default_factory=dict)
     operation_counter: int = 0
     current_request_id: str | None = None
@@ -80,7 +107,7 @@ class AgentHarness:
     pending_messages: asyncio.Queue = field(default_factory=asyncio.Queue)
     conversation_task: asyncio.Task | None = None
     conversation_running: bool = False
-    agent_session_id: int | None = None
+    agent_session_id: str | None = None
     latest_notebook_context: dict = field(default_factory=dict)
     current_status: str | None = None
     expected_widgets: dict[str, object | None] = field(default_factory=dict)
@@ -90,31 +117,41 @@ class AgentHarness:
     buffer: list[str] = field(default_factory=list)
     summarize_tasks: set[asyncio.Task] = field(default_factory=set)
     in_memory_history: list[dict] = field(default_factory=list)
-
-    mode_config: dict[Mode, tuple[str, int | None]] = field(default_factory=lambda: {
-        Mode.planning: ("claude-opus-4-5-20251101", 4096),
-        Mode.executing: ("claude-opus-4-5-20251101", 1024),
-        Mode.debugging: ("claude-opus-4-5-20251101", 2048),
-    })
+    mcp_servers: dict[str, object] = field(
+        default_factory=lambda: {MCP_SERVER_NAME: agent_tools_mcp}
+    )
+    mcp_allowed_tools: list[str] = field(
+        default_factory=lambda: list(MCP_ALLOWED_TOOL_NAMES)
+    )
+    current_query_task: asyncio.Task | None = None
+    open_stream_blocks: dict[int, str] = field(default_factory=dict)
+    agent_session_metadata: dict[str, object] = field(default_factory=dict)
 
     async def send(self, msg: dict[str, object]) -> None:
         msg_type = msg.get("type", "unknown")
-        if msg_type != "agent_stream_delta":
+        if msg_type == "agent_error":
+            print(f"[agent] Sending message: agent_error payload={json.dumps(msg)}")
+        elif msg_type != "agent_stream_delta":
             print(f"[agent] Sending message: {msg_type}")
 
         await self.conn.send(msg)
 
     async def _notify_history_updated(self, *, request_id: str | None = None) -> None:
-        await self.send({
+        payload: dict[str, object] = {
             "type": "agent_history_updated",
-            "session_id": str(self.agent_session_id) if self.agent_session_id is not None else None,
-            **({"request_id": request_id} if request_id else {}),
-        })
+            "session_id": self.agent_session_id,
+        }
+        if request_id is not None:
+            payload["request_id"] = request_id
+        await self.send(payload)
 
-    async def _fetch_history_from_db(self) -> list[dict]:
+    async def _fetch_history_from_db(self) -> list[dict[str, object]]:
         if skip_db_history:
             return self.in_memory_history
-        assert self.agent_session_id is not None
+
+        if self.agent_session_id is None:
+            return []
+
         resp = await gql_query(
             auth=auth_token_sdk,
             query="""
@@ -126,175 +163,13 @@ class AgentHarness:
             """,
             variables={"sessionId": str(self.agent_session_id)},
         )
+
         nodes = resp.get("data", {}).get("agentHistories", {}).get("nodes", [])
         return [{
-            "payload": n.get("payload"),
-            "request_id": n.get("requestId"),
-            "template_version_id": n.get("templateVersionId"),
-        } for n in nodes]
-
-    @staticmethod
-    def _truncate_message_content(msg: MessageParam) -> MessageParam:
-        content = msg.get("content")
-
-        if isinstance(content, str):
-            if len(content) > 500:
-                return {"role": msg["role"], "content": content[:500] + "...[truncated]"}
-            return msg
-
-        if isinstance(content, list):
-            truncated_blocks = []
-            for block in content:
-                if not isinstance(block, dict):
-                    truncated_blocks.append(block)
-                    continue
-
-                block_type = block.get("type")
-
-                if block_type in {"thinking", "redacted_thinking"}:
-                    continue
-
-                if block_type == "tool_result":
-                    block_content = block.get("content", "{}")
-
-                    if isinstance(block_content, list):
-                        text_blocks = [b for b in block_content if isinstance(b, dict) and b.get("type") == "text"]
-                        if len(text_blocks) > 0:
-                            result_str = text_blocks[0].get("text", "{}")
-                            result = json.loads(result_str)
-                            result["_note"] = "image removed during truncation"
-                            truncated_blocks.append({
-                                "type": "tool_result",
-                                "tool_use_id": block.get("tool_use_id"),
-                                "content": json.dumps(result)
-                            })
-                        else:
-                            truncated_blocks.append(block)
-                        continue
-
-                    result_str = block_content
-                    result = json.loads(result_str)
-                    tool_name = result.get("tool_name")
-
-                    if tool_name in {"create_cell", "create_markdown_cell"}:
-                        result = {k: v for k, v in result.items() if k != "code"}
-                    elif tool_name == "edit_cell":
-                        result = {k: v for k, v in result.items() if k not in {"code", "original_code"}}
-                    elif tool_name == "bash":
-                        result = {k: v for k, v in result.items() if k != "output"}
-                    elif tool_name == "execute_code":
-                        result = {k: v for k, v in result.items() if k != "code"}
-                        if "stdout" in result and isinstance(result.get("stdout"), str) and len(result["stdout"]) > 1500:
-                            result["stdout"] = "...[truncated]\n" + result["stdout"][-1500:]
-                        if "stderr" in result and isinstance(result.get("stderr"), str) and len(result["stderr"]) > 1500:
-                            result["stderr"] = "...[truncated]\n" + result["stderr"][-1500:]
-                        if "exception" in result and isinstance(result.get("exception"), str) and len(result["exception"]) > 1500:
-                            result["exception"] = "...[truncated]\n" + result["exception"][-1500:]
-
-                    truncated_blocks.append({
-                        "type": "tool_result",
-                        "tool_use_id": block.get("tool_use_id"),
-                        "content": json.dumps(result)
-                    })
-                    continue
-
-                if block_type == "tool_use":
-                    tool_name = block.get("name")
-                    inp = block.get("input")
-                    truncated_inp = inp
-
-                    if isinstance(inp, dict) and tool_name is not None:
-                        if tool_name in {"create_cell", "create_markdown_cell"}:
-                            truncated_inp = {k: v for k, v in inp.items() if k != "code"}
-                        elif tool_name == "edit_cell":
-                            truncated_inp = {k: v for k, v in inp.items() if k != "new_code"}
-                        elif tool_name == "update_plan":
-                            truncated_inp = {k: v for k, v in inp.items() if k not in {"plan", "plan_diff"}}
-
-                    truncated_blocks.append({
-                        "type": "tool_use",
-                        "id": block.get("id"),
-                        "name": tool_name,
-                        "input": truncated_inp,
-                    })
-                    continue
-
-                if block_type == "text":
-                    text = block.get("text", "")
-                    if len(text) > 1000:
-                        truncated_blocks.append({"type": "text", "text": text[:1000] + "...[truncated]"})
-                    else:
-                        truncated_blocks.append(block)
-                    continue
-
-                truncated_blocks.append(block)
-
-            return {"role": msg["role"], "content": truncated_blocks}
-
-        return msg
-
-    def _prepare_messages_for_inference(self, messages: list[MessageParam]) -> list[MessageParam]:
-        nrof_messages = len(messages)
-
-        cache_pos = nrof_messages - (nrof_messages % cache_chunk_size)
-        trunc_pos = cache_pos - cache_chunk_size
-        greatest_cache_index = cache_pos - 1
-
-        print(f"[agent] _prepare_messages_for_inference: nrof_messages={nrof_messages}, cache_pos={cache_pos}, trunc_pos={trunc_pos}, cache_index={greatest_cache_index}")
-
-        if trunc_pos > 0:
-            messages = [
-                self._truncate_message_content(msg) if i < trunc_pos else msg
-                for i, msg in enumerate(messages)
-            ]
-
-        if greatest_cache_index <= 0:
-            return messages
-
-        user_cache_index = greatest_cache_index
-        message_to_cache = None
-
-        while user_cache_index >= 0:
-            msg = messages[user_cache_index]
-            if msg.get("role") != "user":
-                user_cache_index -= 1
-                continue
-
-            content = msg.get("content")
-
-            if isinstance(content, str):
-                message_to_cache = {
-                    **msg.copy(),
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": content,
-                            "cache_control": {"type": "ephemeral"}
-                        }
-                    ]
-                }
-                break
-
-            if isinstance(content, list) and len(content) > 0:
-                last_block = content[-1]
-                if isinstance(last_block, dict) and last_block.get("type") == "text":
-                    content_copy = content.copy()
-                    content_copy[-1]["cache_control"] = {"type": "ephemeral"}  # type: ignore
-                    message_to_cache = {
-                        **msg.copy(),
-                        "content": content_copy
-                    }
-                    break
-
-            user_cache_index -= 1
-
-        if message_to_cache is None:
-            return messages
-
-        print(f"[agent] Caching message at index {user_cache_index}")
-        messages[user_cache_index] = message_to_cache  # pyright: ignore[reportCallIssue, reportArgumentType]
-
-        return messages
+            "payload": node.get("payload"),
+            "request_id": node.get("requestId"),
+            "template_version_id": node.get("templateVersionId"),
+        } for node in nodes if isinstance(node, dict)]
 
     async def _build_messages_from_db(self) -> list[MessageParam]:
         history = await self._fetch_history_from_db()
@@ -302,9 +177,11 @@ class AgentHarness:
 
         for item in history:
             payload = item.get("payload")
+            if not isinstance(payload, dict):
+                continue
 
-            t = payload.get("type") if isinstance(payload, dict) else None
-            if t == "anthropic_message":
+            payload_type = payload.get("type")
+            if payload_type == "anthropic_message":
                 role = payload.get("role")
                 content = payload.get("content")
 
@@ -312,47 +189,62 @@ class AgentHarness:
                 if role == "user" and display_widgets is not None and isinstance(content, str):
                     for widget in display_widgets:
                         ref_pattern = f"@({widget['widgetKey']}|{widget['id']})"
-                        inline_widget = f"<Widget label=\"{widget['label']}\" type=\"{widget['widgetType']}\" widget_key=\"{widget['widgetKey']}\" cell=\"{widget['cellDisplayName']}\"/>"
+                        inline_widget = (
+                            f"<Widget label=\"{widget['label']}\" type=\"{widget['widgetType']}\" "
+                            f"widget_key=\"{widget['widgetKey']}\" cell=\"{widget['cellDisplayName']}\"/>"
+                        )
                         content = content.replace(ref_pattern, inline_widget)
 
-                if (role == "user" and isinstance(content, dict) and content.get("type") == "cell_result"):
+                if role == "user" and isinstance(content, dict) and content.get("type") == "cell_result":
                     exception = content.get("exception")
                     logs = content.get("logs")
                     message = content.get("message", "Cell execution completed")
 
-                    content = message
+                    content = str(message)
                     if exception:
-                        content = f"{message}\n\nException: {exception}"
+                        content = f"{content}\n\nException: {exception}"
                     if logs:
                         content = f"{content}\n\nLogs:\n{logs}"
 
                 if isinstance(content, list):
-                    cleaned_content = []
+                    cleaned_content: list[object] = []
                     for block in content:
                         if isinstance(block, dict) and block.get("type") == "thinking_summary":
                             continue
 
                         if isinstance(block, dict) and block.get("type") == "tool_result":
-                            block = block.copy()
-                            block_content = block.get("content", "{}")
+                            block_copy = dict(block)
+                            block_content = block_copy.get("content", "{}")
                             if isinstance(block_content, str):
-                                result = json.loads(block_content)
-                                if "original_code" in result:
-                                    result.pop("original_code")
-                                    block["content"] = json.dumps(result, sort_keys=True)
+                                try:
+                                    result = json.loads(block_content)
+                                except Exception:
+                                    cleaned_content.append(block_copy)
+                                    continue
+                                if isinstance(result, dict) and "original_code" in result:
+                                    result.pop("original_code", None)
+                                    block_copy["content"] = json.dumps(result, sort_keys=True)
+                            cleaned_content.append(block_copy)
+                            continue
+
                         cleaned_content.append(block)
                     content = cleaned_content
 
                 template_version_id = item.get("template_version_id")
                 if role == "user" and template_version_id is not None:
-                    checkpoint_content = f"[auto-generated metadata] template_version_id={template_version_id}"
+                    checkpoint_content = (
+                        "[auto-generated metadata] "
+                        f"template_version_id={template_version_id}"
+                    )
                     anthropic_messages.append({"role": "user", "content": checkpoint_content})
 
-                if role in {"user", "assistant"} and (isinstance(content, (str, list))):
+                if role in {"user", "assistant"} and isinstance(content, (str, list)):
                     anthropic_messages.append({"role": role, "content": content})
-
-            elif t == "cancellation":
-                anthropic_messages.append({"role": "user", "content": "[Request cancelled by user]"})
+            elif payload_type == "cancellation":
+                anthropic_messages.append({
+                    "role": "user",
+                    "content": "[Request cancelled by user]",
+                })
 
         reordered: list[MessageParam] = []
         pending_tool_ids: set[str] = set()
@@ -370,17 +262,18 @@ class AgentHarness:
                             pending_tool_ids.add(tool_id)
 
             if len(pending_tool_ids) > 0 and role == "user":
-                is_tool_result_msg = isinstance(content, list) and any(
-                    isinstance(b, dict) and b.get("type") == "tool_result"
-                    for b in content
+                is_tool_result_message = isinstance(content, list) and any(
+                    isinstance(block, dict) and block.get("type") == "tool_result"
+                    for block in content
                 )
-                if is_tool_result_msg:
+                if is_tool_result_message:
                     reordered.append(msg)
-                    for block in content:
-                        if isinstance(block, dict) and block.get("type") == "tool_result":
-                            tool_result_id = block.get("tool_use_id")
-                            if tool_result_id is not None:
-                                pending_tool_ids.discard(tool_result_id)
+                    if isinstance(content, list):
+                        for block in content:
+                            if isinstance(block, dict) and block.get("type") == "tool_result":
+                                tool_result_id = block.get("tool_use_id")
+                                if tool_result_id is not None:
+                                    pending_tool_ids.discard(tool_result_id)
                     if len(pending_tool_ids) == 0:
                         reordered.extend(deferred)
                         deferred.clear()
@@ -392,10 +285,266 @@ class AgentHarness:
             reordered.append(msg)
 
         reordered.extend(deferred)
-
         print(f"[agent] Built {len(reordered)} messages from DB")
-
         return reordered
+
+    async def _insert_history(
+        self,
+        *,
+        event_type: str = "anthropic_message",
+        role: str = "user",
+        payload: dict[str, object],
+        request_id: str | None = None,
+        tx_id: str | None = None,
+        template_version_id: str | None = None,
+    ) -> None:
+        event_payload: dict[str, object] = {
+            "type": event_type,
+            "role": role,
+            "timestamp": int(time.time() * 1000),
+            **payload,
+        }
+
+        if skip_db_history:
+            self.in_memory_history.append({
+                "payload": event_payload,
+                "request_id": request_id,
+                "template_version_id": template_version_id,
+            })
+            await self._notify_history_updated(request_id=request_id)
+            return
+
+        if self.agent_session_id is None:
+            print("[agent] Skipping history write: missing agent_session_id")
+            return
+
+        variables = {
+            "sessionId": str(self.agent_session_id),
+            "eventType": event_type,
+            "payload": event_payload,
+            "requestId": request_id,
+            "txId": tx_id,
+            "templateVersionId": (
+                str(template_version_id) if template_version_id is not None else None
+            ),
+        }
+
+        await gql_query(
+            auth=auth_token_sdk,
+            query="""
+                mutation CreateAgentHistory($sessionId: BigInt!, $eventType: String!, $payload: JSON!, $requestId: String, $txId: String, $templateVersionId: BigInt) {
+                    createAgentHistory(input: {agentHistory: {sessionId: $sessionId, eventType: $eventType, payload: $payload, requestId: $requestId, txId: $txId, templateVersionId: $templateVersionId}}) {
+                        clientMutationId
+                    }
+                }
+            """,
+            variables=variables,
+        )
+
+        await self._notify_history_updated(request_id=request_id)
+
+    def _normalize_tool_result_content(
+        self, tool_response: object
+    ) -> str | list[dict[str, object]]:
+        if isinstance(tool_response, str):
+            return tool_response
+
+        if isinstance(tool_response, list):
+            normalized_blocks: list[dict[str, object]] = []
+            for item in tool_response:
+                if isinstance(item, dict):
+                    block_type = item.get("type")
+                    text_value = item.get("text")
+                else:
+                    block_type = getattr(item, "type", None)
+                    text_value = getattr(item, "text", None)
+                    if block_type is None and isinstance(text_value, str):
+                        block_type = "text"
+
+                if block_type == "text" and isinstance(text_value, str):
+                    normalized_blocks.append({
+                        "type": "text",
+                        "text": text_value,
+                    })
+                    continue
+
+                return json.dumps(tool_response, default=str)
+
+            if len(normalized_blocks) > 0:
+                return normalized_blocks
+
+            return json.dumps(tool_response, default=str)
+
+        if isinstance(tool_response, dict):
+            content = tool_response.get("content")
+            if isinstance(content, list):
+                normalized_content = self._normalize_tool_result_content(content)
+                if isinstance(normalized_content, list):
+                    return normalized_content
+            return json.dumps(tool_response, default=str)
+
+        return json.dumps(tool_response, default=str)
+
+    def _extract_tool_result_text(
+        self, content: str | list[dict[str, object]]
+    ) -> str | None:
+        if isinstance(content, str):
+            return content
+        for block in content:
+            if (
+                isinstance(block, dict)
+                and block.get("type") == "text"
+                and isinstance(block.get("text"), str)
+            ):
+                return block["text"]
+        return None
+
+    def _build_generic_tool_result_content(
+        self,
+        *,
+        tool_name: str,
+        content: str | list[dict[str, object]],
+        is_error: bool,
+    ) -> str | list[dict[str, object]]:
+        text_content = self._extract_tool_result_text(content)
+        if text_content is None:
+            return content
+
+        try:
+            parsed = json.loads(text_content)
+        except Exception:
+            parsed = None
+        if isinstance(parsed, dict) and isinstance(parsed.get("tool_name"), str):
+            return content
+
+        result_payload: dict[str, object] = {
+            "tool_name": tool_name,
+            "success": not is_error,
+            "summary": (
+                f"{tool_name} failed"
+                if is_error
+                else f"{tool_name} completed"
+            ),
+        }
+        if text_content.strip() != "":
+            result_payload["raw_output"] = text_content
+        if is_error:
+            result_payload["error"] = text_content
+            if text_content.strip() != "":
+                result_payload["summary"] = f"{tool_name} failed: {text_content[:200]}"
+
+        return [{"type": "text", "text": json.dumps(result_payload)}]
+
+    def _extract_tool_blocks_from_sdk_message(
+        self, msg: object
+    ) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
+        content = getattr(msg, "content", None)
+        if not isinstance(content, list):
+            return [], []
+
+        tool_use_blocks: list[dict[str, object]] = []
+        tool_result_blocks: list[dict[str, object]] = []
+
+        for block in content:
+            if isinstance(block, ToolUseBlock):
+                tool_use_id = str(block.id).strip()
+                tool_name = str(block.name).strip()
+                if tool_use_id == "" or tool_name == "":
+                    continue
+                tool_input = block.input if isinstance(block.input, dict) else {}
+                tool_use_blocks.append({
+                    "type": "tool_use",
+                    "id": tool_use_id,
+                    "name": tool_name,
+                    "input": tool_input,
+                })
+                continue
+
+            if not isinstance(block, ToolResultBlock):
+                continue
+
+            tool_use_id = str(block.tool_use_id).strip()
+            if tool_use_id == "":
+                continue
+            normalized_content = self._normalize_tool_result_content(block.content)
+            payload_block: dict[str, object] = {
+                "type": "tool_result",
+                "tool_use_id": tool_use_id,
+                "content": normalized_content,
+            }
+            if isinstance(block.is_error, bool):
+                payload_block["is_error"] = block.is_error
+            tool_result_blocks.append(payload_block)
+
+        return tool_use_blocks, tool_result_blocks
+
+    async def _persist_tool_blocks_from_sdk_message(
+        self,
+        *,
+        msg: object,
+        request_id: str | None,
+        tool_use_index: dict[str, str],
+    ) -> None:
+        tool_use_blocks, tool_result_blocks = self._extract_tool_blocks_from_sdk_message(msg)
+        message_role: str | None = None
+        if isinstance(msg, AssistantMessage):
+            message_role = "assistant"
+        elif isinstance(msg, UserMessage):
+            message_role = "user"
+
+        for block in tool_use_blocks:
+            tool_use_id = block.get("id")
+            tool_name = block.get("name")
+            if not isinstance(tool_use_id, str) or tool_use_id == "":
+                continue
+            if not isinstance(tool_name, str) or tool_name == "":
+                continue
+            tool_use_index[tool_use_id] = tool_name
+
+        if len(tool_use_blocks) > 0:
+            try:
+                await self._insert_history(
+                    role=message_role or "assistant",
+                    payload={"content": tool_use_blocks},
+                    request_id=request_id,
+                )
+            except Exception as e:
+                print(f"[agent] Failed to persist message tool_use blocks: {e!s}")
+
+        if len(tool_result_blocks) > 0:
+            tool_result_blocks_with_added_fields: list[dict[str, object]] = []
+            for block in tool_result_blocks:
+                tool_result_block_with_added_fields = dict(block)
+                tool_use_id = block.get("tool_use_id")
+                if isinstance(tool_use_id, str):
+                    tool_name = tool_use_index.get(tool_use_id)
+                    content = block.get("content")
+                    if (
+                        isinstance(tool_name, str)
+                        and (
+                            isinstance(content, str)
+                            or isinstance(content, list)
+                        )
+                    ):
+                        tool_result_block_with_added_fields["content"] = (
+                            self._build_generic_tool_result_content(
+                                tool_name=tool_name,
+                                content=content,
+                                is_error=bool(block.get("is_error", False)),
+                            )
+                        )
+                tool_result_blocks_with_added_fields.append(
+                    tool_result_block_with_added_fields
+                )
+
+            try:
+                await self._insert_history(
+                    role=message_role or "user",
+                    payload={"content": tool_result_blocks_with_added_fields},
+                    request_id=request_id,
+                )
+            except Exception as e:
+                print(f"[agent] Failed to persist message tool_result blocks: {e!s}")
 
     async def refresh_cells_context(self) -> str:
         context_result, reactivity_result = await asyncio.gather(
@@ -409,7 +558,9 @@ class AgentHarness:
 
         reactivity_available: bool = reactivity_result.get("status") == "success"
         if not reactivity_available:
-            print(f"[agent] Reactivity summary unavailable: {reactivity_result.get('error', 'unknown')}")
+            print(
+                f"[agent] Reactivity summary unavailable: {reactivity_result.get('error', 'unknown')}"
+            )
 
         context = context_result.get("context", {})
         self.latest_notebook_context = context
@@ -418,7 +569,9 @@ class AgentHarness:
         cell_count = context.get("cell_count", 0)
         cells = context.get("cells", [])
 
-        cell_lines = [f"# Notebook Cells for {notebook_name}, Total cells: {cell_count}\n"]
+        cell_lines = [
+            f"# Notebook Cells for {notebook_name}, Total cells: {cell_count}\n"
+        ]
 
         default_tab_name = context.get("default_tab_name", "Tab 1")
 
@@ -491,7 +644,9 @@ class AgentHarness:
                 cell_lines.append("- Reactivity summary unavailable.")
                 continue
 
-            cell_reactivity: dict[str, dict[str, Iterable[str]]] = reactivity_result.get("cell_reactivity", {})
+            cell_reactivity: dict[str, dict[str, Iterable[str]]] = (
+                reactivity_result.get("cell_reactivity", {})
+            )
             reactivity_meta = cell_reactivity.get(str(tf_id))
             is_reactivity_ready = status in reactivity_ready_statuses
 
@@ -522,134 +677,57 @@ class AgentHarness:
 
         return "\n".join(cell_lines)
 
-    async def _extract_last_request_id(self) -> str | None:
-        history = await self._fetch_history_from_db()
-
-        for item in reversed(history):
-            if not isinstance(item, dict):
-                continue
-            request_id = item.get("request_id")
-            if request_id is not None:
-                return request_id
-
-        return None
-
-    async def _insert_history(
-        self,
-        *,
-        event_type: str = "anthropic_message",
-        role: str = "user",
-        payload: dict,
-        request_id: str | None = None,
-        tx_id: str | None = None,
-        template_version_id: str | None = None,
-    ) -> None:
-        payload = {
-            "type": event_type,
-            "role": role,
-            "timestamp": int(time.time() * 1000),
-            **payload,
-        }
-
-        if skip_db_history:
-            self.in_memory_history.append({
-                "payload": payload,
-                "request_id": request_id,
-                "template_version_id": template_version_id,
-            })
-            return
-
-        assert self.agent_session_id is not None
-
-        variables = {
-            "sessionId": str(self.agent_session_id),
-            "eventType": event_type,
-            "payload": payload,
-            "requestId": request_id,
-            "txId": tx_id,
-            "templateVersionId": str(template_version_id) if template_version_id is not None else None,
-        }
-
-        await gql_query(
-            auth=auth_token_sdk,
-            query="""
-                mutation CreateAgentHistory($sessionId: BigInt!, $eventType: String!, $payload: JSON!, $requestId: String, $txId: String, $templateVersionId: BigInt) {
-                    createAgentHistory(input: {agentHistory: {sessionId: $sessionId, eventType: $eventType, payload: $payload, requestId: $requestId, txId: $txId, templateVersionId: $templateVersionId}}) {
-                        clientMutationId
-                    }
-                }
-            """,
-            variables=variables,
+    def _behavior_file_name(self) -> str:
+        return (
+            "proactive.md"
+            if self.behavior == Behavior.proactive
+            else "step_by_step.md"
         )
 
-        await self._notify_history_updated(request_id=request_id)
+    def _compose_turn_system_prompt(self) -> str:
+        self.system_prompt = (context_root.parent / "system_prompt.md").read_text()
+        assert self.system_prompt is not None
 
-    async def _mark_all_history_removed(self) -> None:
-        if skip_db_history:
-            self.in_memory_history.clear()
-            return
-        assert self.agent_session_id is not None
+        behavior_file = self._behavior_file_name()
+        turn_behavior_content = (context_root / "turn_behavior" / behavior_file).read_text()
+        examples_content = (context_root / "examples" / behavior_file).read_text()
 
-        await gql_query(
-            auth=auth_token_sdk,
-            query="""
-                mutation ClearAgentHistory($sessionId: BigInt!) {
-                    clearAgentHistory(input: {argSessionId: $sessionId}) {
-                        clientMutationId
-                    }
-                }
-            """,
-            variables={"sessionId": str(self.agent_session_id)},
+        final_system_prompt = self.system_prompt.replace(
+            "TURN_BEHAVIOR_PLACEHOLDER",
+            f"<turn_behavior>\n{turn_behavior_content}\n</turn_behavior>",
         )
-        await self._notify_history_updated()
+        return final_system_prompt.replace(
+            "EXAMPLES_PLACEHOLDER",
+            f"<examples>\n{examples_content}\n</examples>",
+        )
 
-    def _start_conversation_loop(self) -> None:
-        self.conversation_task = asyncio.create_task(self.run_agent_loop())
+    async def _build_turn_prompt(self, user_query: str) -> str:
+        behavior_file = self._behavior_file_name()
+        turn_behavior_content = (context_root / "turn_behavior" / behavior_file).read_text()
+        examples_content = (context_root / "examples" / behavior_file).read_text()
 
-        def _task_done_callback(task: asyncio.Task) -> None:
-            try:
-                task.result()
-            except Exception as e:
-                print(f"[agent] conversation_task raised exception: {e}")
-                traceback.print_exc()
+        notebook_state = await self.refresh_cells_context()
+        self.latest_notebook_state = notebook_state
 
-        self.conversation_task.add_done_callback(_task_done_callback)
+        context_blocks = [
+            f"<turn_behavior>\n{turn_behavior_content}\n</turn_behavior>",
+            f"<examples>\n{examples_content}\n</examples>",
+            f"<current_notebook_state>\n{notebook_state}\n</current_notebook_state>",
+        ]
+        if self.current_plan is not None:
+            plan_content = json.dumps(self.current_plan, indent=2)
+            context_blocks.append(f"<current_plan>\n{plan_content}\n</current_plan>")
 
-    async def _clear_running_state(self) -> None:
-        if len(self.pending_operations) > 0:
-            print(f"[agent] Cancelling {len(self.pending_operations)} pending operations")
-            for tx_id, future in self.pending_operations.items():
-                if not future.done():
-                    future.cancel()
-                    print(f"[agent]   Cancelled: {tx_id}")
-            self.pending_operations.clear()
+        context_blocks.append(f"<user_request>\n{user_query}\n</user_request>")
+        return "\n\n".join(context_blocks)
 
-        if self.conversation_task and not self.conversation_task.done():
-            print("[agent] Cancelling conversation task")
-            self.conversation_running = False
-            self.conversation_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await self.conversation_task
-            self.conversation_task = None
-
-        while not self.pending_messages.empty():
-            try:
-                self.pending_messages.get_nowait()
-            except asyncio.QueueEmpty:
-                break
-
-        self.executing_cells.clear()
-
-        print("[agent] Cleared running state")
-
-    async def atomic_operation(self, action: str, params: dict | None = None, timeout: float = 10.0) -> dict:
+    async def atomic_operation(
+        self, action: str, params: dict | None = None, timeout: float = 10.0
+    ) -> dict:
         if params is None:
             params: dict = {}
 
         self.operation_counter += 1
-
-        if self.mode == Mode.planning and action in {"create_cell", "edit_cell", "run_cell", "delete_cell"}:
-            self.set_mode(Mode.executing)
 
         force_backend_browser_retry = params.get("force_backend_browser_retry", False)
 
@@ -661,7 +739,12 @@ class AgentHarness:
         start_time = time.time()
         try:
             print(f"[agent] -> {action}")
-            await self.send({"type": "agent_action", "action": action, "params": params, "tx_id": tx_id})
+            await self.send({
+                "type": "agent_action",
+                "action": action,
+                "params": params,
+                "tx_id": tx_id,
+            })
         except Exception as e:
             self.pending_operations.pop(tx_id, None)
             return {"status": "error", "error": f"Send failed: {e!s}"}
@@ -669,8 +752,13 @@ class AgentHarness:
         try:
             return await asyncio.wait_for(response_future, timeout=timeout)
         except asyncio.CancelledError:
-            print(f"[agent] Operation cancelled (session reinitialized): action={action}, tx_id={tx_id}")
-            return {"status": "error", "error": f"OPERATION FAILED: '{action}' was interrupted because the session was reinitialized. This operation did NOT complete. You must retry or inform the user."}
+            print(
+                f"[agent] Operation cancelled (session reinitialized): action={action}, tx_id={tx_id}"
+            )
+            return {
+                "status": "error",
+                "error": f"OPERATION FAILED: '{action}' was interrupted because the session was reinitialized. This operation did NOT complete. You must retry or inform the user.",
+            }
         except TimeoutError:
             self.pending_operations.pop(tx_id, None)
             duration = time.time() - start_time
@@ -678,9 +766,17 @@ class AgentHarness:
 
             if not force_backend_browser_retry:
                 print(f"[agent] Retrying {action} with backend browser")
-                return await self.atomic_operation(action, {**params, "force_backend_browser_retry": True}, timeout=timeout)
+                return await self.atomic_operation(
+                    action,
+                    {**params, "force_backend_browser_retry": True},
+                    timeout=timeout,
+                )
 
-            return {"status": "error", "error": f"OPERATION FAILED: '{action}' timed out after 10 seconds. This operation did NOT complete.", "tx_id": tx_id}
+            return {
+                "status": "error",
+                "error": f"OPERATION FAILED: '{action}' timed out after 10 seconds. This operation did NOT complete.",
+                "tx_id": tx_id,
+            }
         finally:
             ret = self.pending_operations.pop(tx_id, None)
 
@@ -694,117 +790,179 @@ class AgentHarness:
         if fut and not fut.done():
             fut.set_result(msg)
 
-    def set_mode(self, mode: Mode) -> None:
-        if mode == self.mode:
+    async def _send_usage_update(self, usage: dict[str, Any]) -> None:
+        await self.send({
+            "type": "agent_usage_update",
+            "input_tokens": int(usage.get("input_tokens", 0) or 0),
+            "cache_read_input_tokens": int(usage.get("cache_read_input_tokens", 0) or 0),
+            "cache_creation_input_tokens": int(
+                usage.get("cache_creation_input_tokens", 0) or 0
+            ),
+            "context_limit": 200_000,
+        })
+
+    def _current_sdk_session_id(self) -> str:
+        return self.agent_session_id or "default"
+
+    def _normalize_session_id(self, raw_session_id: object) -> str | None:
+        if raw_session_id is None:
+            return None
+        session_id = str(raw_session_id).strip()
+        if session_id == "":
+            return None
+        return session_id
+
+    async def _close_open_stream_blocks(self) -> None:
+        if len(self.open_stream_blocks) == 0:
             return
 
-        self.mode = mode
-        print(f"[agent] Mode changed to {mode.value}")
+        pending_blocks = sorted(self.open_stream_blocks)
+        print(f"[agent] Closing {len(pending_blocks)} dangling stream block(s): {pending_blocks}")
+        for block_index in pending_blocks:
+            await self.send({"type": "agent_stream_block_stop", "block_index": block_index})
+        self.open_stream_blocks.clear()
 
-    async def _wait_for_message(self) -> None:
+    async def _wait_for_running_query_to_stop(self, timeout_seconds: float = 2.0) -> bool:
+        if self.current_query_task is None or self.current_query_task.done():
+            return True
+
+        try:
+            await asyncio.wait_for(self.current_query_task, timeout=timeout_seconds)
+            return True
+        except TimeoutError:
+            self.current_query_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await self.current_query_task
+            return False
+        except asyncio.CancelledError:
+            return True
+
+    async def _stop_conversation_loop(self) -> None:
+        self.conversation_running = False
+        if self.conversation_task is None:
+            return
+        if not self.conversation_task.done():
+            self.conversation_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await self.conversation_task
+        self.conversation_task = None
+
+    def _start_conversation_loop(self) -> None:
+        if self.conversation_task is not None and not self.conversation_task.done():
+            return
+        self.conversation_task = asyncio.create_task(self.run_agent_loop())
+
+    async def _wait_for_message(self) -> tuple[str, str | None]:
         print("[agent] _wait_for_message: waiting for message...")
         while True:
             msg = await self.pending_messages.get()
-
             msg_type = msg.get("type")
 
-            if self.pause_until_user_query and msg_type in {"resume", "cell_result", "set_widget_value"}:
+            if (
+                self.pause_until_user_query
+                and msg_type in {"resume", "cell_result", "set_widget_value"}
+            ):
                 print(f"[agent] Suppressing follow-up message type={msg_type}")
                 continue
 
-            break
+            if msg_type == "resume":
+                request_id = msg.get("request_id")
+                if isinstance(request_id, str):
+                    self.current_request_id = request_id
+                self.current_status = "thinking"
+                content = msg.get("content")
+                if isinstance(content, str) and content.strip() != "":
+                    return content, self.current_request_id
+                return "Continue with the next step.", self.current_request_id
 
-        if msg_type == "resume":
-            print("[agent] Resuming turn after tool results")
-            return
+            if msg_type == "user_query":
+                request_id = msg.get("request_id")
+                self.current_request_id = request_id if isinstance(request_id, str) else None
+                self.current_status = "thinking"
+                self.pause_until_user_query = False
 
-        if msg_type == "user_query":
-            self.current_request_id = msg.get("request_id")
-            self.current_status = "thinking"
-            self.pause_until_user_query = False
+                content = msg.get("content")
+                if isinstance(content, str) and content.strip() != "":
+                    return content, self.current_request_id
+                print("[agent] Ignoring user_query with empty content")
+                continue
 
-            payload = {
-                "content": msg["content"],
-            }
+            if msg_type == "cell_result":
+                if self.current_request_id is None:
+                    print(
+                        f"[agent] Ignoring cell_result for {msg.get('cell_id')} - no active request"
+                    )
+                    continue
 
-            if msg.get("display_query") is not None:
-                payload["display_query"] = msg["display_query"]
-            if msg.get("display_nodes") is not None:
-                payload["display_nodes"] = msg["display_nodes"]
-            if msg.get("display_widgets") is not None:
-                payload["display_widgets"] = msg["display_widgets"]
-            if msg.get("hidden") is not None:
-                payload["hidden"] = msg["hidden"]
+                cell_id = msg.get("cell_id")
+                success = bool(msg.get("success", True))
+                cell_name = msg.get("display_name")
+                logs = msg.get("logs")
 
-            template_version_id = msg.get("template_version_id")
+                if success:
+                    result_message = f"Cell {cell_name} ({cell_id}) executed successfully."
+                else:
+                    exception = msg.get("exception", "Unknown error")
+                    result_message = (
+                        f"Cell {cell_name} ({cell_id}) execution failed. Exception: {exception}"
+                    )
 
-            await self._insert_history(
-                payload=payload,
-                request_id=self.current_request_id,
-                template_version_id=template_version_id,
-            )
+                try:
+                    await self._insert_history(
+                        role="user",
+                        payload={
+                            "content": result_message,
+                            "hidden": True,
+                        },
+                        request_id=self.current_request_id,
+                    )
+                except Exception as e:
+                    print(f"[agent] Failed to persist cell_result history: {e!s}")
 
-        elif msg_type == "cell_result":
-            if self.current_request_id is None:
-                print(f"[agent] Ignoring cell_result for {msg.get('cell_id')} - no active request")
-                return
+                logs_text = ""
+                if isinstance(logs, str) and logs.strip() != "":
+                    logs_text = f"\nRecent logs:\n{logs}"
 
-            cell_id = msg["cell_id"]
-            success = msg.get("success", True)
-            cell_name = msg.get("display_name", None)
+                if self.pending_auto_continue and len(self.executing_cells) == 0:
+                    self.pending_auto_continue = False
+                    return (
+                        "A requested cell finished running. Continue with the next step.\n"
+                        + result_message
+                        + logs_text,
+                        self.current_request_id,
+                    )
 
-            if success:
-                result_message = f"✓ Cell {cell_name} ({cell_id}) executed successfully"
-                result_content = {
-                    "type": "cell_result",
-                    "message": result_message,
-                    "cell_id": cell_id,
-                    "cell_name": cell_name,
-                    "success": success,
-                    "logs": msg.get("logs"),
-                }
-                print(f"[agent] Cell {cell_id} succeeded")
-            else:
-                exception = msg.get("exception", "Unknown error")
-                result_message = f"✗ Cell {cell_name} ({cell_id}) execution failed"
-                result_content = {
-                    "type": "cell_result",
-                    "message": result_message,
-                    "cell_id": cell_id,
-                    "cell_name": cell_name,
-                    "success": False,
-                    "exception": exception,
-                    "logs": msg.get("logs"),
-                }
-                print(f"[agent] Cell {cell_id} failed")
+                return (
+                    "Cell execution update:\n" + result_message + logs_text,
+                    self.current_request_id,
+                )
 
-            await self._insert_history(
-                payload={
-                    "content": result_content,
-                },
-            )
+            if msg_type == "set_widget_value":
+                if self.current_request_id is None:
+                    print("[agent] Ignoring set_widget_value - no active request")
+                    continue
 
-            if self.pending_auto_continue and not self.executing_cells:
-                print(f"[agent] All cells complete, resuming auto-continue (request_id={self.current_request_id})")
-                self.pending_auto_continue = False
-                await self.pending_messages.put({
-                    "type": "user_query",
-                    "content": "Continue with the next step.",
-                    "request_id": self.current_request_id,
-                    "hidden": True,
-                })
+                data = msg.get("data", {})
+                if not isinstance(data, dict):
+                    data = {}
+                widget_info = ", ".join(f"{k}={v}" for k, v in data.items())
+                content = f"User provided input via widget(s): {widget_info}"
 
-        elif msg_type == "set_widget_value":
-            data = msg.get("data", {})
-            widget_info = ", ".join(f"{k}={v}" for k, v in data.items())
-            content = f"User provided input via widget(s): {widget_info}"
+                try:
+                    await self._insert_history(
+                        role="user",
+                        payload={
+                            "content": content,
+                            "hidden": True,
+                        },
+                        request_id=self.current_request_id,
+                    )
+                except Exception as e:
+                    print(f"[agent] Failed to persist widget history: {e!s}")
 
-            await self._insert_history(
-                payload={
-                    "content": content,
-                    "hidden": True,
-                },
-            )
+                return content, self.current_request_id
+
+            print(f"[agent] Unknown pending message type={msg_type}, ignoring")
 
     async def _complete_turn(self) -> None:
         if self.current_request_id is None:
@@ -812,2962 +970,704 @@ class AgentHarness:
 
         should_continue = self.should_auto_continue
         self.should_auto_continue = False
-        self.pending_auto_continue = False
-
-        if self.mode == Mode.executing:
-            self.set_mode(Mode.planning)
 
         await self._notify_history_updated(request_id=self.current_request_id)
 
         if should_continue:
             print("[agent] Auto-continuing as requested by model")
             await self.pending_messages.put({
-                "type": "user_query",
+                "type": "resume",
                 "content": "Continue with the next step.",
                 "request_id": self.current_request_id,
-                "hidden": True,
             })
 
-    def init_tools(self) -> None:
-        self.tools = []
-        self.tool_map = {}
+    async def run_agent_loop(self) -> None:
+        print("[agent] run_agent_loop: started")
+        self.conversation_running = True
 
-        async def create_cell(args: dict) -> dict:
-            position = args["position"]
-            code = args["code"]
-            title = args["title"]
-            action_summary = args["action_summary"]
+        while self.conversation_running:
+            try:
+                query, request_id = await self._wait_for_message()
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                print(f"[agent] _wait_for_message failed: {e!s}")
+                continue
 
-            if position < 0:
-                return {
-                    "tool_name": "create_cell",
-                    "summary": "Error: Position must be non-negative",
-                    "success": False,
+            if not self.conversation_running:
+                break
+
+            turn_task: asyncio.Task | None = None
+            try:
+                turn_task = asyncio.create_task(
+                    self._run_query_with_turn_prompt(query=query, request_id=request_id)
+                )
+                self.current_query_task = turn_task
+                await turn_task
+            except Exception as e:
+                print(f"[agent] run_agent_loop turn failed: {e!s}")
+            finally:
+                if turn_task is not None and self.current_query_task is turn_task:
+                    self.current_query_task = None
+                await self._complete_turn()
+
+        print("[agent] run_agent_loop: stopped")
+
+    async def _disconnect_sdk_client(self) -> None:
+        if self.client is None:
+            return
+        try:
+            await self.client.disconnect()
+        finally:
+            self.client = None
+
+    async def _load_agent_session_metadata(self, session_id: str) -> dict[str, object]:
+        response = await gql_query(
+            auth=auth_token_sdk,
+            query="""
+                query AgentSessionMetadata($id: BigInt!) {
+                    agentSession(id: $id) {
+                        metadata
+                    }
                 }
+            """,
+            variables={"id": session_id},
+        )
 
-            print(f'[tool] create_cell pos={position} title="{title}"')
+        data = response.get("data")
+        if not isinstance(data, dict):
+            return {}
+        session = data.get("agentSession")
+        if not isinstance(session, dict):
+            return {}
+        metadata = session.get("metadata")
+        if not isinstance(metadata, dict):
+            return {}
+        return metadata
 
-            params = {
-                "position": position,
-                "cell_type": "code",
-                "source": code,
-                "title": title,
-                "auto_run": True,
-            }
+    async def _persist_agent_session_metadata(self, metadata: dict[str, object]) -> None:
+        if self.agent_session_id is None:
+            return
 
-            result = await self.atomic_operation("create_cell", params)
-            if result.get("status") == "success":
-                cell_id = result.get("cell_id", "unknown")
-                tf_id = result.get("tf_id", "unknown")
-                msg = f"Created cell at position {position} (cell_id: {cell_id}, tf_id: {tf_id}, title: {title})"
-                print(f"[tool] create_cell -> {msg}")
-                return {
-                    "tool_name": "create_cell",
-                    "summary": msg,
-                    "code": code,
-                    "cell_id": cell_id,
-                    "tf_id": tf_id,
-                    "cell_name": title,
-                    "position": position,
-                    "message": action_summary,
-                    "success": True,
+        await gql_query(
+            auth=auth_token_sdk,
+            query="""
+                mutation UpdateAgentSessionMetadata($id: BigInt!, $metadata: JSON) {
+                    updateAgentSession(input: {id: $id, patch: {metadata: $metadata}}) {
+                        clientMutationId
+                    }
                 }
+            """,
+            variables={
+                "id": self.agent_session_id,
+                "metadata": metadata,
+            },
+        )
+
+    async def _capture_claude_session_id(self, raw_session_id: object) -> None:
+        session_id = self._normalize_session_id(raw_session_id)
+        if session_id is None or self.agent_session_id is None:
+            return
+
+        existing = self._normalize_session_id(
+            self.agent_session_metadata.get("claude_session_id")
+        )
+        if existing == session_id:
+            return
+
+        merged_metadata = dict(self.agent_session_metadata)
+        merged_metadata["claude_session_id"] = session_id
+
+        try:
+            await self._persist_agent_session_metadata(merged_metadata)
+        except Exception as e:
+            print(f"[agent] Failed to persist Claude session id metadata: {e!s}")
+            return
+
+        self.agent_session_metadata = merged_metadata
+        print(
+            "[agent] Persisted Claude session id "
+            f"(db_session_id={self.agent_session_id}, claude_session_id={session_id})"
+        )
+
+    def _build_sdk_env(self) -> dict[str, str]:
+        direct_anthropic_key = os.environ.get("AGENT_SDK_DIRECT_ANTHROPIC_KEY", "").strip()
+        if direct_anthropic_key != "":
+            print("[agent] SDK gateway mode: direct-anthropic")
             return {
-                "tool_name": "create_cell",
-                "summary": f"Failed to create cell: {result.get('error', 'Unknown error')}",
-                "success": False,
+                "ANTHROPIC_AUTH_TOKEN": direct_anthropic_key,
+                "ANTHROPIC_API_KEY": direct_anthropic_key,
             }
 
-        async def create_markdown_cell(args: dict) -> dict:
-            position = args["position"]
-            code = args["code"]
-            title = args["title"]
-            action_summary = args["action_summary"]
+        sdk_base_url = f"{nucleus_url}/infer/plots-agent/anthropic"
+        sdk_auth_token = sdk_token if sdk_token != "" else auth_token_sdk
+        print(f"[agent] SDK gateway mode: nucleus-proxy ({sdk_base_url})")
+        return {
+            "ANTHROPIC_BASE_URL": sdk_base_url,
+            "ANTHROPIC_AUTH_TOKEN": sdk_auth_token,
+            "ANTHROPIC_API_KEY": sdk_auth_token,
+        }
 
-            if position < 0:
-                return {
-                    "summary": "Error: Position must be non-negative",
-                    "success": False,
-                }
+    async def _connect_sdk_client(self, *, resume_session_id: str | None) -> None:
+        self.system_prompt = self._compose_turn_system_prompt()
+        sdk_env = self._build_sdk_env()
 
-            print(f"[tool] create_markdown_cell pos={position}")
+        def _sdk_stderr(line: str) -> None:
+            stripped = line.rstrip()
+            if stripped != "":
+                print(f"[claude] {stripped}", flush=True)
 
-            params = {
-                "position": position,
-                "cell_type": "markdown",
-                "source": code,
+        self.client = ClaudeSDKClient(
+            options=ClaudeAgentOptions(
+                system_prompt=self.system_prompt,
+                include_partial_messages=True,
+                mcp_servers=self.mcp_servers,
+                allowed_tools=[
+                    *self.mcp_allowed_tools,
+                    *SDK_BUILTIN_ALLOWED_TOOLS,
+                ],
+                permission_mode="acceptEdits",
+                model="claude-opus-4-6",
+                thinking={"type": "adaptive"},
+                resume=resume_session_id,
+                env=sdk_env,
+                stderr=_sdk_stderr,
+            )
+        )
+        await self.client.connect()
+
+        try:
+            mcp_status = await self.client.get_mcp_status()
+            print(f"[agent] MCP status: {json.dumps(mcp_status)}")
+        except Exception as e:
+            print(f"[agent] Failed to fetch MCP status: {e!s}")
+
+    async def _reset_for_new_session(self) -> None:
+        await self._stop_conversation_loop()
+
+        if len(self.pending_operations) > 0:
+            print(f"[agent] Failing {len(self.pending_operations)} pending operation(s) for new session")
+            for future in self.pending_operations.values():
+                if not future.done():
+                    future.set_result({
+                        "status": "error",
+                        "error": "Operation interrupted due to session change. Retry in the new session.",
+                    })
+            self.pending_operations.clear()
+
+        self.pause_until_user_query = False
+        self.executing_cells.clear()
+        self.pending_tool_calls.clear()
+        self.expected_widgets.clear()
+        self.open_stream_blocks.clear()
+        self.current_request_id = None
+        self.current_status = None
+        self.should_auto_continue = False
+        self.pending_auto_continue = False
+
+        while not self.pending_messages.empty():
+            with suppress(asyncio.QueueEmpty):
+                self.pending_messages.get_nowait()
+
+        self.agent_session_metadata = {}
+
+    async def _handle_stream_event(
+        self,
+        event: dict[str, Any],
+        *,
+        collected_assistant_blocks: dict[int, dict[str, object]] | None = None,
+    ) -> None:
+        event_type = event.get("type")
+
+        if event_type == "message_start":
+            self.open_stream_blocks.clear()
+            return
+
+        if event_type == "content_block_start":
+            block_index = int(event.get("index", -1))
+            block = event.get("content_block", {})
+            block_type = block.get("type", "unknown")
+            if block_index >= 0:
+                if block_index in self.open_stream_blocks:
+                    await self.send({"type": "agent_stream_block_stop", "block_index": block_index})
+                self.open_stream_blocks[block_index] = str(block_type)
+
+            if collected_assistant_blocks is not None and block_index >= 0:
+                if block_type == "text":
+                    collected_assistant_blocks[block_index] = {"type": "text", "text": ""}
+                elif block_type == "thinking":
+                    collected_assistant_blocks[block_index] = {
+                        "type": "thinking",
+                        "thinking": "",
+                    }
+
+            payload: dict[str, object] = {
+                "type": "agent_stream_block_start",
+                "block_index": block_index,
+                "block_type": block_type,
             }
+            if block_type == "tool_use":
+                payload["block_id"] = str(block.get("id", ""))
+                payload["block_name"] = str(block.get("name", ""))
+                print(
+                    "[agent] tool_use block started "
+                    f"index={block_index} name={payload['block_name']} id={payload['block_id']}"
+                )
+            await self.send(payload)
+            return
 
-            result = await self.atomic_operation("create_markdown_cell", params)
-            if result.get("status") == "success":
-                cell_id = result.get("cell_id", "unknown")
-                msg = f"Created markdown cell at position {position} (ID: {cell_id})"
+        if event_type == "content_block_delta":
+            block_index = int(event.get("index", -1))
+            delta = event.get("delta", {})
+            delta_type = delta.get("type")
 
-                print(f"[tool] create_markdown_cell -> {msg}")
-                return {
-                    "tool_name": "create_markdown_cell",
-                    "summary": msg,
-                    "code": code,
-                    "cell_id": cell_id,
-                    "cell_name": title,
-                    "position": position,
-                    "message": action_summary,
-                    "success": True,
-                }
-            return {
-                "tool_name": "create_markdown_cell",
-                "message": f"Failed to create cell: {result.get('error', 'Unknown error')}",
-                "success": False,
-            }
+            if delta_type == "text_delta":
+                await self.send({
+                    "type": "agent_stream_delta",
+                    "block_index": block_index,
+                    "block_type": "text",
+                    "delta": str(delta.get("text", "")),
+                })
+            elif delta_type == "thinking_delta":
+                await self.send({
+                    "type": "agent_stream_delta",
+                    "block_index": block_index,
+                    "block_type": "thinking",
+                    "delta": str(delta.get("thinking", "")),
+                })
+            elif delta_type == "input_json_delta":
+                await self.send({
+                    "type": "agent_stream_delta",
+                    "block_index": block_index,
+                    "block_type": "tool_use",
+                    "delta": str(delta.get("partial_json", "")),
+                })
 
-        async def edit_cell(args: dict) -> dict:
-            cell_id = args["cell_id"]
-            new_code = args["new_code"]
-            title = args["title"]
-            action_summary = args["action_summary"]
+            if collected_assistant_blocks is not None and block_index >= 0:
+                existing = collected_assistant_blocks.get(block_index)
+                if existing is not None:
+                    if delta_type == "text_delta":
+                        existing["text"] = str(existing.get("text", "")) + str(delta.get("text", ""))
+                    elif delta_type == "thinking_delta":
+                        existing["thinking"] = str(existing.get("thinking", "")) + str(
+                            delta.get("thinking", "")
+                        )
+            return
 
-            print(f"[tool] edit_cell id={cell_id}")
-
-            original_code = ""
-
-            cells = self.latest_notebook_context.get("cells", [])
-
-            for cell in cells:
-                if cell.get("cell_id") == cell_id:
-                    original_code = cell.get("source", "")
-                    break
-
-            params = {
-                "cell_id": cell_id,
-                "source": new_code,
-                "auto_run": True
-            }
-
-            result = await self.atomic_operation("edit_cell", params)
-            if result.get("status") == "success":
-                msg = f"Cell {cell_id} edited successfully"
-                print(f"[tool] edit_cell -> {msg}")
-
-                return {
-                    "tool_name": "edit_cell",
-                    "summary": msg,
-                    "code": new_code,
-                    "original_code": original_code,
-                    "cell_id": cell_id,
-                    "cell_name": title,
-                    "message": action_summary,
-                    "success": True,
-                }
-            return {
-                "tool_name": "edit_cell",
-                "summary": f"Failed to edit cell: {result.get('error', 'Unknown error')}",
-                "success": False,
-            }
-
-        async def delete_cell(args: dict) -> dict:
-            cell_id = args["cell_id"]
-            title = args["title"]
-            action_summary = args["action_summary"]
-
-            print(f"[tool] delete_cell id={cell_id}")
-            params = {"cell_id": cell_id}
-
-            result = await self.atomic_operation("delete_cell", params)
-            if result.get("status") == "success":
-                remaining = result.get("remaining_cells", [])
-                cell_count = result.get("cell_count", 0)
-
-                if remaining:
-                    cell_list = ", ".join([f"{c['index']}: {c['cell_type']}" for c in remaining[:5]])
-                    if len(remaining) > 5:
-                        cell_list += f", ... ({len(remaining) - 5} more)"
-                    msg = f"Cell {cell_id} deleted. {cell_count} cells remain: [{cell_list}]"
-                else:
-                    msg = f"Cell {cell_id} deleted. No cells remain in notebook."
-                print(f"[tool] delete_cell -> {msg}")
-                return {
-                    "tool_name": "delete_cell",
-                    "summary": msg,
-                    "cell_id": cell_id,
-                    "cell_name": title,
-                    "message": action_summary,
-                    "success": True,
-                }
-            return {
-                "tool_name": "delete_cell",
-                "summary": f"Failed to delete cell: {result.get('error', 'Unknown error')}",
-                "success": False,
-            }
-
-        async def run_cell(args: dict) -> dict:
-            cell_id = args["cell_id"]
-            title = args["title"]
-            action_summary = args["action_summary"]
-            params = {"cell_id": cell_id}
-
+        if event_type == "content_block_stop":
+            block_index = int(event.get("index", -1))
+            if block_index in self.open_stream_blocks:
+                self.open_stream_blocks.pop(block_index, None)
             await self.send({
-                "type": "agent_action",
-                "action": "run_cell",
-                "params": params,
+                "type": "agent_stream_block_stop",
+                "block_index": block_index,
             })
-            self.executing_cells.add(cell_id)
-
-            return {
-                "tool_name": "run_cell",
-                "summary": f"Cell {cell_id} execution started",
-                "cell_id": cell_id,
-                "cell_name": title,
-                "message": action_summary,
-                "success": True,
-            }
-
-        async def stop_cell(args: dict) -> dict:
-            cell_id = args["cell_id"]
-            title = args["title"]
-            action_summary = args["action_summary"]
-            params = {"cell_id": cell_id}
-
-            result = await self.atomic_operation("stop_cell", params)
-            if result.get("status") == "success":
-                self.executing_cells.discard(cell_id)
-                return {
-                    "tool_name": "stop_cell",
-                    "summary": f"Stopped cell {cell_id}",
-                    "cell_id": cell_id,
-                    "cell_name": title,
-                    "message": action_summary,
-                    "success": True,
-                }
-            return {
-                "tool_name": "stop_cell",
-                "summary": f"Failed to stop cell {cell_id}: {result.get('error', 'Unknown error')}",
-                "success": False,
-            }
-
-        async def delete_all_cells(args: dict) -> dict:
-            context_result = await self.atomic_operation("get_context", {})
-            if context_result.get("status") != "success":
-                error_msg = context_result.get("error", "Unknown error")
-                return {
-                    "tool_name": "delete_all_cells",
-                    "summary": f"Failed to delete cells: {error_msg}",
-                    "success": False,
-                }
-
-            cells = context_result.get("context", {}).get("cells", [])
-            deleted_count = 0
-
-            for cell in reversed(cells):
-                cell_id = cell.get("cell_id")
-                if cell_id:
-                    result = await self.atomic_operation("delete_cell", {"cell_id": cell_id})
-                    if result.get("status") == "success":
-                        deleted_count += 1
-
-            return {
-                "tool_name": "delete_all_cells",
-                "success": True,
-                "summary": f"Deleted {deleted_count} cells from the notebook",
-                "deleted_count": deleted_count,
-            }
-
-        async def rename_notebook(args: dict) -> dict:
-            name = args["name"]
-            print(f"[tool] rename_notebook name={name}")
-            params = {"name": name}
-
-            result = await self.atomic_operation("rename_notebook", params)
-            if result.get("status") == "success":
-                return {
-                    "tool_name": "rename_notebook",
-                    "success": True,
-                    "summary": f"Notebook renamed to '{name}'",
-                    "name": name,
-                }
-
-            return {
-                "tool_name": "rename_notebook",
-                "summary": f"Failed to rename notebook: {result.get('error', 'Unknown error')}",
-                "success": False,
-            }
-
-        async def create_tab(args: dict) -> dict:
-            position = args["position"]
-            display_name = args["display_name"]
-
-            if position < 0:
-                return {
-                    "tool_name": "create_tab",
-                    "summary": "Error: Position must be non-negative",
-                    "success": False,
-                }
-
-            print(f'[tool] create_tab pos={position} name="{display_name}"')
-
-            params = {
-                "position": position,
-                "display_name": display_name,
-            }
-
-            result = await self.atomic_operation("create_tab", params)
-            if result.get("status") == "success":
-                tab_id = result.get("tab_id", "unknown")
-                msg = f"Created tab at position {position} (ID: {tab_id}, Name: {display_name})"
-                print(f"[tool] create_tab -> {msg}")
-                return {
-                    "tool_name": "create_tab",
-                    "summary": msg,
-                    "tab_id": tab_id,
-                    "display_name": display_name,
-                    "position": position,
-                    "success": True,
-                }
-            return {
-                "tool_name": "create_tab",
-                "summary": f"Failed to create tab: {result.get('error', 'Unknown error')}",
-                "success": False,
-            }
-
-        async def rename_tab(args: dict) -> dict:
-            tab_id = args["tab_id"]
-            new_name = args["new_name"]
-
-            print(f'[tool] rename_tab tab_id={tab_id} new_name="{new_name}"')
-
-            params = {
-                "tab_id": tab_id,
-                "new_name": new_name,
-            }
-
-            result = await self.atomic_operation("rename_tab", params)
-            if result.get("status") == "success":
-                target = "Tab 1" if tab_id == "DEFAULT" else f"tab {tab_id}"
-                msg = f"Renamed {target} to '{new_name}'"
-                print(f"[tool] rename_tab -> {msg}")
-                return {
-                    "tool_name": "rename_tab",
-                    "summary": msg,
-                    "tab_id": tab_id,
-                    "new_name": new_name,
-                    "success": True,
-                }
-            return {
-                "tool_name": "rename_tab",
-                "summary": f"Failed to rename tab: {result.get('error', 'Unknown error')}",
-                "success": False,
-            }
-
-        async def restore_checkpoint(args: dict) -> dict:
-            template_version_id = args.get("template_version_id")
-            print(f"[tool] restore_checkpoint template_version_id={template_version_id}")
-            params = {"template_version_id": template_version_id}
-
-            result = await self.atomic_operation("restore_checkpoint", params)
-            if result.get("status") == "success":
-                return {
-                    "tool_name": "restore_checkpoint",
-                    "success": True,
-                    "summary": f"Restored checkpoint to template version {template_version_id}",
-                    "template_version_id": template_version_id,
-                }
-
-            return {
-                "tool_name": "restore_checkpoint",
-                "summary": f"Failed to restore checkpoint: {result.get('error', 'Unknown error')}",
-                "success": False,
-            }
-
-        async def set_widget(args: dict) -> dict:
-            key = args.get("key")
-            action_summary = args.get("action_summary")
-            label = args.get("label")
-            if not key:
-                return {
-                    "tool_name": "set_widget",
-                    "summary": "Failed to set widget: Widget key is required",
-                    "success": False,
-                }
-
-            value = args.get("value")
-            if value is None:
-                return {
-                    "tool_name": "set_widget",
-                    "summary": "Failed to set widget: Widget value is required",
-                    "success": False,
-                }
-
-            print(f"[tool] set_widget key={key} value={value!r}")
-
-            params = {"key": key, "value": json.dumps(value)}
-
-            result = await self.atomic_operation("set_widget", params)
-
-            if result.get("status") == "success":
-                return {
-                    "tool_name": "set_widget",
-                    "success": True,
-                    "summary": f"Updated widget value for: {key}",
-                    "key": key,
-                    "label": label,
-                    "value": value,
-                    "message": action_summary,
-                }
-            return {
-                "tool_name": "set_widget",
-                "summary": f"Failed to update widget value: {result.get('error', 'Unknown error')}",
-                "success": False,
-            }
-
-        async def update_plan(args: dict) -> dict:
-            try:
-                plan_items = args.get("plan", [])
-                plan_diff = args.get("plan_diff", [])
-                plan_update_overview = args.get("plan_update_overview", "")
-
-                plan = {"steps": plan_items}
-                self.current_plan = plan
-
-                print(f"[tool] update_plan: {plan_update_overview}")
-                for item in plan_items:
-                    print(f"  [{item.get('status')}] {item.get('id')}: {item.get('description')}")
-                for diff in plan_diff:
-                    print(f"  diff: [{diff.get('action')}] {diff.get('id')}")
-
-                return {
-                    "tool_name": "update_plan",
-                    "success": True,
-                    "summary": plan_update_overview if plan_update_overview else "Plan updated",
-                }
-            except Exception as e:
-                print(f"[tool] update_plan error: {e}")
-                return {
-                    "tool_name": "update_plan",
-                    "success": False,
-                    "summary": f"Error updating plan: {e!s}",
-                }
-
-        def submit_response(args: dict) -> dict:
-            try:
-                summary = args.get("summary")
-                if summary is not None and not isinstance(summary, str):
-                    summary = None
-
-                questions = args.get("questions")
-                if questions is not None and not isinstance(questions, str):
-                    questions = None
-
-                next_status = args.get("next_status")
-                if not isinstance(next_status, str) or next_status not in {"executing", "fixing", "thinking", "awaiting_user_response", "awaiting_cell_execution", "awaiting_user_widget_input", "done"}:
-                    print(f"[agent] Invalid next_status: {next_status}")
-                    return {
-                        "tool_name": "submit_response",
-                        "message": "Please provide a valid next_status",
-                        "success": False,
-                    }
-
-                should_continue = args.get("continue", False)
-
-                expected_widgets = args.get("expected_widgets", [])
-
-                print("[tool] submit_response called with:")
-                print(f"  - next_status: {next_status}")
-                print(f"  - summary: {summary}")
-                print(f"  - questions: {questions}")
-                print(f"  - continue: {should_continue}")
-                print(f"  - expected_widgets: {expected_widgets}")
-
-                if should_continue and self.executing_cells:
-                    print(f"[tool] Deferring auto-continue - {len(self.executing_cells)} cells still executing: {self.executing_cells}")
-                    self.should_auto_continue = False
-                    self.pending_auto_continue = True
-                else:
-                    self.should_auto_continue = should_continue
-                    self.pending_auto_continue = False
-
-                terminal_statuses = {"done", "awaiting_user_response"}
-                if not should_continue and next_status in terminal_statuses:
-                    self.pause_until_user_query = True
-                else:
-                    self.pause_until_user_query = False
-
-                self.current_status = next_status
-                if next_status == "awaiting_user_widget_input":
-                    self.expected_widgets = {str(k): None for k in expected_widgets}
-
-                return {
-                    "tool_name": "submit_response",
-                    "summary": "Response submitted successfully",
-                    "success": True,
-                }
-            except Exception as e:
-                print(f"[tool] submit_response error: {e}")
-                import traceback
-                traceback.print_exc()
-                return {
-                    "tool_name": "submit_response",
-                    "summary": f"Error submitting response: {e!s}",
-                    "success": False,
-                }
-
-        async def h5_filter_by(args: dict) -> dict:
-            widget_key = args.get("widget_key")
-            filters = args.get("filters")
-
-            if isinstance(filters, str):
-                try:
-                    filters = json.loads(filters)
-                except json.JSONDecodeError:
-                    return {
-                        "tool_name": "h5_filter_by",
-                        "success": False,
-                        "summary": f"filters is invalid JSON: {filters!r}",
-                    }
-
-            print(f"[tool] h5_filter_by widget_key={widget_key} filters={filters}")
-
-            params = {
-                "widget_key": widget_key,
-                "filters": filters
-            }
-
-            result = await self.atomic_operation("h5_filter_by", params)
-            if result.get("status") == "success":
-                return {
-                    "tool_name": "h5_filter_by",
-                    "success": True,
-                    "label": args.get("label"),
-                    "summary": f"Applied filters to h5 widget: {filters}",
-                    "widget_key": widget_key,
-                    "filters": filters,
-                }
-
-            return {
-                "tool_name": "h5_filter_by",
-                "success": False,
-                "summary": f"Failed to apply filters to h5 widget: {result.get('error', 'Unknown error')}",
-            }
-
-        async def h5_color_by(args: dict) -> dict:
-            widget_key = args.get("widget_key")
-            color_by = args.get("color_by")
-
-            if isinstance(color_by, str):
-                try:
-                    color_by = json.loads(color_by)
-                except json.JSONDecodeError:
-                    return {
-                        "tool_name": "h5_color_by",
-                        "success": False,
-                        "summary": f"color_by is invalid JSON: {color_by!r}",
-                    }
-
-            print(f"[tool] h5_color_by widget_key={widget_key} color_by={color_by}")
-
-            params = {
-                "widget_key": widget_key,
-                "color_by": color_by
-            }
-
-            result = await self.atomic_operation("h5_color_by", params)
-            if result.get("status") == "success":
-                return {
-                    "tool_name": "h5_color_by",
-                    "success": True,
-                    "label": args.get("label"),
-                    "summary": f"Set h5 widget coloring: {color_by}",
-                    "widget_key": widget_key,
-                    "color_by": color_by,
-                }
-
-            return {
-                "tool_name": "h5_color_by",
-                "success": False,
-                "summary": f"Failed to set h5 widget coloring: {result.get('error', 'Unknown error')}",
-            }
-
-        async def h5_refresh(args: dict) -> dict:
-            widget_key = args.get("widget_key")
-
-            print(f"[tool] h5_refresh widget_key={widget_key}")
-
-            params = {
-                "widget_key": widget_key,
-            }
-
-            result = await self.atomic_operation("h5_refresh", params)
-            if result.get("status") == "success":
-                return {
-                    "tool_name": "h5_refresh",
-                    "success": True,
-                    "label": args.get("label"),
-                    "summary": f"Refreshed h5 widget {widget_key}",
-                    "widget_key": widget_key,
-                }
-
-            return {
-                "tool_name": "h5_refresh",
-                "success": False,
-                "summary": f"Failed to refresh h5 widget: {result.get('error', 'Unknown error')}",
-            }
-
-        async def h5_set_selected_obsm_key(args: dict) -> dict:
-            widget_key = args.get("widget_key")
-            obsm_key = args.get("obsm_key")
-
-            print(f"[tool] h5_set_selected_obsm_key widget_key={widget_key} obsm_key={obsm_key}")
-
-            params = {
-                "widget_key": widget_key,
-                "obsm_key": obsm_key
-            }
-
-            result = await self.atomic_operation("h5_set_selected_obsm_key", params)
-            if result.get("status") == "success":
-                return {
-                    "tool_name": "h5_set_selected_obsm_key",
-                    "success": True,
-                    "label": args.get("label"),
-                    "summary": f"Set h5 widget to use obsm key {obsm_key}",
-                    "widget_key": widget_key,
-                    "obsm_key": obsm_key,
-                }
-
-            return {
-                "tool_name": "h5_set_selected_obsm_key",
-                "success": False,
-                "summary": f"Failed to set h5 widget obsm key: {result.get('error', 'Unknown error')}",
-            }
-
-        async def h5_set_background_image(args: dict) -> dict:
-            widget_key = args.get("widget_key")
-            node_id = args.get("node_id")
-
-            print(f"[tool] h5_set_background_image widget_key={widget_key} node_id={node_id}")
-
-            params = {
-                "widget_key": widget_key,
-                "node_id": node_id,
-            }
-
-            result = await self.atomic_operation("h5_set_background_image", params)
-            if result.get("status") == "success":
-                return {
-                    "tool_name": "h5_set_background_image",
-                    "success": True,
-                    "label": args.get("label"),
-                    "summary": f"Set background image for h5 widget using {node_id}",
-                    "widget_key": widget_key,
-                    "node_id": node_id,
-                }
-            return {
-                "tool_name": "h5_set_background_image",
-                "success": False,
-                "summary": f"Failed to set background image: {result.get('error', 'Unknown error')}",
-            }
-
-        async def h5_open_image_aligner(args: dict) -> dict:
-            widget_key = args.get("widget_key")
-            background_image_id = args.get("background_image_id")
-
-            print(f"[tool] h5_open_image_aligner widget_key={widget_key} background_image_id={background_image_id}")
-
-            params = {
-                "widget_key": widget_key,
-                "background_image_id": background_image_id,
-            }
-
-            result = await self.atomic_operation("h5_open_image_aligner", params)
-            if result.get("status") == "success":
-                return {
-                    "tool_name": "h5_open_image_aligner",
-                    "success": True,
-                    "label": args.get("label"),
-                    "summary": f"Opened image aligner for background image {background_image_id}",
-                    "widget_key": widget_key,
-                    "background_image_id": background_image_id,
-                }
-
-            return {
-                "tool_name": "h5_open_image_aligner",
-                "success": False,
-                "summary": f"Failed to open image aligner: {result.get('error', 'Unknown error')}",
-            }
-
-        async def h5_autoscale(args: dict) -> dict:
-            widget_key = args.get("widget_key")
-
-            print(f"[tool] h5_autoscale widget_key={widget_key}")
-
-            params = {
-                "widget_key": widget_key,
-            }
-
-            result = await self.atomic_operation("h5_autoscale", params)
-            if result.get("status") == "success":
-                return {
-                    "tool_name": "h5_autoscale",
-                    "success": True,
-                    "label": args.get("label"),
-                    "summary": f"Autoscaled h5 widget {widget_key} to data bounds",
-                    "widget_key": widget_key,
-                }
-
-            return {
-                "tool_name": "h5_autoscale",
-                "success": False,
-                "summary": f"Failed to autoscale h5 widget: {result.get('error', 'Unknown error')}",
-            }
-
-        async def h5_zoom(args: dict) -> dict:
-            widget_key = args.get("widget_key")
-            direction = args.get("direction")
-            percentage = args.get("percentage")
-
-            print(f"[tool] h5_zoom widget_key={widget_key} direction={direction} percentage={percentage}")
-
-            params = {
-                "widget_key": widget_key,
-                "direction": direction,
-            }
-
-            if percentage is not None:
-                params["percentage"] = percentage
-
-            result = await self.atomic_operation("h5_zoom", params)
-            if result.get("status") == "success":
-                zoom_desc = f"zoom {direction}"
-                if percentage is not None:
-                    zoom_desc += f" by {percentage}%"
-                return {
-                    "tool_name": "h5_zoom",
-                    "success": True,
-                    "label": args.get("label"),
-                    "summary": f"Applied {zoom_desc} to h5 widget {widget_key}",
-                    "widget_key": widget_key,
-                    "direction": direction,
-                    "percentage": percentage,
-                }
-
-            return {
-                "tool_name": "h5_zoom",
-                "success": False,
-                "summary": f"Failed to zoom h5 widget: {result.get('error', 'Unknown error')}",
-            }
-
-        async def h5_set_background_image_visibility(args: dict) -> dict:
-            widget_key = args.get("widget_key")
-            background_image_id = args.get("background_image_id")
-            hidden = args.get("hidden")
-
-            print(f"[tool] h5_set_background_image_visibility widget_key={widget_key} background_image_id={background_image_id} hidden={hidden}")
-
-            params = {
-                "widget_key": widget_key,
-                "background_image_id": background_image_id,
-                "hidden": hidden
-            }
-
-            result = await self.atomic_operation("h5_set_background_image_visibility", params)
-            if result.get("status") == "success":
-                visibility_action = "hidden" if hidden else "shown"
-                return {
-                    "tool_name": "h5_set_background_image_visibility",
-                    "success": True,
-                    "label": args.get("label"),
-                    "summary": f"Background image {background_image_id} {visibility_action}",
-                    "widget_key": widget_key,
-                    "background_image_id": background_image_id,
-                    "hidden": hidden,
-                }
-
-            return {
-                "tool_name": "h5_set_background_image_visibility",
-                "success": False,
-                "summary": f"Failed to set background image visibility: {result.get('error', 'Unknown error')}",
-            }
-
-        async def h5_add_selected_cells_to_categorical_obs(args: dict) -> dict:
-            widget_key = args.get("widget_key")
-            obs_key = args.get("obs_key")
-            category = args.get("category")
-
-            print(f"[tool] h5_add_selected_cells_to_categorical_obs widget_key={widget_key} obs_key={obs_key} category={category}")
-
-            params = {
-                "widget_key": widget_key,
-                "obs_key": obs_key,
-                "category": category
-            }
-
-            result = await self.atomic_operation("h5_add_selected_cells_to_categorical_obs", params)
-            if result.get("status") == "success":
-                return {
-                    "tool_name": "h5_add_selected_cells_to_categorical_obs",
-                    "success": True,
-                    "label": args.get("label"),
-                    "summary": f"Assigned selected cells to category '{category}' in observation key '{obs_key}'",
-                    "widget_key": widget_key,
-                    "obs_key": obs_key,
-                    "category": category,
-                }
-
-            return {
-                "tool_name": "h5_add_selected_cells_to_categorical_obs",
-                "success": False,
-                "summary": f"Failed to assign selected cells to category: {result.get('error', 'Unknown error')}",
-            }
-
-        async def h5_set_marker_opacity(args: dict) -> dict:
-            widget_key = args.get("widget_key")
-            opacity = args.get("opacity")
-
-            print(f"[tool] h5_set_marker_opacity widget_key={widget_key} opacity={opacity}")
-
-            params = {
-                "widget_key": widget_key,
-                "opacity": opacity
-            }
-
-            result = await self.atomic_operation("h5_set_marker_opacity", params)
-            if result.get("status") == "success":
-                return {
-                    "tool_name": "h5_set_marker_opacity",
-                    "success": True,
-                    "label": args.get("label"),
-                    "summary": f"Set marker opacity to {opacity}",
-                    "widget_key": widget_key,
-                    "opacity": opacity,
-                }
-
-            return {
-                "tool_name": "h5_set_marker_opacity",
-                "success": False,
-                "summary": f"Failed to set marker opacity: {result.get('error', 'Unknown error')}",
-            }
-
-        async def h5_manage_obs(args: dict) -> dict:
-            widget_key = args.get("widget_key")
-            obs_key = args.get("obs_key")
-            operation = args.get("operation")
-            obs_type = args.get("obs_type", "category")
-
-            print(f"[tool] h5_manage_obs widget_key={widget_key} obs_key={obs_key} operation={operation} obs_type={obs_type}")
-
-            params = {
-                "widget_key": widget_key,
-                "obs_key": obs_key,
-                "operation": operation
-            }
-
-            if operation == "add":
-                params["obs_type"] = obs_type
-
-            result = await self.atomic_operation("h5_manage_obs", params)
-            if result.get("status") == "success":
-                if operation == "add":
-                    return {
-                        "tool_name": "h5_manage_obs",
-                        "success": True,
-                        "label": args.get("label"),
-                        "summary": f"Created observation column '{obs_key}' with type '{obs_type}'",
-                        "widget_key": widget_key,
-                        "obs_key": obs_key,
-                        "operation": operation,
-                        "obs_type": obs_type,
-                    }
-
-                return {
-                    "tool_name": "h5_manage_obs",
-                    "success": True,
-                    "label": args.get("label"),
-                    "summary": f"Deleted observation column '{obs_key}'",
-                    "widget_key": widget_key,
-                    "obs_key": obs_key,
-                    "operation": operation,
-                }
-
-            return {
-                "tool_name": "h5_manage_obs",
-                "success": False,
-                "summary": f"Failed to {operation} observation column: {result.get('error', 'Unknown error')}",
-            }
-
-        async def redeem_package(args: dict) -> dict:
-            package_code = args.get("package_code")
-            package_version_id = args.get("package_version_id")
-            redemption_reason = args.get("redemption_reason")
-            if package_code is None or package_version_id is None or redemption_reason is None:
-                return {
-                    "tool_name": "redeem_package",
-                    "success": False,
-                    "summary": "Package code, package version ID and redemption reason are required to redeem a package",
-                }
-
-            package_code = str(package_code)
-            package_version_id = str(package_version_id)
-
-            print("[tool] redeem_package")
-
-            result = await self.atomic_operation("redeem_package", {
-                "package_code": str(package_code),
-                "package_version_id": str(package_version_id),
-            })
-            if result.get("status") == "success":
-                return {
-                    "tool_name": "redeem_package",
-                    "success": True,
-                    "summary": f"Redeemed package {package_code} (version {package_version_id})",
-                    "package_code": package_code,
-                    "package_version_id": package_version_id,
-                    "redemption_reason": redemption_reason,
-                }
-
-            return {
-                "tool_name": "redeem_package",
-                "success": False,
-                "summary": f"Failed to redeem package: {result.get('error', 'Unknown error')}",
-            }
-
-        async def smart_ui_spotlight(args: dict) -> dict:
-            keyword = args.get("keyword")
-            widget_key = args.get("widget_key")
-            widget_label = args.get("widget_label")
-
-            print(f"[tool] smart_ui_spotlight keyword={keyword}, widget_key={widget_key}")
-
-            params = {
-                "keyword": keyword
-            }
-            if widget_key is not None:
-                params["widget_key"] = widget_key
-
-            result = await self.atomic_operation("smart_ui_spotlight", params)
-            if result.get("status") == "success":
-                res = {
-                    "tool_name": "smart_ui_spotlight",
-                    "success": True,
-                    "summary": f"Highlighted UI element: {keyword}",
-                    "keyword": keyword,
-                }
-
-                if widget_key is not None:
-                    res["widget_key"] = widget_key
-                if widget_label is not None:
-                    res["widget_label"] = widget_label
-                return res
-
-            return {
-                "tool_name": "smart_ui_spotlight",
-                "success": False,
-                "summary": f"Failed to highlight UI element: {result.get('error', 'Unknown error')}",
-            }
-
-        self.tools.append({
-            "name": "create_cell",
-            "description": "Create a new code cell at specified position. The cell will automatically run after creation.",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "position": {"type": "integer", "description": "Position to insert the cell"},
-                    "code": {"type": "string", "description": "Python code for the cell"},
-                    "title": {"type": "string", "description": "Name for the cell"},
-                    "action_summary": {"type": "string", "description": "Summary of the purpose of the cell."},
-                },
-                "required": ["position", "code", "title", "action_summary"],
-            },
-        })
-        self.tool_map["create_cell"] = create_cell
-
-        self.tools.append({
-            "name": "create_markdown_cell",
-            "description": "Create a new markdown cell at specified position.",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "position": {"type": "integer", "description": "Position to insert the cell"},
-                    "code": {"type": "string", "description": "Markdown content"},
-                    "title": {"type": "string", "description": "Title of first header in the markdown cell"},
-                    "action_summary": {"type": "string", "description": "Summary of the purpose of the cell."},
-                },
-                "required": ["position", "code", "title", "action_summary"],
-            },
-        })
-        self.tool_map["create_markdown_cell"] = create_markdown_cell
-
-        self.tools.append({
-            "name": "edit_cell",
-            "description": "Replace the contents of an existing cell. The cell will automatically run after editing.",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "cell_id": {"type": "string", "description": "ID of the cell to edit"},
-                    "new_code": {"type": "string", "description": "New code/content for the cell"},
-                    "title": {"type": "string", "description": "Name of the cell to edit"},
-                    "action_summary": {"type": "string", "description": "Summary of the purpose of the edit."},
-                },
-                "required": ["cell_id", "new_code", "title"],
-            },
-        })
-        self.tool_map["edit_cell"] = edit_cell
-
-        self.tools.append({
-            "name": "delete_cell",
-            "description": "Remove a cell from the notebook.",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "cell_id": {"type": "string", "description": "ID of the cell to delete"},
-                    "title": {"type": "string", "description": "Name of the cell to delete"},
-                    "action_summary": {"type": "string", "description": "Summary of the purpose of the delete."},
-                },
-                "required": ["cell_id", "title", "action_summary"],
-            },
-        })
-        self.tool_map["delete_cell"] = delete_cell
-
-        self.tools.append({
-            "name": "run_cell",
-            "description": "Execute a specific cell.",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "cell_id": {"type": "string", "description": "ID of the cell to run"},
-                    "title": {"type": "string", "description": "Name of the cell to run"},
-                    "action_summary": {"type": "string", "description": "Summary of the purpose of the run."},
-                },
-                "required": ["cell_id", "title", "action_summary"],
-            },
-        })
-        self.tool_map["run_cell"] = run_cell
-
-        self.tools.append({
-            "name": "stop_cell",
-            "description": "Stop execution of a specific cell.",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "cell_id": {"type": "string", "description": "ID of the cell to stop"},
-                    "cell_name": {"type": "string", "description": "Name of the cell to stop"},
-                    "title": {"type": "string", "description": "Title of the cell to stop"},
-                    "action_summary": {"type": "string", "description": "Summary of the purpose of the stop."},
-                },
-                "required": ["cell_id", "title", "action_summary"],
-            },
-        })
-        self.tool_map["stop_cell"] = stop_cell
-
-        self.tools.append({
-            "name": "delete_all_cells",
-            "description": "Delete all cells in the notebook efficiently.",
-            "input_schema": {
-                "type": "object",
-                "properties": {},
-            },
-        })
-        self.tool_map["delete_all_cells"] = delete_all_cells
-
-        self.tools.append({
-            "name": "rename_notebook",
-            "description": "Rename the current plot notebook. Only call when the user explicitly asks to rename the notebook or the notebook is named Untitled Layout",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "name": {"type": "string", "description": "New notebook name (<=5 words, Title Case)"},
-                },
-                "required": ["name"],
-            },
-        })
-        self.tool_map["rename_notebook"] = rename_notebook
-
-        self.tools.append({
-            "name": "create_tab",
-            "description": "Create a new tab marker cell at specified position to organize cells. IMPORTANT: This inserts a new cell, shifting all subsequent cell positions down by 1.",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "position": {"type": "integer", "description": "Position to insert the tab marker"},
-                    "display_name": {"type": "string", "description": "Name for the tab"},
-                },
-                "required": ["position", "display_name"],
-            },
-        })
-        self.tool_map["create_tab"] = create_tab
-
-        self.tools.append({
-            "name": "rename_tab",
-            "description": 'Rename a tab. Use tab_id="DEFAULT" to rename the default tab.',
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "tab_id": {"type": "string", "description": 'ID of the tab to rename. Use "DEFAULT" for the default tab, or the TAB_ID from a Tab Marker.'},
-                    "new_name": {"type": "string", "description": "New name for the tab"},
-                },
-                "required": ["tab_id", "new_name"],
-            },
-        })
-        self.tool_map["rename_tab"] = rename_tab
-
-        self.tools.append({
-            "name": "restore_checkpoint",
-            "description": "Restore this notebook to one of its own previously-created checkpoints (template_version_id). Only call when the user explicitly asks to restore/revert/rollback/undo the notebook state. Confirm before restoring.",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "template_version_id": {
-                        "type": "string",
-                        "description": "Template version ID to restore",
-                    },
-                },
-                "required": ["template_version_id"],
-            },
-        })
-        self.tool_map["restore_checkpoint"] = restore_checkpoint
-
-        self.tools.append({
-            "name": "update_plan",
-            "description": "Update the agent's plan.",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "plan": {
-                        "type": "array",
-                        "description": "List of plan items. This should be the complete current plan state.",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "id": {"type": "string", "description": "Unique step identifier"},
-                                "description": {"type": "string", "description": "What this step does"},
-                                "status": {"type": "string", "enum": ["todo", "in_progress", "done", "cancelled"], "description": "Current status"}
-                            },
-                            "required": ["id", "description", "status"]
-                        }
-                    },
-                    "plan_diff": {
-                        "type": "array",
-                        "description": "List of plan diff items - only the steps that changed in this update.",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "id": {"type": "string", "description": "Unique step identifier"},
-                                "action": {"type": "string", "enum": ["add", "update", "complete", "remove"], "description": "What action was taken on this step"}
-                            },
-                            "required": ["id", "action"]
-                        }
-                    },
-                    "plan_update_overview": {
-                        "type": "string",
-                        "description": "Short title overview of what changed. E.g. 'Added QC steps' or 'Completed step 2, step 3 now in progress'"
-                    }
-                },
-                "required": ["plan", "plan_diff", "plan_update_overview"]
-            }
-        })
-        self.tool_map["update_plan"] = update_plan
-
-        self.tools.append({
-            "name": "submit_response",
-            "description": "Submit the user-facing response with next_status, questions, and summary. At least one of summary or questions is REQUIRED. Call this at the end of every turn.",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "summary": {"type": "string", "description": "User-facing progress, responses, or next step. Use markdown bullets if needed."},
-                    "questions": {"type": "string", "description": "User-facing questions. Put finalized question text here."},
-                    "next_status": {"type": "string", "description": "What the agent will do next", "enum": ["executing", "fixing", "thinking", "awaiting_user_response", "awaiting_cell_execution", "awaiting_user_widget_input", "done"]},
-                    "expected_widgets": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "Optional list of full widget keys (<tf_id>/<widget_id>) to await when next_status is 'awaiting_user_widget_input'"
-                    },
-                    "continue": {
-                        "type": "boolean",
-                        "description": "Set to true to immediately continue to the next step without waiting for user input. Set to false when waiting for user input or when all work is complete.",
-                        "default": False
-                    },
-                },
-                "required": ["next_status"],
-            },
-        })
-        self.tool_map["submit_response"] = submit_response
-
-        self.tools.append({
-            "name": "set_widget",
-            "description": "Set a single widget value by widget key.",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "key": {
-                        "type": "string",
-                        "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
-                    },
-                    "value": {
-                        "description": "JSON-serializable value"
-                    },
-                    "action_summary": {"type": "string", "description": "Summary of the purpose of the set_widget."},
-                    "label": {"type": "string", "description": "Label of the widget to set"},
-                },
-                "required": ["key", "value", "action_summary", "label"],
-            },
-        })
-        self.tool_map["set_widget"] = set_widget
-
-        self.tools.append({
-            "name": "h5_filter_by",
-            "description": "Set filters for an h5/AnnData widget. Pass the complete array of filters. Include existing filters from widget context to preserve them.",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "widget_key": {
-                        "type": "string",
-                        "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
-                    },
-                    "label": {
-                        "type": "string",
-                        "description": "Label of the widget"
-                    },
-                    "filters": {
-                        "type": "array",
-                        "description": "Complete array of filters to apply",
-                        "items": {
-                            "oneOf": [
-                                {
-                                    "type": "object",
-                                    "properties": {
-                                        "type": {
-                                            "type": "string",
-                                            "enum": ["obs"],
-                                            "description": "Filter by observation metadata"
-                                        },
-                                        "key": {
-                                            "type": "string",
-                                            "description": "The observation key to filter on"
-                                        },
-                                        "operation": {
-                                            "oneOf": [
-                                                {
-                                                    "type": "object",
-                                                    "properties": {
-                                                        "type": {
-                                                            "type": "string",
-                                                            "enum": ["neq"],
-                                                            "description": "Not equal operation"
-                                                        },
-                                                        "value": {
-                                                            "type": ["string", "number", "null"],
-                                                            "description": "Value to compare against"
-                                                        }
-                                                    },
-                                                    "required": ["type", "value"]
-                                                },
-                                                {
-                                                    "type": "object",
-                                                    "properties": {
-                                                        "type": {
-                                                            "type": "string",
-                                                            "enum": ["geq", "leq", "g", "l"],
-                                                            "description": "Numeric comparison: geq (>=), leq (<=), g (>), l (<)"
-                                                        },
-                                                        "value": {
-                                                            "type": "number",
-                                                            "description": "Numeric value to compare against"
-                                                        }
-                                                    },
-                                                    "required": ["type", "value"]
-                                                }
-                                            ],
-                                            "description": "Filter operation to apply"
-                                        }
-                                    },
-                                    "required": ["type", "key", "operation"]
-                                },
-                                {
-                                    "type": "object",
-                                    "properties": {
-                                        "type": {
-                                            "type": "string",
-                                            "enum": ["var"],
-                                            "description": "Filter by variable(s) / gene(s)"
-                                        },
-                                        "keys": {
-                                            "type": "array",
-                                            "items": {"type": "string"},
-                                            "description": "Array of variable/gene names to filter on"
-                                        },
-                                        "operation": {
-                                            "type": "object",
-                                            "properties": {
-                                                "type": {
-                                                    "type": "string",
-                                                    "enum": ["geq", "leq", "g", "l"],
-                                                    "description": "Numeric comparison: geq (>=), leq (<=), g (>), l (<)"
-                                                },
-                                                "value": {
-                                                    "type": "number",
-                                                    "description": "Numeric value to compare against"
-                                                }
-                                            },
-                                            "required": ["type", "value"]
-                                        }
-                                    },
-                                    "required": ["type", "keys", "operation"]
-                                }
-                            ]
-                        }
-                    }
-                },
-                "required": ["widget_key", "filters"],
-            },
-        })
-        self.tool_map["h5_filter_by"] = h5_filter_by
-
-        self.tools.append({
-            "name": "h5_color_by",
-            "description": "Set an h5/AnnData widget to color by a specific observation or variable (can be multiple if for genes)",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "widget_key": {
-                        "type": "string",
-                        "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
-                    },
-                    "label": {
-                        "type": "string",
-                        "description": "Label of the widget"
-                    },
-                    "color_by": {
-                        "oneOf": [
-                            {
-                                "type": "object",
-                                "properties": {
-                                    "type": {
-                                        "type": "string",
-                                        "enum": ["obs"],
-                                        "description": "Color by observation metadata"
-                                    },
-                                    "key": {
-                                        "type": "string",
-                                        "description": "The observation key to color by"
-                                    }
-                                },
-                                "required": ["type", "key"]
-                            },
-                            {
-                                "type": "object",
-                                "properties": {
-                                    "type": {
-                                        "type": "string",
-                                        "enum": ["var"],
-                                        "description": "Color by variable(s) / gene(s)"
-                                    },
-                                    "keys": {
-                                        "type": "array",
-                                        "items": {"type": "string"},
-                                        "description": "Array of variable/gene names to color by"
-                                    }
-                                },
-                                "required": ["type", "keys"]
-                            },
-                            {
-                                "type": "null"
-                            }
-                        ],
-                        "description": "Coloring configuration. Can be null to remove coloring, an obs object to color by observation, or a var object to color by variables like genes"
-                    }
-                },
-                "required": ["widget_key", "color_by"],
-            },
-        })
-        self.tool_map["h5_color_by"] = h5_color_by
-
-        self.tools.append({
-            "name": "h5_refresh",
-            "description": "Refresh an h5/AnnData widget (re-render/recompute view after state changes).",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "widget_key": {
-                        "type": "string",
-                        "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
-                    },
-                    "label": {
-                        "type": "string",
-                        "description": "Label of the widget"
-                    },
-                },
-                "required": ["widget_key"],
-            },
-        })
-        self.tool_map["h5_refresh"] = h5_refresh
-
-        self.tools.append({
-            "name": "h5_set_selected_obsm_key",
-            "description": "Set the selected obsm key for an h5/AnnData widget to control which embedding is displayed.",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "widget_key": {
-                        "type": "string",
-                        "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
-                    },
-                    "label": {
-                        "type": "string",
-                        "description": "Label of the widget"
-                    },
-                    "obsm_key": {
-                        "type": "string",
-                        "description": "The obsm key to use for embedding (e.g spatial, X_umap)"
-                    },
-                },
-                "required": ["widget_key", "obsm_key"],
-            },
-        })
-        self.tool_map["h5_set_selected_obsm_key"] = h5_set_selected_obsm_key
-
-        self.tools.append({
-            "name": "h5_set_background_image",
-            "description": "Set a background image for an h5/AnnData widget from a user-attached file. The file must be an image type (jpg, jpeg, png, tiff).",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "label": {
-                        "type": "string",
-                        "description": "Label of the widget"
-                    },
-                    "widget_key": {
-                        "type": "string",
-                        "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
-                    },
-                    "node_id": {
-                        "type": "string",
-                        "description": "The LData node ID of the image file to use as background. This should come from files attached by the user in the chat."
-                    },
-                },
-                "required": ["widget_key", "node_id"],
-            },
-        })
-        self.tool_map["h5_set_background_image"] = h5_set_background_image
-
-        self.tools.append({
-            "name": "h5_open_image_aligner",
-            "description": "Open the image alignment modal for a background image in an h5/AnnData widget.",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "label": {
-                        "type": "string",
-                        "description": "Label of the widget"
-                    },
-                    "widget_key": {
-                        "type": "string",
-                        "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
-                    },
-                    "background_image_id": {
-                        "type": "string",
-                        "description": "The ID of the background image to align (typically the node_id)"
-                    },
-                },
-                "required": ["widget_key", "background_image_id"],
-            },
-        })
-        self.tool_map["h5_open_image_aligner"] = h5_open_image_aligner
-
-        self.tools.append({
-            "name": "h5_autoscale",
-            "description": "Reset the plotted view in an h5/AnnData widget to Plotly's autoscaled data bounds.",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "label": {
-                        "type": "string",
-                        "description": "Label of the widget"
-                    },
-                    "widget_key": {
-                        "type": "string",
-                        "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
-                    },
-                },
-                "required": ["widget_key"],
-            },
-        })
-        self.tool_map["h5_autoscale"] = h5_autoscale
-
-        self.tools.append({
-            "name": "h5_zoom",
-            "description": "Zoom the Plotly view in an h5/AnnData widget in or out from the current camera center.",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "widget_key": {
-                        "type": "string",
-                        "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
-                    },
-                    "label": {
-                        "type": "string",
-                        "description": "Label of the widget"
-                    },
-                    "direction": {
-                        "type": "string",
-                        "enum": ["in", "out"],
-                        "description": 'Zoom direction; use "in" to zoom closer, "out" to zoom farther'
-                    },
-                    "percentage": {
-                        "type": "number",
-                        "minimum": 0,
-                        "description": "Optional percentage change (e.g. 25 for ±25%); omitting uses the default Plotly zoom factor"
-                    },
-                },
-                "required": ["widget_key", "direction"],
-            },
-        })
-        self.tool_map["h5_zoom"] = h5_zoom
-
-        self.tools.append({
-            "name": "h5_set_background_image_visibility",
-            "description": "Show or hide a specific background image in an h5/AnnData widget.",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "label": {
-                        "type": "string",
-                        "description": "Label of the widget"
-                    },
-                    "widget_key": {
-                        "type": "string",
-                        "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
-                    },
-                    "background_image_id": {
-                        "type": "string",
-                        "description": "The ID of the background image to show or hide"
-                    },
-                    "hidden": {
-                        "type": "boolean",
-                        "description": "Whether to hide (true) or show (false) the background image"
-                    },
-                },
-                "required": ["widget_key", "background_image_id", "hidden"],
-            },
-        })
-        self.tool_map["h5_set_background_image_visibility"] = h5_set_background_image_visibility
-
-        self.tools.append({
-            "name": "h5_add_selected_cells_to_categorical_obs",
-            "description": "Assign selected cells to a category in a categorical observation key",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "label": {
-                        "type": "string",
-                        "description": "Label of the widget"
-                    },
-                    "widget_key": {
-                        "type": "string",
-                        "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
-                    },
-                    "obs_key": {
-                        "type": "string",
-                        "description": "The existing categorical observation key to add selected cells to"
-                    },
-                    "category": {
-                        "type": "string",
-                        "description": "The category name to assign to selected cells. Will be created if it doesn't exist in this observation key."
-                    },
-                },
-                "required": ["widget_key", "obs_key", "category"],
-            },
-        })
-        self.tool_map["h5_add_selected_cells_to_categorical_obs"] = h5_add_selected_cells_to_categorical_obs
-
-        self.tools.append({
-            "name": "h5_set_marker_opacity",
-            "description": "Set the marker opacity for all cell markers in an h5/AnnData widget.",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "label": {
-                        "type": "string",
-                        "description": "Label of the widget"
-                    },
-                    "widget_key": {
-                        "type": "string",
-                        "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
-                    },
-                    "opacity": {
-                        "type": "number",
-                        "description": "Opacity value for cell markers, between 0.1 (transparent) and 0.9 (opaque)"
-                    },
-                },
-                "required": ["widget_key", "opacity"],
-            },
-        })
-        self.tool_map["h5_set_marker_opacity"] = h5_set_marker_opacity
-
-        self.tools.append({
-            "name": "h5_manage_obs",
-            "description": "Create or delete an observation column in an h5/AnnData widget.",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "widget_key": {
-                        "type": "string",
-                        "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>"
-                    },
-                    "label": {
-                        "type": "string",
-                        "description": "Label of the widget"
-                    },
-                    "obs_key": {
-                        "type": "string",
-                        "description": "The observation column name to create or delete"
-                    },
-                    "operation": {
-                        "type": "string",
-                        "enum": ["add", "remove"],
-                        "description": "Whether to create a new observation column ('add') or delete an existing one ('remove')"
-                    },
-                    "obs_type": {
-                        "type": "string",
-                        "enum": ["category", "bool", "int64", "float64"],
-                        "description": "Type of observation. Only for 'add' operation. Defaults to 'category'."
-                    }
-                },
-                "required": ["widget_key", "obs_key", "operation"]
-            }
-        })
-        self.tool_map["h5_manage_obs"] = h5_manage_obs
-
-        self.tools.append({
-            "name": "redeem_package",
-            "description": "Redeem a package so the workspace gains access to technology-specific assets.",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "package_code": {
-                        "type": "string",
-                        "description": "Multi-use package invite code."
-                    },
-                    "package_version_id": {
-                        "type": "string",
-                        "description": "Package version ID."
-                    },
-                    "redemption_reason": {
-                        "type": "string",
-                        "description": "Reason for redeeming the package to display in the agent history. (e.g., `Installed X Technology Tools into Workspace`)"
-                    }
-                },
-                "required": ["package_code", "package_version_id", "redemption_reason"]
-            }
-        })
-        self.tool_map["redeem_package"] = redeem_package
-
-        self.tools.append({
-            "name": "smart_ui_spotlight",
-            "description": "Highlight a UI element to guide the user's attention.",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "keyword": {
-                        "type": "string",
-                        "enum": ["lasso_select", "file_upload", "widget_input"],
-                        "description": "The UI element to highlight"
-                    },
-                    "widget_key": {
-                        "type": "string",
-                        "description": "Optional full widget key including tf_id and widget_id in the format <tf_id>/<widget_id> for keywords related to a specific widget"
-                    },
-                    "widget_label": {
-                        "type": "string",
-                        "description": "Optional label of the widget to highlight"
-                    }
-                },
-                "required": ["keyword"]
-            }
-        })
-        self.tool_map["smart_ui_spotlight"] = smart_ui_spotlight
-
-        def glob_file_search(args: dict) -> dict:
-            pattern = args.get("pattern", "")
-            base_path = args.get("base_path", ".")
-
-            try:
-                if not Path(base_path).is_absolute():
-                    base_path = Path(__file__).parent / "agent_config/context" / base_path
-                else:
-                    base_path = Path(base_path)
-
-                if "/" in pattern:
-                    flag = "-path"
-                    search_pattern = f"*/{pattern}"
-                else:
-                    flag = "-name"
-                    search_pattern = pattern
-
-                result = subprocess.run(
-                    ["/usr/bin/find", str(base_path), flag, search_pattern],
-                    capture_output=True,
-                    text=True,
-                    timeout=5,
-                    check=True
+            return
+
+        if event_type == "message_delta":
+            return
+
+        if event_type == "message_stop":
+            await self._close_open_stream_blocks()
+            return
+
+    async def _run_query(
+        self,
+        *,
+        prompt: str,
+        request_id: str | None,
+    ) -> None:
+        assert self.client is not None
+
+        session_id = self._current_sdk_session_id()
+        self.open_stream_blocks.clear()
+        run_started_at = time.perf_counter()
+        assistant_blocks_by_index: dict[int, dict[str, object]] = {}
+        assistant_message_started_at: float | None = None
+        persisted_assistant_message_this_turn = False
+        terminal_error: str | None = None
+        stream_complete_error: dict[str, object] | None = None
+        usage_data: dict[str, Any] | None = None
+        tool_use_index: dict[str, str] = {}
+        assistant_error_type: str | None = None
+
+        async def persist_current_assistant_message(
+            *, duration_seconds: float | None = None
+        ) -> bool:
+            nonlocal persisted_assistant_message_this_turn
+            if len(assistant_blocks_by_index) == 0:
+                return False
+
+            assistant_content: list[dict[str, object]] = []
+            for idx in sorted(assistant_blocks_by_index):
+                assistant_content.append(assistant_blocks_by_index[idx])
+
+            resolved_duration = duration_seconds
+            if resolved_duration is None:
+                duration_base = (
+                    assistant_message_started_at
+                    if assistant_message_started_at is not None
+                    else run_started_at
                 )
-
-                files = result.stdout.strip().split("\n") if result.stdout.strip() else []
-                relative_files = [str(Path(f).relative_to(context_root)) for f in files if f]
-
-                return {
-                    "tool_name": "glob_file_search",
-                    "success": True,
-                    "summary": f"Found {len(relative_files)} files matching pattern '{pattern}'",
-                    "files": relative_files,
-                    "pattern": pattern,
-                }
-            except Exception as e:
-                return {
-                    "tool_name": "glob_file_search",
-                    "success": False,
-                    "summary": f"Error searching for files: {e}"
-                }
-
-        def grep(args: dict) -> dict:
-            pattern = args.get("pattern")
-            if pattern is None:
-                return {
-                    "tool_name": "grep",
-                    "success": False,
-                    "summary": "Pattern is required"
-                }
-
-            path = args.get("path", ".")
-            case_insensitive = args.get("case_insensitive", False)
+                resolved_duration = max(0.0, time.perf_counter() - duration_base)
 
             try:
-                if not Path(path).is_absolute():
-                    search_path = Path(__file__).parent / "agent_config/context" / path
-                else:
-                    search_path = Path(path)
-
-                cmd = ["/usr/bin/rg", "--line-number"]
-                if case_insensitive:
-                    cmd.append("--ignore-case")
-                cmd.extend([pattern, str(search_path)])
-
-                result = subprocess.run(
-                    cmd,
-                    capture_output=True,
-                    text=True,
-                    timeout=10,
-                    check=False
+                await self._insert_history(
+                    role="assistant",
+                    payload={
+                        "content": assistant_content,
+                        "duration": resolved_duration,
+                    },
+                    request_id=request_id,
                 )
-
-                display_path = str(search_path.relative_to(context_root))
-
-                matches = result.stdout.strip().replace(str(context_root) + "/", "")
-
-                if result.returncode == 0:
-                    return {
-                        "tool_name": "grep",
-                        "success": True,
-                        "summary": f"Found matches for pattern '{pattern}' in {display_path}",
-                        "matches": matches,
-                        "pattern": pattern,
-                        "path": display_path
-                    }
-
-                if result.returncode == 1:
-                    return {
-                        "tool_name": "grep",
-                        "success": True,
-                        "summary": f"No matches found for pattern '{pattern}' in {display_path}",
-                        "matches": "",
-                        "pattern": pattern,
-                        "path": display_path
-                    }
-
-                return {
-                    "tool_name": "grep",
-                    "success": False,
-                    "summary": f"Ripgrep error: {result.stderr}"
-                }
+                persisted_assistant_message_this_turn = True
             except Exception as e:
-                return {
-                    "tool_name": "grep",
-                    "success": False,
-                    "summary": f"Error searching: {e}"
-                }
+                print(f"[agent] Failed to persist assistant history: {e!s}")
+            finally:
+                assistant_blocks_by_index.clear()
 
-        def read_file(args: dict) -> dict:
-            path = args.get("path")
-            if path is None:
-                return {
-                    "tool_name": "read_file",
-                    "success": False,
-                    "summary": "Path is required"
-                }
-
-            offset = args.get("offset", 0)
-            limit = args.get("limit")
-
-            try:
-                if not Path(path).is_absolute():
-                    file_path = Path(__file__).parent / "agent_config/context" / path
-                else:
-                    file_path = Path(path)
-
-                if not file_path.exists():
-                    return {
-                        "tool_name": "read_file",
-                        "success": False,
-                        "summary": f"File not found: {path}"
-                    }
-
-                with Path(file_path).open(encoding="utf-8") as f:
-                    lines = f.readlines()
-
-                total_lines = len(lines)
-
-                if offset >= total_lines:
-                    return {
-                        "tool_name": "read_file",
-                        "success": False,
-                        "summary": f"Offset {offset} exceeds file length {total_lines}"
-                    }
-
-                if limit is not None:
-                    selected_lines = lines[offset:offset + limit]
-                else:
-                    selected_lines = lines[offset:]
-
-                numbered_lines = []
-                for i, line in enumerate(selected_lines, start=offset + 1):
-                    numbered_lines.append(f"{i:6}|{line.rstrip()}")
-
-                content = "\n".join(numbered_lines)
-
-                display_path = str(file_path.relative_to(context_root))
-
-                return {
-                    "tool_name": "read_file",
-                    "success": True,
-                    "summary": f"Read {len(selected_lines)} lines from {display_path} (total: {total_lines} lines)",
-                    "content": content,
-                    "path": display_path,
-                    "offset": offset,
-                    "lines_read": len(selected_lines),
-                    "total_lines": total_lines
-                }
-            except Exception as e:
-                return {
-                    "tool_name": "read_file",
-                    "success": False,
-                    "summary": f"Error reading file: {e}"
-                }
-
-        def search_replace(args: dict) -> dict:
-            path = args.get("path")
-            old_string = args.get("old_string")
-            new_string = args.get("new_string", "")
-
-            if path is None or old_string is None:
-                return {
-                    "tool_name": "search_replace",
-                    "success": False,
-                    "summary": "Path and old_string are required"
-                }
-
-            try:
-                if not Path(path).is_absolute():
-                    file_path = Path(__file__).parent / "agent_config/context" / path
-                else:
-                    file_path = Path(path)
-
-                if not file_path.exists():
-                    return {
-                        "tool_name": "search_replace",
-                        "success": False,
-                        "summary": f"File not found: {path}"
-                    }
-
-                tmp_file = Path(str(file_path) + ".tmp")
-
-                result = subprocess.run(  # noqa: S602
-                    f"rg --passthru --fixed-strings '{old_string}' --replace '{new_string}' {file_path} > {tmp_file} && mv {tmp_file} {file_path}",
-                    shell=True,
-                    capture_output=True,
-                    text=True,
-                    check=False
-                )
-
-                display_path = str(file_path.relative_to(context_root))
-
-                if result.returncode == 0:
-                    return {
-                        "tool_name": "search_replace",
-                        "success": True,
-                        "summary": f"Replaced text in {display_path}",
-                        "path": display_path
-                    }
-
-                if tmp_file.exists():
-                    tmp_file.unlink()
-
-                return {
-                    "tool_name": "search_replace",
-                    "success": False,
-                    "summary": f"Ripgrep replace failed: {result.stderr}"
-                }
-            except Exception as e:
-                return {
-                    "tool_name": "search_replace",
-                    "success": False,
-                    "summary": f"Error replacing text: {e}"
-                }
-
-        def bash(args: dict) -> dict:
-            command = args.get("command", "")
-
-            try:
-                result = subprocess.run(  # noqa: S602
-                    command,
-                    check=False,
-                    shell=True,
-                    capture_output=True,
-                    text=True,
-                    timeout=30,
-                    cwd=str(Path(__file__).parent / "agent_config/context")
-                )
-
-                output = result.stdout + result.stderr
-
-                return {
-                    "tool_name": "bash",
-                    "success": result.returncode == 0,
-                    "summary": f"Executed command: {command}",
-                    "output": output.strip(),
-                    "command": command,
-                    "return_code": result.returncode
-                }
-            except subprocess.TimeoutExpired:
-                return {
-                    "tool_name": "bash",
-                    "success": False,
-                    "summary": "Command timed out after 30 seconds"
-                }
-            except Exception as e:
-                return {
-                    "tool_name": "bash",
-                    "success": False,
-                    "summary": f"Error executing command: {e}"
-                }
-
-        self.tools.append({
-            "name": "glob_file_search",
-            "description": "Search for files matching a pattern. Defaults to searching the context directory. For nested paths use patterns like 'technology_docs/*.md'.",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "pattern": {
-                        "type": "string",
-                        "description": "Glob pattern to match files. Use '*.md' for all markdown files, 'technology_docs/*.md' for files in a subdirectory."
-                    },
-                    "base_path": {
-                        "type": "string",
-                        "description": "Base path to search in (relative to agent_config/context/). Defaults to '.' to search entire context directory."
-                    }
-                },
-                "required": ["pattern"]
-            }
-        })
-        self.tool_map["glob_file_search"] = glob_file_search
-
-        self.tools.append({
-            "name": "grep",
-            "description": "Search for text patterns in files using ripgrep (rg). Returns matches with line numbers. Fast and supports regex.",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "pattern": {
-                        "type": "string",
-                        "description": "Text pattern to search for (supports regex)"
-                    },
-                    "path": {
-                        "type": "string",
-                        "description": "File or directory path to search in (relative to agent_config/context/). Defaults to current directory '.' to search all context files."
-                    },
-                    "case_insensitive": {
-                        "type": "boolean",
-                        "description": "Whether to perform case-insensitive search. Defaults to false."
-                    }
-                },
-                "required": ["pattern"]
-            }
-        })
-        self.tool_map["grep"] = grep
-
-        self.tools.append({
-            "name": "read_file",
-            "description": "Read contents of a file with optional offset and limit for large files. Returns numbered lines.",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "path": {
-                        "type": "string",
-                        "description": "Path to the file to read (relative to agent_config/context/)"
-                    },
-                    "offset": {
-                        "type": "integer",
-                        "description": "Line number to start reading from (0-indexed). Defaults to 0."
-                    },
-                    "limit": {
-                        "type": "integer",
-                        "description": "Maximum number of lines to read. If not provided, reads to end of file."
-                    }
-                },
-                "required": ["path"]
-            }
-        })
-        self.tool_map["read_file"] = read_file
-
-        self.tools.append({
-            "name": "search_replace",
-            "description": "Replace the first occurrence of a string in a file with another string. Useful for editing files or maintaining state. Paths are relative to 'agent_config/context/' by default.",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "path": {
-                        "type": "string",
-                        "description": "Path to the file to edit. Paths are resolved from 'agent_config/context/'."
-                    },
-                    "old_string": {
-                        "type": "string",
-                        "description": "Exact string to find and replace"
-                    },
-                    "new_string": {
-                        "type": "string",
-                        "description": "String to replace with"
-                    }
-                },
-                "required": ["path", "old_string", "new_string"]
-            }
-        })
-        self.tool_map["search_replace"] = search_replace
-
-        self.tools.append({
-            "name": "bash",
-            "description": "Execute a bash command. The working directory is already set to the context directory, so use relative paths (e.g., 'ls technology_docs/' not 'ls agent_config/context/technology_docs/').",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "command": {
-                        "type": "string",
-                        "description": "Bash command to execute. Working directory is the context directory, use relative paths."
-                    }
-                },
-                "required": ["command"]
-            }
-        })
-        self.tool_map["bash"] = bash
-
-        async def execute_code(args: dict) -> dict:
-            code = args.get("code")
-            if code is None:
-                return {
-                    "tool_name": "execute_code",
-                    "success": False,
-                    "summary": "No code provided"
-                }
-
-            print(f"[tool] execute_code: {code[:50]}...")
-
-            result = await self.atomic_operation("execute_code", {"code": code})
-
-            return {
-                "tool_name": "execute_code",
-                "success": True,
-                "summary": "Code executed",
-                "code": code,
-                "stdout": result.get("stdout"),
-                "stderr": result.get("stderr"),
-                "exception": result.get("exception"),
-            }
-
-        self.tools.append({
-            "name": "execute_code",
-            "description": "Execute arbitrary Python code in the notebook kernel and return the result, stdout, stderr, and any exceptions. Use this to test imports, print values, or run simple inspection code.",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "code": {"type": "string", "description": "Python code to execute"}
-                },
-                "required": ["code"]
-            }
-        })
-        self.tool_map["execute_code"] = execute_code
-
-        async def get_global_info(args: dict) -> dict:
-            key = args.get("key")
-            if key is None:
-                return {
-                    "tool_name": "get_global_info",
-                    "success": False,
-                    "summary": "No key provided"
-                }
-
-            print(f"[tool] get_global_info: {key}")
-
-            result = await self.atomic_operation("get_global_info", {"key": key})
-
-            if result.get("status") == "success":
-                info = result.get("info", {})
-                return {
-                    "tool_name": "get_global_info",
-                    "success": True,
-                    "summary": f"Retrieved info for global '{key}'",
-                    "key": key,
-                    "info": info
-                }
-
-            return {
-                "tool_name": "get_global_info",
-                "success": False,
-                "summary": f"Failed to get global info: {result.get('error', 'Unknown error')}"
-            }
-
-        self.tools.append({
-            "name": "get_global_info",
-            "description": "Get rich information about a specific global variable including its type, shape, columns, dtypes, etc. Especially useful for DataFrames and AnnData objects.",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "key": {"type": "string", "description": "Name of the global variable to inspect"}
-                },
-                "required": ["key"]
-            }
-        })
-        self.tool_map["get_global_info"] = get_global_info
-
-        async def capture_widget_image(args: dict) -> dict:
-            widget_key = args.get("widget_key")
-            if widget_key is None:
-                return {
-                    "tool_name": "capture_widget_image",
-                    "success": False,
-                    "summary": "No widget_key provided"
-                }
-
-            print(f"[tool] capture_widget_image: {widget_key}")
-
-            result = await self.atomic_operation("capture_widget_image", {"widget_key": widget_key})
-
-            if result.get("status") == "success":
-                widget_type = result.get("widget_type", "unknown")
-                metadata = result.get("metadata", {})
-                image = result.get("image")
-
-                return {
-                    "tool_name": "capture_widget_image",
-                    "success": True,
-                    "summary": f"Captured image from {widget_type} widget '{widget_key}'",
-                    "widget_key": widget_key,
-                    "widget_type": widget_type,
-                    "image": image,
-                    "metadata": metadata,
-                }
-
-            return {
-                "tool_name": "capture_widget_image",
-                "success": False,
-                "summary": f"Failed to capture widget image: {result.get('error', 'Unknown error')}"
-            }
-
-        self.tools.append({
-            "name": "capture_widget_image",
-            "description": "Capture a visual screenshot of an h5/AnnData or plot widget displayed in the notebook. Returns a base64-encoded PNG image and metadata about the current visualization state (such as color_by settings, filters, and cell counts for h5 widgets). Use this to visually inspect plots, clustering results, or any Plotly-based visualization the user is seeing.",
-            "input_schema": {
-                "type": "object",
-                "properties": {
-                    "widget_key": {
-                        "type": "string",
-                        "description": "Full widget key in format <tf_id>/<widget_id>"
-                    },
-                },
-                "required": ["widget_key"],
-            },
-        })
-        self.tool_map["capture_widget_image"] = capture_widget_image
-
-        if len(self.tools) > 0:
-            self.tools[-1]["cache_control"] = {"type": "ephemeral"}
-
-    async def handle_stream(self, *, use_beta_api: bool, **kwargs) -> tuple[Message | BetaMessage, float]:  # noqa: ANN003
-        start_time = time.time()
+            return True
 
         await self.send({
             "type": "agent_stream_start",
             "timestamp": int(time.time() * 1000),
         })
 
-        content_blocks: list[dict] = []
-        current_block_index = -1
-        usage_data = None
-
         try:
-            stream_ctx = self.client.beta.messages.stream(**kwargs) if use_beta_api else self.client.messages.stream(**kwargs)
-
-            def _process_buffer(index: int, text: str) -> None:
-                self.buffer.append(text)
-
-                if "\n\n" in text:
-                    t = asyncio.create_task(self._summarize_and_send_chunk("".join(self.buffer), index))
-                    self.summarize_tasks.add(t)
-                    t.add_done_callback(lambda _: self.summarize_tasks.discard(t))
-
-            async with stream_ctx as stream:
-                async for event in stream:
-                    event_type = event.type
-                    if event_type == "message_start":
-                        message_data = event.message
-                        if hasattr(message_data, "usage") and message_data.usage:
-                            usage_data = message_data.usage
-
-                    elif event_type == "content_block_start":
-                        current_block_index = event.index
-                        block = event.content_block
-
-                        block_dict = {"type": block.type}
-                        if block.type == "text":
-                            block_dict["text"] = ""
-                        elif block.type == "thinking":
-                            block_dict["thinking"] = ""
-                        elif block.type == "tool_use":
-                            block_dict["id"] = block.id
-                            block_dict["name"] = block.name
-                            block_dict["input"] = {}
-
-                        content_blocks.append(block_dict)
-
-                        block_start_msg = {
-                            "type": "agent_stream_block_start",
-                            "block_index": current_block_index,
-                            "block_type": block.type,
-                        }
-                        if block.type == "tool_use":
-                            block_start_msg["block_id"] = block.id
-                            block_start_msg["block_name"] = block.name
-
-                        await self.send(block_start_msg)
-
-                    elif event_type == "content_block_delta":
-                        delta = event.delta
-                        block_index = event.index
-
-                        if delta.type == "text_delta":
-                            content_blocks[block_index]["text"] += delta.text
-                            await self.send({
-                                "type": "agent_stream_delta",
-                                "block_index": block_index,
-                                "block_type": "text",
-                                "delta": delta.text,
-                            })
-
-                            _process_buffer(block_index, delta.text)
-
-                        elif delta.type == "thinking_delta":
-                            content_blocks[block_index]["thinking"] += delta.thinking
-                            await self.send({
-                                "type": "agent_stream_delta",
-                                "block_index": block_index,
-                                "block_type": "thinking",
-                                "delta": delta.thinking,
-                            })
-
-                            _process_buffer(block_index, delta.thinking)
-
-                        elif delta.type == "input_json_delta":
-                            partial_json = delta.partial_json
-                            await self.send({
-                                "type": "agent_stream_delta",
-                                "block_index": block_index,
-                                "block_type": "tool_use",
-                                "delta": partial_json,
-                            })
-
-                    elif event_type == "content_block_stop":
-                        block_index = event.index
-
-                        buffer_text = "".join(self.buffer)
-
-                        if buffer_text.strip() != "":
-                            asyncio.create_task(self._summarize_and_send_chunk(buffer_text, block_index))
-
-                        self.buffer = []
-
-                        await self.send({
-                            "type": "agent_stream_block_stop",
-                            "block_index": block_index,
-                        })
-
-                    elif event_type == "message_delta":
-                        if hasattr(event, "usage") and event.usage:
-                            usage_data = event.usage
-
-                    elif event_type == "message_stop":
-                        pass
-
-                final_message = await stream.get_final_message()
-
-            duration_seconds = time.time() - start_time
-
-            if usage_data is not None:
-                cache_read_input_tokens = getattr(usage_data, "cache_read_input_tokens", None) or 0
-                cache_creation_input_tokens = getattr(usage_data, "cache_creation_input_tokens", None) or 0
-
-                await self.send({
-                    "type": "agent_usage_update",
-                    "input_tokens": usage_data.input_tokens,
-                    "cache_read_input_tokens": cache_read_input_tokens,
-                    "cache_creation_input_tokens": cache_creation_input_tokens,
-                    "context_limit": 200_000,  # todo(aidan): store this info in db per model config
-                })
-
-            await self.send({
-                "type": "agent_stream_complete",
-            })
-
-            print(f"[agent] Stream completed in {duration_seconds:.3f}s, {len(content_blocks)} blocks")
-
-            return final_message, duration_seconds
-
-        except APIStatusError as e:
-            print(f"[agent] Stream error (status={e.status_code}): {e}")
-
-            should_clear_history = "prompt is too long" in str(e).lower()
-            should_contact_support = 400 <= e.status_code < 500 and e.status_code != 429
-
-            if should_clear_history:
-                user_message = "This conversation is too long for the agent to continue. Clear history and try again."
-            elif should_contact_support:
-                user_message = "An unexpected error occurred. Please try again."
-            else:
-                user_message = "Our model provider is experiencing a temporary issue. Please try again in a few minutes."
-
-            error_payload = {
-                "message": user_message,
-                "should_contact_support": should_contact_support,
-                "should_clear_history": should_clear_history,
-            }
-
-            await self._insert_history(
-                event_type="error",
-                role="system",
-                payload=error_payload,
+            print(
+                f"[agent] starting SDK query (request_id={request_id}, session_id={session_id})"
             )
-
-            await self.send({
-                "type": "agent_stream_complete",
-                "error": error_payload,
-            })
-
-            raise
-
-        except Exception as e:
-            print(f"[agent] Stream error: {e}")
-            traceback.print_exc()
-
-            error_payload = {
-                "message": "An unexpected error occurred. Please try again.",
-                "should_contact_support": True,
-            }
-
-            await self._insert_history(
-                event_type="error",
-                role="system",
-                payload=error_payload,
-            )
-
-            await self.send({
-                "type": "agent_stream_complete",
-                "error": error_payload,
-            })
-
-            raise
-
-    async def _run_quick_inference(self, prompt: str) -> str:
-        messages = [{
-            "role": "user",
-            "content": prompt + "\n\nDo not use any markdown formatting. If the content does not contain a clear reasoning process, provide a best-effort summary of the available text. Do not return meta-commentary."
-        }]
-
-        try:
-            msg = await self.client.messages.create(
-                model="claude-haiku-4-5-20251001",
-                max_tokens=100,
-                messages=messages
-            )
-            return msg.content[0].text
-
-        except Exception as e:
-            print(f"[agent] Failed to run quick inference: {e}")
-
-            return ""
-
-    async def _summarize_and_send_chunk(self, text: str, block_index: int) -> None:
-        prompt = f"Summarize the most recent thoughts in this reasoning process into a brief, active phrase (2-6 words). Focus on spatial analysis tasks, protocol verification, or scientific reasoning currently being analyzed. If no clear reasoning is present, summarize the general intent. Examples: 'Verifying widget parameters', 'Analyzing QC metrics', 'Checking protocol compliance'.\n\nThinking:\n{text}"
-        summary = await self._run_quick_inference(prompt)
-
-        if summary.strip() != "":
-            await self.send({
-                "type": "agent_stream_delta",
-                "block_index": block_index,
-                "block_type": "thinking_summary",
-                "delta": summary,
-            })
-
-    async def run_agent_loop(self) -> None:
-        assert self.client is not None, "Client not initialized"
-
-        self.conversation_running = True
-        turn = 0
-
-        print("[agent] run_agent_loop: started")
-
-        while self.conversation_running:
-            await self._wait_for_message()
-            if not self.conversation_running:
-                break
-
-            print("[agent] run_agent_loop: building messages from DB...")
-            build_start = time.time()
-
-            raw_messages = await self._build_messages_from_db()
-            repaired = await self._close_pending_tool_calls(
-                error_message="Tool call pending at start of turn -- closing before inference.",
-                messages=raw_messages,
-            )
-            if repaired:
-                print("[agent] run_agent_loop: repaired pending tool calls, rebuilding messages from DB...")
-                raw_messages = await self._build_messages_from_db()
-
-            api_messages = self._prepare_messages_for_inference(raw_messages)
-            build_elapsed = time.time() - build_start
-            print(f"[agent] run_agent_loop: built {len(api_messages) if api_messages else 0} messages in {build_elapsed:.3f}s")
-
-            if not api_messages or api_messages[-1].get("role") != "user":
-                print("[agent] run_agent_loop: skipping (no messages or last message not user)")
-                continue
-
-            notebook_state = await self.refresh_cells_context()
-            self.latest_notebook_state = notebook_state
-            notebook_state_block = {
-                "type": "text",
-                "text": f"<current_notebook_state>\n{notebook_state}\n</current_notebook_state>",
-            }
-
-            context_blocks = [notebook_state_block]
-            if self.current_plan is not None:
-                plan_content = json.dumps(self.current_plan, indent=2)
-                context_blocks.append({
-                    "type": "text",
-                    "text": f"<current_plan>\n{plan_content}\n</current_plan>",
-                })
-
-            last_user_msg = api_messages[-1]
-            last_content = last_user_msg.get("content")
-            if isinstance(last_content, str):
-                api_messages[-1] = {  # pyright: ignore[reportArgumentType, reportCallIssue]
-                    "role": "user",
-                    "content": [{"type": "text", "text": last_content}, *context_blocks],
-                }
-            elif isinstance(last_content, list):
-                api_messages[-1] = {  # pyright: ignore[reportArgumentType, reportCallIssue]
-                    "role": "user",
-                    "content": [*last_content, *context_blocks],
-                }
-
-            turn += 1
-            print(f"[agent] run_agent_loop: starting turn {turn}")
-
-            model, thinking_budget = self.mode_config.get(self.mode, ("claude-opus-4-5-20251101", 1024))
-
-            print(f"[agent] Turn {turn}, mode={self.mode}, thinking_budget={thinking_budget}")
-
-            if thinking_budget is not None:
-                max_tokens = thinking_budget + 4096
-            else:
-                max_tokens = 4096
-
-            can_use_thinking = True
-            if thinking_budget is not None and len(api_messages) > 0:
-                has_any_thinking = False
-                for msg in api_messages:
-                    if msg.get("role") == "assistant":
-                        content = msg.get("content", [])
-                        if isinstance(content, list):
-                            for block in content:
-                                block_type = block.get("type") if isinstance(block, dict) else None
-                                if block_type in {"thinking", "redacted_thinking"}:
-                                    has_any_thinking = True
-                                    break
-                        if has_any_thinking:
-                            break
-
-                if not has_any_thinking:
-                    last_assistant_msg = None
-                    for msg in reversed(api_messages):
-                        if msg.get("role") == "assistant":
-                            last_assistant_msg = msg
-                            break
-
-                    if last_assistant_msg:
-                        content = last_assistant_msg.get("content", [])
-                        if isinstance(content, list) and len(content) > 0:
-                            first_block_type = content[0].get("type") if isinstance(content[0], dict) else None
-                            if first_block_type not in {"thinking", "redacted_thinking"}:
-                                can_use_thinking = False
-                                print(f"[agent] Cannot use thinking API: last assistant message starts with {first_block_type}, not thinking")
-
-            self.system_prompt = (context_root.parent / "system_prompt.md").read_text()
-            assert self.system_prompt is not None
-
-            behavior_file = "proactive.md" if self.behavior == Behavior.proactive else "step_by_step.md"
-
-            turn_behavior_content = (context_root / "turn_behavior" / behavior_file).read_text()
-            final_system_prompt = re.sub(
-                r"TURN_BEHAVIOR_PLACEHOLDER",
-                f"<turn_behavior>\n{turn_behavior_content}\n</turn_behavior>",
-                self.system_prompt,
-            )
-
-            examples_content = (context_root / "examples" / behavior_file).read_text()
-            final_system_prompt = re.sub(
-                r"EXAMPLES_PLACEHOLDER",
-                f"<examples>\n{examples_content}\n</examples>",
-                final_system_prompt,
-            )
-
-            system_blocks = [
-                {
-                    "type": "text",
-                    "text": final_system_prompt,
-                    "cache_control": {"type": "ephemeral"}
-                }
-            ]
-
-            kwargs = {
-                "model": model,
-                "max_tokens": max_tokens,
-                "system": system_blocks,
-                "messages": api_messages,
-                "tools": self.tools,
-            }
-            use_beta_api = False
-            if thinking_budget is not None and can_use_thinking:
-                kwargs["thinking"] = {
-                    "type": "enabled",
-                    "budget_tokens": thinking_budget,
-                }
-                kwargs["betas"] = ["interleaved-thinking-2025-05-14"]
-                use_beta_api = True
-
             try:
-                response, duration_seconds = await self.handle_stream(
-                    use_beta_api=use_beta_api,
-                    **kwargs
+                await asyncio.wait_for(
+                    self.client.query(prompt=prompt, session_id=session_id), timeout=10.0
                 )
-
-            except Exception as e:
-                print(f"[agent] API error: {e}")
-
-                print(f"[agent] API call failed with {len(api_messages)} messages")
-                for i, msg in enumerate(api_messages):
-                    role = msg.get("role", "?")
-                    content = msg.get("content", [])
-                    if isinstance(content, str):
-                        print(f"  Message {i} ({role}): string content, length={len(content)}")
-                    elif isinstance(content, list):
-                        print(f"  Message {i} ({role}): {len(content)} blocks")
-                        for j, block in enumerate(content):
-                            block_type = block.get("type") if isinstance(block, dict) else getattr(block, "type", "?")
-                            print(f"    Block {j}: {block_type}")
-                    else:
-                        print(f"  Message {i} ({role}): unknown content type={type(content)}")
-
+            except TimeoutError:
+                terminal_error = "Timed out submitting prompt to Claude runtime"
                 await self.send({
                     "type": "agent_error",
-                    "error": f"API error: {e!s}",
-                    "fatal": False
+                    "error": terminal_error,
+                    "fatal": False,
                 })
-                continue
+                return
+            print(f"[agent] SDK query submitted (request_id={request_id})")
+            receive_iter = self.client.receive_response().__aiter__()
+            while True:
+                try:
+                    msg = await asyncio.wait_for(receive_iter.__anext__(), timeout=90.0)
+                except StopAsyncIteration:
+                    break
+                except TimeoutError:
+                    await self.send({
+                        "type": "agent_error",
+                        "error": "Timed out waiting for model response from Claude runtime",
+                        "fatal": False,
+                    })
+                    terminal_error = "Timed out waiting for model response from Claude runtime"
+                    break
 
-            response_content = response.model_dump()["content"]
-            if isinstance(response_content, list):
-                for block in response_content:
-                    if isinstance(block, dict):
-                        block.pop("caller", None)
-                        block.pop("parsed_output", None)
-            if response_content is not None and (not isinstance(response_content, list) or len(response_content) > 0):
-                if isinstance(response_content, list):
-                    thinking_text = None
-                    response_text = None
-                    for block in response_content:
-                        if isinstance(block, dict):
-                            if block.get("type") == "thinking":
-                                thinking_text = block.get("thinking", None)
-                            elif block.get("type") == "text":
-                                response_text = block.get("text", None)
-
-                    if thinking_text is not None or response_text is not None:
-
-                        thinking_text_str = f"Thinking:\n{thinking_text}\n\n" if thinking_text is not None else ""
-                        response_text_str = f"Response:\n{response_text}\n\n" if response_text is not None else ""
-
-                        prompt = f"Summarize the reasoning process in a concise past-tense sentence (2-6 words). Focus on analysis tasks, protocol verification, or scientific conclusions reached. If no clear reasoning is present, summarize the general action taken. Examples: 'Verified widget parameters', 'Analyzed QC metrics', 'Checked protocol compliance'.\n\n{thinking_text_str}{response_text_str}"
-
-                        summary = await self._run_quick_inference(prompt)
-
-                        if summary.strip() != "":
-                            response_content.append({
-                                "type": "thinking_summary",
-                                "summary": summary
-                            })
-
-                await self._insert_history(
-                    role="assistant",
-                    payload={
-                        "content": response_content,
-                        "duration": duration_seconds,
-                    },
-                )
-            else:
-                print(f"[agent] Skipping empty assistant message (stop_reason={response.stop_reason})")
-
-            if response.stop_reason == "end_turn":
-                print("[agent] Turn ended without submit_response; completing turn")
-                await self._complete_turn()
-            elif response.stop_reason == "tool_use":
-                tool_results = []
-                called_submit_response = False
-
-                for block in response.content:
-                    if isinstance(block, dict):
-                        block_type = block.get("type")
-                    else:
-                        block_type = getattr(block, "type", None)
-
-                    if block_type == "tool_use":
-                        tool_id = block.get("id") if isinstance(block, dict) else block.id
-                        tool_name = block.get("name") if isinstance(block, dict) else block.name
-                        tool_input = block.get("input") if isinstance(block, dict) else block.input
-
-                        if tool_name == "submit_response":
-                            called_submit_response = True
-
-                        print(f"[agent] Executing tool: {tool_name} (id={tool_id})")
-
-                        handler = self.tool_map.get(tool_name)
-
-                        self.pending_tool_calls.add(tool_id)
-                        if handler is not None:
-                            try:
-                                result = handler(tool_input)
-                                if asyncio.iscoroutine(result):
-                                    result = await result
-
-                                if tool_name == "capture_widget_image" and result.get("success") and result.get("image") is not None:
-                                    image_data: str = result.get("image", "")
-                                    if not image_data.startswith("data:"):
-                                        raise ValueError("Image data is not a data URL")
-
-                                    header, base64_data = image_data.split(",", 1)
-                                    media_type = header.split(";")[0].removeprefix("data:")
-                                    image_data = base64_data
-
-                                    result_without_image = {k: v for k, v in result.items() if k != "image"}
-
-                                    tool_results.append({
-                                        "type": "tool_result",
-                                        "tool_use_id": tool_id,
-                                        "content": [
-                                            {
-                                                "type": "text",
-                                                "text": json.dumps(result_without_image),
-                                            },
-                                            {
-                                                "type": "image",
-                                                "source": {
-                                                    "type": "base64",
-                                                    "media_type": media_type,
-                                                    "data": image_data,
-                                                },
-                                            },
-                                        ],
-                                    })
-                                else:
-                                    tool_results.append({
-                                        "type": "tool_result",
-                                        "tool_use_id": tool_id,
-                                        "content": json.dumps(result),
-                                    })
-                            except Exception as e:
-                                print(f"[agent] Tool error: {tool_name}: {e}")
-                                traceback.print_exc()
-                                tool_results.append({
-                                    "type": "tool_result",
-                                    "tool_use_id": tool_id,
-                                    "content": json.dumps({
-                                        "tool_name": tool_name,
-                                        "summary": f"Error executing tool: {e!s}",
-                                        "error": str(e),
-                                        "success": False,
-                                    }),
-                                })
-                        else:
-                            tool_results.append({
-                                "type": "tool_result",
-                                "tool_use_id": tool_id,
-                                "content": json.dumps({
-                                    "summary": None,
-                                    "error": f"Unknown tool: {tool_name}",
-                                    "success": False,
-                                }),
-                            })
-
-                if len(tool_results) > 0:
-                    uncancelled_tool_results = [result for result in tool_results if result.get("tool_use_id") in self.pending_tool_calls]
-                    self.pending_tool_calls.difference_update({result.get("tool_use_id") for result in tool_results})
-                    await self._insert_history(
-                        payload={
-                            "content": uncancelled_tool_results,
-                        },
+                if isinstance(msg, StreamEvent):
+                    await self._capture_claude_session_id(msg.session_id)
+                    event_type = msg.event.get("type")
+                    if event_type == "message_start":
+                        assistant_blocks_by_index.clear()
+                        assistant_message_started_at = time.perf_counter()
+                        message_usage = msg.event.get("message", {}).get("usage")
+                        if isinstance(message_usage, dict):
+                            usage_data = message_usage
+                    elif event_type == "message_delta":
+                        delta_usage = msg.event.get("usage")
+                        if isinstance(delta_usage, dict):
+                            usage_data = delta_usage
+                    elif event_type == "message_stop":
+                        stop_usage = msg.event.get("message", {}).get("usage")
+                        if isinstance(stop_usage, dict):
+                            usage_data = stop_usage
+                    await self._handle_stream_event(
+                        msg.event, collected_assistant_blocks=assistant_blocks_by_index
                     )
+                    if event_type == "message_stop":
+                        message_duration_seconds: float | None = None
+                        if assistant_message_started_at is not None:
+                            message_duration_seconds = max(
+                                0.0, time.perf_counter() - assistant_message_started_at
+                            )
+                        await persist_current_assistant_message(
+                            duration_seconds=message_duration_seconds
+                        )
+                        assistant_message_started_at = None
+                elif isinstance(msg, ResultMessage):
+                    await self._capture_claude_session_id(msg.session_id)
+                    print(
+                        "[agent] SDK result message "
+                        f"subtype={msg.subtype} is_error={msg.is_error} result={msg.result!r}"
+                    )
+                    if msg.is_error:
+                        terminal_error = msg.result if msg.result is not None else "Claude query failed"
+                        if (
+                            isinstance(msg.result, str)
+                            and "prompt is too long" in msg.result.lower()
+                        ):
+                            stream_complete_error = {
+                                "message": (
+                                    "This conversation is too long for the agent to continue. "
+                                    "Clear history and try again."
+                                ),
+                                "should_contact_support": False,
+                                "should_clear_history": True,
+                            }
+                        elif assistant_error_type in {
+                            "authentication_failed",
+                            "billing_error",
+                            "invalid_request",
+                        }:
+                            stream_complete_error = {
+                                "message": "An unexpected error occurred. Please try again.",
+                                "should_contact_support": True,
+                                "should_clear_history": False,
+                            }
+                        elif assistant_error_type in {
+                            "rate_limit",
+                            "server_error",
+                            "unknown",
+                        }:
+                            stream_complete_error = {
+                                "message": (
+                                    "Our model provider is experiencing a temporary issue. "
+                                    "Please try again in a few minutes."
+                                ),
+                                "should_contact_support": False,
+                                "should_clear_history": False,
+                            }
+
+                        if stream_complete_error is not None:
+                            agent_error_message = str(stream_complete_error["message"])
+                        else:
+                            agent_error_message = terminal_error
+                        await self.send({
+                            "type": "agent_error",
+                            "error": agent_error_message,
+                            "fatal": False,
+                        })
+                    # todo(tim): reconsider if needed 
+                    elif (
+                        len(assistant_blocks_by_index) == 0
+                        and not persisted_assistant_message_this_turn
+                        and isinstance(msg.result, str)
+                        and msg.result != ""
+                    ):
+                        assistant_blocks_by_index[0] = {
+                            "type": "text",
+                            "text": msg.result,
+                        }
+                        if assistant_message_started_at is None:
+                            assistant_message_started_at = run_started_at
+                    break
+                elif isinstance(msg, SystemMessage):
+                    if msg.subtype == "init":
+                        await self._capture_claude_session_id(msg.data.get("session_id"))
+                    continue
                 else:
-                    print("[agent] No tool results")
-
-                if called_submit_response:
-                    print("[agent] submit_response called, completing turn")
-                    await self._complete_turn()
-                else:
-                    await self.pending_messages.put({"type": "resume"})
-            elif response.stop_reason == "max_tokens":
-                print("[agent] Hit max tokens")
-                await self._close_pending_tool_calls(
-                    error_message="Tool call cancelled because the model hit max_tokens before tool execution.",
-                    messages=await self._build_messages_from_db(),
-                )
-                error_payload = {
-                    "message": "The model reached the response token limit for this turn. Please retry or shorten the request.",
-                    "should_contact_support": False,
-                }
-                await self._insert_history(
-                    event_type="error",
-                    role="system",
-                    payload=error_payload,
-                )
-                await self.send({
-                    "type": "agent_stream_complete",
-                    "error": error_payload,
-                })
-                await self._complete_turn()
-            else:
-                print(f"[agent] Unknown stop reason: {response.stop_reason}")
-                await self._complete_turn()
-
-    async def _close_pending_tool_calls(self, *, error_message: str, messages: list[MessageParam]) -> bool:
-        tool_use_ids = set()
-        tool_result_ids = set()
-
-        for history_msg in messages:
-            content = history_msg.get("content")
-            if not isinstance(content, list):
-                continue
-
-            for block in content:
-                if not isinstance(block, dict):
+                    if isinstance(msg, AssistantMessage) and msg.error is not None:
+                        assistant_error_type = str(msg.error)
+                        print(f"[agent] assistant message error={msg.error}")
+                    await self._capture_claude_session_id(getattr(msg, "session_id", None))
+                    await self._persist_tool_blocks_from_sdk_message(
+                        msg=msg, request_id=request_id, tool_use_index=tool_use_index
+                    )
                     continue
 
-                if block.get("type") == "tool_use":
-                    tool_id = block.get("id")
-                    if tool_id:
-                        tool_use_ids.add(tool_id)
-                elif block.get("type") == "tool_result":
-                    tool_use_id = block.get("tool_use_id")
-                    if tool_use_id:
-                        tool_result_ids.add(tool_use_id)
+            print(f"[agent] finished SDK query (request_id={request_id})")
+        except APIStatusError as e:
+            should_contact_support = 400 <= e.status_code < 500 and e.status_code != 429
 
-        pending_tool_ids = tool_use_ids - tool_result_ids
+            if should_contact_support:
+                user_message = "An unexpected error occurred. Please try again."
+            else:
+                user_message = (
+                    "Our model provider is experiencing a temporary issue. "
+                    "Please try again in a few minutes."
+                )
 
-        if len(pending_tool_ids) > 0:
-            print(f"[agent] Closing {len(pending_tool_ids)} pending tool calls")
-            await self._insert_history(
-                payload={
-                    "content": [
-                        {
-                            "type": "tool_result",
-                            "tool_use_id": tool_id,
-                            "content": json.dumps({
-                                "summary": None,
-                                "error": error_message,
-                                "success": False,
-                            }),
-                        }
-                        for tool_id in pending_tool_ids
-                    ],
-                },
+            stream_complete_error = {
+                "message": user_message,
+                "should_contact_support": should_contact_support,
+                "should_clear_history": False,
+            }
+            terminal_error = f"API error: {e!s}"
+            await self.send({
+                "type": "agent_error",
+                "error": terminal_error,
+                "fatal": False,
+            })
+        except Exception as e:
+            terminal_error = f"Agent SDK query failed: {e!s}"
+            await self.send({
+                "type": "agent_error",
+                "error": terminal_error,
+                "fatal": False,
+            })
+        finally:
+            pending_duration_base = (
+                assistant_message_started_at
+                if assistant_message_started_at is not None
+                else run_started_at
             )
-            await self._notify_history_updated()
-            return True
+            await persist_current_assistant_message(
+                duration_seconds=max(0.0, time.perf_counter() - pending_duration_base)
+            )
 
-        return False
+            if terminal_error is not None:
+                try:
+                    if stream_complete_error is not None:
+                        error_history_payload = dict(stream_complete_error)
+                        error_history_payload["raw_error"] = terminal_error
+                        if assistant_error_type is not None:
+                            error_history_payload["assistant_error_type"] = assistant_error_type
+                    else:
+                        error_history_payload = {
+                            "message": terminal_error,
+                            "should_contact_support": False,
+                        }
+                    await self._insert_history(
+                        event_type="error",
+                        role="system",
+                        payload=error_history_payload,
+                        request_id=request_id,
+                    )
+                except Exception as e:
+                    print(f"[agent] Failed to persist error history: {e!s}")
+
+            await self._close_open_stream_blocks()
+            if usage_data is not None:
+                await self._send_usage_update(usage_data)
+            stream_complete_payload: dict[str, object] = {"type": "agent_stream_complete"}
+            if stream_complete_error is not None:
+                stream_complete_payload["error"] = stream_complete_error
+            await self.send(stream_complete_payload)
+
+    async def _run_query_with_turn_prompt(
+        self,
+        *,
+        query: str,
+        request_id: str | None,
+    ) -> None:
+        assert self.client is not None
+
+        try:
+            turn_prompt = await self._build_turn_prompt(query)
+            print(
+                "[agent] Turn prompt ready "
+                f"(behavior={self.behavior.value}, "
+                f"has_plan={self.current_plan is not None}, "
+                f"notebook_chars={len(self.latest_notebook_state or '')})"
+            )
+        except Exception as e:
+            await self.send({
+                "type": "agent_error",
+                "error": f"Failed to build turn prompt: {e!s}",
+                "fatal": False,
+            })
+            self.current_query_task = None
+            return
+
+        await self._run_query(prompt=turn_prompt, request_id=request_id)
+
+    # async def _run_quick_inference(self, prompt: str) -> str:
+    #     messages = [
+    #         {
+    #             "role": "user",
+    #             "content": prompt
+    #             + "\n\nDo not use any markdown formatting. If the content does not contain a clear reasoning process, provide a best-effort summary of the available text. Do not return meta-commentary.",
+    #         }
+    #     ]
+
+    #     try:
+    #         msg = await self.client.messages.create(
+    #             model="claude-haiku-4-5-20251001", max_tokens=100, messages=messages
+    #         )
+    #         return msg.content[0].text
+
+    #     except Exception as e:
+    #         print(f"[agent] Failed to run quick inference: {e}")
+
+    #         return ""
+
+    # async def _summarize_and_send_chunk(self, text: str, block_index: int) -> None:
+    #     prompt = f"Summarize the most recent thoughts in this reasoning process into a brief, active phrase (2-6 words). Focus on spatial analysis tasks, protocol verification, or scientific reasoning currently being analyzed. If no clear reasoning is present, summarize the general intent. Examples: 'Verifying widget parameters', 'Analyzing QC metrics', 'Checking protocol compliance'.\n\nThinking:\n{text}"
+    #     summary = await self._run_quick_inference(prompt)
+
+    #     if summary.strip() != "":
+    #         await self.send({
+    #             "type": "agent_stream_delta",
+    #             "block_index": block_index,
+    #             "block_type": "thinking_summary",
+    #             "delta": summary,
+    #         })
 
     _context_init_task: asyncio.Task | None = None
 
     async def handle_init(self, msg: dict[str, object]) -> None:
-        session_id = msg.get("session_id")
-        if session_id is None:
-            raise RuntimeError(f"[handle init] Session ID is not set. Message: {msg}")
-
-        new_session_id = int(session_id)
-
-        if self.initialized and self.agent_session_id == new_session_id:
-            print(f"[agent] Same session reconnected (session_id={new_session_id}), preserving state")
-
-            if len(self.pending_operations) > 0:
-                print(f"[agent] Failing {len(self.pending_operations)} pending operations for retry")
-                for tx_id, future in list(self.pending_operations.items()):
-                    if not future.done():
-                        future.set_result({
-                            "status": "error",
-                            "error": "Connection was reset during operation. Please retry.",
-                        })
-                self.pending_operations.clear()
-
-            await self.send({
-                "type": "agent_status",
-                "status": "ready"
-            })
-
-            if self.conversation_task is None or self.conversation_task.done():
-                print("[agent] Restarting conversation loop after reconnect")
-
-                self.pending_tool_calls.clear()
-                messages = await self._build_messages_from_db()
-                await self._close_pending_tool_calls(
-                    error_message="Tool call pending at start of conversation -- closing before next request.",
-                    messages=messages,
-                )
-                self._start_conversation_loop()
-
-            return
-
-        print("[agent] Initializing")
-
-        try:
-            await self._clear_running_state()
-
-            self.should_auto_continue = False
-            self.pending_auto_continue = False
-            self.pause_until_user_query = False
-
+        new_session_id = self._normalize_session_id(msg.get("session_id"))
+        session_changed = new_session_id is not None and new_session_id != self.agent_session_id
+        if session_changed:
+            print(f"[agent] Session initialized/changed: {new_session_id}")
+            self.agent_session_id = new_session_id
+        elif self.agent_session_id is None:
             self.agent_session_id = new_session_id
 
-            self.init_tools()
-
-            self.client = anthropic.AsyncAnthropic(
-                api_key="dummy",
-                base_url=f"{nucleus_url}/infer/plots-agent/anthropic",
-                default_headers={"Authorization": auth_token_sdk, "Pod-Id": str(pod_id)}
-            )
-
-            system_prompt_path = context_root.parent / "system_prompt.md"
-            self.system_prompt = system_prompt_path.read_text()
-
-            self.pending_tool_calls.clear()
-            messages = await self._build_messages_from_db()
-            await self._close_pending_tool_calls(
-                error_message="Tool call cancelled - session was ended before completion",
-                messages=messages,
-            )
-
-            self.initialized = True
-            await self.send({
-                "type": "agent_status",
-                "status": "ready"
-            })
-            print("[agent] Initialization complete")
-
-            print("[agent] Starting conversation loop")
-            self._start_conversation_loop()
-            print("[agent] Conversation loop started")
-
-            latest_submit_response = None
-            latest_update_plan = None
-            latest_submit_response_with_plan = None
-
-            for history_msg in reversed(messages):
-                if history_msg.get("role") != "assistant":
-                    continue
-                content = history_msg.get("content")
-                if not isinstance(content, list):
-                    continue
-
-                for block in reversed(content):
-                    if not isinstance(block, dict) or block.get("type") != "tool_use":
-                        continue
-
-                    tool_name = block.get("name")
-                    tool_input = block.get("input", {})
-
-                    if tool_name == "submit_response":
-                        if latest_submit_response is None:
-                            latest_submit_response = tool_input
-                        if latest_submit_response_with_plan is None and tool_input.get("plan"):
-                            latest_submit_response_with_plan = tool_input
-
-                    if tool_name == "update_plan" and latest_update_plan is None:
-                        plan_items = tool_input.get("plan", [])
-                        if plan_items:
-                            latest_update_plan = tool_input
-
-                    if latest_submit_response is not None and latest_update_plan is not None:
-                        break
-
-                if latest_submit_response is not None and latest_update_plan is not None:
-                    break
-
-            if latest_update_plan is not None:
-                plan_items = latest_update_plan.get("plan", [])
-                self.current_plan = {"steps": plan_items}
-                print(f"[agent] Seeded plan from update_plan: {len(plan_items)} steps")
-            elif latest_submit_response_with_plan is not None:
-                plan_items = latest_submit_response_with_plan.get("plan", [])
-                self.current_plan = {"steps": plan_items}
-                print(f"[agent] Seeded plan from submit_response: {len(plan_items)} steps")
-
-            if latest_submit_response is not None:
-                next_status = latest_submit_response.get("next_status")
-                waiting_states = {"awaiting_cell_execution", "awaiting_user_widget_input"}
-
-                if next_status in waiting_states:
-                    previous_request_id = await self._extract_last_request_id()
-                    print(f"[agent] Reconnected while {next_status}, prompting LLM to check state and retry (request_id={previous_request_id})")
-                    await self.pending_messages.put({
-                        "type": "user_query",
-                        "content": "The session was reconnected. You were waiting for an action to complete, but it may have finished or failed while offline. Please retry any incomplete actions or continue with your plan.",
-                        "request_id": previous_request_id,
-                        "hidden": True,
-                    })
-                else:
-                    print(f"[agent] Reconnected with status '{next_status}', staying idle")
-
-            if len(messages) > 0 and messages[-1].get("role") == "user" and not self.pause_until_user_query:
-                print("[agent] Incomplete turn detected, auto-resuming")
-                await self.pending_messages.put({"type": "resume"})
-        except Exception as e:
+        if self.agent_session_id is None:
+            print("[agent] Missing session_id in init; cannot initialize Claude SDK client")
             await self.send({
                 "type": "agent_error",
-                "error": f"Failed to initialize: {e!s}",
-                "fatal": True
+                "error": "Missing agent session id.",
+                "fatal": False,
             })
+            return
+
+        if self.client is not None and not session_changed:
+            print("[agent] SDK client already initialized; skipping re-init")
+            await self.send({"type": "agent_status", "status": "ready"})
+            self._start_conversation_loop()
+            return
+
+        if self.client is not None and session_changed:
+            if self.current_query_task is not None and not self.current_query_task.done():
+                print("[agent] Interrupting running query due to session change")
+                await self.client.interrupt()
+                await self._wait_for_running_query_to_stop()
+            await self._reset_for_new_session()
+            await self._disconnect_sdk_client()
+
+        try:
+            metadata = await self._load_agent_session_metadata(self.agent_session_id)
+        except Exception as e:
+            print(f"[agent] Failed to load agent session metadata: {e!s}")
+            metadata = {}
+        self.agent_session_metadata = metadata
+        resume_session_id = self._normalize_session_id(metadata.get("claude_session_id"))
+
+        if self.client is None:
+            await self._connect_sdk_client(resume_session_id=resume_session_id)
+            if resume_session_id is None:
+                print("[agent] SDK initialized without resume session")
+            else:
+                print(f"[agent] SDK initialized with resume session {resume_session_id}")
+
+        await self.send({"type": "agent_status", "status": "ready"})
+        print(
+            "[agent] Initialization complete "
+            f"(db_session_id={self.agent_session_id}, "
+            f"claude_session_id={resume_session_id})"
+        )
+        self._start_conversation_loop()
+
+        # todo(rteqs): planning stuff
 
     async def handle_query(self, msg: dict[str, object]) -> None:
+        assert self.client is not None
         query = msg.get("query", "")
-        request_id = msg.get("request_id")
+        raw_request_id = msg.get("request_id")
+        request_id = str(raw_request_id) if raw_request_id is not None else None
         contextual_node_data = msg.get("contextual_node_data")
         template_version_id = msg.get("template_version_id")
         selected_widgets = msg.get("selected_widgets")
@@ -3776,66 +1676,88 @@ class AgentHarness:
         self.pause_until_user_query = False
 
         if behavior is not None:
-            self.behavior = Behavior.step_by_step if behavior == "step_by_step" else Behavior.proactive
+            self.behavior = (
+                Behavior.step_by_step
+                if behavior == "step_by_step"
+                else Behavior.proactive
+            )
 
         full_query = query
         if contextual_node_data:
             full_query = f"{query} \n\nHere is the context of the selected nodes the user would like to use: <ContextualNodeData>{json.dumps(contextual_node_data)}</ContextualNodeData>"
+
+        try:
+            user_payload: dict[str, object] = {
+                "content": str(full_query),
+            }
+            if query is not None:
+                user_payload["display_query"] = query
+            if contextual_node_data is not None:
+                user_payload["display_nodes"] = contextual_node_data
+            if selected_widgets is not None:
+                user_payload["display_widgets"] = selected_widgets
+            await self._insert_history(
+                role="user",
+                payload=user_payload,
+                request_id=request_id if isinstance(request_id, str) else None,
+                template_version_id=(
+                    str(template_version_id)
+                    if template_version_id is not None
+                    else None
+                ),
+            )
+        except Exception as e:
+            print(f"[agent] Failed to persist user history: {e!s}")
+
         await self.pending_messages.put({
             "type": "user_query",
-            "content": full_query,
-            "request_id": request_id,
-            "display_query": query,
-            "display_nodes": contextual_node_data,
-            "display_widgets": selected_widgets,
-            "template_version_id": template_version_id,
+            "content": str(full_query),
+            "request_id": request_id if isinstance(request_id, str) else None,
         })
 
-        print(f"[agent] Message queued successfully (request_id={request_id})")
+        print(
+            "[agent] Message queued successfully "
+            f"(request_id={request_id}, session_id={self._current_sdk_session_id()})"
+        )
 
     async def handle_cancel(self, msg: dict[str, object]) -> None:
+        # todo(rteqs): idk if we stil need a request id
         request_id = msg.get("request_id", "unknown")
         print(f"[agent] Cancelling request {request_id}")
 
-        self.current_request_id = None
+        assert self.client is not None
+
+        if self.current_query_task is None or self.current_query_task.done():
+            await self.send({
+                "type": "agent_error",
+                "error": "No active query to cancel.",
+                "fatal": False,
+            })
+            return
+
+        await self.client.interrupt()
+        completed_gracefully = await self._wait_for_running_query_to_stop()
+        if completed_gracefully:
+            print(f"[agent] Cancel completed for request {request_id}")
+        else:
+            print(f"[agent] Cancel forced task cancellation for request {request_id}")
+
+        try:
+            await self._insert_history(
+                event_type="cancellation",
+                role="system",
+                payload={"reason": "Request cancelled by user"},
+                request_id=str(request_id),
+            )
+        except Exception as e:
+            print(f"[agent] Failed to persist cancellation history: {e!s}")
+
         self.should_auto_continue = False
         self.pending_auto_continue = False
         self.pause_until_user_query = True
+        self.expected_widgets.clear()
+        self.current_status = None
         self.executing_cells.clear()
-
-        await self._clear_running_state()
-
-        self.pending_tool_calls.clear()
-        await self._close_pending_tool_calls(
-            error_message="Request cancelled by user",
-            messages=await self._build_messages_from_db(),
-        )
-
-        for file in (context_root / "agent_scratch").rglob("*"):
-            if file.name == ".gitkeep":
-                continue
-
-            file.unlink()
-
-        await self._insert_history(
-            event_type="cancellation",
-            role="system",
-            payload={
-                "reason": "Request cancelled by user",
-            },
-            request_id=request_id,
-        )
-
-        self._start_conversation_loop()
-
-    async def handle_clear_history(self) -> None:
-        await self._clear_running_state()
-        await self._mark_all_history_removed()
-
-        self.current_plan = None
-        self.pause_until_user_query = False
-
-        self._start_conversation_loop()
 
     async def get_full_prompt(self) -> dict:
         self.system_prompt = (context_root.parent / "system_prompt.md").read_text()
@@ -3857,18 +1779,19 @@ class AgentHarness:
         tree_lines.extend(build_tree(context_root, "  "))
         tree_content = "\n".join(tree_lines)
 
-        truncated_messages = self._prepare_messages_for_inference(messages)
-
         return {
             "system_prompt": self.system_prompt,
             "messages": messages,
-            "truncated_messages": truncated_messages,
-            "model": self.mode_config.get(self.mode, ("claude-opus-4-5-20251101", 1024))[0],
-            "cells": self.latest_notebook_state if self.latest_notebook_state is not None else "Interact with agent to populate notebook state.",
+            "model": "claude-opus-4-6",
+            "cells": self.latest_notebook_state
+            if self.latest_notebook_state is not None
+            else "Interact with agent to populate notebook state.",
             "tree": tree_content,
         }
 
     async def update_system_prompt(self, msg: dict[str, object]) -> dict:
+        assert self.client is not None
+
         new_content = msg.get("content")
         if not isinstance(new_content, str):
             return {"status": "error", "error": "Invalid content"}
@@ -3876,19 +1799,20 @@ class AgentHarness:
         system_prompt_path = context_root.parent / "system_prompt.md"
         system_prompt_path.write_text(new_content)
         self.system_prompt = new_content
+        self.client.options.system_prompt = new_content
 
         full_prompt = await self.get_full_prompt()
-        return {
-            "status": "success",
-            **full_prompt,
-        }
+        return {"status": "success", **full_prompt}
 
+    # todo(rteqs): rip a generator for handle_query
     async def accept(self) -> None:
         msg = await self.conn.recv()
         msg_type = msg.get("type")
         msg_request_id = msg.get("request_id")
 
-        print(f"[agent] accept: received message type={msg_type} (request_id={msg_request_id})")
+        print(
+            f"[agent] accept: received message type={msg_type} (request_id={msg_request_id})"
+        )
 
         if msg_type == "init":
             print(f"[agent] Message: {msg_type}")
@@ -3897,25 +1821,28 @@ class AgentHarness:
             query = msg.get("query", "")
             query_preview = query[:60] + "..." if len(query) > 60 else query
             request_id = msg.get("request_id", "unknown")
-            print(f"[agent] accept: dispatching to handle_query (query={query_preview}, request_id={request_id})")
+            print(
+                f"[agent] accept: dispatching to handle_query (query={query_preview}, request_id={request_id})"
+            )
             handle_start = time.time()
             await self.handle_query(msg)
             handle_elapsed = time.time() - handle_start
-            print(f"[agent] accept: handle_query completed in {handle_elapsed:.3f}s (request_id={request_id})")
+            print(
+                f"[agent] accept: handle_query completed in {handle_elapsed:.3f}s (request_id={request_id})"
+            )
         elif msg_type == "agent_cancel":
             request_id = msg.get("request_id", "unknown")
             print(f"[agent] Cancel: {request_id}")
             await self.handle_cancel(msg)
-        elif msg_type == "agent_clear_history":
-            print("[agent] Clear history request")
-            await self.handle_clear_history()
         elif msg_type == "agent_reset_kernel":
             print("[agent] Reset kernel globals request")
             result = await self.atomic_operation("reset_kernel_globals", {})
             if result.get("status") != "success":
                 print(f"[agent] Failed to reset kernel: {result.get('error')}")
         elif msg_type == "agent_action_response":
-            print(f"[agent] {msg.get('action', 'unknown')} -> {msg.get('status', 'unknown')}")
+            print(
+                f"[agent] {msg.get('action', 'unknown')} -> {msg.get('status', 'unknown')}"
+            )
             await self.handle_action_response(msg)
         elif msg_type == "kernel_message":
             nested_msg = msg.get("message", {})
@@ -3935,11 +1862,23 @@ class AgentHarness:
                 if cell_id is not None:
                     self.executing_cells.discard(str(cell_id))
                 if self.pause_until_user_query:
-                    print(f"        Suppressing cell {cell_id} result while pause_until_user_query is True")
+                    print(
+                        f"        Suppressing cell {cell_id} result while pause_until_user_query is True"
+                    )
                     return
-                execution_statuses = {"executing", "awaiting_cell_execution", "thinking", "fixing"}
-                if self.current_status is not None and self.current_status not in execution_statuses:
-                    print(f"        Not adding cell {cell_id} result because {self.current_status}")
+                execution_statuses = {
+                    "executing",
+                    "awaiting_cell_execution",
+                    "thinking",
+                    "fixing",
+                }
+                if (
+                    self.current_status is not None
+                    and self.current_status not in execution_statuses
+                ):
+                    print(
+                        f"        Not adding cell {cell_id} result because {self.current_status}"
+                    )
                     return
 
                 if self.current_request_id is not None:
@@ -3952,7 +1891,9 @@ class AgentHarness:
                         "display_name": display_name,
                     })
                 else:
-                    print(f"        Cell {cell_id} completed but no active request - updating executing_cells only")
+                    print(
+                        f"        Cell {cell_id} completed but no active request - updating executing_cells only"
+                    )
 
             elif nested_type == "start_cell":
                 cell_id = nested_msg.get("cell_id")
@@ -3971,7 +1912,7 @@ class AgentHarness:
                         self.current_status = "thinking"
                         await self.pending_messages.put({
                             "type": "set_widget_value",
-                            "data": self.expected_widgets
+                            "data": self.expected_widgets,
                         })
                         print("        Finished waiting for widget input")
             else:
@@ -3985,18 +1926,14 @@ class AgentHarness:
                 "type": "agent_action_response",
                 "tx_id": tx_id,
                 "status": "success",
-                **result
+                **result,
             })
         elif msg_type == "update_system_prompt":
             tx_id = msg.get("tx_id")
             print(f"[agent] Update system prompt request (tx_id={tx_id})")
             result = await self.update_system_prompt(msg)
 
-            await self.send({
-                "type": "agent_action_response",
-                "tx_id": tx_id,
-                **result
-            })
+            await self.send({"type": "agent_action_response", "tx_id": tx_id, **result})
         elif msg_type == "seed_plan_from_history":
             print("[agent] seed_plan_from_history received")
             plan = msg.get("plan")
@@ -4022,6 +1959,7 @@ async def main() -> None:
 
     socket_io_thread = SocketIoThread(socket=sock)
     socket_io_thread.start()
+    harness: AgentHarness | None = None
     try:
         socket_io_thread.initialized.wait()
 
@@ -4038,6 +1976,11 @@ async def main() -> None:
 
         print("Agent shutting down...")
     finally:
+        if harness is not None:
+            try:
+                await harness._disconnect_sdk_client()
+            except Exception:
+                traceback.print_exc()
         socket_io_thread.shutdown.set()
         socket_io_thread.join()
 
