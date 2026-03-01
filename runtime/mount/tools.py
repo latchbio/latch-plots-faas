@@ -7,16 +7,6 @@ from claude_agent_sdk import create_sdk_mcp_server, tool
 from lplots import _inject
 
 
-VALID_NEXT_STATUSES = {
-    "executing",
-    "fixing",
-    "thinking",
-    "awaiting_user_response",
-    "awaiting_cell_execution",
-    "awaiting_user_widget_input",
-    "done",
-}
-
 MCP_SERVER_NAME = "plots-agent-tools"
 
 MCP_TOOL_NAMES = [
@@ -86,6 +76,7 @@ def harness():
         "required": ["position", "code", "title", "action_summary"],
     },
 )
+
 async def create_cell(args: dict[str, Any]) -> dict[str, Any]:
     h = harness()
     position = args["position"]
@@ -156,6 +147,7 @@ async def create_cell(args: dict[str, Any]) -> dict[str, Any]:
         "required": ["position", "code", "title", "action_summary"],
     },
 )
+
 async def create_markdown_cell(args: dict[str, Any]) -> dict[str, Any]:
     h = harness()
     position = args["position"]
@@ -211,12 +203,13 @@ async def create_markdown_cell(args: dict[str, Any]) -> dict[str, Any]:
         "required": ["cell_id", "new_code", "title"],
     },
 )
+
 async def edit_cell(args: dict[str, Any]) -> dict[str, Any]:
     h = harness()
     cell_id = args["cell_id"]
     new_code = args["new_code"]
     title = args["title"]
-    action_summary = args.get("action_summary", "")
+    action_summary = args["action_summary"]
 
     print(f"[tool] edit_cell id={cell_id}")
     original_code = ""
@@ -250,7 +243,7 @@ async def edit_cell(args: dict[str, Any]) -> dict[str, Any]:
 
 @tool(
     "run_cell",
-    "Run an existing code cell.",
+    "Execute a specific cell.",
     {
         "type": "object",
         "properties": {
@@ -264,19 +257,20 @@ async def edit_cell(args: dict[str, Any]) -> dict[str, Any]:
         "required": ["cell_id", "title", "action_summary"],
     },
 )
+
 async def run_cell(args: dict[str, Any]) -> dict[str, Any]:
     h = harness()
     cell_id = args["cell_id"]
     title = args["title"]
     action_summary = args["action_summary"]
 
-    print(f"[tool] run_cell id={cell_id} title={title!r}")
+    params = {"cell_id": cell_id}
     await h.send({
         "type": "agent_action",
         "action": "run_cell",
-        "params": {"cell_id": cell_id},
+        "params": params,
     })
-    h.executing_cells.add(str(cell_id))
+    h.executing_cells.add(cell_id)
 
     return ok({
         "tool_name": "run_cell",
@@ -304,6 +298,7 @@ async def run_cell(args: dict[str, Any]) -> dict[str, Any]:
         "required": ["cell_id", "title", "action_summary"],
     },
 )
+
 async def delete_cell(args: dict[str, Any]) -> dict[str, Any]:
     h = harness()
     cell_id = args["cell_id"]
@@ -346,7 +341,8 @@ async def delete_cell(args: dict[str, Any]) -> dict[str, Any]:
         "type": "object",
         "properties": {
             "cell_id": {"type": "string", "description": "ID of the cell to stop"},
-            "title": {"type": "string", "description": "Name of the cell to stop"},
+            "cell_name": {"type": "string", "description": "Name of the cell to stop"},
+            "title": {"type": "string", "description": "Title of the cell to stop"},
             "action_summary": {
                 "type": "string",
                 "description": "Summary of the purpose of the stop.",
@@ -355,15 +351,18 @@ async def delete_cell(args: dict[str, Any]) -> dict[str, Any]:
         "required": ["cell_id", "title", "action_summary"],
     },
 )
+
 async def stop_cell(args: dict[str, Any]) -> dict[str, Any]:
     h = harness()
     cell_id = args["cell_id"]
     title = args["title"]
     action_summary = args["action_summary"]
 
-    result = await h.atomic_operation("stop_cell", {"cell_id": cell_id})
+    params = {"cell_id": cell_id}
+
+    result = await h.atomic_operation("stop_cell", params)
     if result.get("status") == "success":
-        h.executing_cells.discard(str(cell_id))
+        h.executing_cells.discard(cell_id)
         return ok({
             "tool_name": "stop_cell",
             "summary": f"Stopped cell {cell_id}",
@@ -385,15 +384,17 @@ async def stop_cell(args: dict[str, Any]) -> dict[str, Any]:
     "Delete all cells in the notebook efficiently.",
     {"type": "object", "properties": {}},
 )
+
 async def delete_all_cells(args: dict[str, Any]) -> dict[str, Any]:
     h = harness()
     _ = args
 
     context_result = await h.atomic_operation("get_context", {})
     if context_result.get("status") != "success":
+        error_msg = context_result.get("error", "Unknown error")
         return ok({
             "tool_name": "delete_all_cells",
-            "summary": f"Failed to delete cells: {context_result.get('error', 'Unknown error')}",
+            "summary": f"Failed to delete cells: {error_msg}",
             "success": False,
         })
 
@@ -418,7 +419,7 @@ async def delete_all_cells(args: dict[str, Any]) -> dict[str, Any]:
     "rename_notebook",
     (
         "Rename the current plot notebook. Only call when the user explicitly asks "
-        "to rename the notebook or the notebook is named Untitled Layout."
+        "to rename the notebook or the notebook is named Untitled Layout"
     ),
     {
         "type": "object",
@@ -431,6 +432,7 @@ async def delete_all_cells(args: dict[str, Any]) -> dict[str, Any]:
         "required": ["name"],
     },
 )
+
 async def rename_notebook(args: dict[str, Any]) -> dict[str, Any]:
     h = harness()
     name = args["name"]
@@ -455,7 +457,7 @@ async def rename_notebook(args: dict[str, Any]) -> dict[str, Any]:
     "create_tab",
     (
         "Create a new tab marker cell at specified position to organize cells. "
-        "This inserts a new cell and shifts all subsequent cell positions."
+        "IMPORTANT: This inserts a new cell, shifting all subsequent cell positions down by 1."
     ),
     {
         "type": "object",
@@ -469,6 +471,7 @@ async def rename_notebook(args: dict[str, Any]) -> dict[str, Any]:
         "required": ["position", "display_name"],
     },
 )
+
 async def create_tab(args: dict[str, Any]) -> dict[str, Any]:
     h = harness()
     position = args["position"]
@@ -522,6 +525,7 @@ async def create_tab(args: dict[str, Any]) -> dict[str, Any]:
         "required": ["tab_id", "new_name"],
     },
 )
+
 async def rename_tab(args: dict[str, Any]) -> dict[str, Any]:
     h = harness()
     tab_id = args["tab_id"]
@@ -552,7 +556,8 @@ async def rename_tab(args: dict[str, Any]) -> dict[str, Any]:
     "restore_checkpoint",
     (
         "Restore this notebook to one of its own previously-created checkpoints "
-        "(template_version_id)."
+        "(template_version_id). Only call when the user explicitly asks to "
+        "restore/revert/rollback/undo the notebook state. Confirm before restoring."
     ),
     {
         "type": "object",
@@ -565,6 +570,7 @@ async def rename_tab(args: dict[str, Any]) -> dict[str, Any]:
         "required": ["template_version_id"],
     },
 )
+
 async def restore_checkpoint(args: dict[str, Any]) -> dict[str, Any]:
     h = harness()
     template_version_id = args.get("template_version_id")
@@ -591,7 +597,8 @@ async def restore_checkpoint(args: dict[str, Any]) -> dict[str, Any]:
     "execute_code",
     (
         "Execute arbitrary Python code in the notebook kernel and return the result, "
-        "stdout, stderr, and any exceptions."
+        "stdout, stderr, and any exceptions. Use this to test imports, print values, "
+        "or run simple inspection code."
     ),
     {
         "type": "object",
@@ -599,6 +606,7 @@ async def restore_checkpoint(args: dict[str, Any]) -> dict[str, Any]:
         "required": ["code"],
     },
 )
+
 async def execute_code(args: dict[str, Any]) -> dict[str, Any]:
     h = harness()
     code = args.get("code")
@@ -609,16 +617,12 @@ async def execute_code(args: dict[str, Any]) -> dict[str, Any]:
             "summary": "No code provided",
         })
 
-    print(f"[tool] execute_code: {str(code)[:50]}...")
+    print(f"[tool] execute_code: {code[:50]}...")
     result = await h.atomic_operation("execute_code", {"code": code})
     return ok({
         "tool_name": "execute_code",
-        "success": result.get("status") == "success",
-        "summary": (
-            "Code executed"
-            if result.get("status") == "success"
-            else f"Failed to execute code: {result.get('error', 'Unknown error')}"
-        ),
+        "success": True,
+        "summary": "Code executed",
         "code": code,
         "stdout": result.get("stdout"),
         "stderr": result.get("stderr"),
@@ -629,8 +633,8 @@ async def execute_code(args: dict[str, Any]) -> dict[str, Any]:
 @tool(
     "get_global_info",
     (
-        "Get rich information about a specific global variable including type, shape, "
-        "columns, dtypes, and related metadata."
+        "Get rich information about a specific global variable including its type, "
+        "shape, columns, dtypes, etc. Especially useful for DataFrames and AnnData objects."
     ),
     {
         "type": "object",
@@ -643,6 +647,7 @@ async def execute_code(args: dict[str, Any]) -> dict[str, Any]:
         "required": ["key"],
     },
 )
+
 async def get_global_info(args: dict[str, Any]) -> dict[str, Any]:
     h = harness()
     key = args.get("key")
@@ -656,12 +661,13 @@ async def get_global_info(args: dict[str, Any]) -> dict[str, Any]:
     print(f"[tool] get_global_info: {key}")
     result = await h.atomic_operation("get_global_info", {"key": key})
     if result.get("status") == "success":
+        info = result.get("info", {})
         return ok({
             "tool_name": "get_global_info",
             "success": True,
             "summary": f"Retrieved info for global '{key}'",
             "key": key,
-            "info": result.get("info", {}),
+            "info": info,
         })
 
     return ok({
@@ -674,8 +680,11 @@ async def get_global_info(args: dict[str, Any]) -> dict[str, Any]:
 @tool(
     "capture_widget_image",
     (
-        "Capture a visual screenshot of an h5/AnnData or plot widget and return "
-        "a base64-encoded PNG plus metadata."
+        "Capture a visual screenshot of an h5/AnnData or plot widget displayed in the "
+        "notebook. Returns a base64-encoded PNG image and metadata about the current "
+        "visualization state (such as color_by settings, filters, and cell counts for "
+        "h5 widgets). Use this to visually inspect plots, clustering results, or any "
+        "Plotly-based visualization the user is seeing."
     ),
     {
         "type": "object",
@@ -688,6 +697,7 @@ async def get_global_info(args: dict[str, Any]) -> dict[str, Any]:
         "required": ["widget_key"],
     },
 )
+
 async def capture_widget_image(args: dict[str, Any]) -> dict[str, Any]:
     h = harness()
     widget_key = args.get("widget_key")
@@ -701,14 +711,18 @@ async def capture_widget_image(args: dict[str, Any]) -> dict[str, Any]:
     print(f"[tool] capture_widget_image: {widget_key}")
     result = await h.atomic_operation("capture_widget_image", {"widget_key": widget_key})
     if result.get("status") == "success":
+        widget_type = result.get("widget_type", "unknown")
+        metadata = result.get("metadata", {})
+        image = result.get("image")
+
         return ok({
             "tool_name": "capture_widget_image",
             "success": True,
-            "summary": f"Captured image from {result.get('widget_type', 'unknown')} widget '{widget_key}'",
+            "summary": f"Captured image from {widget_type} widget '{widget_key}'",
             "widget_key": widget_key,
-            "widget_type": result.get("widget_type", "unknown"),
-            "image": result.get("image"),
-            "metadata": result.get("metadata", {}),
+            "widget_type": widget_type,
+            "image": image,
+            "metadata": metadata,
         })
 
     return ok({
@@ -726,7 +740,10 @@ async def capture_widget_image(args: dict[str, Any]) -> dict[str, Any]:
         "properties": {
             "key": {
                 "type": "string",
-                "description": "Full widget key in format <tf_id>/<widget_id>",
+                "description": (
+                    "Full widget key including tf_id and widget_id in the format "
+                    "<tf_id>/<widget_id>"
+                ),
             },
             "value": {"description": "JSON-serializable value"},
             "action_summary": {
@@ -738,6 +755,7 @@ async def capture_widget_image(args: dict[str, Any]) -> dict[str, Any]:
         "required": ["key", "value", "action_summary", "label"],
     },
 )
+
 async def set_widget(args: dict[str, Any]) -> dict[str, Any]:
     h = harness()
     key = args.get("key")
@@ -780,22 +798,119 @@ async def set_widget(args: dict[str, Any]) -> dict[str, Any]:
 @tool(
     "h5_filter_by",
     (
-        "Set filters for an h5/AnnData widget. Pass the complete array of filters "
-        "to apply."
+        "Set filters for an h5/AnnData widget. Pass the complete array of filters. "
+        "Include existing filters from widget context to preserve them."
     ),
     {
         "type": "object",
         "properties": {
             "widget_key": {
                 "type": "string",
-                "description": "Full widget key in format <tf_id>/<widget_id>",
+                "description": (
+                    "Full widget key including tf_id and widget_id in the format "
+                    "<tf_id>/<widget_id>"
+                ),
             },
             "label": {"type": "string", "description": "Label of the widget"},
-            "filters": {"type": "array", "description": "Complete filter array"},
+            "filters": {
+                "type": "array",
+                "description": "Complete array of filters to apply",
+                "items": {
+                    "oneOf": [
+                        {
+                            "type": "object",
+                            "properties": {
+                                "type": {
+                                    "type": "string",
+                                    "enum": ["obs"],
+                                    "description": "Filter by observation metadata",
+                                },
+                                "key": {
+                                    "type": "string",
+                                    "description": "The observation key to filter on",
+                                },
+                                "operation": {
+                                    "oneOf": [
+                                        {
+                                            "type": "object",
+                                            "properties": {
+                                                "type": {
+                                                    "type": "string",
+                                                    "enum": ["neq"],
+                                                    "description": "Not equal operation",
+                                                },
+                                                "value": {
+                                                    "type": ["string", "number", "null"],
+                                                    "description": "Value to compare against",
+                                                },
+                                            },
+                                            "required": ["type", "value"],
+                                        },
+                                        {
+                                            "type": "object",
+                                            "properties": {
+                                                "type": {
+                                                    "type": "string",
+                                                    "enum": ["geq", "leq", "g", "l"],
+                                                    "description": (
+                                                        "Numeric comparison: geq (>=), leq (<=), "
+                                                        "g (>), l (<)"
+                                                    ),
+                                                },
+                                                "value": {
+                                                    "type": "number",
+                                                    "description": "Numeric value to compare against",
+                                                },
+                                            },
+                                            "required": ["type", "value"],
+                                        },
+                                    ],
+                                    "description": "Filter operation to apply",
+                                },
+                            },
+                            "required": ["type", "key", "operation"],
+                        },
+                        {
+                            "type": "object",
+                            "properties": {
+                                "type": {
+                                    "type": "string",
+                                    "enum": ["var"],
+                                    "description": "Filter by variable(s) / gene(s)",
+                                },
+                                "keys": {
+                                    "type": "array",
+                                    "items": {"type": "string"},
+                                    "description": "Array of variable/gene names to filter on",
+                                },
+                                "operation": {
+                                    "type": "object",
+                                    "properties": {
+                                        "type": {
+                                            "type": "string",
+                                            "enum": ["geq", "leq", "g", "l"],
+                                            "description": (
+                                                "Numeric comparison: geq (>=), leq (<=), g (>), l (<)"
+                                            ),
+                                        },
+                                        "value": {
+                                            "type": "number",
+                                            "description": "Numeric value to compare against",
+                                        },
+                                    },
+                                    "required": ["type", "value"],
+                                },
+                            },
+                            "required": ["type", "keys", "operation"],
+                        },
+                    ]
+                },
+            },
         },
         "required": ["widget_key", "filters"],
     },
 )
+
 async def h5_filter_by(args: dict[str, Any]) -> dict[str, Any]:
     h = harness()
     widget_key = args.get("widget_key")
@@ -831,22 +946,64 @@ async def h5_filter_by(args: dict[str, Any]) -> dict[str, Any]:
 
 @tool(
     "h5_color_by",
-    "Set an h5/AnnData widget to color by an observation or variable.",
+    "Set an h5/AnnData widget to color by a specific observation or variable (can be multiple if for genes)",
     {
         "type": "object",
         "properties": {
             "widget_key": {
                 "type": "string",
-                "description": "Full widget key in format <tf_id>/<widget_id>",
+                "description": (
+                    "Full widget key including tf_id and widget_id in the format "
+                    "<tf_id>/<widget_id>"
+                ),
             },
             "label": {"type": "string", "description": "Label of the widget"},
             "color_by": {
-                "description": "Color configuration (null, obs object, or var object)"
+                "oneOf": [
+                    {
+                        "type": "object",
+                        "properties": {
+                            "type": {
+                                "type": "string",
+                                "enum": ["obs"],
+                                "description": "Color by observation metadata",
+                            },
+                            "key": {
+                                "type": "string",
+                                "description": "The observation key to color by",
+                            },
+                        },
+                        "required": ["type", "key"],
+                    },
+                    {
+                        "type": "object",
+                        "properties": {
+                            "type": {
+                                "type": "string",
+                                "enum": ["var"],
+                                "description": "Color by variable(s) / gene(s)",
+                            },
+                            "keys": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                                "description": "Array of variable/gene names to color by",
+                            },
+                        },
+                        "required": ["type", "keys"],
+                    },
+                    {"type": "null"},
+                ],
+                "description": (
+                    "Coloring configuration. Can be null to remove coloring, an obs "
+                    "object to color by observation, or a var object to color by "
+                    "variables like genes"
+                ),
             },
         },
         "required": ["widget_key", "color_by"],
     },
 )
+
 async def h5_color_by(args: dict[str, Any]) -> dict[str, Any]:
     h = harness()
     widget_key = args.get("widget_key")
@@ -882,19 +1039,20 @@ async def h5_color_by(args: dict[str, Any]) -> dict[str, Any]:
 
 @tool(
     "h5_refresh",
-    "Refresh an h5/AnnData widget after state changes.",
+    "Refresh an h5/AnnData widget (re-render/recompute view after state changes).",
     {
         "type": "object",
         "properties": {
             "widget_key": {
                 "type": "string",
-                "description": "Full widget key in format <tf_id>/<widget_id>",
+                "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>",
             },
             "label": {"type": "string", "description": "Label of the widget"},
         },
         "required": ["widget_key"],
     },
 )
+
 async def h5_refresh(args: dict[str, Any]) -> dict[str, Any]:
     h = harness()
     widget_key = args.get("widget_key")
@@ -917,20 +1075,24 @@ async def h5_refresh(args: dict[str, Any]) -> dict[str, Any]:
 
 @tool(
     "h5_set_selected_obsm_key",
-    "Set the selected obsm key for an h5/AnnData widget.",
+    "Set the selected obsm key for an h5/AnnData widget to control which embedding is displayed.",
     {
         "type": "object",
         "properties": {
             "widget_key": {
                 "type": "string",
-                "description": "Full widget key in format <tf_id>/<widget_id>",
+                "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>",
             },
             "label": {"type": "string", "description": "Label of the widget"},
-            "obsm_key": {"type": "string", "description": "obsm key to use"},
+            "obsm_key": {
+                "type": "string",
+                "description": "The obsm key to use for embedding (e.g spatial, X_umap)",
+            },
         },
         "required": ["widget_key", "obsm_key"],
     },
 )
+
 async def h5_set_selected_obsm_key(args: dict[str, Any]) -> dict[str, Any]:
     h = harness()
     widget_key = args.get("widget_key")
@@ -957,23 +1119,27 @@ async def h5_set_selected_obsm_key(args: dict[str, Any]) -> dict[str, Any]:
 
 @tool(
     "h5_set_background_image",
-    "Set a background image for an h5/AnnData widget from a user-attached file.",
+    "Set a background image for an h5/AnnData widget from a user-attached file. The file must be an image type (jpg, jpeg, png, tiff).",
     {
         "type": "object",
         "properties": {
             "label": {"type": "string", "description": "Label of the widget"},
             "widget_key": {
                 "type": "string",
-                "description": "Full widget key in format <tf_id>/<widget_id>",
+                "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>",
             },
             "node_id": {
                 "type": "string",
-                "description": "LData node ID of the image file to use as background",
+                "description": (
+                    "The LData node ID of the image file to use as background. "
+                    "This should come from files attached by the user in the chat."
+                ),
             },
         },
         "required": ["widget_key", "node_id"],
     },
 )
+
 async def h5_set_background_image(args: dict[str, Any]) -> dict[str, Any]:
     h = harness()
     widget_key = args.get("widget_key")
@@ -1007,28 +1173,27 @@ async def h5_set_background_image(args: dict[str, Any]) -> dict[str, Any]:
             "label": {"type": "string", "description": "Label of the widget"},
             "widget_key": {
                 "type": "string",
-                "description": "Full widget key in format <tf_id>/<widget_id>",
+                "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>",
             },
             "background_image_id": {
                 "type": "string",
-                "description": "ID of the background image to align",
+                "description": "The ID of the background image to align (typically the node_id)",
             },
         },
         "required": ["widget_key", "background_image_id"],
     },
 )
+
 async def h5_open_image_aligner(args: dict[str, Any]) -> dict[str, Any]:
     h = harness()
     widget_key = args.get("widget_key")
     background_image_id = args.get("background_image_id")
-    print(
-        "[tool] h5_open_image_aligner "
-        f"widget_key={widget_key} background_image_id={background_image_id}"
-    )
-    result = await h.atomic_operation(
-        "h5_open_image_aligner",
-        {"widget_key": widget_key, "background_image_id": background_image_id},
-    )
+    print(f"[tool] h5_open_image_aligner widget_key={widget_key} background_image_id={background_image_id}")
+    params = {
+        "widget_key": widget_key,
+        "background_image_id": background_image_id,
+    }
+    result = await h.atomic_operation("h5_open_image_aligner", params)
     if result.get("status") == "success":
         return ok({
             "tool_name": "h5_open_image_aligner",
@@ -1047,19 +1212,20 @@ async def h5_open_image_aligner(args: dict[str, Any]) -> dict[str, Any]:
 
 @tool(
     "h5_autoscale",
-    "Reset the plotted view in an h5/AnnData widget to autoscaled data bounds.",
+    "Reset the plotted view in an h5/AnnData widget to Plotly's autoscaled data bounds.",
     {
         "type": "object",
         "properties": {
             "label": {"type": "string", "description": "Label of the widget"},
             "widget_key": {
                 "type": "string",
-                "description": "Full widget key in format <tf_id>/<widget_id>",
+                "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>",
             },
         },
         "required": ["widget_key"],
     },
 )
+
 async def h5_autoscale(args: dict[str, Any]) -> dict[str, Any]:
     h = harness()
     widget_key = args.get("widget_key")
@@ -1082,29 +1248,33 @@ async def h5_autoscale(args: dict[str, Any]) -> dict[str, Any]:
 
 @tool(
     "h5_zoom",
-    "Zoom the Plotly view in an h5/AnnData widget in or out.",
+    "Zoom the Plotly view in an h5/AnnData widget in or out from the current camera center.",
     {
         "type": "object",
         "properties": {
             "widget_key": {
                 "type": "string",
-                "description": "Full widget key in format <tf_id>/<widget_id>",
+                "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>",
             },
             "label": {"type": "string", "description": "Label of the widget"},
             "direction": {
                 "type": "string",
                 "enum": ["in", "out"],
-                "description": "Zoom direction",
+                "description": 'Zoom direction; use "in" to zoom closer, "out" to zoom farther',
             },
             "percentage": {
                 "type": "number",
                 "minimum": 0,
-                "description": "Optional percentage change",
+                "description": (
+                    "Optional percentage change (e.g. 25 for ±25%); omitting uses "
+                    "the default Plotly zoom factor"
+                ),
             },
         },
         "required": ["widget_key", "direction"],
     },
 )
+
 async def h5_zoom(args: dict[str, Any]) -> dict[str, Any]:
     h = harness()
     widget_key = args.get("widget_key")
@@ -1146,20 +1316,21 @@ async def h5_zoom(args: dict[str, Any]) -> dict[str, Any]:
             "label": {"type": "string", "description": "Label of the widget"},
             "widget_key": {
                 "type": "string",
-                "description": "Full widget key in format <tf_id>/<widget_id>",
+                "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>",
             },
             "background_image_id": {
                 "type": "string",
-                "description": "ID of the background image to show or hide",
+                "description": "The ID of the background image to show or hide",
             },
             "hidden": {
                 "type": "boolean",
-                "description": "Whether to hide (true) or show (false)",
+                "description": "Whether to hide (true) or show (false) the background image",
             },
         },
         "required": ["widget_key", "background_image_id", "hidden"],
     },
 )
+
 async def h5_set_background_image_visibility(args: dict[str, Any]) -> dict[str, Any]:
     h = harness()
     widget_key = args.get("widget_key")
@@ -1198,24 +1369,31 @@ async def h5_set_background_image_visibility(args: dict[str, Any]) -> dict[str, 
 
 @tool(
     "h5_add_selected_cells_to_categorical_obs",
-    "Assign selected cells to a category in a categorical observation key.",
+    "Assign selected cells to a category in a categorical observation key",
     {
         "type": "object",
         "properties": {
             "label": {"type": "string", "description": "Label of the widget"},
             "widget_key": {
                 "type": "string",
-                "description": "Full widget key in format <tf_id>/<widget_id>",
+                "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>",
             },
-            "obs_key": {"type": "string", "description": "Categorical observation key"},
+            "obs_key": {
+                "type": "string",
+                "description": "The existing categorical observation key to add selected cells to",
+            },
             "category": {
                 "type": "string",
-                "description": "Category name to assign to selected cells",
+                "description": (
+                    "The category name to assign to selected cells. Will be created if it "
+                    "doesn't exist in this observation key."
+                ),
             },
         },
         "required": ["widget_key", "obs_key", "category"],
     },
 )
+
 async def h5_add_selected_cells_to_categorical_obs(args: dict[str, Any]) -> dict[str, Any]:
     h = harness()
     widget_key = args.get("widget_key")
@@ -1249,23 +1427,24 @@ async def h5_add_selected_cells_to_categorical_obs(args: dict[str, Any]) -> dict
 
 @tool(
     "h5_set_marker_opacity",
-    "Set marker opacity for all cell markers in an h5/AnnData widget.",
+    "Set the marker opacity for all cell markers in an h5/AnnData widget.",
     {
         "type": "object",
         "properties": {
             "label": {"type": "string", "description": "Label of the widget"},
             "widget_key": {
                 "type": "string",
-                "description": "Full widget key in format <tf_id>/<widget_id>",
+                "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>",
             },
             "opacity": {
                 "type": "number",
-                "description": "Opacity value between 0.1 and 0.9",
+                "description": "Opacity value for cell markers, between 0.1 (transparent) and 0.9 (opaque)",
             },
         },
         "required": ["widget_key", "opacity"],
     },
 )
+
 async def h5_set_marker_opacity(args: dict[str, Any]) -> dict[str, Any]:
     h = harness()
     widget_key = args.get("widget_key")
@@ -1299,27 +1478,31 @@ async def h5_set_marker_opacity(args: dict[str, Any]) -> dict[str, Any]:
         "properties": {
             "widget_key": {
                 "type": "string",
-                "description": "Full widget key in format <tf_id>/<widget_id>",
+                "description": "Full widget key including tf_id and widget_id in the format <tf_id>/<widget_id>",
             },
             "label": {"type": "string", "description": "Label of the widget"},
             "obs_key": {
                 "type": "string",
-                "description": "Observation column name to create or delete",
+                "description": "The observation column name to create or delete",
             },
             "operation": {
                 "type": "string",
                 "enum": ["add", "remove"],
-                "description": "Whether to add or remove the observation column",
+                "description": (
+                    "Whether to create a new observation column ('add') or delete an "
+                    "existing one ('remove')"
+                ),
             },
             "obs_type": {
                 "type": "string",
                 "enum": ["category", "bool", "int64", "float64"],
-                "description": "Observation type when operation is add",
+                "description": "Type of observation. Only for 'add' operation. Defaults to 'category'.",
             },
         },
         "required": ["widget_key", "obs_key", "operation"],
     },
 )
+
 async def h5_manage_obs(args: dict[str, Any]) -> dict[str, Any]:
     h = harness()
     widget_key = args.get("widget_key")
@@ -1331,7 +1514,7 @@ async def h5_manage_obs(args: dict[str, Any]) -> dict[str, Any]:
         "[tool] h5_manage_obs "
         f"widget_key={widget_key} obs_key={obs_key} operation={operation} obs_type={obs_type}"
     )
-    params: dict[str, object] = {
+    params = {
         "widget_key": widget_key,
         "obs_key": obs_key,
         "operation": operation,
@@ -1375,16 +1558,20 @@ async def h5_manage_obs(args: dict[str, Any]) -> dict[str, Any]:
     {
         "type": "object",
         "properties": {
-            "package_code": {"type": "string", "description": "Multi-use package invite code"},
-            "package_version_id": {"type": "string", "description": "Package version ID"},
+            "package_code": {"type": "string", "description": "Multi-use package invite code."},
+            "package_version_id": {"type": "string", "description": "Package version ID."},
             "redemption_reason": {
                 "type": "string",
-                "description": "Reason for redeeming the package",
+                "description": (
+                    "Reason for redeeming the package to display in the agent history. "
+                    "(e.g., `Installed X Technology Tools into Workspace`)"
+                ),
             },
         },
         "required": ["package_code", "package_version_id", "redemption_reason"],
     },
 )
+
 async def redeem_package(args: dict[str, Any]) -> dict[str, Any]:
     h = harness()
     package_code = args.get("package_code")
@@ -1400,20 +1587,20 @@ async def redeem_package(args: dict[str, Any]) -> dict[str, Any]:
             ),
         })
 
-    package_code_str = str(package_code)
-    package_version_id_str = str(package_version_id)
+    package_code = str(package_code)
+    package_version_id = str(package_version_id)
     print("[tool] redeem_package")
     result = await h.atomic_operation(
         "redeem_package",
-        {"package_code": package_code_str, "package_version_id": package_version_id_str},
+        {"package_code": str(package_code), "package_version_id": str(package_version_id)},
     )
     if result.get("status") == "success":
         return ok({
             "tool_name": "redeem_package",
             "success": True,
-            "summary": f"Redeemed package {package_code_str} (version {package_version_id_str})",
-            "package_code": package_code_str,
-            "package_version_id": package_version_id_str,
+            "summary": f"Redeemed package {package_code} (version {package_version_id})",
+            "package_code": package_code,
+            "package_version_id": package_version_id,
             "redemption_reason": redemption_reason,
         })
 
@@ -1437,7 +1624,10 @@ async def redeem_package(args: dict[str, Any]) -> dict[str, Any]:
             },
             "widget_key": {
                 "type": "string",
-                "description": "Optional full widget key for widget-related highlights",
+                "description": (
+                    "Optional full widget key including tf_id and widget_id in the format "
+                    "<tf_id>/<widget_id> for keywords related to a specific widget"
+                ),
             },
             "widget_label": {
                 "type": "string",
@@ -1447,6 +1637,7 @@ async def redeem_package(args: dict[str, Any]) -> dict[str, Any]:
         "required": ["keyword"],
     },
 )
+
 async def smart_ui_spotlight(args: dict[str, Any]) -> dict[str, Any]:
     h = harness()
     keyword = args.get("keyword")
@@ -1454,23 +1645,23 @@ async def smart_ui_spotlight(args: dict[str, Any]) -> dict[str, Any]:
     widget_label = args.get("widget_label")
 
     print(f"[tool] smart_ui_spotlight keyword={keyword}, widget_key={widget_key}")
-    params: dict[str, object] = {"keyword": keyword}
+    params = {"keyword": keyword}
     if widget_key is not None:
         params["widget_key"] = widget_key
 
     result = await h.atomic_operation("smart_ui_spotlight", params)
     if result.get("status") == "success":
-        payload: dict[str, object] = {
+        res = {
             "tool_name": "smart_ui_spotlight",
             "success": True,
             "summary": f"Highlighted UI element: {keyword}",
             "keyword": keyword,
         }
         if widget_key is not None:
-            payload["widget_key"] = widget_key
+            res["widget_key"] = widget_key
         if widget_label is not None:
-            payload["widget_label"] = widget_label
-        return ok(payload)
+            res["widget_label"] = widget_label
+        return ok(res)
 
     return ok({
         "tool_name": "smart_ui_spotlight",
@@ -1481,20 +1672,22 @@ async def smart_ui_spotlight(args: dict[str, Any]) -> dict[str, Any]:
 
 @tool(
     "update_plan",
-    "Update the in-memory execution plan shown in the agent UI.",
+    "Update the agent's plan.",
     {
         "type": "object",
         "properties": {
             "plan": {
                 "type": "array",
+                "description": "List of plan items. This should be the complete current plan state.",
                 "items": {
                     "type": "object",
                     "properties": {
-                        "id": {"type": "string"},
-                        "description": {"type": "string"},
+                        "id": {"type": "string", "description": "Unique step identifier"},
+                        "description": {"type": "string", "description": "What this step does"},
                         "status": {
                             "type": "string",
                             "enum": ["todo", "in_progress", "done", "cancelled"],
+                            "description": "Current status",
                         },
                     },
                     "required": ["id", "description", "status"],
@@ -1502,24 +1695,32 @@ async def smart_ui_spotlight(args: dict[str, Any]) -> dict[str, Any]:
             },
             "plan_diff": {
                 "type": "array",
+                "description": "List of plan diff items - only the steps that changed in this update.",
                 "items": {
                     "type": "object",
                     "properties": {
-                        "id": {"type": "string"},
+                        "id": {"type": "string", "description": "Unique step identifier"},
                         "action": {
                             "type": "string",
                             "enum": ["add", "update", "complete", "remove"],
+                            "description": "What action was taken on this step",
                         },
-                        "description": {"type": "string"},
                     },
                     "required": ["id", "action"],
                 },
             },
-            "plan_update_overview": {"type": "string"},
+            "plan_update_overview": {
+                "type": "string",
+                "description": (
+                    "Short title overview of what changed. E.g. 'Added QC steps' or "
+                    "'Completed step 2, step 3 now in progress'"
+                ),
+            },
         },
         "required": ["plan", "plan_diff", "plan_update_overview"],
     },
 )
+
 async def update_plan(args: dict[str, Any]) -> dict[str, Any]:
     h = harness()
     try:
@@ -1527,38 +1728,19 @@ async def update_plan(args: dict[str, Any]) -> dict[str, Any]:
         plan_diff = args.get("plan_diff", [])
         plan_update_overview = args.get("plan_update_overview", "")
 
-        if not isinstance(plan_items, list):
-            return ok({
-                "tool_name": "update_plan",
-                "success": False,
-                "summary": "Invalid plan: expected list",
-            })
-        if not isinstance(plan_diff, list):
-            return ok({
-                "tool_name": "update_plan",
-                "success": False,
-                "summary": "Invalid plan_diff: expected list",
-            })
-
-        h.current_plan = {"steps": plan_items}
+        plan = {"steps": plan_items}
+        h.current_plan = plan
 
         print(f"[tool] update_plan: {plan_update_overview}")
         for item in plan_items:
-            if isinstance(item, dict):
-                print(
-                    f"  [{item.get('status')}] {item.get('id')}: {item.get('description')}"
-                )
+            print(f"  [{item.get('status')}] {item.get('id')}: {item.get('description')}")
         for diff in plan_diff:
-            if isinstance(diff, dict):
-                print(f"  diff: [{diff.get('action')}] {diff.get('id')}")
+            print(f"  diff: [{diff.get('action')}] {diff.get('id')}")
 
-        summary = (
-            plan_update_overview if isinstance(plan_update_overview, str) and plan_update_overview.strip() != "" else "Plan updated"
-        )
         return ok({
             "tool_name": "update_plan",
             "success": True,
-            "summary": summary,
+            "summary": plan_update_overview if plan_update_overview else "Plan updated",
         })
     except Exception as e:
         print(f"[tool] update_plan error: {e!s}")
@@ -1571,25 +1753,53 @@ async def update_plan(args: dict[str, Any]) -> dict[str, Any]:
 
 @tool(
     "submit_response",
-    (
-        "Submit user-facing structured response and set next_status. "
-        "At least one of summary or questions is required."
-    ),
+    "Submit the user-facing response with next_status, questions, and summary. At least one of summary or questions is REQUIRED. Call this at the end of every turn.",
     {
         "type": "object",
         "properties": {
-            "summary": {"type": "string"},
-            "questions": {"type": "string"},
-            "next_status": {"type": "string", "enum": sorted(VALID_NEXT_STATUSES)},
+            "summary": {
+                "type": "string",
+                "description": "User-facing progress, responses, or next step. Use markdown bullets if needed.",
+            },
+            "questions": {
+                "type": "string",
+                "description": "User-facing questions. Put finalized question text here.",
+            },
+            "next_status": {
+                "type": "string",
+                "description": "What the agent will do next",
+                "enum": [
+                    "executing",
+                    "fixing",
+                    "thinking",
+                    "awaiting_user_response",
+                    "awaiting_cell_execution",
+                    "awaiting_user_widget_input",
+                    "done",
+                ],
+            },
             "expected_widgets": {
                 "type": "array",
                 "items": {"type": "string"},
+                "description": (
+                    "Optional list of full widget keys (<tf_id>/<widget_id>) to await "
+                    "when next_status is 'awaiting_user_widget_input'"
+                ),
             },
-            "continue": {"type": "boolean", "default": False},
+            "continue": {
+                "type": "boolean",
+                "description": (
+                    "Set to true to immediately continue to the next step without "
+                    "waiting for user input. Set to false when waiting for user input "
+                    "or when all work is complete."
+                ),
+                "default": False,
+            },
         },
         "required": ["next_status"],
     },
 )
+
 async def submit_response(args: dict[str, Any]) -> dict[str, Any]:
     h = harness()
     try:
@@ -1601,33 +1811,25 @@ async def submit_response(args: dict[str, Any]) -> dict[str, Any]:
         if questions is not None and not isinstance(questions, str):
             questions = None
 
-        if (summary is None or summary.strip() == "") and (
-            questions is None or questions.strip() == ""
-        ):
-            return ok({
-                "tool_name": "submit_response",
-                "success": False,
-                "summary": "Please provide at least one of summary or questions.",
-            })
-
         next_status = args.get("next_status")
-        if not isinstance(next_status, str) or next_status not in VALID_NEXT_STATUSES:
+        if not isinstance(next_status, str) or next_status not in {
+            "executing",
+            "fixing",
+            "thinking",
+            "awaiting_user_response",
+            "awaiting_cell_execution",
+            "awaiting_user_widget_input",
+            "done",
+        }:
+            print(f"[agent] Invalid next_status: {next_status}")
             return ok({
                 "tool_name": "submit_response",
                 "success": False,
-                "summary": "Please provide a valid next_status.",
+                "message": "Please provide a valid next_status",
             })
 
-        should_continue = bool(args.get("continue", False))
-
-        expected_widgets_arg = args.get("expected_widgets", [])
-        expected_widgets: list[str] = []
-        if isinstance(expected_widgets_arg, list):
-            expected_widgets = [
-                str(widget_key)
-                for widget_key in expected_widgets_arg
-                if isinstance(widget_key, str) and widget_key.strip() != ""
-            ]
+        should_continue = args.get("continue", False)
+        expected_widgets = args.get("expected_widgets", [])
 
         print("[tool] submit_response called with:")
         print(f"  - next_status: {next_status}")
@@ -1635,13 +1837,9 @@ async def submit_response(args: dict[str, Any]) -> dict[str, Any]:
         print(f"  - questions: {questions}")
         print(f"  - continue: {should_continue}")
         print(f"  - expected_widgets: {expected_widgets}")
-        if should_continue:
-            print(
-                "[tool] submit_response: continue=true retained for compatibility; "
-                "SDK runtime controls actual turn continuation."
-            )
 
         if should_continue and h.executing_cells:
+            print(f"[tool] Deferring auto-continue - {len(h.executing_cells)} cells still executing: {h.executing_cells}")
             h.should_auto_continue = False
             h.pending_auto_continue = True
         else:
@@ -1649,24 +1847,24 @@ async def submit_response(args: dict[str, Any]) -> dict[str, Any]:
             h.pending_auto_continue = False
 
         terminal_statuses = {"done", "awaiting_user_response"}
-        h.pause_until_user_query = (
-            not should_continue and next_status in terminal_statuses
-        )
+        if not should_continue and next_status in terminal_statuses:
+            h.pause_until_user_query = True
+        else:
+            h.pause_until_user_query = False
 
         h.current_status = next_status
         if next_status == "awaiting_user_widget_input":
-            h.expected_widgets = {widget_key: None for widget_key in expected_widgets}
-        else:
-            h.expected_widgets.clear()
+            h.expected_widgets = {str(k): None for k in expected_widgets}
 
         return ok({
             "tool_name": "submit_response",
             "success": True,
             "summary": "Response submitted successfully",
-            "next_status": next_status,
         })
     except Exception as e:
         print(f"[tool] submit_response error: {e!s}")
+        import traceback
+        traceback.print_exc()
         return ok({
             "tool_name": "submit_response",
             "success": False,
