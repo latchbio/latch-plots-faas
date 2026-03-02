@@ -1280,6 +1280,8 @@ class AgentHarness:
         usage_data: dict[str, Any] | None = None
         tool_use_index: dict[str, str] = {}
         assistant_error_type: str | None = None
+        stream_message_open = False
+        buffered_tool_messages: list[object] = []
 
         async def persist_current_assistant_message(
             *, duration_seconds: float | None = None
@@ -1317,6 +1319,20 @@ class AgentHarness:
                 assistant_blocks_by_index.clear()
 
             return True
+
+        # todo(tim): consider replacing buffer system, maybe one writer system instead
+        async def flush_buffered_tool_messages() -> None:
+            if len(buffered_tool_messages) == 0:
+                return
+
+            buffered_batch = list(buffered_tool_messages)
+            buffered_tool_messages.clear()
+            for buffered_msg in buffered_batch:
+                await self._persist_tool_blocks_from_sdk_message(
+                    msg=buffered_msg,
+                    request_id=request_id,
+                    tool_use_index=tool_use_index,
+                )
 
         await self.send({
             "type": "agent_stream_start",
@@ -1359,6 +1375,7 @@ class AgentHarness:
                     await self._capture_claude_session_id(msg.session_id)
                     event_type = msg.event.get("type")
                     if event_type == "message_start":
+                        stream_message_open = True
                         assistant_blocks_by_index.clear()
                         assistant_message_started_at = time.perf_counter()
                         message_usage = msg.event.get("message", {}).get("usage")
@@ -1385,6 +1402,8 @@ class AgentHarness:
                             duration_seconds=message_duration_seconds
                         )
                         assistant_message_started_at = None
+                        stream_message_open = False
+                        await flush_buffered_tool_messages()
                 elif isinstance(msg, ResultMessage):
                     await self._capture_claude_session_id(msg.session_id)
                     print(
@@ -1461,6 +1480,9 @@ class AgentHarness:
                         assistant_error_type = str(msg.error)
                         print(f"[agent] assistant message error={msg.error}")
                     await self._capture_claude_session_id(getattr(msg, "session_id", None))
+                    if stream_message_open or len(self.open_stream_blocks) > 0:
+                        buffered_tool_messages.append(msg)
+                        continue
                     await self._persist_tool_blocks_from_sdk_message(
                         msg=msg, request_id=request_id, tool_use_index=tool_use_index
                     )
@@ -1511,6 +1533,7 @@ class AgentHarness:
             await persist_current_assistant_message(
                 duration_seconds=max(0.0, time.perf_counter() - pending_duration_base)
             )
+            await flush_buffered_tool_messages()
 
             if terminal_error is not None:
                 try:
