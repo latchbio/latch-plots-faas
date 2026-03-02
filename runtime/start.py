@@ -36,11 +36,6 @@ env_vars = {
 }
 
 # todo(tim): clean up this key stuff once proxy working
-for key in ("AGENT_SDK_DIRECT_ANTHROPIC_KEY",):
-    value = os.environ.get(key)
-    if value:
-        env_vars[key] = value
-
 direct_key_path = latch_p / "agent-sdk-direct-anthropic-key"
 if direct_key_path.exists():
     direct_key = direct_key_path.read_text().strip()
