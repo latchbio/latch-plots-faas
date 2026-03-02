@@ -1282,6 +1282,8 @@ class AgentHarness:
         assistant_error_type: str | None = None
         stream_message_open = False
         buffered_tool_messages: list[object] = []
+        final_submit_response_reached = False
+        dropping_post_terminal_stream_message = False
 
         async def persist_current_assistant_message(
             *, duration_seconds: float | None = None
@@ -1374,6 +1376,19 @@ class AgentHarness:
                 if isinstance(msg, StreamEvent):
                     await self._capture_claude_session_id(msg.session_id)
                     event_type = msg.event.get("type")
+                    if final_submit_response_reached:
+                        if event_type == "message_start":
+                            dropping_post_terminal_stream_message = True
+                            assistant_blocks_by_index.clear()
+                            assistant_message_started_at = None
+                            stream_message_open = False
+                            self.open_stream_blocks.clear()
+                            continue
+                        if dropping_post_terminal_stream_message:
+                            if event_type == "message_stop":
+                                dropping_post_terminal_stream_message = False
+                                self.open_stream_blocks.clear()
+                            continue
                     if event_type == "message_start":
                         stream_message_open = True
                         assistant_blocks_by_index.clear()
@@ -1480,18 +1495,19 @@ class AgentHarness:
                         assistant_error_type = str(msg.error)
                         print(f"[agent] assistant message error={msg.error}")
                     await self._capture_claude_session_id(getattr(msg, "session_id", None))
+                    if not final_submit_response_reached and self.pause_until_user_query and self.current_status in {"done", "awaiting_user_response"}:
+                        final_submit_response_reached = True
+                        print("[agent] Final submit_response detected, interrupting SDK query and suppressing follow-up streamed assistant output")
+                        try:
+                            await self.client.interrupt()
+                        except Exception as e:
+                            print(f"[agent] Failed to interrupt SDK query after final submit_response: {e!s}")
                     if stream_message_open or len(self.open_stream_blocks) > 0:
                         buffered_tool_messages.append(msg)
                         continue
                     await self._persist_tool_blocks_from_sdk_message(
                         msg=msg, request_id=request_id, tool_use_index=tool_use_index
                     )
-                    if self.pause_until_user_query and self.current_status in {"done", "awaiting_user_response"}:
-                        print("[agent] Final submit_response detected, interrupting SDK query to prevent follow-up inference")
-                        try:
-                            await self.client.interrupt()
-                        except Exception as e:
-                            print(f"[agent] Failed to interrupt SDK query after final submit_response: {e!s}")
                     continue
 
             print(f"[agent] finished SDK query (request_id={request_id})")
