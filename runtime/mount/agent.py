@@ -3,7 +3,6 @@ import json
 import os
 import re
 import socket
-import subprocess  # noqa: S404
 import sys
 import time
 import traceback
@@ -16,35 +15,18 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
-# todo(tim): clean up these imports once base image updated
-try:
-    from anthropic import APIStatusError
-    from anthropic.types import MessageParam
-    from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
-    from claude_agent_sdk.types import (
-        AssistantMessage,
-        ResultMessage,
-        StreamEvent,
-        SystemMessage,
-        ToolResultBlock,
-        ToolUseBlock,
-        UserMessage,
-    )
-except ImportError:
-    print("[agent] claude_agent_sdk missing, installing...", flush=True)
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "--upgrade", "claude-agent-sdk"])
-    from anthropic import APIStatusError
-    from anthropic.types import MessageParam
-    from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
-    from claude_agent_sdk.types import (
-        AssistantMessage,
-        ResultMessage,
-        StreamEvent,
-        SystemMessage,
-        ToolResultBlock,
-        ToolUseBlock,
-        UserMessage,
-    )
+from anthropic import APIStatusError
+from anthropic.types import MessageParam
+from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
+from claude_agent_sdk.types import (
+    AssistantMessage,
+    ResultMessage,
+    StreamEvent,
+    SystemMessage,
+    ToolResultBlock,
+    ToolUseBlock,
+    UserMessage,
+)
 from tools import MCP_ALLOWED_TOOL_NAMES, MCP_SERVER_NAME, agent_tools_mcp
 from lplots import _inject
 from socketio_thread import SocketIoThread
