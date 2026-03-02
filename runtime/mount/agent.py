@@ -1470,7 +1470,6 @@ class AgentHarness:
                             await self.client.interrupt()
                         except Exception as e:
                             print(f"[agent] Failed to interrupt SDK query after final submit_response: {e!s}")
-                        break
                     continue
 
             print(f"[agent] finished SDK query (request_id={request_id})")
