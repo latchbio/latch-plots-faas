@@ -7,7 +7,7 @@ import sys
 import time
 import traceback
 import uuid
-from collections.abc import Callable, Iterable
+from collections.abc import Iterable
 from contextlib import suppress
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -35,8 +35,6 @@ from utils import auth_token_sdk, gql_query, nucleus_url, sdk_token
 sys.stdout.reconfigure(line_buffering=True)
 
 skip_db_history = os.environ.get("AGENT_SKIP_DB_HISTORY") == "1"
-
-cache_chunk_size = 20
 
 reactivity_ready_statuses = {"ran", "ok", "success", "error"}
 
@@ -80,14 +78,11 @@ class AgentHarness:
     system_prompt: str | None = None
     pending_operations: dict[str, asyncio.Future] = field(default_factory=dict)
     executing_cells: set[str] = field(default_factory=set)
-    tools: list[dict[str, object]] = field(default_factory=list)
-    tool_map: dict[str, Callable] = field(default_factory=dict)
     operation_counter: int = 0
     current_request_id: str | None = None
     should_auto_continue: bool = False
     pending_auto_continue: bool = False
     pause_until_user_query: bool = False
-    pending_tool_calls: set[str] = field(default_factory=set)
 
     pending_messages: asyncio.Queue = field(default_factory=asyncio.Queue)
     conversation_task: asyncio.Task | None = None
@@ -99,8 +94,6 @@ class AgentHarness:
     behavior: Behavior = Behavior.step_by_step
     latest_notebook_state: str | None = None
     current_plan: dict | None = None
-    buffer: list[str] = field(default_factory=list)
-    summarize_tasks: set[asyncio.Task] = field(default_factory=set)
     in_memory_history: list[dict] = field(default_factory=list)
     mcp_servers: dict[str, object] = field(
         default_factory=lambda: {MCP_SERVER_NAME: agent_tools_mcp}
@@ -475,13 +468,7 @@ class AgentHarness:
                 if isinstance(tool_use_id, str):
                     tool_name = tool_use_index.get(tool_use_id)
                     content = block.get("content")
-                    if (
-                        isinstance(tool_name, str)
-                        and (
-                            isinstance(content, str)
-                            or isinstance(content, list)
-                        )
-                    ):
+                    if isinstance(tool_name, str) and isinstance(content, (str, list)):
                         tool_result_block_with_added_fields["content"] = (
                             self._build_generic_tool_result_content(
                                 tool_name=tool_name,
@@ -735,9 +722,6 @@ class AgentHarness:
             ),
             "context_limit": 200_000,
         })
-
-    def _current_sdk_session_id(self) -> str:
-        return self.agent_session_id or "default"
 
     def _normalize_session_id(self, raw_session_id: object) -> str | None:
         if raw_session_id is None:
@@ -1129,7 +1113,6 @@ class AgentHarness:
 
         self.pause_until_user_query = False
         self.executing_cells.clear()
-        self.pending_tool_calls.clear()
         self.expected_widgets.clear()
         self.open_stream_blocks.clear()
         self.current_request_id = None
@@ -1250,8 +1233,8 @@ class AgentHarness:
         request_id: str | None,
     ) -> None:
         assert self.client is not None
+        assert self.agent_session_id is not None
 
-        session_id = self._current_sdk_session_id()
         self.open_stream_blocks.clear()
         run_started_at = time.perf_counter()
         assistant_blocks_by_index: dict[int, dict[str, object]] = {}
@@ -1325,11 +1308,11 @@ class AgentHarness:
 
         try:
             print(
-                f"[agent] starting SDK query (request_id={request_id}, session_id={session_id})"
+                f"[agent] starting SDK query (request_id={request_id}, session_id={self.agent_session_id})"
             )
             try:
                 await asyncio.wait_for(
-                    self.client.query(prompt=prompt, session_id=session_id), timeout=10.0
+                    self.client.query(prompt=prompt, session_id=self.agent_session_id), timeout=10.0
                 )
             except TimeoutError:
                 terminal_error = "Timed out submitting prompt to Claude runtime"
@@ -1340,10 +1323,10 @@ class AgentHarness:
                 })
                 return
             print(f"[agent] SDK query submitted (request_id={request_id})")
-            receive_iter = self.client.receive_response().__aiter__()
+            receive_iter = aiter(self.client.receive_response())
             while True:
                 try:
-                    msg = await asyncio.wait_for(receive_iter.__anext__(), timeout=90.0)
+                    msg = await asyncio.wait_for(anext(receive_iter), timeout=90.0)
                 except StopAsyncIteration:
                     break
                 except TimeoutError:
@@ -1454,7 +1437,7 @@ class AgentHarness:
                             "error": agent_error_message,
                             "fatal": False,
                         })
-                    # todo(tim): reconsider if needed 
+                    # todo(tim): reconsider if needed
                     elif (
                         len(assistant_blocks_by_index) == 0
                         and not persisted_assistant_message_this_turn
@@ -1588,40 +1571,6 @@ class AgentHarness:
             return
 
         await self._run_query(prompt=turn_prompt, request_id=request_id)
-
-    # async def _run_quick_inference(self, prompt: str) -> str:
-    #     messages = [
-    #         {
-    #             "role": "user",
-    #             "content": prompt
-    #             + "\n\nDo not use any markdown formatting. If the content does not contain a clear reasoning process, provide a best-effort summary of the available text. Do not return meta-commentary.",
-    #         }
-    #     ]
-
-    #     try:
-    #         msg = await self.client.messages.create(
-    #             model="claude-haiku-4-5-20251001", max_tokens=100, messages=messages
-    #         )
-    #         return msg.content[0].text
-
-    #     except Exception as e:
-    #         print(f"[agent] Failed to run quick inference: {e}")
-
-    #         return ""
-
-    # async def _summarize_and_send_chunk(self, text: str, block_index: int) -> None:
-    #     prompt = f"Summarize the most recent thoughts in this reasoning process into a brief, active phrase (2-6 words). Focus on spatial analysis tasks, protocol verification, or scientific reasoning currently being analyzed. If no clear reasoning is present, summarize the general intent. Examples: 'Verifying widget parameters', 'Analyzing QC metrics', 'Checking protocol compliance'.\n\nThinking:\n{text}"
-    #     summary = await self._run_quick_inference(prompt)
-
-    #     if summary.strip() != "":
-    #         await self.send({
-    #             "type": "agent_stream_delta",
-    #             "block_index": block_index,
-    #             "block_type": "thinking_summary",
-    #             "delta": summary,
-    #         })
-
-    _context_init_task: asyncio.Task | None = None
 
     #existing
     async def handle_init(self, msg: dict[str, object]) -> None:
