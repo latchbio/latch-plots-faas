@@ -35,7 +35,7 @@ env_vars = {
     "PATH": "/opt/mamba/envs/plots-faas/bin:" + os.environ["PATH"],
 }
 
-# todo(tim): clean up this key stuff once proxy working
+# todo(tim): cleanup this key stuff once proxy working
 direct_key_path = latch_p / "agent-sdk-direct-anthropic-key"
 if direct_key_path.exists():
     direct_key = direct_key_path.read_text().strip()
