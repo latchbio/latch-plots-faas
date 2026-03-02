@@ -1280,6 +1280,7 @@ class AgentHarness:
         usage_data: dict[str, Any] | None = None
         tool_use_index: dict[str, str] = {}
         assistant_error_type: str | None = None
+        interrupted_for_final_submit_response = False
 
         async def persist_current_assistant_message(
             *, duration_seconds: float | None = None
@@ -1392,6 +1393,14 @@ class AgentHarness:
                         f"subtype={msg.subtype} is_error={msg.is_error} result={msg.result!r}"
                     )
                     if msg.is_error:
+                        if interrupted_for_final_submit_response:
+                            print(
+                                "[agent] Ignoring expected SDK interruption after final submit_response"
+                            )
+                            terminal_error = None
+                            stream_complete_error = None
+                            break
+
                         terminal_error = msg.result if msg.result is not None else "Claude query failed"
                         if (
                             isinstance(msg.result, str)
@@ -1464,6 +1473,14 @@ class AgentHarness:
                     await self._persist_tool_blocks_from_sdk_message(
                         msg=msg, request_id=request_id, tool_use_index=tool_use_index
                     )
+                    if not interrupted_for_final_submit_response and self.pause_until_user_query and self.current_status in {"done", "awaiting_user_response"}:
+                        print("[agent] Final submit_response detected, interrupting SDK query to prevent follow-up inference")
+                        interrupted_for_final_submit_response = True
+                        try:
+                            await self.client.interrupt()
+                        except Exception as e:
+                            interrupted_for_final_submit_response = False
+                            print(f"[agent] Failed to interrupt SDK query after final submit_response: {e!s}")
                     continue
 
             print(f"[agent] finished SDK query (request_id={request_id})")
