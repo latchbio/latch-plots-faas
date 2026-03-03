@@ -729,7 +729,9 @@ async def start_kernel_proc() -> None:
         preexec_fn=lambda: os.nice(1),
     )
 
-    _ = Path(f"/proc/{k_proc.proc}/oom_score_adj").write_text("100\n", encoding="utf-8")
+    _ = Path(f"/proc/{k_proc.proc.pid}/oom_score_adj").write_text(
+        "100\n", encoding="utf-8"
+    )
 
     k_state: KernelState | None = None
     try:
