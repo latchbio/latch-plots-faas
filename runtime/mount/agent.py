@@ -115,7 +115,7 @@ class AgentHarness:
             "session_id": str(self.agent_session_id) if self.agent_session_id is not None else None,
             **({"request_id": request_id} if request_id else {}),
         })
-    
+
     async def _fetch_history_from_db(self) -> list[dict]:
         if skip_db_history:
             return self.in_memory_history
@@ -240,7 +240,7 @@ class AgentHarness:
         reordered.extend(deferred)
 
         print(f"[agent] Built {len(reordered)} messages from DB")
-        
+
         return reordered
 
     
@@ -1595,7 +1595,6 @@ class AgentHarness:
         )
         self._start_conversation_loop()
 
-    
     async def handle_query(self, msg: dict[str, object]) -> None:
         query = msg.get("query", "")
         request_id = msg.get("request_id")
@@ -1678,8 +1677,7 @@ class AgentHarness:
             )
         except Exception as e:
             print(f"[agent] Failed to persist cancellation history: {e!s}")
-
-    
+ 
     async def get_full_prompt(self) -> dict:
         self.system_prompt = (context_root.parent / "system_prompt.md").read_text()
         messages = await self._build_messages_from_db()
@@ -1710,7 +1708,6 @@ class AgentHarness:
             else "Interact with agent to populate notebook state.",
             "tree": tree_content,
         }
-
     
     async def update_system_prompt(self, msg: dict[str, object]) -> dict:
         assert self.client is not None
@@ -1838,7 +1835,7 @@ class AgentHarness:
             await self.send({
                 "type": "agent_action_response",
                 "tx_id": tx_id,
-                **result,
+                **result
             })
         elif msg_type == "seed_plan_from_history":
             print("[agent] seed_plan_from_history received")
