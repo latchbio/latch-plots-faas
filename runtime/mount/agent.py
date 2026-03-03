@@ -1065,7 +1065,7 @@ class AgentHarness:
                     *self.mcp_allowed_tools,
                     *SDK_BUILTIN_ALLOWED_TOOLS,
                 ],
-                permission_mode="bypassPermissions",
+                permission_mode="acceptEdits",
                 model="claude-opus-4-6",
                 thinking={"type": "adaptive"},
                 resume=resume_session_id,
