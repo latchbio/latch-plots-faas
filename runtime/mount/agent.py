@@ -340,11 +340,7 @@ class AgentHarness:
         if isinstance(content, str):
             return content
         for block in content:
-            if (
-                isinstance(block, dict)
-                and block.get("type") == "text"
-                and isinstance(block.get("text"), str)
-            ):
+            if isinstance(block, dict) and block.get("type") == "text" and isinstance(block.get("text"), str):
                 return block["text"]
         return None
 
@@ -787,10 +783,7 @@ class AgentHarness:
             msg = await self.pending_messages.get()
             msg_type = msg.get("type")
 
-            if (
-                self.pause_until_user_query
-                and msg_type in {"resume", "cell_result", "set_widget_value"}
-            ):
+            if self.pause_until_user_query and msg_type in {"resume", "cell_result", "set_widget_value"}:
                 print(f"[agent] Suppressing follow-up message type={msg_type}")
                 continue
 
@@ -1392,10 +1385,7 @@ class AgentHarness:
                     )
                     if msg.is_error:
                         terminal_error = msg.result if msg.result is not None else "Claude query failed"
-                        if (
-                            isinstance(msg.result, str)
-                            and "prompt is too long" in msg.result.lower()
-                        ):
+                        if isinstance(msg.result, str) and "prompt is too long" in msg.result.lower():
                             stream_complete_error = {
                                 "message": (
                                     "This conversation is too long for the agent to continue. "
@@ -1438,12 +1428,7 @@ class AgentHarness:
                             "fatal": False,
                         })
                     # todo(tim): reconsider if needed
-                    elif (
-                        len(assistant_blocks_by_index) == 0
-                        and not persisted_assistant_message_this_turn
-                        and isinstance(msg.result, str)
-                        and msg.result != ""
-                    ):
+                    elif len(assistant_blocks_by_index) == 0 and not persisted_assistant_message_this_turn and isinstance(msg.result, str) and msg.result != "":
                         assistant_blocks_by_index[0] = {
                             "type": "text",
                             "text": msg.result,
@@ -1838,10 +1823,7 @@ class AgentHarness:
                     "thinking",
                     "fixing",
                 }
-                if (
-                    self.current_status is not None
-                    and self.current_status not in execution_statuses
-                ):
+                if self.current_status is not None and self.current_status not in execution_statuses:
                     print(
                         f"        Not adding cell {cell_id} result because {self.current_status}"
                     )
