@@ -76,7 +76,6 @@ def harness():
         "required": ["position", "code", "title", "action_summary"],
     },
 )
-
 async def create_cell(args: dict[str, Any]) -> dict[str, Any]:
     h = harness()
     position = args["position"]
@@ -147,7 +146,6 @@ async def create_cell(args: dict[str, Any]) -> dict[str, Any]:
         "required": ["position", "code", "title", "action_summary"],
     },
 )
-
 async def create_markdown_cell(args: dict[str, Any]) -> dict[str, Any]:
     h = harness()
     position = args["position"]
@@ -203,7 +201,6 @@ async def create_markdown_cell(args: dict[str, Any]) -> dict[str, Any]:
         "required": ["cell_id", "new_code", "title"],
     },
 )
-
 async def edit_cell(args: dict[str, Any]) -> dict[str, Any]:
     h = harness()
     cell_id = args["cell_id"]
@@ -257,7 +254,6 @@ async def edit_cell(args: dict[str, Any]) -> dict[str, Any]:
         "required": ["cell_id", "title", "action_summary"],
     },
 )
-
 async def run_cell(args: dict[str, Any]) -> dict[str, Any]:
     h = harness()
     cell_id = args["cell_id"]
@@ -265,11 +261,7 @@ async def run_cell(args: dict[str, Any]) -> dict[str, Any]:
     action_summary = args["action_summary"]
 
     params = {"cell_id": cell_id}
-    await h.send({
-        "type": "agent_action",
-        "action": "run_cell",
-        "params": params,
-    })
+    await h.send({"type": "agent_action", "action": "run_cell", "params": params})
     h.executing_cells.add(cell_id)
 
     return ok({
@@ -298,7 +290,6 @@ async def run_cell(args: dict[str, Any]) -> dict[str, Any]:
         "required": ["cell_id", "title", "action_summary"],
     },
 )
-
 async def delete_cell(args: dict[str, Any]) -> dict[str, Any]:
     h = harness()
     cell_id = args["cell_id"]
@@ -311,7 +302,9 @@ async def delete_cell(args: dict[str, Any]) -> dict[str, Any]:
         remaining = result.get("remaining_cells", [])
         cell_count = result.get("cell_count", 0)
         if remaining:
-            cell_list = ", ".join([f"{c['index']}: {c['cell_type']}" for c in remaining[:5]])
+            cell_list = ", ".join([
+                f"{c['index']}: {c['cell_type']}" for c in remaining[:5]
+            ])
             if len(remaining) > 5:
                 cell_list += f", ... ({len(remaining) - 5} more)"
             msg = f"Cell {cell_id} deleted. {cell_count} cells remain: [{cell_list}]"
@@ -351,7 +344,6 @@ async def delete_cell(args: dict[str, Any]) -> dict[str, Any]:
         "required": ["cell_id", "title", "action_summary"],
     },
 )
-
 async def stop_cell(args: dict[str, Any]) -> dict[str, Any]:
     h = harness()
     cell_id = args["cell_id"]
@@ -384,10 +376,8 @@ async def stop_cell(args: dict[str, Any]) -> dict[str, Any]:
     "Delete all cells in the notebook efficiently.",
     {"type": "object", "properties": {}},
 )
-
-async def delete_all_cells(args: dict[str, Any]) -> dict[str, Any]:
+async def delete_all_cells(args: dict[str, Any]) -> dict[str, Any]:  # noqa: ARG001
     h = harness()
-    _ = args
 
     context_result = await h.atomic_operation("get_context", {})
     if context_result.get("status") != "success":
@@ -432,7 +422,6 @@ async def delete_all_cells(args: dict[str, Any]) -> dict[str, Any]:
         "required": ["name"],
     },
 )
-
 async def rename_notebook(args: dict[str, Any]) -> dict[str, Any]:
     h = harness()
     name = args["name"]
@@ -471,7 +460,6 @@ async def rename_notebook(args: dict[str, Any]) -> dict[str, Any]:
         "required": ["position", "display_name"],
     },
 )
-
 async def create_tab(args: dict[str, Any]) -> dict[str, Any]:
     h = harness()
     position = args["position"]
@@ -525,14 +513,15 @@ async def create_tab(args: dict[str, Any]) -> dict[str, Any]:
         "required": ["tab_id", "new_name"],
     },
 )
-
 async def rename_tab(args: dict[str, Any]) -> dict[str, Any]:
     h = harness()
     tab_id = args["tab_id"]
     new_name = args["new_name"]
 
     print(f'[tool] rename_tab tab_id={tab_id} new_name="{new_name}"')
-    result = await h.atomic_operation("rename_tab", {"tab_id": tab_id, "new_name": new_name})
+    result = await h.atomic_operation(
+        "rename_tab", {"tab_id": tab_id, "new_name": new_name}
+    )
     if result.get("status") == "success":
         target = "Tab 1" if tab_id == "DEFAULT" else f"tab {tab_id}"
         msg = f"Renamed {target} to '{new_name}'"
@@ -570,7 +559,6 @@ async def rename_tab(args: dict[str, Any]) -> dict[str, Any]:
         "required": ["template_version_id"],
     },
 )
-
 async def restore_checkpoint(args: dict[str, Any]) -> dict[str, Any]:
     h = harness()
     template_version_id = args.get("template_version_id")
@@ -602,11 +590,12 @@ async def restore_checkpoint(args: dict[str, Any]) -> dict[str, Any]:
     ),
     {
         "type": "object",
-        "properties": {"code": {"type": "string", "description": "Python code to execute"}},
+        "properties": {
+            "code": {"type": "string", "description": "Python code to execute"}
+        },
         "required": ["code"],
     },
 )
-
 async def execute_code(args: dict[str, Any]) -> dict[str, Any]:
     h = harness()
     code = args.get("code")
@@ -647,7 +636,6 @@ async def execute_code(args: dict[str, Any]) -> dict[str, Any]:
         "required": ["key"],
     },
 )
-
 async def get_global_info(args: dict[str, Any]) -> dict[str, Any]:
     h = harness()
     key = args.get("key")
@@ -697,7 +685,6 @@ async def get_global_info(args: dict[str, Any]) -> dict[str, Any]:
         "required": ["widget_key"],
     },
 )
-
 async def capture_widget_image(args: dict[str, Any]) -> dict[str, Any]:
     h = harness()
     widget_key = args.get("widget_key")
@@ -709,7 +696,9 @@ async def capture_widget_image(args: dict[str, Any]) -> dict[str, Any]:
         })
 
     print(f"[tool] capture_widget_image: {widget_key}")
-    result = await h.atomic_operation("capture_widget_image", {"widget_key": widget_key})
+    result = await h.atomic_operation(
+        "capture_widget_image", {"widget_key": widget_key}
+    )
     if result.get("status") == "success":
         widget_type = result.get("widget_type", "unknown")
         metadata = result.get("metadata", {})
@@ -755,7 +744,6 @@ async def capture_widget_image(args: dict[str, Any]) -> dict[str, Any]:
         "required": ["key", "value", "action_summary", "label"],
     },
 )
-
 async def set_widget(args: dict[str, Any]) -> dict[str, Any]:
     h = harness()
     key = args.get("key")
@@ -776,7 +764,9 @@ async def set_widget(args: dict[str, Any]) -> dict[str, Any]:
         })
 
     print(f"[tool] set_widget key={key} value={value!r}")
-    result = await h.atomic_operation("set_widget", {"key": key, "value": json.dumps(value)})
+    result = await h.atomic_operation(
+        "set_widget", {"key": key, "value": json.dumps(value)}
+    )
     if result.get("status") == "success":
         return ok({
             "tool_name": "set_widget",
@@ -840,7 +830,11 @@ async def set_widget(args: dict[str, Any]) -> dict[str, Any]:
                                                     "description": "Not equal operation",
                                                 },
                                                 "value": {
-                                                    "type": ["string", "number", "null"],
+                                                    "type": [
+                                                        "string",
+                                                        "number",
+                                                        "null",
+                                                    ],
                                                     "description": "Value to compare against",
                                                 },
                                             },
@@ -910,7 +904,6 @@ async def set_widget(args: dict[str, Any]) -> dict[str, Any]:
         "required": ["widget_key", "filters"],
     },
 )
-
 async def h5_filter_by(args: dict[str, Any]) -> dict[str, Any]:
     h = harness()
     widget_key = args.get("widget_key")
@@ -926,7 +919,9 @@ async def h5_filter_by(args: dict[str, Any]) -> dict[str, Any]:
             })
 
     print(f"[tool] h5_filter_by widget_key={widget_key} filters={filters}")
-    result = await h.atomic_operation("h5_filter_by", {"widget_key": widget_key, "filters": filters})
+    result = await h.atomic_operation(
+        "h5_filter_by", {"widget_key": widget_key, "filters": filters}
+    )
     if result.get("status") == "success":
         return ok({
             "tool_name": "h5_filter_by",
@@ -1003,7 +998,6 @@ async def h5_filter_by(args: dict[str, Any]) -> dict[str, Any]:
         "required": ["widget_key", "color_by"],
     },
 )
-
 async def h5_color_by(args: dict[str, Any]) -> dict[str, Any]:
     h = harness()
     widget_key = args.get("widget_key")
@@ -1019,7 +1013,9 @@ async def h5_color_by(args: dict[str, Any]) -> dict[str, Any]:
             })
 
     print(f"[tool] h5_color_by widget_key={widget_key} color_by={color_by}")
-    result = await h.atomic_operation("h5_color_by", {"widget_key": widget_key, "color_by": color_by})
+    result = await h.atomic_operation(
+        "h5_color_by", {"widget_key": widget_key, "color_by": color_by}
+    )
     if result.get("status") == "success":
         return ok({
             "tool_name": "h5_color_by",
@@ -1052,7 +1048,6 @@ async def h5_color_by(args: dict[str, Any]) -> dict[str, Any]:
         "required": ["widget_key"],
     },
 )
-
 async def h5_refresh(args: dict[str, Any]) -> dict[str, Any]:
     h = harness()
     widget_key = args.get("widget_key")
@@ -1092,12 +1087,13 @@ async def h5_refresh(args: dict[str, Any]) -> dict[str, Any]:
         "required": ["widget_key", "obsm_key"],
     },
 )
-
 async def h5_set_selected_obsm_key(args: dict[str, Any]) -> dict[str, Any]:
     h = harness()
     widget_key = args.get("widget_key")
     obsm_key = args.get("obsm_key")
-    print(f"[tool] h5_set_selected_obsm_key widget_key={widget_key} obsm_key={obsm_key}")
+    print(
+        f"[tool] h5_set_selected_obsm_key widget_key={widget_key} obsm_key={obsm_key}"
+    )
     result = await h.atomic_operation(
         "h5_set_selected_obsm_key", {"widget_key": widget_key, "obsm_key": obsm_key}
     )
@@ -1139,7 +1135,6 @@ async def h5_set_selected_obsm_key(args: dict[str, Any]) -> dict[str, Any]:
         "required": ["widget_key", "node_id"],
     },
 )
-
 async def h5_set_background_image(args: dict[str, Any]) -> dict[str, Any]:
     h = harness()
     widget_key = args.get("widget_key")
@@ -1183,16 +1178,14 @@ async def h5_set_background_image(args: dict[str, Any]) -> dict[str, Any]:
         "required": ["widget_key", "background_image_id"],
     },
 )
-
 async def h5_open_image_aligner(args: dict[str, Any]) -> dict[str, Any]:
     h = harness()
     widget_key = args.get("widget_key")
     background_image_id = args.get("background_image_id")
-    print(f"[tool] h5_open_image_aligner widget_key={widget_key} background_image_id={background_image_id}")
-    params = {
-        "widget_key": widget_key,
-        "background_image_id": background_image_id,
-    }
+    print(
+        f"[tool] h5_open_image_aligner widget_key={widget_key} background_image_id={background_image_id}"
+    )
+    params = {"widget_key": widget_key, "background_image_id": background_image_id}
     result = await h.atomic_operation("h5_open_image_aligner", params)
     if result.get("status") == "success":
         return ok({
@@ -1225,7 +1218,6 @@ async def h5_open_image_aligner(args: dict[str, Any]) -> dict[str, Any]:
         "required": ["widget_key"],
     },
 )
-
 async def h5_autoscale(args: dict[str, Any]) -> dict[str, Any]:
     h = harness()
     widget_key = args.get("widget_key")
@@ -1274,14 +1266,15 @@ async def h5_autoscale(args: dict[str, Any]) -> dict[str, Any]:
         "required": ["widget_key", "direction"],
     },
 )
-
 async def h5_zoom(args: dict[str, Any]) -> dict[str, Any]:
     h = harness()
     widget_key = args.get("widget_key")
     direction = args.get("direction")
     percentage = args.get("percentage")
 
-    print(f"[tool] h5_zoom widget_key={widget_key} direction={direction} percentage={percentage}")
+    print(
+        f"[tool] h5_zoom widget_key={widget_key} direction={direction} percentage={percentage}"
+    )
     params: dict[str, object] = {"widget_key": widget_key, "direction": direction}
     if percentage is not None:
         params["percentage"] = percentage
@@ -1330,7 +1323,6 @@ async def h5_zoom(args: dict[str, Any]) -> dict[str, Any]:
         "required": ["widget_key", "background_image_id", "hidden"],
     },
 )
-
 async def h5_set_background_image_visibility(args: dict[str, Any]) -> dict[str, Any]:
     h = harness()
     widget_key = args.get("widget_key")
@@ -1393,8 +1385,9 @@ async def h5_set_background_image_visibility(args: dict[str, Any]) -> dict[str, 
         "required": ["widget_key", "obs_key", "category"],
     },
 )
-
-async def h5_add_selected_cells_to_categorical_obs(args: dict[str, Any]) -> dict[str, Any]:
+async def h5_add_selected_cells_to_categorical_obs(
+    args: dict[str, Any],
+) -> dict[str, Any]:
     h = harness()
     widget_key = args.get("widget_key")
     obs_key = args.get("obs_key")
@@ -1444,7 +1437,6 @@ async def h5_add_selected_cells_to_categorical_obs(args: dict[str, Any]) -> dict
         "required": ["widget_key", "opacity"],
     },
 )
-
 async def h5_set_marker_opacity(args: dict[str, Any]) -> dict[str, Any]:
     h = harness()
     widget_key = args.get("widget_key")
@@ -1502,7 +1494,6 @@ async def h5_set_marker_opacity(args: dict[str, Any]) -> dict[str, Any]:
         "required": ["widget_key", "obs_key", "operation"],
     },
 )
-
 async def h5_manage_obs(args: dict[str, Any]) -> dict[str, Any]:
     h = harness()
     widget_key = args.get("widget_key")
@@ -1514,11 +1505,7 @@ async def h5_manage_obs(args: dict[str, Any]) -> dict[str, Any]:
         "[tool] h5_manage_obs "
         f"widget_key={widget_key} obs_key={obs_key} operation={operation} obs_type={obs_type}"
     )
-    params = {
-        "widget_key": widget_key,
-        "obs_key": obs_key,
-        "operation": operation,
-    }
+    params = {"widget_key": widget_key, "obs_key": obs_key, "operation": operation}
     if operation == "add":
         params["obs_type"] = obs_type
 
@@ -1558,8 +1545,14 @@ async def h5_manage_obs(args: dict[str, Any]) -> dict[str, Any]:
     {
         "type": "object",
         "properties": {
-            "package_code": {"type": "string", "description": "Multi-use package invite code."},
-            "package_version_id": {"type": "string", "description": "Package version ID."},
+            "package_code": {
+                "type": "string",
+                "description": "Multi-use package invite code.",
+            },
+            "package_version_id": {
+                "type": "string",
+                "description": "Package version ID.",
+            },
             "redemption_reason": {
                 "type": "string",
                 "description": (
@@ -1571,7 +1564,6 @@ async def h5_manage_obs(args: dict[str, Any]) -> dict[str, Any]:
         "required": ["package_code", "package_version_id", "redemption_reason"],
     },
 )
-
 async def redeem_package(args: dict[str, Any]) -> dict[str, Any]:
     h = harness()
     package_code = args.get("package_code")
@@ -1592,7 +1584,10 @@ async def redeem_package(args: dict[str, Any]) -> dict[str, Any]:
     print("[tool] redeem_package")
     result = await h.atomic_operation(
         "redeem_package",
-        {"package_code": str(package_code), "package_version_id": str(package_version_id)},
+        {
+            "package_code": str(package_code),
+            "package_version_id": str(package_version_id),
+        },
     )
     if result.get("status") == "success":
         return ok({
@@ -1637,7 +1632,6 @@ async def redeem_package(args: dict[str, Any]) -> dict[str, Any]:
         "required": ["keyword"],
     },
 )
-
 async def smart_ui_spotlight(args: dict[str, Any]) -> dict[str, Any]:
     h = harness()
     keyword = args.get("keyword")
@@ -1682,8 +1676,14 @@ async def smart_ui_spotlight(args: dict[str, Any]) -> dict[str, Any]:
                 "items": {
                     "type": "object",
                     "properties": {
-                        "id": {"type": "string", "description": "Unique step identifier"},
-                        "description": {"type": "string", "description": "What this step does"},
+                        "id": {
+                            "type": "string",
+                            "description": "Unique step identifier",
+                        },
+                        "description": {
+                            "type": "string",
+                            "description": "What this step does",
+                        },
                         "status": {
                             "type": "string",
                             "enum": ["todo", "in_progress", "done", "cancelled"],
@@ -1699,7 +1699,10 @@ async def smart_ui_spotlight(args: dict[str, Any]) -> dict[str, Any]:
                 "items": {
                     "type": "object",
                     "properties": {
-                        "id": {"type": "string", "description": "Unique step identifier"},
+                        "id": {
+                            "type": "string",
+                            "description": "Unique step identifier",
+                        },
                         "action": {
                             "type": "string",
                             "enum": ["add", "update", "complete", "remove"],
@@ -1720,7 +1723,6 @@ async def smart_ui_spotlight(args: dict[str, Any]) -> dict[str, Any]:
         "required": ["plan", "plan_diff", "plan_update_overview"],
     },
 )
-
 async def update_plan(args: dict[str, Any]) -> dict[str, Any]:
     h = harness()
     try:
@@ -1733,7 +1735,9 @@ async def update_plan(args: dict[str, Any]) -> dict[str, Any]:
 
         print(f"[tool] update_plan: {plan_update_overview}")
         for item in plan_items:
-            print(f"  [{item.get('status')}] {item.get('id')}: {item.get('description')}")
+            print(
+                f"  [{item.get('status')}] {item.get('id')}: {item.get('description')}"
+            )
         for diff in plan_diff:
             print(f"  diff: [{diff.get('action')}] {diff.get('id')}")
 
@@ -1799,7 +1803,6 @@ async def update_plan(args: dict[str, Any]) -> dict[str, Any]:
         "required": ["next_status"],
     },
 )
-
 async def submit_response(args: dict[str, Any]) -> dict[str, Any]:
     h = harness()
     try:
@@ -1839,7 +1842,9 @@ async def submit_response(args: dict[str, Any]) -> dict[str, Any]:
         print(f"  - expected_widgets: {expected_widgets}")
 
         if should_continue and h.executing_cells:
-            print(f"[tool] Deferring auto-continue - {len(h.executing_cells)} cells still executing: {h.executing_cells}")
+            print(
+                f"[tool] Deferring auto-continue - {len(h.executing_cells)} cells still executing: {h.executing_cells}"
+            )
             h.should_auto_continue = False
             h.pending_auto_continue = True
         else:
@@ -1864,12 +1869,14 @@ async def submit_response(args: dict[str, Any]) -> dict[str, Any]:
     except Exception as e:
         print(f"[tool] submit_response error: {e!s}")
         import traceback
+
         traceback.print_exc()
         return ok({
             "tool_name": "submit_response",
             "success": False,
             "summary": f"Error submitting response: {e!s}",
         })
+
 
 all_tools = [
     create_cell,
