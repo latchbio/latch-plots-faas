@@ -41,7 +41,6 @@ reactivity_ready_statuses = {"ran", "ok", "success", "error"}
 sandbox_root = os.environ.get("LATCH_SANDBOX_ROOT")
 if sandbox_root:
     import pathlib
-
     original_path_new = pathlib.Path.__new__
 
     def patched_path_new(cls, *args, **kwargs):
@@ -110,14 +109,12 @@ class AgentHarness:
 
         await self.conn.send(msg)
 
-    
     async def _notify_history_updated(self, *, request_id: str | None = None) -> None:
         await self.send({
             "type": "agent_history_updated",
             "session_id": str(self.agent_session_id) if self.agent_session_id is not None else None,
             **({"request_id": request_id} if request_id else {}),
         })
-
     
     async def _fetch_history_from_db(self) -> list[dict]:
         if skip_db_history:
@@ -141,7 +138,6 @@ class AgentHarness:
             "template_version_id": n.get("templateVersionId"),
         } for n in nodes]
 
-    
     async def _build_messages_from_db(self) -> list[MessageParam]:
         history = await self._fetch_history_from_db()
         anthropic_messages: list[MessageParam] = []
@@ -161,7 +157,7 @@ class AgentHarness:
                         inline_widget = f"<Widget label=\"{widget['label']}\" type=\"{widget['widgetType']}\" widget_key=\"{widget['widgetKey']}\" cell=\"{widget['cellDisplayName']}\"/>"
                         content = content.replace(ref_pattern, inline_widget)
 
-                if role == "user" and isinstance(content, dict) and content.get("type") == "cell_result":
+                if (role == "user" and isinstance(content, dict) and content.get("type") == "cell_result"):
                     exception = content.get("exception")
                     logs = content.get("logs")
                     message = content.get("message", "Cell execution completed")
@@ -198,7 +194,7 @@ class AgentHarness:
                     checkpoint_content = f"[auto-generated metadata] template_version_id={template_version_id}"
                     anthropic_messages.append({"role": "user", "content": checkpoint_content})
 
-                if role in {"user", "assistant"} and isinstance(content, (str, list)):
+                if role in {"user", "assistant"} and (isinstance(content, (str, list))):
                     anthropic_messages.append({"role": role, "content": content})
 
             elif t == "cancellation":
@@ -221,8 +217,8 @@ class AgentHarness:
 
             if len(pending_tool_ids) > 0 and role == "user":
                 is_tool_result_msg = isinstance(content, list) and any(
-                    isinstance(block, dict) and block.get("type") == "tool_result"
-                    for block in content
+                    isinstance(b, dict) and b.get("type") == "tool_result"
+                    for b in content
                 )
                 if is_tool_result_msg:
                     reordered.append(msg)
@@ -242,7 +238,9 @@ class AgentHarness:
             reordered.append(msg)
 
         reordered.extend(deferred)
+
         print(f"[agent] Built {len(reordered)} messages from DB")
+        
         return reordered
 
     
@@ -699,8 +697,7 @@ class AgentHarness:
             if ret is not None:
                 duration = time.time() - start_time
                 print(f"[agent] {action} took {duration:.3f}s")
-
-    
+ 
     async def handle_action_response(self, msg: dict[str, object]) -> None:
         tx_id = msg.get("tx_id")
         fut = self.pending_operations.get(tx_id)
@@ -1727,17 +1724,17 @@ class AgentHarness:
         self.client.options.system_prompt = new_content
 
         full_prompt = await self.get_full_prompt()
-        return {"status": "success", **full_prompt}
+        return {
+            "status": "success",
+            **full_prompt,
+        }
 
     
     async def accept(self) -> None:
         msg = await self.conn.recv()
         msg_type = msg.get("type")
         msg_request_id = msg.get("request_id")
-
-        print(
-            f"[agent] accept: received message type={msg_type} (request_id={msg_request_id})"
-        )
+        print(f"[agent] accept: received message type={msg_type} (request_id={msg_request_id})")
 
         if msg_type == "init":
             print(f"[agent] Message: {msg_type}")
@@ -1746,15 +1743,11 @@ class AgentHarness:
             query = msg.get("query", "")
             query_preview = query[:60] + "..." if len(query) > 60 else query
             request_id = msg.get("request_id", "unknown")
-            print(
-                f"[agent] accept: dispatching to handle_query (query={query_preview}, request_id={request_id})"
-            )
+            print(f"[agent] accept: dispatching to handle_query (query={query_preview}, request_id={request_id})")
             handle_start = time.time()
             await self.handle_query(msg)
             handle_elapsed = time.time() - handle_start
-            print(
-                f"[agent] accept: handle_query completed in {handle_elapsed:.3f}s (request_id={request_id})"
-            )
+            print(f"[agent] accept: handle_query completed in {handle_elapsed:.3f}s (request_id={request_id})")
         elif msg_type == "agent_cancel":
             request_id = msg.get("request_id", "unknown")
             print(f"[agent] Cancel: {request_id}")
@@ -1765,9 +1758,7 @@ class AgentHarness:
             if result.get("status") != "success":
                 print(f"[agent] Failed to reset kernel: {result.get('error')}")
         elif msg_type == "agent_action_response":
-            print(
-                f"[agent] {msg.get('action', 'unknown')} -> {msg.get('status', 'unknown')}"
-            )
+            print(f"[agent] {msg.get('action', 'unknown')} -> {msg.get('status', 'unknown')}")
             await self.handle_action_response(msg)
         elif msg_type == "kernel_message":
             nested_msg = msg.get("message", {})
@@ -1787,20 +1778,11 @@ class AgentHarness:
                 if cell_id is not None:
                     self.executing_cells.discard(str(cell_id))
                 if self.pause_until_user_query:
-                    print(
-                        f"        Suppressing cell {cell_id} result while pause_until_user_query is True"
-                    )
+                    print(f"        Suppressing cell {cell_id} result while pause_until_user_query is True")
                     return
-                execution_statuses = {
-                    "executing",
-                    "awaiting_cell_execution",
-                    "thinking",
-                    "fixing",
-                }
+                execution_statuses = {"executing", "awaiting_cell_execution", "thinking", "fixing"}
                 if self.current_status is not None and self.current_status not in execution_statuses:
-                    print(
-                        f"        Not adding cell {cell_id} result because {self.current_status}"
-                    )
+                    print(f"        Not adding cell {cell_id} result because {self.current_status}")
                     return
 
                 if self.current_request_id is not None:
@@ -1813,9 +1795,7 @@ class AgentHarness:
                         "display_name": display_name,
                     })
                 else:
-                    print(
-                        f"        Cell {cell_id} completed but no active request - updating executing_cells only"
-                    )
+                    print(f"        Cell {cell_id} completed but no active request - updating executing_cells only")
 
             elif nested_type == "start_cell":
                 cell_id = nested_msg.get("cell_id")
@@ -1834,7 +1814,7 @@ class AgentHarness:
                         self.current_status = "thinking"
                         await self.pending_messages.put({
                             "type": "set_widget_value",
-                            "data": self.expected_widgets,
+                            "data": self.expected_widgets
                         })
                         print("        Finished waiting for widget input")
             else:
@@ -1848,14 +1828,18 @@ class AgentHarness:
                 "type": "agent_action_response",
                 "tx_id": tx_id,
                 "status": "success",
-                **result,
+                **result
             })
         elif msg_type == "update_system_prompt":
             tx_id = msg.get("tx_id")
             print(f"[agent] Update system prompt request (tx_id={tx_id})")
             result = await self.update_system_prompt(msg)
 
-            await self.send({"type": "agent_action_response", "tx_id": tx_id, **result})
+            await self.send({
+                "type": "agent_action_response",
+                "tx_id": tx_id,
+                **result,
+            })
         elif msg_type == "seed_plan_from_history":
             print("[agent] seed_plan_from_history received")
             plan = msg.get("plan")
@@ -1868,7 +1852,6 @@ class AgentHarness:
                 print(f"[agent] Seeded plan from history: {len(plan['steps'])} steps")
         else:
             print(f"[agent] Unknown message type: {msg_type}")
-
 
 
 async def main() -> None:
