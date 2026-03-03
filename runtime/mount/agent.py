@@ -294,7 +294,6 @@ class AgentHarness:
 
         await self._notify_history_updated(request_id=request_id)
 
-    # todo(tim): clean up these type checks
     def _normalize_tool_result_content(
         self, tool_response: object
     ) -> str | list[dict[str, object]]:
@@ -1271,7 +1270,7 @@ class AgentHarness:
 
             return assistant_message_persisted
 
-        # todo(tim): consider replacing buffer system, maybe one writer system instead
+        # todo(tim): consider replacing buffer system with simpler system
         async def flush_buffered_tool_messages() -> None:
             if len(buffered_tool_messages) == 0:
                 return
@@ -1420,7 +1419,6 @@ class AgentHarness:
                             "error": agent_error_message,
                             "fatal": False,
                         })
-                    # todo(tim): reconsider if needed
                     elif len(assistant_blocks_by_index) == 0 and not persisted_assistant_message_this_turn and isinstance(msg.result, str) and msg.result != "":
                         assistant_blocks_by_index[0] = {
                             "type": "text",
