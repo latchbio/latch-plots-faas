@@ -37,7 +37,7 @@ sys.stdout.reconfigure(line_buffering=True)
 skip_db_history = os.environ.get("AGENT_SKIP_DB_HISTORY") == "1"
 
 reactivity_ready_statuses = {"ran", "ok", "success", "error"}
-#existing
+
 sandbox_root = os.environ.get("LATCH_SANDBOX_ROOT")
 if sandbox_root:
     import pathlib
@@ -102,7 +102,7 @@ class AgentHarness:
     open_stream_blocks: dict[int, str] = field(default_factory=dict)
     agent_session_metadata: dict[str, object] = field(default_factory=dict)
 
-    #existing
+    
     async def send(self, msg: dict[str, object]) -> None:
         msg_type = msg.get("type", "unknown")
         if msg_type != "agent_stream_delta":
@@ -110,7 +110,7 @@ class AgentHarness:
 
         await self.conn.send(msg)
 
-    #existing
+    
     async def _notify_history_updated(self, *, request_id: str | None = None) -> None:
         await self.send({
             "type": "agent_history_updated",
@@ -118,7 +118,7 @@ class AgentHarness:
             **({"request_id": request_id} if request_id else {}),
         })
 
-    #existing
+    
     async def _fetch_history_from_db(self) -> list[dict]:
         if skip_db_history:
             return self.in_memory_history
@@ -141,7 +141,7 @@ class AgentHarness:
             "template_version_id": n.get("templateVersionId"),
         } for n in nodes]
 
-    #existing
+    
     async def _build_messages_from_db(self) -> list[MessageParam]:
         history = await self._fetch_history_from_db()
         anthropic_messages: list[MessageParam] = []
@@ -245,7 +245,7 @@ class AgentHarness:
         print(f"[agent] Built {len(reordered)} messages from DB")
         return reordered
 
-    #existing
+    
     async def _insert_history(
         self,
         *,
@@ -482,7 +482,7 @@ class AgentHarness:
             except Exception as e:
                 print(f"[agent] Failed to persist message tool_result blocks: {e!s}")
 
-    #existing
+    
     async def refresh_cells_context(self) -> str:
         context_result, reactivity_result = await asyncio.gather(
             self.atomic_operation("get_context"),
@@ -656,7 +656,7 @@ class AgentHarness:
         context_blocks.append(f"<user_request>\n{user_query}\n</user_request>")
         return "\n\n".join(context_blocks)
 
-    #existing
+    
     async def atomic_operation(self, action: str, params: dict | None = None, timeout: float = 10.0) -> dict:
         if params is None:
             params: dict = {}
@@ -700,7 +700,7 @@ class AgentHarness:
                 duration = time.time() - start_time
                 print(f"[agent] {action} took {duration:.3f}s")
 
-    #existing
+    
     async def handle_action_response(self, msg: dict[str, object]) -> None:
         tx_id = msg.get("tx_id")
         fut = self.pending_operations.get(tx_id)
@@ -761,7 +761,7 @@ class AgentHarness:
                 await self.conversation_task
         self.conversation_task = None
 
-    #existing
+    
     def _start_conversation_loop(self) -> None:
         self.conversation_task = asyncio.create_task(self.run_agent_loop())
 
@@ -774,7 +774,7 @@ class AgentHarness:
 
         self.conversation_task.add_done_callback(_task_done_callback)
 
-    #existing
+    
     async def _wait_for_message(self) -> tuple[str, str | None]:
         print("[agent] _wait_for_message: waiting for message...")
         while True:
@@ -907,7 +907,7 @@ class AgentHarness:
 
             print(f"[agent] Unknown pending message type={msg_type}, ignoring")
 
-    #existing
+    
     async def _complete_turn(self) -> None:
         if self.current_request_id is None:
             return
@@ -927,7 +927,7 @@ class AgentHarness:
                 "hidden": True,
             })
 
-    #existing
+    
     async def run_agent_loop(self) -> None:
         print("[agent] run_agent_loop: started")
         self.conversation_running = True
@@ -1532,7 +1532,7 @@ class AgentHarness:
 
         await self._run_query(prompt=turn_prompt, request_id=request_id)
 
-    #existing
+    
     async def handle_init(self, msg: dict[str, object]) -> None:
         new_session_id = self._normalize_session_id(msg.get("session_id"))
         session_changed = new_session_id is not None and new_session_id != self.agent_session_id
@@ -1598,7 +1598,7 @@ class AgentHarness:
         )
         self._start_conversation_loop()
 
-    #existing
+    
     async def handle_query(self, msg: dict[str, object]) -> None:
         query = msg.get("query", "")
         request_id = msg.get("request_id")
@@ -1627,7 +1627,7 @@ class AgentHarness:
 
         print(f"[agent] Message queued successfully (request_id={request_id})")
 
-    #existing
+    
     async def handle_cancel(self, msg: dict[str, object]) -> None:
         request_id = msg.get("request_id", "unknown")
         print(f"[agent] Cancelling request {request_id}")
@@ -1682,12 +1682,12 @@ class AgentHarness:
         except Exception as e:
             print(f"[agent] Failed to persist cancellation history: {e!s}")
 
-    #existing
+    
     async def get_full_prompt(self) -> dict:
         self.system_prompt = (context_root.parent / "system_prompt.md").read_text()
         messages = await self._build_messages_from_db()
 
-        #existing
+        
         def build_tree(path: Path, prefix: str = "") -> list[str]:
             lines = []
             entries = sorted(path.iterdir(), key=lambda p: (not p.is_dir(), p.name))
@@ -1714,7 +1714,7 @@ class AgentHarness:
             "tree": tree_content,
         }
 
-    #existing
+    
     async def update_system_prompt(self, msg: dict[str, object]) -> dict:
         assert self.client is not None
         new_content = msg.get("content")
@@ -1729,7 +1729,7 @@ class AgentHarness:
         full_prompt = await self.get_full_prompt()
         return {"status": "success", **full_prompt}
 
-    #existing
+    
     async def accept(self) -> None:
         msg = await self.conn.recv()
         msg_type = msg.get("type")
@@ -1870,7 +1870,7 @@ class AgentHarness:
             print(f"[agent] Unknown message type: {msg_type}")
 
 
-#existing
+
 async def main() -> None:
     global loop
     loop = asyncio.get_running_loop()
