@@ -1871,8 +1871,7 @@ async def submit_response(args: dict[str, Any]) -> dict[str, Any]:
             "summary": f"Error submitting response: {e!s}",
         })
 
-# todo(rteqs): idk splitting them actually helps, i.e. one big mcp server or multiple small. maybe for subagents that we want to limit capability so context window stays small
-core_tools = [
+all_tools = [
     create_cell,
     create_markdown_cell,
     edit_cell,
@@ -1889,8 +1888,6 @@ core_tools = [
     capture_widget_image,
     update_plan,
     submit_response,
-]
-widget_tools = [
     set_widget,
     h5_filter_by,
     h5_color_by,
@@ -1904,13 +1901,8 @@ widget_tools = [
     h5_add_selected_cells_to_categorical_obs,
     h5_set_marker_opacity,
     h5_manage_obs,
-]
-misc_tools = [
     redeem_package,
     smart_ui_spotlight,
 ]
-
-all_tools = core_tools + widget_tools + misc_tools
-
 
 agent_tools_mcp = create_sdk_mcp_server(name=MCP_SERVER_NAME, tools=all_tools)

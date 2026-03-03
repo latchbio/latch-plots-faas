@@ -15,11 +15,11 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
-from anthropic import APIStatusError
 from anthropic.types import MessageParam
 from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
 from claude_agent_sdk.types import (
     AssistantMessage,
+    McpSdkServerConfig,
     ResultMessage,
     StreamEvent,
     SystemMessage,
@@ -37,14 +37,13 @@ sys.stdout.reconfigure(line_buffering=True)
 skip_db_history = os.environ.get("AGENT_SKIP_DB_HISTORY") == "1"
 
 reactivity_ready_statuses = {"ran", "ok", "success", "error"}
-
+#existing
 sandbox_root = os.environ.get("LATCH_SANDBOX_ROOT")
 if sandbox_root:
     import pathlib
 
     original_path_new = pathlib.Path.__new__
 
-    #existing
     def patched_path_new(cls, *args, **kwargs):
         if args and args[0] == "/root/.latch":
             return original_path_new(cls, sandbox_root, *args[1:], **kwargs)
@@ -95,9 +94,7 @@ class AgentHarness:
     latest_notebook_state: str | None = None
     current_plan: dict | None = None
     in_memory_history: list[dict] = field(default_factory=list)
-    mcp_servers: dict[str, object] = field(
-        default_factory=lambda: {MCP_SERVER_NAME: agent_tools_mcp}
-    )
+    mcp_server: McpSdkServerConfig = field(default_factory=lambda: agent_tools_mcp)
     mcp_allowed_tools: list[str] = field(
         default_factory=lambda: list(MCP_ALLOWED_TOOL_NAMES)
     )
@@ -618,13 +615,17 @@ class AgentHarness:
             else "step_by_step.md"
         )
 
+    def _load_behavior_context(self) -> tuple[str, str]:
+        behavior_file = self._behavior_file_name()
+        turn_behavior_content = (context_root / "turn_behavior" / behavior_file).read_text()
+        examples_content = (context_root / "examples" / behavior_file).read_text()
+        return turn_behavior_content, examples_content
+
     def _compose_turn_system_prompt(self) -> str:
         self.system_prompt = (context_root.parent / "system_prompt.md").read_text()
         assert self.system_prompt is not None
 
-        behavior_file = self._behavior_file_name()
-        turn_behavior_content = (context_root / "turn_behavior" / behavior_file).read_text()
-        examples_content = (context_root / "examples" / behavior_file).read_text()
+        turn_behavior_content, examples_content = self._load_behavior_context()
 
         final_system_prompt = re.sub(
             r"TURN_BEHAVIOR_PLACEHOLDER",
@@ -638,9 +639,7 @@ class AgentHarness:
         )
 
     async def _build_turn_prompt(self, user_query: str) -> str:
-        behavior_file = self._behavior_file_name()
-        turn_behavior_content = (context_root / "turn_behavior" / behavior_file).read_text()
-        examples_content = (context_root / "examples" / behavior_file).read_text()
+        turn_behavior_content, examples_content = self._load_behavior_context()
 
         notebook_state = await self.refresh_cells_context()
         self.latest_notebook_state = notebook_state
@@ -766,7 +765,6 @@ class AgentHarness:
     def _start_conversation_loop(self) -> None:
         self.conversation_task = asyncio.create_task(self.run_agent_loop())
 
-        #existing
         def _task_done_callback(task: asyncio.Task) -> None:
             try:
                 task.result()
@@ -1039,6 +1037,7 @@ class AgentHarness:
             f"(db_session_id={self.agent_session_id}, claude_session_id={session_id})"
         )
 
+    # todo(tim): cleanup this key stuff once proxy working
     def _build_sdk_env(self) -> dict[str, str]:
         direct_anthropic_key = os.environ.get("AGENT_SDK_DIRECT_ANTHROPIC_KEY", "").strip()
         if direct_anthropic_key != "":
@@ -1061,26 +1060,20 @@ class AgentHarness:
         self.system_prompt = self._compose_turn_system_prompt()
         sdk_env = self._build_sdk_env()
 
-        def _sdk_stderr(line: str) -> None:
-            stripped = line.rstrip()
-            if stripped != "":
-                print(f"[claude] {stripped}", flush=True)
-
         self.client = ClaudeSDKClient(
             options=ClaudeAgentOptions(
                 system_prompt=self.system_prompt,
                 include_partial_messages=True,
-                mcp_servers=self.mcp_servers,
+                mcp_servers={MCP_SERVER_NAME: self.mcp_server},
                 allowed_tools=[
                     *self.mcp_allowed_tools,
                     *SDK_BUILTIN_ALLOWED_TOOLS,
                 ],
-                permission_mode="acceptEdits",
+                permission_mode="bypassPermissions",
                 model="claude-opus-4-6",
                 thinking={"type": "adaptive"},
                 resume=resume_session_id,
                 env=sdk_env,
-                stderr=_sdk_stderr,
             )
         )
         await self.client.connect()
@@ -1114,8 +1107,10 @@ class AgentHarness:
         self.pending_auto_continue = False
 
         while not self.pending_messages.empty():
-            with suppress(asyncio.QueueEmpty):
+            try:
                 self.pending_messages.get_nowait()
+            except asyncio.QueueEmpty:
+                break
 
         self.agent_session_metadata = {}
 
@@ -1233,7 +1228,7 @@ class AgentHarness:
         assistant_blocks_by_index: dict[int, dict[str, object]] = {}
         assistant_message_started_at: float | None = None
         persisted_assistant_message_this_turn = False
-        terminal_error: str | None = None
+        final_query_error: str | None = None
         stream_complete_error: dict[str, object] | None = None
         usage_data: dict[str, Any] | None = None
         tool_use_index: dict[str, str] = {}
@@ -1241,12 +1236,11 @@ class AgentHarness:
         stream_message_open = False
         buffered_tool_messages: list[object] = []
         final_submit_response_reached = False
-        dropping_post_terminal_stream_message = False
+        dropping_post_submit_stream_message = False
 
         async def persist_current_assistant_message(
             *, duration_seconds: float | None = None
         ) -> bool:
-            nonlocal persisted_assistant_message_this_turn
             if len(assistant_blocks_by_index) == 0:
                 return False
 
@@ -1256,13 +1250,13 @@ class AgentHarness:
 
             resolved_duration = duration_seconds
             if resolved_duration is None:
-                duration_base = (
-                    assistant_message_started_at
-                    if assistant_message_started_at is not None
-                    else run_started_at
-                )
+                if assistant_message_started_at is not None:
+                    duration_base = assistant_message_started_at
+                else:
+                    duration_base = run_started_at
                 resolved_duration = max(0.0, time.perf_counter() - duration_base)
 
+            assistant_message_persisted = False
             try:
                 await self._insert_history(
                     role="assistant",
@@ -1272,13 +1266,13 @@ class AgentHarness:
                     },
                     request_id=request_id,
                 )
-                persisted_assistant_message_this_turn = True
+                assistant_message_persisted = True
             except Exception as e:
                 print(f"[agent] Failed to persist assistant history: {e!s}")
             finally:
                 assistant_blocks_by_index.clear()
 
-            return True
+            return assistant_message_persisted
 
         # todo(tim): consider replacing buffer system, maybe one writer system instead
         async def flush_buffered_tool_messages() -> None:
@@ -1308,10 +1302,10 @@ class AgentHarness:
                     self.client.query(prompt=prompt, session_id=self.agent_session_id), timeout=10.0
                 )
             except TimeoutError:
-                terminal_error = "Timed out submitting prompt to Claude runtime"
+                final_query_error = "Timed out submitting prompt to Claude runtime"
                 await self.send({
                     "type": "agent_error",
-                    "error": terminal_error,
+                    "error": final_query_error,
                     "fatal": False,
                 })
                 return
@@ -1328,7 +1322,7 @@ class AgentHarness:
                         "error": "Timed out waiting for model response from Claude runtime",
                         "fatal": False,
                     })
-                    terminal_error = "Timed out waiting for model response from Claude runtime"
+                    final_query_error = "Timed out waiting for model response from Claude runtime"
                     break
 
                 if isinstance(msg, StreamEvent):
@@ -1336,15 +1330,15 @@ class AgentHarness:
                     event_type = msg.event.get("type")
                     if final_submit_response_reached:
                         if event_type == "message_start":
-                            dropping_post_terminal_stream_message = True
+                            dropping_post_submit_stream_message = True
                             assistant_blocks_by_index.clear()
                             assistant_message_started_at = None
                             stream_message_open = False
                             self.open_stream_blocks.clear()
                             continue
-                        if dropping_post_terminal_stream_message:
+                        if dropping_post_submit_stream_message:
                             if event_type == "message_stop":
-                                dropping_post_terminal_stream_message = False
+                                dropping_post_submit_stream_message = False
                                 self.open_stream_blocks.clear()
                             continue
                     if event_type == "message_start":
@@ -1371,9 +1365,11 @@ class AgentHarness:
                             message_duration_seconds = max(
                                 0.0, time.perf_counter() - assistant_message_started_at
                             )
-                        await persist_current_assistant_message(
+                        assistant_message_persisted = await persist_current_assistant_message(
                             duration_seconds=message_duration_seconds
                         )
+                        if assistant_message_persisted:
+                            persisted_assistant_message_this_turn = True
                         assistant_message_started_at = None
                         stream_message_open = False
                         await flush_buffered_tool_messages()
@@ -1384,7 +1380,7 @@ class AgentHarness:
                         f"subtype={msg.subtype} is_error={msg.is_error} result={msg.result!r}"
                     )
                     if msg.is_error:
-                        terminal_error = msg.result if msg.result is not None else "Claude query failed"
+                        final_query_error = msg.result if msg.result is not None else "Claude query failed"
                         if isinstance(msg.result, str) and "prompt is too long" in msg.result.lower():
                             stream_complete_error = {
                                 "message": (
@@ -1421,7 +1417,7 @@ class AgentHarness:
                         if stream_complete_error is not None:
                             agent_error_message = str(stream_complete_error["message"])
                         else:
-                            agent_error_message = terminal_error
+                            agent_error_message = final_query_error
                         await self.send({
                             "type": "agent_error",
                             "error": agent_error_message,
@@ -1461,56 +1457,35 @@ class AgentHarness:
                     continue
 
             print(f"[agent] finished SDK query (request_id={request_id})")
-        except APIStatusError as e:
-            should_contact_support = 400 <= e.status_code < 500 and e.status_code != 429
-
-            if should_contact_support:
-                user_message = "An unexpected error occurred. Please try again."
-            else:
-                user_message = (
-                    "Our model provider is experiencing a temporary issue. "
-                    "Please try again in a few minutes."
-                )
-
-            stream_complete_error = {
-                "message": user_message,
-                "should_contact_support": should_contact_support,
-                "should_clear_history": False,
-            }
-            terminal_error = f"API error: {e!s}"
-            await self.send({
-                "type": "agent_error",
-                "error": terminal_error,
-                "fatal": False,
-            })
         except Exception as e:
-            terminal_error = f"Agent SDK query failed: {e!s}"
+            final_query_error = f"Agent SDK query failed: {e!s}"
             await self.send({
                 "type": "agent_error",
-                "error": terminal_error,
+                "error": final_query_error,
                 "fatal": False,
             })
         finally:
-            pending_duration_base = (
-                assistant_message_started_at
-                if assistant_message_started_at is not None
-                else run_started_at
-            )
-            await persist_current_assistant_message(
+            if assistant_message_started_at is not None:
+                pending_duration_base = assistant_message_started_at
+            else:
+                pending_duration_base = run_started_at
+            assistant_message_persisted = await persist_current_assistant_message(
                 duration_seconds=max(0.0, time.perf_counter() - pending_duration_base)
             )
+            if assistant_message_persisted:
+                persisted_assistant_message_this_turn = True
             await flush_buffered_tool_messages()
 
-            if terminal_error is not None:
+            if final_query_error is not None:
                 try:
                     if stream_complete_error is not None:
                         error_history_payload = dict(stream_complete_error)
-                        error_history_payload["raw_error"] = terminal_error
+                        error_history_payload["raw_error"] = final_query_error
                         if assistant_error_type is not None:
                             error_history_payload["assistant_error_type"] = assistant_error_type
                     else:
                         error_history_payload = {
-                            "message": terminal_error,
+                            "message": final_query_error,
                             "should_contact_support": False,
                         }
                     await self._insert_history(
@@ -1623,8 +1598,6 @@ class AgentHarness:
         )
         self._start_conversation_loop()
 
-        # todo(rteqs): planning stuff
-
     #existing
     async def handle_query(self, msg: dict[str, object]) -> None:
         query = msg.get("query", "")
@@ -1689,8 +1662,10 @@ class AgentHarness:
             self.pending_operations.clear()
 
         while not self.pending_messages.empty():
-            with suppress(asyncio.QueueEmpty):
+            try:
                 self.pending_messages.get_nowait()
+            except asyncio.QueueEmpty:
+                break
 
         for file in (context_root / "agent_scratch").rglob("*"):
             if file.name == ".gitkeep":
@@ -1754,7 +1729,6 @@ class AgentHarness:
         full_prompt = await self.get_full_prompt()
         return {"status": "success", **full_prompt}
 
-    # todo(rteqs): rip a generator for handle_query
     #existing
     async def accept(self) -> None:
         msg = await self.conn.recv()
