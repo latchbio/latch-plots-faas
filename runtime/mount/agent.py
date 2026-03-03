@@ -41,6 +41,7 @@ reactivity_ready_statuses = {"ran", "ok", "success", "error"}
 sandbox_root = os.environ.get("LATCH_SANDBOX_ROOT")
 if sandbox_root:
     import pathlib
+
     original_path_new = pathlib.Path.__new__
 
     def patched_path_new(cls, *args, **kwargs):
@@ -58,7 +59,6 @@ SDK_BUILTIN_ALLOWED_TOOLS = [
     "Glob",
     "Edit",
     "Write",
-    "Bash",
     "WebFetch",
     "WebSearch",
 ]
@@ -85,7 +85,8 @@ class AgentHarness:
     pending_messages: asyncio.Queue = field(default_factory=asyncio.Queue)
     conversation_task: asyncio.Task | None = None
     conversation_running: bool = False
-    agent_session_id: str | None = None
+    agent_session_id: int | None = None
+    claude_session_id: str | None = None
     latest_notebook_context: dict = field(default_factory=dict)
     current_status: str | None = None
     expected_widgets: dict[str, object | None] = field(default_factory=dict)
@@ -101,7 +102,6 @@ class AgentHarness:
     open_stream_blocks: dict[int, str] = field(default_factory=dict)
     agent_session_metadata: dict[str, object] = field(default_factory=dict)
 
-    
     async def send(self, msg: dict[str, object]) -> None:
         msg_type = msg.get("type", "unknown")
         if msg_type != "agent_stream_delta":
@@ -112,7 +112,9 @@ class AgentHarness:
     async def _notify_history_updated(self, *, request_id: str | None = None) -> None:
         await self.send({
             "type": "agent_history_updated",
-            "session_id": str(self.agent_session_id) if self.agent_session_id is not None else None,
+            "session_id": str(self.agent_session_id)
+            if self.agent_session_id is not None
+            else None,
             **({"request_id": request_id} if request_id else {}),
         })
 
@@ -132,11 +134,14 @@ class AgentHarness:
             variables={"sessionId": str(self.agent_session_id)},
         )
         nodes = resp.get("data", {}).get("agentHistories", {}).get("nodes", [])
-        return [{
-            "payload": n.get("payload"),
-            "request_id": n.get("requestId"),
-            "template_version_id": n.get("templateVersionId"),
-        } for n in nodes]
+        return [
+            {
+                "payload": n.get("payload"),
+                "request_id": n.get("requestId"),
+                "template_version_id": n.get("templateVersionId"),
+            }
+            for n in nodes
+        ]
 
     async def _build_messages_from_db(self) -> list[MessageParam]:
         history = await self._fetch_history_from_db()
@@ -151,13 +156,21 @@ class AgentHarness:
                 content = payload.get("content")
 
                 display_widgets = payload.get("display_widgets")
-                if role == "user" and display_widgets is not None and isinstance(content, str):
+                if (
+                    role == "user"
+                    and display_widgets is not None
+                    and isinstance(content, str)
+                ):
                     for widget in display_widgets:
                         ref_pattern = f"@({widget['widgetKey']}|{widget['id']})"
-                        inline_widget = f"<Widget label=\"{widget['label']}\" type=\"{widget['widgetType']}\" widget_key=\"{widget['widgetKey']}\" cell=\"{widget['cellDisplayName']}\"/>"
+                        inline_widget = f'<Widget label="{widget["label"]}" type="{widget["widgetType"]}" widget_key="{widget["widgetKey"]}" cell="{widget["cellDisplayName"]}"/>'
                         content = content.replace(ref_pattern, inline_widget)
 
-                if (role == "user" and isinstance(content, dict) and content.get("type") == "cell_result"):
+                if (
+                    role == "user"
+                    and isinstance(content, dict)
+                    and content.get("type") == "cell_result"
+                ):
                     exception = content.get("exception")
                     logs = content.get("logs")
                     message = content.get("message", "Cell execution completed")
@@ -171,34 +184,53 @@ class AgentHarness:
                 if isinstance(content, list):
                     cleaned_content = []
                     for block in content:
-                        if isinstance(block, dict) and block.get("type") == "thinking_summary":
+                        if (
+                            isinstance(block, dict)
+                            and block.get("type") == "thinking_summary"
+                        ):
                             continue
 
-                        if isinstance(block, dict) and block.get("type") == "tool_result":
+                        if (
+                            isinstance(block, dict)
+                            and block.get("type") == "tool_result"
+                        ):
                             block = block.copy()
                             block_content = block.get("content", "{}")
                             if isinstance(block_content, str):
                                 try:
                                     result = json.loads(block_content)
-                                except Exception:
-                                    cleaned_content.append(block)
-                                    continue
-                                if isinstance(result, dict) and "original_code" in result:
+                                except json.JSONDecodeError:
+                                    print(
+                                        f"[agent] tool_result parse failed tool_use_id={block.get('tool_use_id', '?')}"
+                                    )
+                                    result = None
+                                if (
+                                    isinstance(result, dict)
+                                    and "original_code" in result
+                                ):
                                     result.pop("original_code")
-                                    block["content"] = json.dumps(result, sort_keys=True)
+                                    block["content"] = json.dumps(
+                                        result, sort_keys=True
+                                    )
                         cleaned_content.append(block)
                     content = cleaned_content
 
                 template_version_id = item.get("template_version_id")
                 if role == "user" and template_version_id is not None:
                     checkpoint_content = f"[auto-generated metadata] template_version_id={template_version_id}"
-                    anthropic_messages.append({"role": "user", "content": checkpoint_content})
+                    anthropic_messages.append({
+                        "role": "user",
+                        "content": checkpoint_content,
+                    })
 
                 if role in {"user", "assistant"} and (isinstance(content, (str, list))):
                     anthropic_messages.append({"role": role, "content": content})
 
             elif t == "cancellation":
-                anthropic_messages.append({"role": "user", "content": "[Request cancelled by user]"})
+                anthropic_messages.append({
+                    "role": "user",
+                    "content": "[Request cancelled by user]",
+                })
 
         reordered: list[MessageParam] = []
         pending_tool_ids: set[str] = set()
@@ -223,7 +255,10 @@ class AgentHarness:
                 if is_tool_result_msg:
                     reordered.append(msg)
                     for block in content:
-                        if isinstance(block, dict) and block.get("type") == "tool_result":
+                        if (
+                            isinstance(block, dict)
+                            and block.get("type") == "tool_result"
+                        ):
                             tool_result_id = block.get("tool_use_id")
                             if tool_result_id is not None:
                                 pending_tool_ids.discard(tool_result_id)
@@ -243,7 +278,6 @@ class AgentHarness:
 
         return reordered
 
-    
     async def _insert_history(
         self,
         *,
@@ -277,7 +311,9 @@ class AgentHarness:
             "payload": payload,
             "requestId": request_id,
             "txId": tx_id,
-            "templateVersionId": str(template_version_id) if template_version_id is not None else None,
+            "templateVersionId": str(template_version_id)
+            if template_version_id is not None
+            else None,
         }
 
         await gql_query(
@@ -313,10 +349,7 @@ class AgentHarness:
                         block_type = "text"
 
                 if block_type == "text" and isinstance(text_value, str):
-                    normalized_blocks.append({
-                        "type": "text",
-                        "text": text_value,
-                    })
+                    normalized_blocks.append({"type": "text", "text": text_value})
                     continue
 
                 return json.dumps(tool_response, default=str)
@@ -334,16 +367,16 @@ class AgentHarness:
         if isinstance(content, str):
             return content
         for block in content:
-            if isinstance(block, dict) and block.get("type") == "text" and isinstance(block.get("text"), str):
+            if (
+                isinstance(block, dict)
+                and block.get("type") == "text"
+                and isinstance(block.get("text"), str)
+            ):
                 return block["text"]
         return None
 
     def _build_generic_tool_result_content(
-        self,
-        *,
-        tool_name: str,
-        content: str | list[dict[str, object]],
-        is_error: bool,
+        self, *, tool_name: str, content: str | list[dict[str, object]], is_error: bool
     ) -> str | list[dict[str, object]]:
         text_content = self._extract_tool_result_text(content)
         if text_content is None:
@@ -360,9 +393,7 @@ class AgentHarness:
             "tool_name": tool_name,
             "success": not is_error,
             "summary": (
-                f"{tool_name} failed"
-                if is_error
-                else f"{tool_name} completed"
+                f"{tool_name} failed" if is_error else f"{tool_name} completed"
             ),
         }
         if text_content.strip() != "":
@@ -418,13 +449,11 @@ class AgentHarness:
         return tool_use_blocks, tool_result_blocks
 
     async def _persist_tool_blocks_from_sdk_message(
-        self,
-        *,
-        msg: object,
-        request_id: str | None,
-        tool_use_index: dict[str, str],
+        self, *, msg: object, request_id: str | None, tool_use_index: dict[str, str]
     ) -> None:
-        tool_use_blocks, tool_result_blocks = self._extract_tool_blocks_from_sdk_message(msg)
+        tool_use_blocks, tool_result_blocks = (
+            self._extract_tool_blocks_from_sdk_message(msg)
+        )
         message_role: str | None = None
         if isinstance(msg, AssistantMessage):
             message_role = "assistant"
@@ -466,9 +495,7 @@ class AgentHarness:
                                 is_error=bool(block.get("is_error", False)),
                             )
                         )
-                normalized_tool_result_blocks.append(
-                    normalized_tool_result_block
-                )
+                normalized_tool_result_blocks.append(normalized_tool_result_block)
 
             try:
                 await self._insert_history(
@@ -479,7 +506,6 @@ class AgentHarness:
             except Exception as e:
                 print(f"[agent] Failed to persist message tool_result blocks: {e!s}")
 
-    
     async def refresh_cells_context(self) -> str:
         context_result, reactivity_result = await asyncio.gather(
             self.atomic_operation("get_context"),
@@ -492,7 +518,9 @@ class AgentHarness:
 
         reactivity_available: bool = reactivity_result.get("status") == "success"
         if not reactivity_available:
-            print(f"[agent] Reactivity summary unavailable: {reactivity_result.get('error', 'unknown')}")
+            print(
+                f"[agent] Reactivity summary unavailable: {reactivity_result.get('error', 'unknown')}"
+            )
 
         context = context_result.get("context", {})
         self.latest_notebook_context = context
@@ -501,7 +529,9 @@ class AgentHarness:
         cell_count = context.get("cell_count", 0)
         cells = context.get("cells", [])
 
-        cell_lines = [f"# Notebook Cells for {notebook_name}, Total cells: {cell_count}\n"]
+        cell_lines = [
+            f"# Notebook Cells for {notebook_name}, Total cells: {cell_count}\n"
+        ]
 
         default_tab_name = context.get("default_tab_name", "Tab 1")
 
@@ -574,7 +604,9 @@ class AgentHarness:
                 cell_lines.append("- Reactivity summary unavailable.")
                 continue
 
-            cell_reactivity: dict[str, dict[str, Iterable[str]]] = reactivity_result.get("cell_reactivity", {})
+            cell_reactivity: dict[str, dict[str, Iterable[str]]] = (
+                reactivity_result.get("cell_reactivity", {})
+            )
             reactivity_meta = cell_reactivity.get(str(tf_id))
             is_reactivity_ready = status in reactivity_ready_statuses
 
@@ -607,14 +639,14 @@ class AgentHarness:
 
     def _behavior_file_name(self) -> str:
         return (
-            "proactive.md"
-            if self.behavior == Behavior.proactive
-            else "step_by_step.md"
+            "proactive.md" if self.behavior == Behavior.proactive else "step_by_step.md"
         )
 
     def _load_behavior_context(self) -> tuple[str, str]:
         behavior_file = self._behavior_file_name()
-        turn_behavior_content = (context_root / "turn_behavior" / behavior_file).read_text()
+        turn_behavior_content = (
+            context_root / "turn_behavior" / behavior_file
+        ).read_text()
         examples_content = (context_root / "examples" / behavior_file).read_text()
         return turn_behavior_content, examples_content
 
@@ -635,26 +667,9 @@ class AgentHarness:
             final_system_prompt,
         )
 
-    async def _build_turn_prompt(self, user_query: str) -> str:
-        turn_behavior_content, examples_content = self._load_behavior_context()
-
-        notebook_state = await self.refresh_cells_context()
-        self.latest_notebook_state = notebook_state
-
-        context_blocks = [
-            f"<turn_behavior>\n{turn_behavior_content}\n</turn_behavior>",
-            f"<examples>\n{examples_content}\n</examples>",
-            f"<current_notebook_state>\n{notebook_state}\n</current_notebook_state>",
-        ]
-        if self.current_plan is not None:
-            plan_content = json.dumps(self.current_plan, indent=2)
-            context_blocks.append(f"<current_plan>\n{plan_content}\n</current_plan>")
-
-        context_blocks.append(f"<user_request>\n{user_query}\n</user_request>")
-        return "\n\n".join(context_blocks)
-
-    
-    async def atomic_operation(self, action: str, params: dict | None = None, timeout: float = 10.0) -> dict:
+    async def atomic_operation(
+        self, action: str, params: dict | None = None, timeout: float = 10.0
+    ) -> dict:
         if params is None:
             params: dict = {}
 
@@ -670,7 +685,12 @@ class AgentHarness:
         start_time = time.time()
         try:
             print(f"[agent] -> {action}")
-            await self.send({"type": "agent_action", "action": action, "params": params, "tx_id": tx_id})
+            await self.send({
+                "type": "agent_action",
+                "action": action,
+                "params": params,
+                "tx_id": tx_id,
+            })
         except Exception as e:
             self.pending_operations.pop(tx_id, None)
             return {"status": "error", "error": f"Send failed: {e!s}"}
@@ -678,8 +698,13 @@ class AgentHarness:
         try:
             return await asyncio.wait_for(response_future, timeout=timeout)
         except asyncio.CancelledError:
-            print(f"[agent] Operation cancelled (session reinitialized): action={action}, tx_id={tx_id}")
-            return {"status": "error", "error": f"OPERATION FAILED: '{action}' was interrupted because the session was reinitialized. This operation did NOT complete. You must retry or inform the user."}
+            print(
+                f"[agent] Operation cancelled (session reinitialized): action={action}, tx_id={tx_id}"
+            )
+            return {
+                "status": "error",
+                "error": f"OPERATION FAILED: '{action}' was interrupted because the session was reinitialized. This operation did NOT complete. You must retry or inform the user.",
+            }
         except TimeoutError:
             self.pending_operations.pop(tx_id, None)
             duration = time.time() - start_time
@@ -687,16 +712,24 @@ class AgentHarness:
 
             if not force_backend_browser_retry:
                 print(f"[agent] Retrying {action} with backend browser")
-                return await self.atomic_operation(action, {**params, "force_backend_browser_retry": True}, timeout=timeout)
+                return await self.atomic_operation(
+                    action,
+                    {**params, "force_backend_browser_retry": True},
+                    timeout=timeout,
+                )
 
-            return {"status": "error", "error": f"OPERATION FAILED: '{action}' timed out after 10 seconds. This operation did NOT complete.", "tx_id": tx_id}
+            return {
+                "status": "error",
+                "error": f"OPERATION FAILED: '{action}' timed out after 10 seconds. This operation did NOT complete.",
+                "tx_id": tx_id,
+            }
         finally:
             ret = self.pending_operations.pop(tx_id, None)
 
             if ret is not None:
                 duration = time.time() - start_time
                 print(f"[agent] {action} took {duration:.3f}s")
- 
+
     async def handle_action_response(self, msg: dict[str, object]) -> None:
         tx_id = msg.get("tx_id")
         fut = self.pending_operations.get(tx_id)
@@ -707,7 +740,9 @@ class AgentHarness:
         await self.send({
             "type": "agent_usage_update",
             "input_tokens": int(usage.get("input_tokens", 0) or 0),
-            "cache_read_input_tokens": int(usage.get("cache_read_input_tokens", 0) or 0),
+            "cache_read_input_tokens": int(
+                usage.get("cache_read_input_tokens", 0) or 0
+            ),
             "cache_creation_input_tokens": int(
                 usage.get("cache_creation_input_tokens", 0) or 0
             ),
@@ -722,17 +757,33 @@ class AgentHarness:
             return None
         return session_id
 
+    def _normalize_db_session_id(self, raw_session_id: object) -> int | None:
+        session_id = self._normalize_session_id(raw_session_id)
+        if session_id is None:
+            return None
+        try:
+            return int(session_id)
+        except ValueError:
+            return None
+
     async def _close_open_stream_blocks(self) -> None:
         if len(self.open_stream_blocks) == 0:
             return
 
         pending_blocks = sorted(self.open_stream_blocks)
-        print(f"[agent] Closing {len(pending_blocks)} dangling stream block(s): {pending_blocks}")
+        print(
+            f"[agent] Closing {len(pending_blocks)} dangling stream block(s): {pending_blocks}"
+        )
         for block_index in pending_blocks:
-            await self.send({"type": "agent_stream_block_stop", "block_index": block_index})
+            await self.send({
+                "type": "agent_stream_block_stop",
+                "block_index": block_index,
+            })
         self.open_stream_blocks.clear()
 
-    async def _wait_for_running_query_to_stop(self, timeout_seconds: float = 2.0) -> bool:
+    async def _wait_for_running_query_to_stop(
+        self, timeout_seconds: float = 2.0
+    ) -> bool:
         if self.current_query_task is None or self.current_query_task.done():
             return True
 
@@ -757,7 +808,6 @@ class AgentHarness:
                 await self.conversation_task
         self.conversation_task = None
 
-    
     def _start_conversation_loop(self) -> None:
         self.conversation_task = asyncio.create_task(self.run_agent_loop())
 
@@ -770,14 +820,17 @@ class AgentHarness:
 
         self.conversation_task.add_done_callback(_task_done_callback)
 
-    
     async def _wait_for_message(self) -> tuple[str, str | None]:
         print("[agent] _wait_for_message: waiting for message...")
         while True:
             msg = await self.pending_messages.get()
             msg_type = msg.get("type")
 
-            if self.pause_until_user_query and msg_type in {"resume", "cell_result", "set_widget_value"}:
+            if self.pause_until_user_query and msg_type in {
+                "resume",
+                "cell_result",
+                "set_widget_value",
+            }:
                 print(f"[agent] Suppressing follow-up message type={msg_type}")
                 continue
 
@@ -793,13 +846,13 @@ class AgentHarness:
 
             if msg_type == "user_query":
                 request_id = msg.get("request_id")
-                self.current_request_id = request_id if isinstance(request_id, str) else None
+                self.current_request_id = (
+                    request_id if isinstance(request_id, str) else None
+                )
                 self.current_status = "thinking"
                 self.pause_until_user_query = False
 
-                payload = {
-                    "content": msg["content"],
-                }
+                payload = {"content": msg["content"]}
 
                 if msg.get("display_query") is not None:
                     payload["display_query"] = msg["display_query"]
@@ -837,7 +890,9 @@ class AgentHarness:
                 logs = msg.get("logs")
 
                 if success:
-                    result_message = f"✓ Cell {cell_name} ({cell_id}) executed successfully"
+                    result_message = (
+                        f"✓ Cell {cell_name} ({cell_id}) executed successfully"
+                    )
                     result_content = {
                         "type": "cell_result",
                         "message": result_message,
@@ -861,11 +916,7 @@ class AgentHarness:
                     }
                     print(f"[agent] Cell {cell_id} failed")
 
-                await self._insert_history(
-                    payload={
-                        "content": result_content,
-                    },
-                )
+                await self._insert_history(payload={"content": result_content})
 
                 prompt_content = result_message
                 if not success:
@@ -892,18 +943,12 @@ class AgentHarness:
                 widget_info = ", ".join(f"{k}={v}" for k, v in data.items())
                 content = f"User provided input via widget(s): {widget_info}"
 
-                await self._insert_history(
-                    payload={
-                        "content": content,
-                        "hidden": True,
-                    },
-                )
+                await self._insert_history(payload={"content": content, "hidden": True})
 
                 return content, self.current_request_id
 
             print(f"[agent] Unknown pending message type={msg_type}, ignoring")
 
-    
     async def _complete_turn(self) -> None:
         if self.current_request_id is None:
             return
@@ -923,7 +968,6 @@ class AgentHarness:
                 "hidden": True,
             })
 
-    
     async def run_agent_loop(self) -> None:
         print("[agent] run_agent_loop: started")
         self.conversation_running = True
@@ -964,7 +1008,7 @@ class AgentHarness:
         finally:
             self.client = None
 
-    async def _load_agent_session_metadata(self, session_id: str) -> dict[str, object]:
+    async def _load_agent_session_metadata(self, session_id: int) -> dict[str, object]:
         response = await gql_query(
             auth=auth_token_sdk,
             query="""
@@ -988,7 +1032,9 @@ class AgentHarness:
             return {}
         return metadata
 
-    async def _persist_agent_session_metadata(self, metadata: dict[str, object]) -> None:
+    async def _persist_agent_session_metadata(
+        self, metadata: dict[str, object]
+    ) -> None:
         if self.agent_session_id is None:
             return
 
@@ -1001,10 +1047,7 @@ class AgentHarness:
                     }
                 }
             """,
-            variables={
-                "id": self.agent_session_id,
-                "metadata": metadata,
-            },
+            variables={"id": self.agent_session_id, "metadata": metadata},
         )
 
     async def _capture_claude_session_id(self, raw_session_id: object) -> None:
@@ -1012,6 +1055,7 @@ class AgentHarness:
         if session_id is None or self.agent_session_id is None:
             return
 
+        self.claude_session_id = session_id
         existing = self._normalize_session_id(
             self.agent_session_metadata.get("claude_session_id")
         )
@@ -1035,7 +1079,9 @@ class AgentHarness:
 
     # todo(tim): cleanup this key stuff once proxy working
     def _build_sdk_env(self) -> dict[str, str]:
-        direct_anthropic_key = os.environ.get("AGENT_SDK_DIRECT_ANTHROPIC_KEY", "").strip()
+        direct_anthropic_key = os.environ.get(
+            "AGENT_SDK_DIRECT_ANTHROPIC_KEY", ""
+        ).strip()
         if direct_anthropic_key != "":
             print("[agent] SDK gateway mode: direct-anthropic")
             return {
@@ -1061,10 +1107,7 @@ class AgentHarness:
                 system_prompt=self.system_prompt,
                 include_partial_messages=True,
                 mcp_servers={MCP_SERVER_NAME: self.mcp_server},
-                allowed_tools=[
-                    *self.mcp_allowed_tools,
-                    *SDK_BUILTIN_ALLOWED_TOOLS,
-                ],
+                allowed_tools=[*self.mcp_allowed_tools, *SDK_BUILTIN_ALLOWED_TOOLS],
                 permission_mode="acceptEdits",
                 model="claude-opus-4-6",
                 thinking={"type": "adaptive"},
@@ -1084,7 +1127,9 @@ class AgentHarness:
         await self._stop_conversation_loop()
 
         if len(self.pending_operations) > 0:
-            print(f"[agent] Failing {len(self.pending_operations)} pending operation(s) for new session")
+            print(
+                f"[agent] Failing {len(self.pending_operations)} pending operation(s) for new session"
+            )
             for future in self.pending_operations.values():
                 if not future.done():
                     future.set_result({
@@ -1109,6 +1154,7 @@ class AgentHarness:
                 break
 
         self.agent_session_metadata = {}
+        self.claude_session_id = None
 
     async def _handle_stream_event(
         self,
@@ -1128,12 +1174,18 @@ class AgentHarness:
             block_type = block.get("type", "unknown")
             if block_index >= 0:
                 if block_index in self.open_stream_blocks:
-                    await self.send({"type": "agent_stream_block_stop", "block_index": block_index})
+                    await self.send({
+                        "type": "agent_stream_block_stop",
+                        "block_index": block_index,
+                    })
                 self.open_stream_blocks[block_index] = str(block_type)
 
             if collected_assistant_blocks is not None and block_index >= 0:
                 if block_type == "text":
-                    collected_assistant_blocks[block_index] = {"type": "text", "text": ""}
+                    collected_assistant_blocks[block_index] = {
+                        "type": "text",
+                        "text": "",
+                    }
                 elif block_type == "thinking":
                     collected_assistant_blocks[block_index] = {
                         "type": "thinking",
@@ -1186,7 +1238,9 @@ class AgentHarness:
                 existing = collected_assistant_blocks.get(block_index)
                 if existing is not None:
                     if delta_type == "text_delta":
-                        existing["text"] = str(existing.get("text", "")) + str(delta.get("text", ""))
+                        existing["text"] = str(existing.get("text", "")) + str(
+                            delta.get("text", "")
+                        )
                     elif delta_type == "thinking_delta":
                         existing["thinking"] = str(existing.get("thinking", "")) + str(
                             delta.get("thinking", "")
@@ -1210,12 +1264,7 @@ class AgentHarness:
             await self._close_open_stream_blocks()
             return
 
-    async def _run_query(
-        self,
-        *,
-        prompt: str,
-        request_id: str | None,
-    ) -> None:
+    async def _run_query(self, *, prompt: str, request_id: str | None) -> None:
         assert self.client is not None
         assert self.agent_session_id is not None
 
@@ -1250,7 +1299,9 @@ class AgentHarness:
                     message_duration_start = assistant_message_started_at
                 else:
                     message_duration_start = run_started_at
-                resolved_duration = max(0.0, time.perf_counter() - message_duration_start)
+                resolved_duration = max(
+                    0.0, time.perf_counter() - message_duration_start
+                )
 
             assistant_message_persisted = False
             try:
@@ -1290,12 +1341,19 @@ class AgentHarness:
         })
 
         try:
+            query_session_id = self.claude_session_id
+            if query_session_id is None:
+                query_session_id = "default"
+
             print(
-                f"[agent] starting SDK query (request_id={request_id}, session_id={self.agent_session_id})"
+                "[agent] starting SDK query "
+                f"(request_id={request_id}, db_session_id={self.agent_session_id}, "
+                f"claude_session_id={query_session_id})"
             )
             try:
                 await asyncio.wait_for(
-                    self.client.query(prompt=prompt, session_id=self.agent_session_id), timeout=10.0
+                    self.client.query(prompt=prompt, session_id=query_session_id),
+                    timeout=10.0,
                 )
             except TimeoutError:
                 final_query_error = "Timed out submitting prompt to Claude runtime"
@@ -1318,7 +1376,9 @@ class AgentHarness:
                         "error": "Timed out waiting for model response from Claude runtime",
                         "fatal": False,
                     })
-                    final_query_error = "Timed out waiting for model response from Claude runtime"
+                    final_query_error = (
+                        "Timed out waiting for model response from Claude runtime"
+                    )
                     break
 
                 if isinstance(msg, StreamEvent):
@@ -1361,8 +1421,10 @@ class AgentHarness:
                             message_duration_seconds = max(
                                 0.0, time.perf_counter() - assistant_message_started_at
                             )
-                        assistant_message_persisted = await persist_current_assistant_message(
-                            duration_seconds=message_duration_seconds
+                        assistant_message_persisted = (
+                            await persist_current_assistant_message(
+                                duration_seconds=message_duration_seconds
+                            )
                         )
                         if assistant_message_persisted:
                             persisted_assistant_message_this_turn = True
@@ -1376,8 +1438,15 @@ class AgentHarness:
                         f"subtype={msg.subtype} is_error={msg.is_error} result={msg.result!r}"
                     )
                     if msg.is_error:
-                        final_query_error = msg.result if msg.result is not None else "Claude query failed"
-                        if isinstance(msg.result, str) and "prompt is too long" in msg.result.lower():
+                        final_query_error = (
+                            msg.result
+                            if msg.result is not None
+                            else "Claude query failed"
+                        )
+                        if (
+                            isinstance(msg.result, str)
+                            and "prompt is too long" in msg.result.lower()
+                        ):
                             stream_complete_error = {
                                 "message": (
                                     "This conversation is too long for the agent to continue. "
@@ -1419,7 +1488,12 @@ class AgentHarness:
                             "error": agent_error_message,
                             "fatal": False,
                         })
-                    elif len(assistant_blocks_by_index) == 0 and not persisted_assistant_message_this_turn and isinstance(msg.result, str) and msg.result != "":
+                    elif (
+                        len(assistant_blocks_by_index) == 0
+                        and not persisted_assistant_message_this_turn
+                        and isinstance(msg.result, str)
+                        and msg.result != ""
+                    ):
                         assistant_blocks_by_index[0] = {
                             "type": "text",
                             "text": msg.result,
@@ -1429,20 +1503,32 @@ class AgentHarness:
                     break
                 elif isinstance(msg, SystemMessage):
                     if msg.subtype == "init":
-                        await self._capture_claude_session_id(msg.data.get("session_id"))
+                        await self._capture_claude_session_id(
+                            msg.data.get("session_id")
+                        )
                     continue
                 else:
                     if isinstance(msg, AssistantMessage) and msg.error is not None:
                         assistant_error_type = str(msg.error)
                         print(f"[agent] assistant message error={msg.error}")
-                    await self._capture_claude_session_id(getattr(msg, "session_id", None))
-                    if not final_submit_response_reached and self.pause_until_user_query and self.current_status in {"done", "awaiting_user_response"}:
+                    await self._capture_claude_session_id(
+                        getattr(msg, "session_id", None)
+                    )
+                    if (
+                        not final_submit_response_reached
+                        and self.pause_until_user_query
+                        and self.current_status in {"done", "awaiting_user_response"}
+                    ):
                         final_submit_response_reached = True
-                        print("[agent] Final submit_response detected, interrupting SDK query and suppressing follow-up streamed assistant output")
+                        print(
+                            "[agent] Final submit_response detected, interrupting SDK query and suppressing follow-up streamed assistant output"
+                        )
                         try:
                             await self.client.interrupt()
                         except Exception as e:
-                            print(f"[agent] Failed to interrupt SDK query after final submit_response: {e!s}")
+                            print(
+                                f"[agent] Failed to interrupt SDK query after final submit_response: {e!s}"
+                            )
                     if stream_message_open or len(self.open_stream_blocks) > 0:
                         buffered_tool_messages.append(msg)
                         continue
@@ -1465,7 +1551,9 @@ class AgentHarness:
             else:
                 pending_message_duration_start = run_started_at
             assistant_message_persisted = await persist_current_assistant_message(
-                duration_seconds=max(0.0, time.perf_counter() - pending_message_duration_start)
+                duration_seconds=max(
+                    0.0, time.perf_counter() - pending_message_duration_start
+                )
             )
             if assistant_message_persisted:
                 persisted_assistant_message_this_turn = True
@@ -1477,7 +1565,9 @@ class AgentHarness:
                         error_history_payload = dict(stream_complete_error)
                         error_history_payload["raw_error"] = final_query_error
                         if assistant_error_type is not None:
-                            error_history_payload["assistant_error_type"] = assistant_error_type
+                            error_history_payload["assistant_error_type"] = (
+                                assistant_error_type
+                            )
                     else:
                         error_history_payload = {
                             "message": final_query_error,
@@ -1495,21 +1585,36 @@ class AgentHarness:
             await self._close_open_stream_blocks()
             if usage_data is not None:
                 await self._send_usage_update(usage_data)
-            stream_complete_payload: dict[str, object] = {"type": "agent_stream_complete"}
+            stream_complete_payload: dict[str, object] = {
+                "type": "agent_stream_complete"
+            }
             if stream_complete_error is not None:
                 stream_complete_payload["error"] = stream_complete_error
             await self.send(stream_complete_payload)
 
     async def _run_query_with_turn_prompt(
-        self,
-        *,
-        query: str,
-        request_id: str | None,
+        self, *, query: str, request_id: str | None
     ) -> None:
         assert self.client is not None
 
         try:
-            turn_prompt = await self._build_turn_prompt(query)
+            turn_behavior_content, examples_content = self._load_behavior_context()
+            notebook_state = await self.refresh_cells_context()
+            self.latest_notebook_state = notebook_state
+
+            context_blocks = [
+                f"<turn_behavior>\n{turn_behavior_content}\n</turn_behavior>",
+                f"<examples>\n{examples_content}\n</examples>",
+                f"<current_notebook_state>\n{notebook_state}\n</current_notebook_state>",
+            ]
+            if self.current_plan is not None:
+                plan_content = json.dumps(self.current_plan, indent=2)
+                context_blocks.append(
+                    f"<current_plan>\n{plan_content}\n</current_plan>"
+                )
+            context_blocks.append(f"<user_request>\n{query}\n</user_request>")
+            turn_prompt = "\n\n".join(context_blocks)
+
             print(
                 "[agent] Turn prompt ready "
                 f"(behavior={self.behavior.value}, "
@@ -1522,23 +1627,20 @@ class AgentHarness:
                 "error": f"Failed to build turn prompt: {e!s}",
                 "fatal": False,
             })
-            self.current_query_task = None
             return
 
         await self._run_query(prompt=turn_prompt, request_id=request_id)
 
-    
     async def handle_init(self, msg: dict[str, object]) -> None:
-        new_session_id = self._normalize_session_id(msg.get("session_id"))
-        session_changed = new_session_id is not None and new_session_id != self.agent_session_id
-        if session_changed:
-            print(f"[agent] Session initialized/changed: {new_session_id}")
-            self.agent_session_id = new_session_id
-        elif self.agent_session_id is None:
-            self.agent_session_id = new_session_id
+        new_session_id = self._normalize_db_session_id(msg.get("session_id"))
+        init_claude_session_id = self._normalize_session_id(
+            msg.get("claude_session_id")
+        )
 
-        if self.agent_session_id is None:
-            print("[agent] Missing session_id in init; cannot initialize Claude SDK client")
+        if new_session_id is None:
+            print(
+                "[agent] Missing or invalid session_id in init so cannot initialize Claude SDK client"
+            )
             await self.send({
                 "type": "agent_error",
                 "error": "Missing agent session id.",
@@ -1546,10 +1648,17 @@ class AgentHarness:
             })
             return
 
+        session_changed = new_session_id != self.agent_session_id
+        if session_changed:
+            print(f"[agent] Session initialized/changed: {new_session_id}")
+            self.agent_session_id = new_session_id
+
         if self.client is not None and not session_changed:
             print("[agent] SDK client already initialized; skipping re-init")
             if len(self.pending_operations) > 0:
-                print(f"[agent] Failing {len(self.pending_operations)} pending operations for retry")
+                print(
+                    f"[agent] Failing {len(self.pending_operations)} pending operations for retry"
+                )
                 for tx_id, future in list(self.pending_operations.items()):
                     if not future.done():
                         future.set_result({
@@ -1563,7 +1672,10 @@ class AgentHarness:
             return
 
         if self.client is not None and session_changed:
-            if self.current_query_task is not None and not self.current_query_task.done():
+            if (
+                self.current_query_task is not None
+                and not self.current_query_task.done()
+            ):
                 print("[agent] Interrupting running query due to session change")
                 await self.client.interrupt()
                 await self._wait_for_running_query_to_stop()
@@ -1576,14 +1688,21 @@ class AgentHarness:
             print(f"[agent] Failed to load agent session metadata: {e!s}")
             metadata = {}
         self.agent_session_metadata = metadata
-        resume_session_id = self._normalize_session_id(metadata.get("claude_session_id"))
+        resume_session_id = init_claude_session_id
+        if resume_session_id is None:
+            resume_session_id = self._normalize_session_id(
+                metadata.get("claude_session_id")
+            )
+        self.claude_session_id = resume_session_id
 
         if self.client is None:
             await self._connect_sdk_client(resume_session_id=resume_session_id)
             if resume_session_id is None:
                 print("[agent] SDK initialized without resume session")
             else:
-                print(f"[agent] SDK initialized with resume session {resume_session_id}")
+                print(
+                    f"[agent] SDK initialized with resume session {resume_session_id}"
+                )
 
         await self.send({"type": "agent_status", "status": "ready"})
         print(
@@ -1604,7 +1723,11 @@ class AgentHarness:
         self.pause_until_user_query = False
 
         if behavior is not None:
-            self.behavior = Behavior.step_by_step if behavior == "step_by_step" else Behavior.proactive
+            self.behavior = (
+                Behavior.step_by_step
+                if behavior == "step_by_step"
+                else Behavior.proactive
+            )
 
         full_query = query
         if contextual_node_data:
@@ -1621,23 +1744,27 @@ class AgentHarness:
 
         print(f"[agent] Message queued successfully (request_id={request_id})")
 
-    
     async def handle_cancel(self, msg: dict[str, object]) -> None:
         request_id = msg.get("request_id", "unknown")
         print(f"[agent] Cancelling request {request_id}")
 
-        has_running_query = self.client is not None and self.current_query_task is not None and not self.current_query_task.done()
-        if has_running_query:
+        has_running_query = (
+            self.current_query_task is not None and not self.current_query_task.done()
+        )
+        if self.client is not None and has_running_query:
             await self.client.interrupt()
             completed_gracefully = await self._wait_for_running_query_to_stop()
             if completed_gracefully:
                 print(f"[agent] Cancel completed for request {request_id}")
             else:
-                print(f"[agent] Cancel forced task cancellation for request {request_id}")
+                print(
+                    f"[agent] Cancel forced task cancellation for request {request_id}"
+                )
         else:
             print(f"[agent] No active query to interrupt for request {request_id}")
-            if self.current_query_task is not None and self.current_query_task.done():
-                self.current_query_task = None
+
+        if self.current_query_task is not None and self.current_query_task.done():
+            self.current_query_task = None
 
         self.should_auto_continue = False
         self.pending_auto_continue = False
@@ -1648,7 +1775,9 @@ class AgentHarness:
         self.executing_cells.clear()
 
         if len(self.pending_operations) > 0:
-            print(f"[agent] Cancelling {len(self.pending_operations)} pending operations")
+            print(
+                f"[agent] Cancelling {len(self.pending_operations)} pending operations"
+            )
             for tx_id, future in list(self.pending_operations.items()):
                 if not future.done():
                     future.cancel()
@@ -1675,12 +1804,11 @@ class AgentHarness:
             )
         except Exception as e:
             print(f"[agent] Failed to persist cancellation history: {e!s}")
- 
+
     async def get_full_prompt(self) -> dict:
         self.system_prompt = (context_root.parent / "system_prompt.md").read_text()
         messages = await self._build_messages_from_db()
 
-        
         def build_tree(path: Path, prefix: str = "") -> list[str]:
             lines = []
             entries = sorted(path.iterdir(), key=lambda p: (not p.is_dir(), p.name))
@@ -1706,7 +1834,7 @@ class AgentHarness:
             else "Interact with agent to populate notebook state.",
             "tree": tree_content,
         }
-    
+
     async def update_system_prompt(self, msg: dict[str, object]) -> dict:
         assert self.client is not None
         new_content = msg.get("content")
@@ -1719,17 +1847,15 @@ class AgentHarness:
         self.client.options.system_prompt = new_content
 
         full_prompt = await self.get_full_prompt()
-        return {
-            "status": "success",
-            **full_prompt,
-        }
+        return {"status": "success", **full_prompt}
 
-    
     async def accept(self) -> None:
         msg = await self.conn.recv()
         msg_type = msg.get("type")
         msg_request_id = msg.get("request_id")
-        print(f"[agent] accept: received message type={msg_type} (request_id={msg_request_id})")
+        print(
+            f"[agent] accept: received message type={msg_type} (request_id={msg_request_id})"
+        )
 
         if msg_type == "init":
             print(f"[agent] Message: {msg_type}")
@@ -1738,11 +1864,15 @@ class AgentHarness:
             query = msg.get("query", "")
             query_preview = query[:60] + "..." if len(query) > 60 else query
             request_id = msg.get("request_id", "unknown")
-            print(f"[agent] accept: dispatching to handle_query (query={query_preview}, request_id={request_id})")
+            print(
+                f"[agent] accept: dispatching to handle_query (query={query_preview}, request_id={request_id})"
+            )
             handle_start = time.time()
             await self.handle_query(msg)
             handle_elapsed = time.time() - handle_start
-            print(f"[agent] accept: handle_query completed in {handle_elapsed:.3f}s (request_id={request_id})")
+            print(
+                f"[agent] accept: handle_query completed in {handle_elapsed:.3f}s (request_id={request_id})"
+            )
         elif msg_type == "agent_cancel":
             request_id = msg.get("request_id", "unknown")
             print(f"[agent] Cancel: {request_id}")
@@ -1753,7 +1883,9 @@ class AgentHarness:
             if result.get("status") != "success":
                 print(f"[agent] Failed to reset kernel: {result.get('error')}")
         elif msg_type == "agent_action_response":
-            print(f"[agent] {msg.get('action', 'unknown')} -> {msg.get('status', 'unknown')}")
+            print(
+                f"[agent] {msg.get('action', 'unknown')} -> {msg.get('status', 'unknown')}"
+            )
             await self.handle_action_response(msg)
         elif msg_type == "kernel_message":
             nested_msg = msg.get("message", {})
@@ -1773,11 +1905,23 @@ class AgentHarness:
                 if cell_id is not None:
                     self.executing_cells.discard(str(cell_id))
                 if self.pause_until_user_query:
-                    print(f"        Suppressing cell {cell_id} result while pause_until_user_query is True")
+                    print(
+                        f"        Suppressing cell {cell_id} result while pause_until_user_query is True"
+                    )
                     return
-                execution_statuses = {"executing", "awaiting_cell_execution", "thinking", "fixing"}
-                if self.current_status is not None and self.current_status not in execution_statuses:
-                    print(f"        Not adding cell {cell_id} result because {self.current_status}")
+                execution_statuses = {
+                    "executing",
+                    "awaiting_cell_execution",
+                    "thinking",
+                    "fixing",
+                }
+                if (
+                    self.current_status is not None
+                    and self.current_status not in execution_statuses
+                ):
+                    print(
+                        f"        Not adding cell {cell_id} result because {self.current_status}"
+                    )
                     return
 
                 if self.current_request_id is not None:
@@ -1790,7 +1934,9 @@ class AgentHarness:
                         "display_name": display_name,
                     })
                 else:
-                    print(f"        Cell {cell_id} completed but no active request - updating executing_cells only")
+                    print(
+                        f"        Cell {cell_id} completed but no active request - updating executing_cells only"
+                    )
 
             elif nested_type == "start_cell":
                 cell_id = nested_msg.get("cell_id")
@@ -1809,7 +1955,7 @@ class AgentHarness:
                         self.current_status = "thinking"
                         await self.pending_messages.put({
                             "type": "set_widget_value",
-                            "data": self.expected_widgets
+                            "data": self.expected_widgets,
                         })
                         print("        Finished waiting for widget input")
             else:
@@ -1823,18 +1969,14 @@ class AgentHarness:
                 "type": "agent_action_response",
                 "tx_id": tx_id,
                 "status": "success",
-                **result
+                **result,
             })
         elif msg_type == "update_system_prompt":
             tx_id = msg.get("tx_id")
             print(f"[agent] Update system prompt request (tx_id={tx_id})")
             result = await self.update_system_prompt(msg)
 
-            await self.send({
-                "type": "agent_action_response",
-                "tx_id": tx_id,
-                **result
-            })
+            await self.send({"type": "agent_action_response", "tx_id": tx_id, **result})
         elif msg_type == "seed_plan_from_history":
             print("[agent] seed_plan_from_history received")
             plan = msg.get("plan")
