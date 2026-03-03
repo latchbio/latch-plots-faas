@@ -1247,10 +1247,10 @@ class AgentHarness:
             resolved_duration = duration_seconds
             if resolved_duration is None:
                 if assistant_message_started_at is not None:
-                    duration_base = assistant_message_started_at
+                    message_duration_start = assistant_message_started_at
                 else:
-                    duration_base = run_started_at
-                resolved_duration = max(0.0, time.perf_counter() - duration_base)
+                    message_duration_start = run_started_at
+                resolved_duration = max(0.0, time.perf_counter() - message_duration_start)
 
             assistant_message_persisted = False
             try:
@@ -1461,11 +1461,11 @@ class AgentHarness:
             })
         finally:
             if assistant_message_started_at is not None:
-                pending_duration_base = assistant_message_started_at
+                pending_message_duration_start = assistant_message_started_at
             else:
-                pending_duration_base = run_started_at
+                pending_message_duration_start = run_started_at
             assistant_message_persisted = await persist_current_assistant_message(
-                duration_seconds=max(0.0, time.perf_counter() - pending_duration_base)
+                duration_seconds=max(0.0, time.perf_counter() - pending_message_duration_start)
             )
             if assistant_message_persisted:
                 persisted_assistant_message_this_turn = True
