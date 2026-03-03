@@ -451,29 +451,29 @@ class AgentHarness:
                 print(f"[agent] Failed to persist message tool_use blocks: {e!s}")
 
         if len(tool_result_blocks) > 0:
-            tool_result_blocks_with_added_fields: list[dict[str, object]] = []
+            normalized_tool_result_blocks: list[dict[str, object]] = []
             for block in tool_result_blocks:
-                tool_result_block_with_added_fields = dict(block)
+                normalized_tool_result_block = dict(block)
                 tool_use_id = block.get("tool_use_id")
                 if isinstance(tool_use_id, str):
                     tool_name = tool_use_index.get(tool_use_id)
                     content = block.get("content")
                     if isinstance(tool_name, str) and isinstance(content, (str, list)):
-                        tool_result_block_with_added_fields["content"] = (
+                        normalized_tool_result_block["content"] = (
                             self._build_generic_tool_result_content(
                                 tool_name=tool_name,
                                 content=content,
                                 is_error=bool(block.get("is_error", False)),
                             )
                         )
-                tool_result_blocks_with_added_fields.append(
-                    tool_result_block_with_added_fields
+                normalized_tool_result_blocks.append(
+                    normalized_tool_result_block
                 )
 
             try:
                 await self._insert_history(
                     role=message_role or "user",
-                    payload={"content": tool_result_blocks_with_added_fields},
+                    payload={"content": normalized_tool_result_blocks},
                     request_id=request_id,
                 )
             except Exception as e:
