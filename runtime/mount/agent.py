@@ -805,6 +805,8 @@ class AgentHarness:
         def _task_done_callback(task: asyncio.Task) -> None:
             try:
                 task.result()
+            except asyncio.CancelledError:
+                pass
             except Exception as e:
                 print(f"[agent] conversation_task raised exception: {e}")
                 traceback.print_exc()
@@ -1625,13 +1627,11 @@ class AgentHarness:
     async def handle_init(self, msg: dict[str, object]) -> None:
         try:
             new_session_id = int(msg.get("session_id"))
-        except (TypeError, ValueError):
-            print(
-                "[agent] Missing or invalid session_id in init so cannot initialize Claude SDK client"
-            )
+        except Exception:
+            print("[agent] invalid session id")
             await self.send({
                 "type": "agent_error",
-                "error": "Missing agent session id.",
+                "error": "Invalid agent session id.",
                 "fatal": False,
             })
             return
