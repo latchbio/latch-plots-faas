@@ -749,22 +749,13 @@ class AgentHarness:
             "context_limit": 200_000,
         })
 
-    def _normalize_session_id(self, raw_session_id: object) -> str | None:
+    def _normalize_claude_session_id(self, raw_session_id: object) -> str | None:
         if raw_session_id is None:
             return None
         session_id = str(raw_session_id).strip()
         if session_id == "":
             return None
         return session_id
-
-    def _normalize_db_session_id(self, raw_session_id: object) -> int | None:
-        session_id = self._normalize_session_id(raw_session_id)
-        if session_id is None:
-            return None
-        try:
-            return int(session_id)
-        except ValueError:
-            return None
 
     async def _close_open_stream_blocks(self) -> None:
         if len(self.open_stream_blocks) == 0:
@@ -1051,12 +1042,12 @@ class AgentHarness:
         )
 
     async def _capture_claude_session_id(self, raw_session_id: object) -> None:
-        session_id = self._normalize_session_id(raw_session_id)
+        session_id = self._normalize_claude_session_id(raw_session_id)
         if session_id is None or self.agent_session_id is None:
             return
 
         self.claude_session_id = session_id
-        existing = self._normalize_session_id(
+        existing = self._normalize_claude_session_id(
             self.agent_session_metadata.get("claude_session_id")
         )
         if existing == session_id:
@@ -1632,12 +1623,9 @@ class AgentHarness:
         await self._run_query(prompt=turn_prompt, request_id=request_id)
 
     async def handle_init(self, msg: dict[str, object]) -> None:
-        new_session_id = self._normalize_db_session_id(msg.get("session_id"))
-        init_claude_session_id = self._normalize_session_id(
-            msg.get("claude_session_id")
-        )
-
-        if new_session_id is None:
+        try:
+            new_session_id = int(msg.get("session_id"))
+        except (TypeError, ValueError):
             print(
                 "[agent] Missing or invalid session_id in init so cannot initialize Claude SDK client"
             )
@@ -1647,6 +1635,10 @@ class AgentHarness:
                 "fatal": False,
             })
             return
+
+        init_claude_session_id = self._normalize_claude_session_id(
+            msg.get("claude_session_id")
+        )
 
         session_changed = new_session_id != self.agent_session_id
         if session_changed:
@@ -1690,7 +1682,7 @@ class AgentHarness:
         self.agent_session_metadata = metadata
         resume_session_id = init_claude_session_id
         if resume_session_id is None:
-            resume_session_id = self._normalize_session_id(
+            resume_session_id = self._normalize_claude_session_id(
                 metadata.get("claude_session_id")
             )
         self.claude_session_id = resume_session_id
