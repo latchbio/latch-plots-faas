@@ -42,7 +42,7 @@ from latch_data_validation.data_validation import validate
 from tools import MCP_ALLOWED_TOOL_NAMES, MCP_SERVER_NAME, agent_tools_mcp
 from lplots import _inject
 from socketio_thread import SocketIoThread
-from utils import auth_token_sdk, gql_query, nucleus_url, sdk_token
+from utils import auth_token_sdk, gql_query, nucleus_url, pod_id, sdk_token
 
 sys.stdout.reconfigure(line_buffering=True)
 
@@ -1181,24 +1181,15 @@ class AgentHarness:
 
     # todo(tim): cleanup this key stuff once proxy working
     def _build_sdk_env(self) -> dict[str, str]:
-        direct_anthropic_key = os.environ.get(
-            "AGENT_SDK_DIRECT_ANTHROPIC_KEY", ""
-        ).strip()
-        if direct_anthropic_key != "":
-            print("[agent] SDK gateway mode: direct-anthropic")
-            return {
-                "ANTHROPIC_AUTH_TOKEN": direct_anthropic_key,
-                "ANTHROPIC_API_KEY": direct_anthropic_key,
-            }
-
-        sdk_base_url = f"{nucleus_url}/infer/plots-agent/anthropic"
-        sdk_auth_token = sdk_token if sdk_token != "" else auth_token_sdk
-        print(f"[agent] SDK gateway mode: nucleus-proxy ({sdk_base_url})")
-        return {
+        sdk_base_url = f"{nucleus_url}/infer/plots-agent/anthropic-sdk-test"
+        sdk_env = {
             "ANTHROPIC_BASE_URL": sdk_base_url,
-            "ANTHROPIC_AUTH_TOKEN": sdk_auth_token,
-            "ANTHROPIC_API_KEY": sdk_auth_token,
+            "ANTHROPIC_AUTH_TOKEN": sdk_token.strip(),
+            "ANTHROPIC_CUSTOM_HEADERS": f"Pod-Id: {str(pod_id)}",
         }
+
+        print(f"[agent] SDK gateway mode: nucleus-proxy ({sdk_base_url})")
+        return sdk_env
 
     async def _connect_sdk_client(self, *, resume_session_id: str | None) -> None:
         self.system_prompt = self._compose_turn_system_prompt()
