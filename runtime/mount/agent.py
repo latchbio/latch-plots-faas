@@ -1,7 +1,6 @@
 import asyncio
 import json
 import os
-import re
 import socket
 import sys
 import time
@@ -13,9 +12,21 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, TypedDict
 
-from anthropic.types import MessageParam
+from anthropic.types import (
+    InputJSONDelta,
+    MessageParam,
+    RawContentBlockDeltaEvent,
+    RawContentBlockStartEvent,
+    RawContentBlockStopEvent,
+    RawMessageDeltaEvent,
+    RawMessageStartEvent,
+    RawMessageStopEvent,
+    TextDelta,
+    ThinkingDelta,
+    ToolUseBlock as AnthropicToolUseBlock,
+)
 from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
 from claude_agent_sdk.types import (
     AssistantMessage,
@@ -69,6 +80,79 @@ class Behavior(Enum):
     step_by_step = "step_by_step"
 
 
+HistoryRole = Literal["user", "assistant", "system"]
+
+
+class AgentSessionMetadata(TypedDict, total=False):
+    claude_session_id: str
+
+
+class TextToolResultBlock(TypedDict):
+    type: Literal["text"]
+    text: str
+
+
+ToolResultContent = str | list[TextToolResultBlock]
+
+
+class ToolUseHistoryBlock(TypedDict):
+    type: Literal["tool_use"]
+    id: str
+    name: str
+    input: dict[str, Any]
+
+
+class ToolResultHistoryBlock(TypedDict, total=False):
+    type: Literal["tool_result"]
+    tool_use_id: str
+    content: ToolResultContent
+    is_error: bool
+
+
+class GenericToolResultPayload(TypedDict, total=False):
+    tool_name: str
+    success: bool
+    summary: str
+    raw_output: str
+    error: str
+
+
+class AssistantTextBlock(TypedDict):
+    type: Literal["text"]
+    text: str
+
+
+class AssistantThinkingBlock(TypedDict):
+    type: Literal["thinking"]
+    thinking: str
+
+
+AssistantStreamBlock = AssistantTextBlock | AssistantThinkingBlock
+
+
+class StreamCompleteErrorPayload(TypedDict):
+    message: str
+    should_contact_support: bool
+    should_clear_history: bool
+
+
+class ErrorHistoryPayload(TypedDict, total=False):
+    message: str
+    should_contact_support: bool
+    should_clear_history: bool
+    raw_error: str
+    assistant_error_type: str
+
+
+AnthropicStreamEvent = (
+    RawMessageStartEvent
+    | RawMessageDeltaEvent
+    | RawMessageStopEvent
+    | RawContentBlockStartEvent
+    | RawContentBlockDeltaEvent
+    | RawContentBlockStopEvent
+)
+
 @dataclass
 class AgentHarness:
     conn: SocketIoThread
@@ -89,7 +173,7 @@ class AgentHarness:
     claude_session_id: str | None = None
     latest_notebook_context: dict = field(default_factory=dict)
     current_status: str | None = None
-    expected_widgets: dict[str, object | None] = field(default_factory=dict)
+    expected_widgets: dict[str, Any | None] = field(default_factory=dict)
     behavior: Behavior = Behavior.step_by_step
     latest_notebook_state: str | None = None
     current_plan: dict | None = None
@@ -100,9 +184,9 @@ class AgentHarness:
     )
     current_query_task: asyncio.Task | None = None
     open_stream_blocks: dict[int, str] = field(default_factory=dict)
-    agent_session_metadata: dict[str, object] = field(default_factory=dict)
+    agent_session_metadata: AgentSessionMetadata = field(default_factory=dict)
 
-    async def send(self, msg: dict[str, object]) -> None:
+    async def send(self, msg: dict[str, Any]) -> None:
         msg_type = msg.get("type", "unknown")
         if msg_type != "agent_stream_delta":
             print(f"[agent] Sending message: {msg_type}")
@@ -282,8 +366,8 @@ class AgentHarness:
         self,
         *,
         event_type: str = "anthropic_message",
-        role: str = "user",
-        payload: dict,
+        role: HistoryRole = "user",
+        payload: dict[str, Any],
         request_id: str | None = None,
         tx_id: str | None = None,
         template_version_id: str | None = None,
@@ -330,14 +414,12 @@ class AgentHarness:
 
         await self._notify_history_updated(request_id=request_id)
 
-    def _normalize_tool_result_content(
-        self, tool_response: object
-    ) -> str | list[dict[str, object]]:
+    def _normalize_tool_result_content(self, tool_response: Any) -> ToolResultContent:
         if isinstance(tool_response, str):
             return tool_response
 
         if isinstance(tool_response, list):
-            normalized_blocks: list[dict[str, object]] = []
+            normalized_blocks: list[TextToolResultBlock] = []
             for item in tool_response:
                 if isinstance(item, dict):
                     block_type = item.get("type")
@@ -361,23 +443,17 @@ class AgentHarness:
 
         return json.dumps(tool_response, default=str)
 
-    def _extract_tool_result_text(
-        self, content: str | list[dict[str, object]]
-    ) -> str | None:
+    def _extract_tool_result_text(self, content: ToolResultContent) -> str | None:
         if isinstance(content, str):
             return content
         for block in content:
-            if (
-                isinstance(block, dict)
-                and block.get("type") == "text"
-                and isinstance(block.get("text"), str)
-            ):
+            if block["type"] == "text":
                 return block["text"]
         return None
 
     def _build_generic_tool_result_content(
-        self, *, tool_name: str, content: str | list[dict[str, object]], is_error: bool
-    ) -> str | list[dict[str, object]]:
+        self, *, tool_name: str, content: ToolResultContent, is_error: bool
+    ) -> ToolResultContent:
         text_content = self._extract_tool_result_text(content)
         if text_content is None:
             return content
@@ -389,7 +465,7 @@ class AgentHarness:
         if isinstance(parsed, dict) and isinstance(parsed.get("tool_name"), str):
             return content
 
-        result_payload: dict[str, object] = {
+        result_payload: GenericToolResultPayload = {
             "tool_name": tool_name,
             "success": not is_error,
             "summary": (
@@ -406,38 +482,37 @@ class AgentHarness:
         return [{"type": "text", "text": json.dumps(result_payload)}]
 
     def _extract_tool_blocks_from_sdk_message(
-        self, msg: object
-    ) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
-        content = getattr(msg, "content", None)
+        self, msg: AssistantMessage | UserMessage
+    ) -> tuple[list[ToolUseHistoryBlock], list[ToolResultHistoryBlock]]:
+        content = msg.content
         if not isinstance(content, list):
             return [], []
 
-        tool_use_blocks: list[dict[str, object]] = []
-        tool_result_blocks: list[dict[str, object]] = []
+        tool_use_blocks: list[ToolUseHistoryBlock] = []
+        tool_result_blocks: list[ToolResultHistoryBlock] = []
 
         for block in content:
             if isinstance(block, ToolUseBlock):
-                tool_use_id = str(block.id).strip()
-                tool_name = str(block.name).strip()
+                tool_use_id = block.id
+                tool_name = block.name
                 if tool_use_id == "" or tool_name == "":
                     continue
-                tool_input = block.input if isinstance(block.input, dict) else {}
                 tool_use_blocks.append({
                     "type": "tool_use",
                     "id": tool_use_id,
                     "name": tool_name,
-                    "input": tool_input,
+                    "input": block.input,
                 })
                 continue
 
             if not isinstance(block, ToolResultBlock):
                 continue
 
-            tool_use_id = str(block.tool_use_id).strip()
+            tool_use_id = block.tool_use_id
             if tool_use_id == "":
                 continue
             normalized_content = self._normalize_tool_result_content(block.content)
-            payload_block: dict[str, object] = {
+            payload_block = {
                 "type": "tool_result",
                 "tool_use_id": tool_use_id,
                 "content": normalized_content,
@@ -449,30 +524,26 @@ class AgentHarness:
         return tool_use_blocks, tool_result_blocks
 
     async def _persist_tool_blocks_from_sdk_message(
-        self, *, msg: object, request_id: str | None, tool_use_index: dict[str, str]
+        self,
+        *,
+        msg: AssistantMessage | UserMessage,
+        request_id: str | None,
+        tool_use_index: dict[str, str],
     ) -> None:
         tool_use_blocks, tool_result_blocks = (
             self._extract_tool_blocks_from_sdk_message(msg)
         )
-        message_role: str | None = None
-        if isinstance(msg, AssistantMessage):
-            message_role = "assistant"
-        elif isinstance(msg, UserMessage):
-            message_role = "user"
+        message_role: Literal["assistant", "user"] = (
+            "assistant" if isinstance(msg, AssistantMessage) else "user"
+        )
 
         for block in tool_use_blocks:
-            tool_use_id = block.get("id")
-            tool_name = block.get("name")
-            if not isinstance(tool_use_id, str) or tool_use_id == "":
-                continue
-            if not isinstance(tool_name, str) or tool_name == "":
-                continue
-            tool_use_index[tool_use_id] = tool_name
+            tool_use_index[block["id"]] = block["name"]
 
         if len(tool_use_blocks) > 0:
             try:
                 await self._insert_history(
-                    role=message_role or "assistant",
+                    role=message_role,
                     payload={"content": tool_use_blocks},
                     request_id=request_id,
                 )
@@ -480,26 +551,30 @@ class AgentHarness:
                 print(f"[agent] Failed to persist message tool_use blocks: {e!s}")
 
         if len(tool_result_blocks) > 0:
-            normalized_tool_result_blocks: list[dict[str, object]] = []
+            normalized_tool_result_blocks: list[ToolResultHistoryBlock] = []
             for block in tool_result_blocks:
-                normalized_tool_result_block = dict(block)
-                tool_use_id = block.get("tool_use_id")
-                if isinstance(tool_use_id, str):
-                    tool_name = tool_use_index.get(tool_use_id)
-                    content = block.get("content")
-                    if isinstance(tool_name, str) and isinstance(content, (str, list)):
-                        normalized_tool_result_block["content"] = (
-                            self._build_generic_tool_result_content(
-                                tool_name=tool_name,
-                                content=content,
-                                is_error=bool(block.get("is_error", False)),
-                            )
+                normalized_tool_result_block: ToolResultHistoryBlock = {
+                    "type": "tool_result",
+                    "tool_use_id": block["tool_use_id"],
+                    "content": block["content"],
+                }
+                if "is_error" in block:
+                    normalized_tool_result_block["is_error"] = block["is_error"]
+
+                tool_name = tool_use_index.get(block["tool_use_id"])
+                if tool_name is not None:
+                    normalized_tool_result_block["content"] = (
+                        self._build_generic_tool_result_content(
+                            tool_name=tool_name,
+                            content=block["content"],
+                            is_error=block.get("is_error", False),
                         )
+                    )
                 normalized_tool_result_blocks.append(normalized_tool_result_block)
 
             try:
                 await self._insert_history(
-                    role=message_role or "user",
+                    role=message_role,
                     payload={"content": normalized_tool_result_blocks},
                     request_id=request_id,
                 )
@@ -637,13 +712,10 @@ class AgentHarness:
 
         return "\n".join(cell_lines)
 
-    def _behavior_file_name(self) -> str:
-        return (
+    def _load_behavior_context(self) -> tuple[str, str]:
+        behavior_file = (
             "proactive.md" if self.behavior == Behavior.proactive else "step_by_step.md"
         )
-
-    def _load_behavior_context(self) -> tuple[str, str]:
-        behavior_file = self._behavior_file_name()
         turn_behavior_content = (
             context_root / "turn_behavior" / behavior_file
         ).read_text()
@@ -656,15 +728,13 @@ class AgentHarness:
 
         turn_behavior_content, examples_content = self._load_behavior_context()
 
-        final_system_prompt = re.sub(
-            r"TURN_BEHAVIOR_PLACEHOLDER",
+        final_system_prompt = self.system_prompt.replace(
+            "TURN_BEHAVIOR_PLACEHOLDER",
             f"<turn_behavior>\n{turn_behavior_content}\n</turn_behavior>",
-            self.system_prompt,
         )
-        return re.sub(
-            r"EXAMPLES_PLACEHOLDER",
+        return final_system_prompt.replace(
+            "EXAMPLES_PLACEHOLDER",
             f"<examples>\n{examples_content}\n</examples>",
-            final_system_prompt,
         )
 
     async def atomic_operation(
@@ -730,7 +800,7 @@ class AgentHarness:
                 duration = time.time() - start_time
                 print(f"[agent] {action} took {duration:.3f}s")
 
-    async def handle_action_response(self, msg: dict[str, object]) -> None:
+    async def handle_action_response(self, msg: dict[str, Any]) -> None:
         tx_id = msg.get("tx_id")
         fut = self.pending_operations.get(tx_id)
         if fut and not fut.done():
@@ -749,13 +819,10 @@ class AgentHarness:
             "context_limit": 200_000,
         })
 
-    def _normalize_claude_session_id(self, raw_session_id: object) -> str | None:
-        if raw_session_id is None:
+    def _normalize_claude_session_id(self, raw_session_id: str | None) -> str | None:
+        if raw_session_id is None or raw_session_id == "":
             return None
-        session_id = str(raw_session_id).strip()
-        if session_id == "":
-            return None
-        return session_id
+        return raw_session_id
 
     async def _close_open_stream_blocks(self) -> None:
         if len(self.open_stream_blocks) == 0:
@@ -1001,7 +1068,9 @@ class AgentHarness:
         finally:
             self.client = None
 
-    async def _load_agent_session_metadata(self, session_id: int) -> dict[str, object]:
+    async def _load_agent_session_metadata(
+        self, session_id: int
+    ) -> AgentSessionMetadata:
         response = await gql_query(
             auth=auth_token_sdk,
             query="""
@@ -1023,10 +1092,11 @@ class AgentHarness:
         metadata = session.get("metadata")
         if not isinstance(metadata, dict):
             return {}
-        return metadata
+    async def _persist_agent_session_metadata(
+        self, metadata: AgentSessionMetadata
 
     async def _persist_agent_session_metadata(
-        self, metadata: dict[str, object]
+        self, metadata: AgentSessionMetadata
     ) -> None:
         if self.agent_session_id is None:
             return
@@ -1043,7 +1113,7 @@ class AgentHarness:
             variables={"id": self.agent_session_id, "metadata": metadata},
         )
 
-    async def _capture_claude_session_id(self, raw_session_id: object) -> None:
+    async def _capture_claude_session_id(self, raw_session_id: str | None) -> None:
         session_id = self._normalize_claude_session_id(raw_session_id)
         if session_id is None or self.agent_session_id is None:
             return
@@ -1055,16 +1125,15 @@ class AgentHarness:
         if existing == session_id:
             return
 
-        merged_metadata = dict(self.agent_session_metadata)
-        merged_metadata["claude_session_id"] = session_id
+        metadata: AgentSessionMetadata = {"claude_session_id": session_id}
 
         try:
-            await self._persist_agent_session_metadata(merged_metadata)
+            await self._persist_agent_session_metadata(metadata)
         except Exception as e:
             print(f"[agent] Failed to persist Claude session id metadata: {e!s}")
             return
 
-        self.agent_session_metadata = merged_metadata
+        self.agent_session_metadata = metadata
         print(
             "[agent] Persisted Claude session id "
             f"(db_session_id={self.agent_session_id}, claude_session_id={session_id})"
@@ -1151,48 +1220,43 @@ class AgentHarness:
 
     async def _handle_stream_event(
         self,
-        event: dict[str, Any],
+        event: AnthropicStreamEvent,
         *,
-        collected_assistant_blocks: dict[int, dict[str, object]] | None = None,
+        collected_assistant_blocks: dict[int, AssistantStreamBlock] | None = None,
     ) -> None:
-        event_type = event.get("type")
-
-        if event_type == "message_start":
+        if isinstance(event, RawMessageStartEvent):
             self.open_stream_blocks.clear()
             return
 
-        if event_type == "content_block_start":
-            block_index = int(event.get("index", -1))
-            block = event.get("content_block", {})
-            block_type = block.get("type", "unknown")
-            if block_index >= 0:
-                if block_index in self.open_stream_blocks:
-                    await self.send({
-                        "type": "agent_stream_block_stop",
-                        "block_index": block_index,
-                    })
-                self.open_stream_blocks[block_index] = str(block_type)
+        if isinstance(event, RawContentBlockStartEvent):
+            block_index = event.index
+            block_type = event.content_block.type
+            if block_index in self.open_stream_blocks:
+                await self.send({
+                    "type": "agent_stream_block_stop",
+                    "block_index": block_index,
+                })
+            self.open_stream_blocks[block_index] = block_type
 
-            if collected_assistant_blocks is not None and block_index >= 0:
+            if collected_assistant_blocks is not None:
                 if block_type == "text":
-                    collected_assistant_blocks[block_index] = {
-                        "type": "text",
-                        "text": "",
-                    }
+                    collected_assistant_blocks[block_index] = {"type": "text", "text": ""}
                 elif block_type == "thinking":
                     collected_assistant_blocks[block_index] = {
                         "type": "thinking",
                         "thinking": "",
                     }
 
-            payload: dict[str, object] = {
+            payload: dict[str, Any] = {
                 "type": "agent_stream_block_start",
                 "block_index": block_index,
                 "block_type": block_type,
             }
-            if block_type == "tool_use":
-                payload["block_id"] = str(block.get("id", ""))
-                payload["block_name"] = str(block.get("name", ""))
+            if block_type == "tool_use" and isinstance(
+                event.content_block, AnthropicToolUseBlock
+            ):
+                payload["block_id"] = event.content_block.id
+                payload["block_name"] = event.content_block.name
                 print(
                     "[agent] tool_use block started "
                     f"index={block_index} name={payload['block_name']} id={payload['block_id']}"
@@ -1200,48 +1264,46 @@ class AgentHarness:
             await self.send(payload)
             return
 
-        if event_type == "content_block_delta":
-            block_index = int(event.get("index", -1))
-            delta = event.get("delta", {})
-            delta_type = delta.get("type")
+        if isinstance(event, RawContentBlockDeltaEvent):
+            block_index = event.index
+            delta = event.delta
 
-            if delta_type == "text_delta":
+            if isinstance(delta, TextDelta):
                 await self.send({
                     "type": "agent_stream_delta",
                     "block_index": block_index,
                     "block_type": "text",
-                    "delta": str(delta.get("text", "")),
+                    "delta": delta.text,
                 })
-            elif delta_type == "thinking_delta":
+            elif isinstance(delta, ThinkingDelta):
                 await self.send({
                     "type": "agent_stream_delta",
                     "block_index": block_index,
                     "block_type": "thinking",
-                    "delta": str(delta.get("thinking", "")),
+                    "delta": delta.thinking,
                 })
-            elif delta_type == "input_json_delta":
+            elif isinstance(delta, InputJSONDelta):
                 await self.send({
                     "type": "agent_stream_delta",
                     "block_index": block_index,
                     "block_type": "tool_use",
-                    "delta": str(delta.get("partial_json", "")),
+                    "delta": delta.partial_json,
                 })
 
-            if collected_assistant_blocks is not None and block_index >= 0:
+            if collected_assistant_blocks is not None:
                 existing = collected_assistant_blocks.get(block_index)
                 if existing is not None:
-                    if delta_type == "text_delta":
-                        existing["text"] = str(existing.get("text", "")) + str(
-                            delta.get("text", "")
-                        )
-                    elif delta_type == "thinking_delta":
-                        existing["thinking"] = str(existing.get("thinking", "")) + str(
-                            delta.get("thinking", "")
-                        )
+                    if isinstance(delta, TextDelta) and existing["type"] == "text":
+                        existing["text"] += delta.text
+                    elif (
+                        isinstance(delta, ThinkingDelta)
+                        and existing["type"] == "thinking"
+                    ):
+                        existing["thinking"] += delta.thinking
             return
 
-        if event_type == "content_block_stop":
-            block_index = int(event.get("index", -1))
+        if isinstance(event, RawContentBlockStopEvent):
+            block_index = event.index
             if block_index in self.open_stream_blocks:
                 self.open_stream_blocks.pop(block_index, None)
             await self.send({
@@ -1250,10 +1312,10 @@ class AgentHarness:
             })
             return
 
-        if event_type == "message_delta":
+        if isinstance(event, RawMessageDeltaEvent):
             return
 
-        if event_type == "message_stop":
+        if isinstance(event, RawMessageStopEvent):
             await self._close_open_stream_blocks()
             return
 
@@ -1263,16 +1325,16 @@ class AgentHarness:
 
         self.open_stream_blocks.clear()
         run_started_at = time.perf_counter()
-        assistant_blocks_by_index: dict[int, dict[str, object]] = {}
+        assistant_blocks_by_index: dict[int, AssistantStreamBlock] = {}
         assistant_message_started_at: float | None = None
         persisted_assistant_message_this_turn = False
         final_query_error: str | None = None
-        stream_complete_error: dict[str, object] | None = None
+        stream_complete_error: StreamCompleteErrorPayload | None = None
         usage_data: dict[str, Any] | None = None
         tool_use_index: dict[str, str] = {}
         assistant_error_type: str | None = None
         stream_message_open = False
-        buffered_tool_messages: list[object] = []
+        buffered_tool_messages: list[AssistantMessage | UserMessage] = []
         final_submit_response_reached = False
         dropping_post_submit_stream_message = False
 
@@ -1282,9 +1344,10 @@ class AgentHarness:
             if len(assistant_blocks_by_index) == 0:
                 return False
 
-            assistant_content: list[dict[str, object]] = []
-            for idx in sorted(assistant_blocks_by_index):
-                assistant_content.append(assistant_blocks_by_index[idx])
+            assistant_content = [
+                assistant_blocks_by_index[idx]
+                for idx in sorted(assistant_blocks_by_index)
+            ]
 
             resolved_duration = duration_seconds
             if resolved_duration is None:
@@ -1401,14 +1464,10 @@ class AgentHarness:
                         delta_usage = msg.event.get("usage")
                         if isinstance(delta_usage, dict):
                             usage_data = delta_usage
-                    elif event_type == "message_stop":
-                        stop_usage = msg.event.get("message", {}).get("usage")
-                        if isinstance(stop_usage, dict):
-                            usage_data = stop_usage
                     await self._handle_stream_event(
-                        msg.event, collected_assistant_blocks=assistant_blocks_by_index
+                        event, collected_assistant_blocks=assistant_blocks_by_index
                     )
-                    if event_type == "message_stop":
+                    if isinstance(event, RawMessageStopEvent):
                         message_duration_seconds: float | None = None
                         if assistant_message_started_at is not None:
                             message_duration_seconds = max(
@@ -1496,17 +1555,15 @@ class AgentHarness:
                     break
                 elif isinstance(msg, SystemMessage):
                     if msg.subtype == "init":
+                        session_id = msg.data.get("session_id")
                         await self._capture_claude_session_id(
-                            msg.data.get("session_id")
+                            session_id if isinstance(session_id, str) else None
                         )
                     continue
-                else:
+                elif isinstance(msg, (AssistantMessage, UserMessage)):
                     if isinstance(msg, AssistantMessage) and msg.error is not None:
-                        assistant_error_type = str(msg.error)
+                        assistant_error_type = msg.error
                         print(f"[agent] assistant message error={msg.error}")
-                    await self._capture_claude_session_id(
-                        getattr(msg, "session_id", None)
-                    )
                     if (
                         not final_submit_response_reached
                         and self.pause_until_user_query
@@ -1529,6 +1586,8 @@ class AgentHarness:
                         msg=msg, request_id=request_id, tool_use_index=tool_use_index
                     )
                     continue
+                else:
+                    raise TypeError(f"Unexpected SDK message type: {type(msg)}")
 
             print(f"[agent] finished SDK query (request_id={request_id})")
         except Exception as e:
@@ -1555,8 +1614,16 @@ class AgentHarness:
             if final_query_error is not None:
                 try:
                     if stream_complete_error is not None:
-                        error_history_payload = dict(stream_complete_error)
-                        error_history_payload["raw_error"] = final_query_error
+                        error_history_payload: ErrorHistoryPayload = {
+                            "message": stream_complete_error["message"],
+                            "should_contact_support": stream_complete_error[
+                                "should_contact_support"
+                            ],
+                            "should_clear_history": stream_complete_error[
+                                "should_clear_history"
+                            ],
+                            "raw_error": final_query_error,
+                        }
                         if assistant_error_type is not None:
                             error_history_payload["assistant_error_type"] = (
                                 assistant_error_type
@@ -1578,9 +1645,7 @@ class AgentHarness:
             await self._close_open_stream_blocks()
             if usage_data is not None:
                 await self._send_usage_update(usage_data)
-            stream_complete_payload: dict[str, object] = {
-                "type": "agent_stream_complete"
-            }
+            stream_complete_payload = {"type": "agent_stream_complete"}
             if stream_complete_error is not None:
                 stream_complete_payload["error"] = stream_complete_error
             await self.send(stream_complete_payload)
@@ -1624,7 +1689,7 @@ class AgentHarness:
 
         await self._run_query(prompt=turn_prompt, request_id=request_id)
 
-    async def handle_init(self, msg: dict[str, object]) -> None:
+    async def handle_init(self, msg: dict[str, Any]) -> None:
         try:
             new_session_id = int(msg.get("session_id"))
         except Exception:
@@ -1636,8 +1701,11 @@ class AgentHarness:
             })
             return
 
+        raw_init_claude_session_id = msg.get("claude_session_id")
         init_claude_session_id = self._normalize_claude_session_id(
-            msg.get("claude_session_id")
+            raw_init_claude_session_id
+            if isinstance(raw_init_claude_session_id, str)
+            else None
         )
 
         session_changed = new_session_id != self.agent_session_id
@@ -1651,7 +1719,7 @@ class AgentHarness:
                 print(
                     f"[agent] Failing {len(self.pending_operations)} pending operations for retry"
                 )
-                for tx_id, future in list(self.pending_operations.items()):
+                for future in self.pending_operations.values():
                     if not future.done():
                         future.set_result({
                             "status": "error",
@@ -1704,7 +1772,7 @@ class AgentHarness:
         )
         self._start_conversation_loop()
 
-    async def handle_query(self, msg: dict[str, object]) -> None:
+    async def handle_query(self, msg: dict[str, Any]) -> None:
         query = msg.get("query", "")
         request_id = msg.get("request_id")
         contextual_node_data = msg.get("contextual_node_data")
@@ -1736,7 +1804,7 @@ class AgentHarness:
 
         print(f"[agent] Message queued successfully (request_id={request_id})")
 
-    async def handle_cancel(self, msg: dict[str, object]) -> None:
+    async def handle_cancel(self, msg: dict[str, Any]) -> None:
         request_id = msg.get("request_id", "unknown")
         print(f"[agent] Cancelling request {request_id}")
 
@@ -1827,7 +1895,7 @@ class AgentHarness:
             "tree": tree_content,
         }
 
-    async def update_system_prompt(self, msg: dict[str, object]) -> dict:
+    async def update_system_prompt(self, msg: dict[str, Any]) -> dict:
         assert self.client is not None
         new_content = msg.get("content")
         if not isinstance(new_content, str):
