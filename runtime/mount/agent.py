@@ -38,6 +38,7 @@ from claude_agent_sdk.types import (
     ToolUseBlock,
     UserMessage,
 )
+from latch_data_validation.data_validation import validate
 from tools import MCP_ALLOWED_TOOL_NAMES, MCP_SERVER_NAME, agent_tools_mcp
 from lplots import _inject
 from socketio_thread import SocketIoThread
@@ -85,6 +86,18 @@ HistoryRole = Literal["user", "assistant", "system"]
 
 class AgentSessionMetadata(TypedDict, total=False):
     claude_session_id: str
+
+
+class AgentSessionMetadataQueryNode(TypedDict, total=False):
+    metadata: dict[str, Any] | None
+
+
+class AgentSessionMetadataQueryData(TypedDict, total=False):
+    agentSession: AgentSessionMetadataQueryNode | None
+
+
+class AgentSessionMetadataQueryResp(TypedDict, total=False):
+    data: AgentSessionMetadataQueryData
 
 
 class TextToolResultBlock(TypedDict):
@@ -1083,17 +1096,23 @@ class AgentHarness:
             variables={"id": session_id},
         )
 
-        data = response.get("data")
-        if not isinstance(data, dict):
+        try:
+            parsed_response = validate(response, AgentSessionMetadataQueryResp)
+            metadata = (
+                ((parsed_response.get("data") or {}).get("agentSession") or {}).get(
+                    "metadata"
+                )
+                or {}
+            )
+            claude_session_id = metadata.get("claude_session_id")
+            return (
+                {"claude_session_id": claude_session_id}
+                if isinstance(claude_session_id, str)
+                else {}
+            )
+        except Exception as e:
+            print(f"[agent] Invalid agent session metadata: {e!s}")
             return {}
-        session = data.get("agentSession")
-        if not isinstance(session, dict):
-            return {}
-        metadata = session.get("metadata")
-        if not isinstance(metadata, dict):
-            return {}
-    async def _persist_agent_session_metadata(
-        self, metadata: AgentSessionMetadata
 
     async def _persist_agent_session_metadata(
         self, metadata: AgentSessionMetadata
@@ -1138,6 +1157,27 @@ class AgentHarness:
             "[agent] Persisted Claude session id "
             f"(db_session_id={self.agent_session_id}, claude_session_id={session_id})"
         )
+
+    def _parse_stream_event(self, raw_event: dict[str, Any]) -> AnthropicStreamEvent | None:
+        event_type = raw_event.get("type")
+        try:
+            if event_type == "message_start":
+                return RawMessageStartEvent(**raw_event)
+            if event_type == "message_delta":
+                return RawMessageDeltaEvent(**raw_event)
+            if event_type == "message_stop":
+                return RawMessageStopEvent(**raw_event)
+            if event_type == "content_block_start":
+                return RawContentBlockStartEvent(**raw_event)
+            if event_type == "content_block_delta":
+                return RawContentBlockDeltaEvent(**raw_event)
+            if event_type == "content_block_stop":
+                return RawContentBlockStopEvent(**raw_event)
+        except Exception as e:
+            print(f"[agent] Invalid stream event payload type={event_type}: {e!s}")
+            return None
+        print(f"[agent] Unknown stream event type={event_type}")
+        return None
 
     # todo(tim): cleanup this key stuff once proxy working
     def _build_sdk_env(self) -> dict[str, str]:
@@ -1439,7 +1479,10 @@ class AgentHarness:
 
                 if isinstance(msg, StreamEvent):
                     await self._capture_claude_session_id(msg.session_id)
-                    event_type = msg.event.get("type")
+                    event = self._parse_stream_event(msg.event)
+                    if event is None:
+                        continue
+                    event_type = event.type
                     if final_submit_response_reached:
                         if event_type == "message_start":
                             dropping_post_submit_stream_message = True
@@ -1453,17 +1496,13 @@ class AgentHarness:
                                 dropping_post_submit_stream_message = False
                                 self.open_stream_blocks.clear()
                             continue
-                    if event_type == "message_start":
+                    if isinstance(event, RawMessageStartEvent):
                         stream_message_open = True
                         assistant_blocks_by_index.clear()
                         assistant_message_started_at = time.perf_counter()
-                        message_usage = msg.event.get("message", {}).get("usage")
-                        if isinstance(message_usage, dict):
-                            usage_data = message_usage
-                    elif event_type == "message_delta":
-                        delta_usage = msg.event.get("usage")
-                        if isinstance(delta_usage, dict):
-                            usage_data = delta_usage
+                        usage_data = event.message.usage.model_dump()
+                    elif isinstance(event, RawMessageDeltaEvent):
+                        usage_data = event.usage.model_dump()
                     await self._handle_stream_event(
                         event, collected_assistant_blocks=assistant_blocks_by_index
                     )
