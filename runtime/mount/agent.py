@@ -1814,7 +1814,6 @@ class AgentHarness:
                 await self.client.interrupt()
                 await self._wait_for_running_query_to_stop()
             await self._reset_for_new_session()
-            await self._disconnect_sdk_client()
 
         try:
             metadata = await self._load_agent_session_metadata(self.agent_session_id)
