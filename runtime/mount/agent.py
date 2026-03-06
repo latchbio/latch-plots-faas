@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from anthropic.types import MessageParam
-from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
+from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient, create_sdk_mcp_server
 from claude_agent_sdk.types import (
     AssistantMessage,
     McpSdkServerConfig,
@@ -27,7 +27,7 @@ from claude_agent_sdk.types import (
     ToolUseBlock,
     UserMessage,
 )
-from tools import MCP_ALLOWED_TOOL_NAMES, MCP_SERVER_NAME, agent_tools_mcp
+from tools import MCP_ALLOWED_TOOL_NAMES, MCP_SERVER_NAME, agent_tools_mcp, all_tools
 from lplots import _inject
 from socketio_thread import SocketIoThread
 from utils import auth_token_sdk, gql_query, nucleus_url, pod_id, sdk_token
@@ -1047,6 +1047,7 @@ class AgentHarness:
 
     async def _connect_sdk_client(self, *, resume_session_id: str | None) -> None:
         self.system_prompt = self._compose_turn_system_prompt()
+        self.mcp_server = create_sdk_mcp_server(name=MCP_SERVER_NAME, tools=all_tools)
         sdk_env = self._build_sdk_env()
 
         self.client = ClaudeSDKClient(
