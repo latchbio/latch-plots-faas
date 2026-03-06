@@ -1184,7 +1184,7 @@ class AgentHarness:
         sdk_base_url = f"{nucleus_url}/infer/plots-agent/anthropic-sdk-test"
         sdk_env = {
             "ANTHROPIC_BASE_URL": sdk_base_url,
-            "ANTHROPIC_AUTH_TOKEN": sdk_token,
+            "ANTHROPIC_API_KEY": sdk_token,
             "ANTHROPIC_CUSTOM_HEADERS": f"Pod-Id: {str(pod_id)}",
         }
 
