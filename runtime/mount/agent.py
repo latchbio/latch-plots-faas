@@ -1571,6 +1571,11 @@ class AgentHarness:
                             agent_error_message = str(stream_complete_error["message"])
                         else:
                             agent_error_message = final_query_error
+                        print(
+                            "[agent] sending agent_error "
+                            f"assistant_error_type={assistant_error_type!r} final_query_error={final_query_error!r} "
+                            f"stream_complete_error={stream_complete_error!r}"
+                        )
                         await self.send({
                             "type": "agent_error",
                             "error": agent_error_message,
@@ -1628,6 +1633,7 @@ class AgentHarness:
             print(f"[agent] finished SDK query (request_id={request_id})")
         except Exception as e:
             final_query_error = f"Agent SDK query failed: {e!s}"
+            print(f"[agent] sending agent_error from exception path: {final_query_error}")
             await self.send({
                 "type": "agent_error",
                 "error": final_query_error,
