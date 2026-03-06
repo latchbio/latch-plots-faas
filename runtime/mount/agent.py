@@ -1447,7 +1447,7 @@ class AgentHarness:
         try:
             query_session_id = self.claude_session_id
             if query_session_id is None:
-                query_session_id = "default"
+                query_session_id = str(self.agent_session_id)
 
             print(
                 "[agent] starting SDK query "
