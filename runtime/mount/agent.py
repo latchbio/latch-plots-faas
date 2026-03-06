@@ -39,7 +39,7 @@ from claude_agent_sdk.types import (
     UserMessage,
 )
 from latch_data_validation.data_validation import validate
-from tools import MCP_ALLOWED_TOOL_NAMES, MCP_SERVER_NAME, agent_tools_mcp
+from tools import MCP_ALLOWED_TOOL_NAMES, MCP_SERVER_NAME, create_agent_tools_mcp
 from lplots import _inject
 from socketio_thread import SocketIoThread
 from utils import auth_token_sdk, gql_query, nucleus_url, pod_id, sdk_token
@@ -190,7 +190,7 @@ class AgentHarness:
     latest_notebook_state: str | None = None
     current_plan: dict | None = None
     in_memory_history: list[dict] = field(default_factory=list)
-    mcp_server: McpSdkServerConfig = field(default_factory=lambda: agent_tools_mcp)
+    mcp_server: McpSdkServerConfig = field(default_factory=create_agent_tools_mcp)
     mcp_allowed_tools: list[str] = field(
         default_factory=lambda: list(MCP_ALLOWED_TOOL_NAMES)
     )
@@ -1190,6 +1190,7 @@ class AgentHarness:
 
     async def _connect_sdk_client(self, *, resume_session_id: str | None) -> None:
         self.system_prompt = self._compose_turn_system_prompt()
+        self.mcp_server = create_agent_tools_mcp()
         sdk_env = self._build_sdk_env()
 
         self.client = ClaudeSDKClient(
@@ -1203,6 +1204,7 @@ class AgentHarness:
                 thinking={"type": "adaptive"},
                 resume=resume_session_id,
                 env=sdk_env,
+                stderr=lambda line: print(f"[claude-sdk] {line}"),
             )
         )
         await self.client.connect()
@@ -1374,6 +1376,7 @@ class AgentHarness:
         buffered_tool_messages: list[AssistantMessage | UserMessage] = []
         final_submit_response_reached = False
         dropping_post_submit_stream_message = False
+        observed_claude_session_id: str | None = None
 
         async def persist_current_assistant_message(
             *, duration_seconds: float | None = None
@@ -1464,6 +1467,10 @@ class AgentHarness:
                 except StopAsyncIteration:
                     break
                 except TimeoutError:
+                    print(
+                        "[agent] sending agent_error from timeout path: "
+                        "Timed out waiting for model response from Claude runtime"
+                    )
                     await self.send({
                         "type": "agent_error",
                         "error": "Timed out waiting for model response from Claude runtime",
@@ -1475,7 +1482,11 @@ class AgentHarness:
                     break
 
                 if isinstance(msg, StreamEvent):
-                    await self._capture_claude_session_id(msg.session_id)
+                    normalized_session_id = self._normalize_claude_session_id(
+                        msg.session_id
+                    )
+                    if normalized_session_id is not None:
+                        observed_claude_session_id = normalized_session_id
                     event = self._parse_stream_event(msg.event)
                     if event is None:
                         continue
@@ -1520,7 +1531,11 @@ class AgentHarness:
                         stream_message_open = False
                         await flush_buffered_tool_messages()
                 elif isinstance(msg, ResultMessage):
-                    await self._capture_claude_session_id(msg.session_id)
+                    normalized_session_id = self._normalize_claude_session_id(
+                        msg.session_id
+                    )
+                    if normalized_session_id is not None:
+                        observed_claude_session_id = normalized_session_id
                     print(
                         "[agent] SDK result message "
                         f"subtype={msg.subtype} is_error={msg.is_error} result={msg.result!r}"
@@ -1581,6 +1596,10 @@ class AgentHarness:
                             "error": agent_error_message,
                             "fatal": False,
                         })
+                    elif observed_claude_session_id is not None:
+                        await self._capture_claude_session_id(
+                            observed_claude_session_id
+                        )
                     elif (
                         len(assistant_blocks_by_index) == 0
                         and not persisted_assistant_message_this_turn
@@ -1597,9 +1616,11 @@ class AgentHarness:
                 elif isinstance(msg, SystemMessage):
                     if msg.subtype == "init":
                         session_id = msg.data.get("session_id")
-                        await self._capture_claude_session_id(
+                        normalized_session_id = self._normalize_claude_session_id(
                             session_id if isinstance(session_id, str) else None
                         )
+                        if normalized_session_id is not None:
+                            observed_claude_session_id = normalized_session_id
                     continue
                 elif isinstance(msg, (AssistantMessage, UserMessage)):
                     if isinstance(msg, AssistantMessage) and msg.error is not None:
