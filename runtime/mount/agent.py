@@ -27,7 +27,7 @@ from anthropic.types import (
     ThinkingDelta,
     ToolUseBlock as AnthropicToolUseBlock,
 )
-from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
+from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient, create_sdk_mcp_server
 from claude_agent_sdk.types import (
     AssistantMessage,
     McpSdkServerConfig,
@@ -81,6 +81,9 @@ def create_agent_tools_mcp() -> McpSdkServerConfig:
     factory = getattr(tools_module, "create_agent_tools_mcp", None)
     if callable(factory):
         return factory()
+    all_tools = getattr(tools_module, "all_tools", None)
+    if isinstance(all_tools, list):
+        return create_sdk_mcp_server(name=MCP_SERVER_NAME, tools=all_tools)
     return agent_tools_mcp
 
 
