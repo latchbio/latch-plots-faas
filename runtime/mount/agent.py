@@ -84,8 +84,7 @@ class Behavior(Enum):
 HistoryRole = Literal["user", "assistant", "system"]
 
 
-class AgentSessionMetadata(TypedDict, total=False):
-    claude_session_id: str
+AgentSessionMetadata = dict[str, Any]
 
 
 class AgentSessionMetadataQueryNode(TypedDict, total=False):
@@ -1104,12 +1103,9 @@ class AgentHarness:
                 )
                 or {}
             )
-            claude_session_id = metadata.get("claude_session_id")
-            return (
-                {"claude_session_id": claude_session_id}
-                if isinstance(claude_session_id, str)
-                else {}
-            )
+            if isinstance(metadata, dict):
+                return dict(metadata)
+            return {}
         except Exception as e:
             print(f"[agent] Invalid agent session metadata: {e!s}")
             return {}
@@ -1144,7 +1140,8 @@ class AgentHarness:
         if existing == session_id:
             return
 
-        metadata: AgentSessionMetadata = {"claude_session_id": session_id}
+        metadata = dict(self.agent_session_metadata)
+        metadata["claude_session_id"] = session_id
 
         try:
             await self._persist_agent_session_metadata(metadata)
@@ -1239,12 +1236,21 @@ class AgentHarness:
         self.current_status = None
         self.should_auto_continue = False
         self.pending_auto_continue = False
+        self.current_plan = None
 
         while not self.pending_messages.empty():
             try:
                 self.pending_messages.get_nowait()
             except asyncio.QueueEmpty:
                 break
+
+        if skip_db_history:
+            self.in_memory_history.clear()
+
+        for file in (context_root / "agent_scratch").rglob("*"):
+            if file.name == ".gitkeep":
+                continue
+            file.unlink()
 
         self.agent_session_metadata = {}
         self.claude_session_id = None
