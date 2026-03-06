@@ -39,7 +39,8 @@ from claude_agent_sdk.types import (
     UserMessage,
 )
 from latch_data_validation.data_validation import validate
-from tools import MCP_ALLOWED_TOOL_NAMES, MCP_SERVER_NAME, create_agent_tools_mcp
+import tools as tools_module
+from tools import MCP_ALLOWED_TOOL_NAMES, MCP_SERVER_NAME, agent_tools_mcp
 from lplots import _inject
 from socketio_thread import SocketIoThread
 from utils import auth_token_sdk, gql_query, nucleus_url, pod_id, sdk_token
@@ -74,6 +75,13 @@ SDK_BUILTIN_ALLOWED_TOOLS = [
     "WebFetch",
     "WebSearch",
 ]
+
+
+def create_agent_tools_mcp() -> McpSdkServerConfig:
+    factory = getattr(tools_module, "create_agent_tools_mcp", None)
+    if callable(factory):
+        return factory()
+    return agent_tools_mcp
 
 
 class Behavior(Enum):

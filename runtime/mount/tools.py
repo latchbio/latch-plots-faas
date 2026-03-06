@@ -1912,4 +1912,9 @@ all_tools = [
     smart_ui_spotlight,
 ]
 
-agent_tools_mcp = create_sdk_mcp_server(name=MCP_SERVER_NAME, tools=all_tools)
+
+def create_agent_tools_mcp():
+    return create_sdk_mcp_server(name=MCP_SERVER_NAME, tools=all_tools)
+
+
+agent_tools_mcp = create_agent_tools_mcp()
