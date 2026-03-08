@@ -9,7 +9,7 @@ import uuid
 from collections.abc import Iterable
 from contextlib import suppress
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any, Literal, TypedDict
@@ -74,6 +74,8 @@ SDK_BUILTIN_ALLOWED_TOOLS = [
     "WebFetch",
     "WebSearch",
 ]
+CLAUDE_TRANSCRIPTS_ROOT = Path.home() / ".claude" / "projects"
+CLAUDE_TRANSCRIPT_MODEL = "claude-opus-4-6"
 
 
 class Behavior(Enum):
@@ -835,6 +837,175 @@ class AgentHarness:
         if raw_session_id is None or raw_session_id == "":
             return None
         return raw_session_id
+
+    def _legacy_transcript_session_id(self) -> str:
+        assert self.agent_session_id is not None
+        return str(
+            uuid.uuid5(
+                uuid.NAMESPACE_URL,
+                f"latch-agent-session:{self.agent_session_id}",
+            )
+        )
+
+    def _claude_transcript_project_dir(self) -> Path:
+        return CLAUDE_TRANSCRIPTS_ROOT / str(Path.cwd()).replace("/", "-")
+
+    def _claude_transcript_path(self, session_id: str) -> Path:
+        return self._claude_transcript_project_dir() / f"{session_id}.jsonl"
+
+    def _transcript_timestamp(self, timestamp_ms: int | None = None) -> str:
+        if timestamp_ms is None:
+            dt = datetime.now(timezone.utc)
+        else:
+            dt = datetime.fromtimestamp(timestamp_ms / 1000, tz=timezone.utc)
+        return dt.isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
+    def _build_legacy_transcript_lines(
+        self, messages: list[MessageParam], *, session_id: str
+    ) -> tuple[list[dict[str, Any]], int]:
+        cwd = str(Path.cwd())
+        slug = f"legacy-session-{self.agent_session_id}"
+        parent_uuid: str | None = None
+        message_lines: list[dict[str, Any]] = []
+        skipped_messages = 0
+
+        for msg in messages:
+            role = msg.get("role")
+            content = msg.get("content")
+            if role not in {"user", "assistant"}:
+                skipped_messages += 1
+                continue
+
+            line_uuid = str(uuid.uuid4())
+            line: dict[str, Any] = {
+                "parentUuid": parent_uuid,
+                "isSidechain": False,
+                "userType": "external",
+                "cwd": cwd,
+                "sessionId": session_id,
+                "version": "sdk-import",
+                "gitBranch": "",
+                "slug": slug,
+                "uuid": line_uuid,
+                "timestamp": self._transcript_timestamp(),
+            }
+
+            if role == "user":
+                if not isinstance(content, (str, list)):
+                    skipped_messages += 1
+                    continue
+                line["type"] = "user"
+                line["message"] = {
+                    "role": "user",
+                    "content": content,
+                }
+            else:
+                if isinstance(content, str):
+                    content = [{"type": "text", "text": content}]
+                if not isinstance(content, list):
+                    skipped_messages += 1
+                    continue
+                request_uuid = line_uuid.replace("-", "")
+                line["type"] = "assistant"
+                line["requestId"] = f"req_legacy_{request_uuid[:24]}"
+                line["message"] = {
+                    "id": f"msg_legacy_{request_uuid[:24]}",
+                    "type": "message",
+                    "role": "assistant",
+                    "content": content,
+                    "model": CLAUDE_TRANSCRIPT_MODEL,
+                    "stop_reason": None,
+                    "stop_sequence": None,
+                    "usage": {
+                        "input_tokens": 0,
+                        "cache_creation_input_tokens": 0,
+                        "cache_read_input_tokens": 0,
+                        "cache_creation": {
+                            "ephemeral_5m_input_tokens": 0,
+                            "ephemeral_1h_input_tokens": 0,
+                        },
+                        "output_tokens": 0,
+                        "service_tier": "standard",
+                    },
+                }
+
+            try:
+                json.dumps(line)
+            except TypeError:
+                skipped_messages += 1
+                continue
+
+            message_lines.append(line)
+            parent_uuid = line_uuid
+
+        snapshot_timestamp = self._transcript_timestamp()
+        snapshot_message_id = (
+            message_lines[0]["uuid"] if len(message_lines) > 0 else str(uuid.uuid4())
+        )
+        return [
+            {
+                "type": "file-history-snapshot",
+                "messageId": snapshot_message_id,
+                "snapshot": {
+                    "messageId": snapshot_message_id,
+                    "trackedFileBackups": {},
+                    "timestamp": snapshot_timestamp,
+                },
+                "isSnapshotUpdate": False,
+            },
+            *message_lines,
+        ], skipped_messages
+
+    async def _bootstrap_claude_transcript_from_db_history(self) -> str | None:
+        messages = await self._build_messages_from_db()
+        if len(messages) == 0:
+            return None
+
+        session_id = self._legacy_transcript_session_id()
+        transcript_path = self._claude_transcript_path(session_id)
+
+        if not transcript_path.exists():
+            transcript_lines, skipped_messages = self._build_legacy_transcript_lines(
+                messages,
+                session_id=session_id,
+            )
+            transcript_path.parent.mkdir(parents=True, exist_ok=True)
+            temp_path = transcript_path.with_suffix(".jsonl.tmp")
+            transcript_content = "".join(
+                json.dumps(line, separators=(",", ":")) + "\n"
+                for line in transcript_lines
+            )
+            try:
+                temp_path.write_text(transcript_content, encoding="utf-8")
+                temp_path.replace(transcript_path)
+            except OSError as e:
+                print(
+                    "[agent] Failed to bootstrap Claude transcript "
+                    f"(db_session_id={self.agent_session_id}): {e!s}"
+                )
+                with suppress(OSError):
+                    temp_path.unlink()
+                return None
+
+            print(
+                "[agent] Bootstrapped Claude transcript "
+                f"(db_session_id={self.agent_session_id}, claude_session_id={session_id}, "
+                f"messages={len(messages)}, skipped={skipped_messages})"
+            )
+
+        metadata = dict(self.agent_session_metadata)
+        metadata["claude_session_id"] = session_id
+        try:
+            await self._persist_agent_session_metadata(metadata)
+        except Exception as e:
+            print(
+                "[agent] Failed to persist legacy session bootstrap metadata: "
+                f"{e!s}"
+            )
+            return session_id
+
+        self.agent_session_metadata = metadata
+        return session_id
 
     async def _close_open_stream_blocks(self) -> None:
         if len(self.open_stream_blocks) == 0:
@@ -1789,6 +1960,8 @@ class AgentHarness:
             resume_session_id = self._normalize_claude_session_id(
                 metadata.get("claude_session_id")
             )
+        if resume_session_id is None:
+            resume_session_id = await self._bootstrap_claude_transcript_from_db_history()
         self.claude_session_id = resume_session_id
 
         if self.client is None:
