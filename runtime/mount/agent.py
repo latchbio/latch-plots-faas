@@ -1278,7 +1278,7 @@ class AgentHarness:
                 parsed_response["data"]["agentSession"]["claudeSessionId"]
             )
         except Exception as e:
-            print(f"[agent] Failed to load agent session claude_session_id: {e!s}")
+            print(f"[agent] Failed to load agent claude_session_id: {e!s}")
             return None
 
     async def _persist_claude_session_id(self, claude_session_id: str) -> None:
