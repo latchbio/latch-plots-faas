@@ -483,22 +483,15 @@ class AgentHarness:
 
         return msg
 
-    def _render_legacy_history_message(self, msg: MessageParam) -> str:
+    def _build_legacy_history_message(self, msg: MessageParam) -> str:
         role = msg["role"].capitalize()
-        content = msg.get("content")
+        content = msg["content"]
 
         if isinstance(content, str):
             return f"{role}:\n{content}"
 
-        if not isinstance(content, list):
-            return f"{role}:\n{json.dumps(content, default=str)}"
-
         block_lines: list[str] = []
         for block in content:
-            if not isinstance(block, dict):
-                block_lines.append(str(block))
-                continue
-
             block_type = block.get("type")
             if block_type == "text":
                 text = block.get("text")
@@ -518,15 +511,15 @@ class AgentHarness:
                 block_content = block.get("content", "")
                 if isinstance(block_content, list):
                     tool_result_text = self._extract_tool_result_text(block_content)
-                    rendered_content = (
+                    content_text = (
                         tool_result_text
                         if tool_result_text is not None
                         else json.dumps(block_content, default=str)
                     )
                 else:
-                    rendered_content = str(block_content)
+                    content_text = str(block_content)
                 prefix = "[tool_result error]" if block.get("is_error") else "[tool_result]"
-                block_lines.append(f"{prefix} {rendered_content}")
+                block_lines.append(f"{prefix} {content_text}")
                 continue
 
             block_lines.append(json.dumps(block, default=str))
@@ -552,10 +545,10 @@ class AgentHarness:
         truncated_messages = [
             self._truncate_legacy_history_message(msg) for msg in windowed_messages
         ]
-        rendered_messages = [
-            self._render_legacy_history_message(msg) for msg in truncated_messages
+        included_messages = [
+            self._build_legacy_history_message(msg) for msg in truncated_messages
         ]
-        history_text = "\n\n".join(rendered_messages)
+        history_text = "\n\n".join(included_messages)
 
         print(
             "[agent] Injecting legacy history into first turn "
@@ -563,8 +556,7 @@ class AgentHarness:
         )
 
         return (
-            "This is prior conversation context. Older turns may be omitted, and included turns may be truncated. "
-            "Do not continue or retry old tool calls unless the current request explicitly asks for that.\n"
+            "This is prior conversation context. Older turns may be omitted.\n"
             f"{history_text}"
         )
 
