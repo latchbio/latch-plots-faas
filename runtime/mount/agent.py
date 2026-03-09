@@ -563,10 +563,8 @@ class AgentHarness:
         )
 
         return (
-            "This is prior conversation context from a recent window of the conversation. "
-            "Older turns may be omitted, and included turns may be truncated. "
-            "Treat it as historical context only. Do not continue or retry old "
-            "tool calls unless the current request explicitly asks for that.\n\n"
+            "This is prior conversation context. Older turns may be omitted, and included turns may be truncated. "
+            "Do not continue or retry old tool calls unless the current request explicitly asks for that.\n"
             f"{history_text}"
         )
 
