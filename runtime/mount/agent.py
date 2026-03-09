@@ -279,9 +279,9 @@ class AgentHarness:
 
                     content = message
                     if exception:
-                        content = f"{message}\n\nException: {exception}"
+                        content = f"{message}\nException: {exception}"
                     if logs:
-                        content = f"{content}\n\nLogs:\n{logs}"
+                        content = f"{content}\nLogs:\n{logs}"
 
                 if isinstance(content, list):
                     cleaned_content = []
@@ -1172,14 +1172,14 @@ class AgentHarness:
                 if not success:
                     exception = result_content.get("exception")
                     if exception:
-                        prompt_content = f"{prompt_content}\n\nException: {exception}"
+                        prompt_content = f"{prompt_content}\nException: {exception}"
                 if logs:
-                    prompt_content = f"{prompt_content}\n\nLogs:\n{logs}"
+                    prompt_content = f"{prompt_content}\nLogs:\n{logs}"
 
                 if self.pending_auto_continue and len(self.executing_cells) == 0:
                     self.pending_auto_continue = False
                     return (
-                        "Continue with the next step.\n\n" + prompt_content,
+                        "Continue with the next step.\n" + prompt_content,
                         self.current_request_id,
                     )
 
@@ -1275,9 +1275,7 @@ class AgentHarness:
             )
             parsed_response = validate(response, AgentSessionQueryResp)
             return self._normalize_claude_session_id(
-                ((parsed_response.get("data") or {}).get("agentSession") or {}).get(
-                    "claudeSessionId"
-                )
+                parsed_response["data"]["agentSession"]["claudeSessionId"]
             )
         except Exception as e:
             print(f"[agent] Failed to load agent session claude_session_id: {e!s}")
@@ -1999,7 +1997,7 @@ class AgentHarness:
 
         full_query = query
         if contextual_node_data:
-            full_query = f"{query} \n\nHere is the context of the selected nodes the user would like to use: <ContextualNodeData>{json.dumps(contextual_node_data)}</ContextualNodeData>"
+            full_query = f"{query}\nHere is the context of the selected nodes the user would like to use: <ContextualNodeData>{json.dumps(contextual_node_data)}</ContextualNodeData>"
         await self.pending_messages.put({
             "type": "user_query",
             "content": full_query,
