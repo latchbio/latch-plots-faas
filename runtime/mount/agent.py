@@ -85,19 +85,16 @@ class Behavior(Enum):
 HistoryRole = Literal["user", "assistant", "system"]
 
 
-AgentSessionMetadata = dict[str, Any]
+class AgentSessionQueryNode(TypedDict, total=False):
+    claudeSessionId: str | None
 
 
-class AgentSessionMetadataQueryNode(TypedDict, total=False):
-    metadata: dict[str, Any] | None
+class AgentSessionQueryData(TypedDict, total=False):
+    agentSession: AgentSessionQueryNode | None
 
 
-class AgentSessionMetadataQueryData(TypedDict, total=False):
-    agentSession: AgentSessionMetadataQueryNode | None
-
-
-class AgentSessionMetadataQueryResp(TypedDict, total=False):
-    data: AgentSessionMetadataQueryData
+class AgentSessionQueryResp(TypedDict, total=False):
+    data: AgentSessionQueryData
 
 
 class TextToolResultBlock(TypedDict):
@@ -197,7 +194,6 @@ class AgentHarness:
     )
     current_query_task: asyncio.Task | None = None
     open_stream_blocks: dict[int, str] = field(default_factory=dict)
-    agent_session_metadata: AgentSessionMetadata = field(default_factory=dict)
 
     async def send(self, msg: dict[str, Any]) -> None:
         msg_type = msg.get("type", "unknown")
@@ -1261,52 +1257,48 @@ class AgentHarness:
         finally:
             self.client = None
 
-    async def _load_agent_session_metadata(
+    async def _load_claude_session_id(
         self, session_id: int
-    ) -> AgentSessionMetadata:
-        response = await gql_query(
-            auth=auth_token_sdk,
-            query="""
-                query AgentSessionMetadata($id: BigInt!) {
-                    agentSession(id: $id) {
-                        metadata
-                    }
-                }
-            """,
-            variables={"id": session_id},
-        )
-
+    ) -> str | None:
         try:
-            parsed_response = validate(response, AgentSessionMetadataQueryResp)
-            metadata = (
-                ((parsed_response.get("data") or {}).get("agentSession") or {}).get(
-                    "metadata"
-                )
-                or {}
+            response = await gql_query(
+                auth=auth_token_sdk,
+                query="""
+                    query AgentSessionClaudeSessionId($id: BigInt!) {
+                        agentSession(id: $id) {
+                            claudeSessionId
+                        }
+                    }
+                """,
+                variables={"id": session_id},
             )
-            if isinstance(metadata, dict):
-                return dict(metadata)
-            return {}
+            parsed_response = validate(response, AgentSessionQueryResp)
+            return self._normalize_claude_session_id(
+                ((parsed_response.get("data") or {}).get("agentSession") or {}).get(
+                    "claudeSessionId"
+                )
+            )
         except Exception as e:
-            print(f"[agent] Invalid agent session metadata: {e!s}")
-            return {}
+            print(f"[agent] Failed to load agent session claude_session_id: {e!s}")
+            return None
 
-    async def _persist_agent_session_metadata(
-        self, metadata: AgentSessionMetadata
-    ) -> None:
+    async def _persist_claude_session_id(self, claude_session_id: str) -> None:
         if self.agent_session_id is None:
             return
 
         await gql_query(
             auth=auth_token_sdk,
             query="""
-                mutation UpdateAgentSessionMetadata($id: BigInt!, $metadata: JSON) {
-                    updateAgentSession(input: {id: $id, patch: {metadata: $metadata}}) {
+                mutation UpdateAgentSessionClaudeSessionId($id: BigInt!, $claudeSessionId: String) {
+                    updateAgentSession(input: {id: $id, patch: {claudeSessionId: $claudeSessionId}}) {
                         clientMutationId
                     }
                 }
             """,
-            variables={"id": self.agent_session_id, "metadata": metadata},
+            variables={
+                "id": self.agent_session_id,
+                "claudeSessionId": claude_session_id,
+            },
         )
 
     async def _capture_claude_session_id(self, raw_session_id: str | None) -> None:
@@ -1314,23 +1306,16 @@ class AgentHarness:
         if session_id is None or self.agent_session_id is None:
             return
 
+        if self.claude_session_id == session_id:
+            return
+
         self.claude_session_id = session_id
-        existing = self._normalize_claude_session_id(
-            self.agent_session_metadata.get("claude_session_id")
-        )
-        if existing == session_id:
-            return
-
-        metadata = dict(self.agent_session_metadata)
-        metadata["claude_session_id"] = session_id
-
         try:
-            await self._persist_agent_session_metadata(metadata)
+            await self._persist_claude_session_id(session_id)
         except Exception as e:
-            print(f"[agent] Failed to persist Claude session id metadata: {e!s}")
+            print(f"[agent] Failed to persist Claude session id: {e!s}")
             return
 
-        self.agent_session_metadata = metadata
         print(
             "[agent] Persisted Claude session id "
             f"(db_session_id={self.agent_session_id}, claude_session_id={session_id})"
@@ -1433,7 +1418,6 @@ class AgentHarness:
                 continue
             file.unlink()
 
-        self.agent_session_metadata = {}
         self.claude_session_id = None
 
     async def _handle_stream_event(
@@ -1971,16 +1955,10 @@ class AgentHarness:
             await self._reset_for_new_session()
             await self._disconnect_sdk_client()
 
-        try:
-            metadata = await self._load_agent_session_metadata(self.agent_session_id)
-        except Exception as e:
-            print(f"[agent] Failed to load agent session metadata: {e!s}")
-            metadata = {}
-        self.agent_session_metadata = metadata
         resume_session_id = init_claude_session_id
         if resume_session_id is None:
-            resume_session_id = self._normalize_claude_session_id(
-                metadata.get("claude_session_id")
+            resume_session_id = await self._load_claude_session_id(
+                self.agent_session_id
             )
         self.claude_session_id = resume_session_id
 
