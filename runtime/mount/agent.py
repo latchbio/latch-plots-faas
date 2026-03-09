@@ -86,15 +86,15 @@ class Behavior(Enum):
 HistoryRole = Literal["user", "assistant", "system"]
 
 
-class AgentSessionQueryNode(TypedDict, total=False):
+class AgentSessionQueryNode(TypedDict):
     claudeSessionId: str | None
 
 
-class AgentSessionQueryData(TypedDict, total=False):
+class AgentSessionQueryData(TypedDict):
     agentSession: AgentSessionQueryNode | None
 
 
-class AgentSessionQueryResp(TypedDict, total=False):
+class AgentSessionQueryResp(TypedDict):
     data: AgentSessionQueryData
 
 
