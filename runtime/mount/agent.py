@@ -6,7 +6,7 @@ import sys
 import time
 import traceback
 import uuid
-from collections.abc import AsyncIterable, Iterable
+from collections.abc import Iterable
 from contextlib import suppress
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -47,6 +47,7 @@ from utils import auth_token_sdk, gql_query, nucleus_url, pod_id, sdk_token
 sys.stdout.reconfigure(line_buffering=True)
 
 skip_db_history = os.environ.get("AGENT_SKIP_DB_HISTORY") == "1"
+legacy_history_window_size = 20
 
 reactivity_ready_statuses = {"ran", "ok", "success", "error"}
 
@@ -97,13 +98,6 @@ class AgentSessionMetadataQueryData(TypedDict, total=False):
 
 class AgentSessionMetadataQueryResp(TypedDict, total=False):
     data: AgentSessionMetadataQueryData
-
-
-class ReplayPromptMessage(TypedDict):
-    type: Literal["user", "assistant"]
-    message: MessageParam
-    parent_tool_use_id: None
-    session_id: str
 
 
 class TextToolResultBlock(TypedDict):
@@ -388,6 +382,193 @@ class AgentHarness:
         print(f"[agent] Built {len(reordered)} messages from DB")
 
         return reordered
+
+    @staticmethod
+    def _truncate_legacy_history_message(msg: MessageParam) -> MessageParam:
+        content = msg.get("content")
+
+        if isinstance(content, str):
+            if len(content) > 500:
+                return {"role": msg["role"], "content": content[:500] + "...[truncated]"}
+            return msg
+
+        if isinstance(content, list):
+            truncated_blocks = []
+            for block in content:
+                if not isinstance(block, dict):
+                    truncated_blocks.append(block)
+                    continue
+
+                block_type = block.get("type")
+
+                if block_type in {"thinking", "redacted_thinking"}:
+                    continue
+
+                if block_type == "tool_result":
+                    block_content = block.get("content", "{}")
+
+                    if isinstance(block_content, list):
+                        text_blocks = [b for b in block_content if isinstance(b, dict) and b.get("type") == "text"]
+                        if len(text_blocks) > 0:
+                            result_str = text_blocks[0].get("text", "{}")
+                            result = json.loads(result_str)
+                            result["_note"] = "image removed during truncation"
+                            truncated_blocks.append({
+                                "type": "tool_result",
+                                "tool_use_id": block.get("tool_use_id"),
+                                "content": json.dumps(result)
+                            })
+                        else:
+                            truncated_blocks.append(block)
+                        continue
+
+                    result_str = block_content
+                    result = json.loads(result_str)
+                    tool_name = result.get("tool_name")
+
+                    if tool_name in {"create_cell", "create_markdown_cell"}:
+                        result = {k: v for k, v in result.items() if k != "code"}
+                    elif tool_name == "edit_cell":
+                        result = {k: v for k, v in result.items() if k not in {"code", "original_code"}}
+                    elif tool_name == "bash":
+                        result = {k: v for k, v in result.items() if k != "output"}
+                    elif tool_name == "execute_code":
+                        result = {k: v for k, v in result.items() if k != "code"}
+                        if "stdout" in result and isinstance(result.get("stdout"), str) and len(result["stdout"]) > 1500:
+                            result["stdout"] = "...[truncated]\n" + result["stdout"][-1500:]
+                        if "stderr" in result and isinstance(result.get("stderr"), str) and len(result["stderr"]) > 1500:
+                            result["stderr"] = "...[truncated]\n" + result["stderr"][-1500:]
+                        if "exception" in result and isinstance(result.get("exception"), str) and len(result["exception"]) > 1500:
+                            result["exception"] = "...[truncated]\n" + result["exception"][-1500:]
+
+                    truncated_blocks.append({
+                        "type": "tool_result",
+                        "tool_use_id": block.get("tool_use_id"),
+                        "content": json.dumps(result)
+                    })
+                    continue
+
+                if block_type == "tool_use":
+                    tool_name = block.get("name")
+                    inp = block.get("input")
+                    truncated_inp = inp
+
+                    if isinstance(inp, dict) and tool_name is not None:
+                        if tool_name in {"create_cell", "create_markdown_cell"}:
+                            truncated_inp = {k: v for k, v in inp.items() if k != "code"}
+                        elif tool_name == "edit_cell":
+                            truncated_inp = {k: v for k, v in inp.items() if k != "new_code"}
+                        elif tool_name == "update_plan":
+                            truncated_inp = {k: v for k, v in inp.items() if k not in {"plan", "plan_diff"}}
+
+                    truncated_blocks.append({
+                        "type": "tool_use",
+                        "id": block.get("id"),
+                        "name": tool_name,
+                        "input": truncated_inp,
+                    })
+                    continue
+
+                if block_type == "text":
+                    text = block.get("text", "")
+                    if len(text) > 1000:
+                        truncated_blocks.append({"type": "text", "text": text[:1000] + "...[truncated]"})
+                    else:
+                        truncated_blocks.append(block)
+                    continue
+
+                truncated_blocks.append(block)
+
+            return {"role": msg["role"], "content": truncated_blocks}
+
+        return msg
+
+    def _render_legacy_history_message(self, msg: MessageParam) -> str:
+        role = msg["role"].capitalize()
+        content = msg.get("content")
+
+        if isinstance(content, str):
+            return f"{role}:\n{content}"
+
+        if not isinstance(content, list):
+            return f"{role}:\n{json.dumps(content, default=str)}"
+
+        block_lines: list[str] = []
+        for block in content:
+            if not isinstance(block, dict):
+                block_lines.append(str(block))
+                continue
+
+            block_type = block.get("type")
+            if block_type == "text":
+                text = block.get("text")
+                if isinstance(text, str) and text != "":
+                    block_lines.append(text)
+                continue
+
+            if block_type == "tool_use":
+                tool_name = block.get("name", "unknown")
+                tool_input = json.dumps(block.get("input"), sort_keys=True, default=str)
+                block_lines.append(
+                    f"[tool_use] {tool_name} input={tool_input}"
+                )
+                continue
+
+            if block_type == "tool_result":
+                block_content = block.get("content", "")
+                if isinstance(block_content, list):
+                    tool_result_text = self._extract_tool_result_text(block_content)
+                    rendered_content = (
+                        tool_result_text
+                        if tool_result_text is not None
+                        else json.dumps(block_content, default=str)
+                    )
+                else:
+                    rendered_content = str(block_content)
+                prefix = "[tool_result error]" if block.get("is_error") else "[tool_result]"
+                block_lines.append(f"{prefix} {rendered_content}")
+                continue
+
+            block_lines.append(json.dumps(block, default=str))
+
+        if len(block_lines) == 0:
+            return f"{role}:"
+
+        return f"{role}:\n" + "\n".join(block_lines)
+
+    async def _build_legacy_history_prompt_block(
+        self, *, exclude_request_id: str | None
+    ) -> str | None:
+        if self.claude_session_id is not None:
+            return None
+
+        messages = await self._build_messages_from_db(
+            exclude_request_id=exclude_request_id
+        )
+        if len(messages) == 0:
+            return None
+
+        windowed_messages = messages[-legacy_history_window_size:]
+        truncated_messages = [
+            self._truncate_legacy_history_message(msg) for msg in windowed_messages
+        ]
+        rendered_messages = [
+            self._render_legacy_history_message(msg) for msg in truncated_messages
+        ]
+        history_text = "\n\n".join(rendered_messages)
+
+        print(
+            "[agent] Injecting legacy history into first turn "
+            f"window_messages len={len(windowed_messages)})"
+        )
+
+        return (
+            "This is prior conversation context from a recent window of the conversation. "
+            "Older turns may be omitted, and included turns may be truncated. "
+            "Treat it as historical context only. Do not continue or retry old "
+            "tool calls unless the current request explicitly asks for that.\n\n"
+            f"{history_text}"
+        )
 
     async def _insert_history(
         self,
@@ -1389,9 +1570,6 @@ class AgentHarness:
         buffered_tool_messages: list[AssistantMessage | UserMessage] = []
         final_submit_response_reached = False
         dropping_post_submit_stream_message = False
-        replay_messages: list[ReplayPromptMessage] = []
-        last_replay_index: int | None = None
-        last_replay_message: ReplayPromptMessage | None = None
 
         async def persist_current_assistant_message(
             *, duration_seconds: float | None = None
@@ -1455,49 +1633,15 @@ class AgentHarness:
             query_session_id = self.claude_session_id
             if query_session_id is None:
                 query_session_id = "default"
-                history = await self._build_messages_from_db(
-                    exclude_request_id=request_id
-                )
-                if len(history) > 0:
-                    user_count = sum(1 for msg in history if msg["role"] == "user")
-                    assistant_count = len(history) - user_count
-                    print(
-                        "[agent] Using legacy replay "
-                        f"(db_session_id={self.agent_session_id}, messages={len(history)}, "
-                        f"user={user_count}, assistant={assistant_count})"
-                    )
-                    replay_messages = [
-                        {
-                            "type": msg["role"],
-                            "message": msg,
-                            "parent_tool_use_id": None,
-                            "session_id": query_session_id,
-                        }
-                        for msg in history
-                    ]
-                    replay_messages.append({
-                        "type": "user",
-                        "message": {"role": "user", "content": prompt},
-                        "parent_tool_use_id": None,
-                        "session_id": query_session_id,
-                    })
-
-            async def replay_prompt() -> AsyncIterable[ReplayPromptMessage]:
-                nonlocal last_replay_index, last_replay_message
-                for idx, replay_message in enumerate(replay_messages):
-                    last_replay_index = idx
-                    last_replay_message = replay_message
-                    yield replay_message
 
             print(
                 "[agent] starting SDK query "
                 f"(request_id={request_id}, db_session_id={self.agent_session_id}, "
                 f"claude_session_id={query_session_id})"
             )
-            query_prompt = prompt if len(replay_messages) == 0 else replay_prompt()
             try:
                 await asyncio.wait_for(
-                    self.client.query(prompt=query_prompt, session_id=query_session_id),
+                    self.client.query(prompt=prompt, session_id=query_session_id),
                     timeout=10.0,
                 )
             except TimeoutError:
@@ -1508,20 +1652,6 @@ class AgentHarness:
                     "fatal": False,
                 })
                 return
-            except Exception as e:
-                if len(replay_messages) > 0:
-                    print(
-                        "[agent] Legacy replay submission failed "
-                        f"(index={last_replay_index}, message={last_replay_message!r}, error={e!s})"
-                    )
-                    final_query_error = "Failed to replay conversation history into Claude runtime"
-                    await self.send({
-                        "type": "agent_error",
-                        "error": final_query_error,
-                        "fatal": False,
-                    })
-                    return
-                raise
             print(f"[agent] SDK query submitted (request_id={request_id})")
             receive_iter = aiter(self.client.receive_response())
             while True:
@@ -1761,12 +1891,23 @@ class AgentHarness:
             turn_behavior_content, examples_content = self._load_behavior_context()
             notebook_state = await self.refresh_cells_context()
             self.latest_notebook_state = notebook_state
+            legacy_history_prompt_block = await self._build_legacy_history_prompt_block(
+                exclude_request_id=request_id
+            )
 
             context_blocks = [
                 f"<turn_behavior>\n{turn_behavior_content}\n</turn_behavior>",
                 f"<examples>\n{examples_content}\n</examples>",
-                f"<current_notebook_state>\n{notebook_state}\n</current_notebook_state>",
             ]
+            if legacy_history_prompt_block is not None:
+                context_blocks.append(
+                    "<legacy_conversation_history>\n"
+                    f"{legacy_history_prompt_block}\n"
+                    "</legacy_conversation_history>"
+                )
+            context_blocks.append(
+                f"<current_notebook_state>\n{notebook_state}\n</current_notebook_state>"
+            )
             if self.current_plan is not None:
                 plan_content = json.dumps(self.current_plan, indent=2)
                 context_blocks.append(
@@ -1779,6 +1920,7 @@ class AgentHarness:
                 "[agent] Turn prompt ready "
                 f"(behavior={self.behavior.value}, "
                 f"has_plan={self.current_plan is not None}, "
+                f"legacy_history={legacy_history_prompt_block is not None}, "
                 f"notebook_chars={len(self.latest_notebook_state or '')})"
             )
         except Exception as e:
