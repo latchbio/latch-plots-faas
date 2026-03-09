@@ -1289,7 +1289,7 @@ class AgentHarness:
         await gql_query(
             auth=auth_token_sdk,
             query="""
-                mutation UpdateAgentSessionClaudeSessionId($id: BigInt!, $claudeSessionId: String) {
+                mutation UpdateAgentSessionClaudeSessionId($id: BigInt!, $claudeSessionId: UUID) {
                     updateAgentSession(input: {id: $id, patch: {claudeSessionId: $claudeSessionId}}) {
                         clientMutationId
                     }
