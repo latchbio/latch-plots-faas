@@ -494,9 +494,7 @@ class AgentHarness:
         for block in content:
             block_type = block.get("type")
             if block_type == "text":
-                text = block.get("text")
-                if isinstance(text, str) and text != "":
-                    block_lines.append(text)
+                block_lines.append(block["text"])
                 continue
 
             if block_type == "tool_use":
@@ -523,9 +521,6 @@ class AgentHarness:
                 continue
 
             block_lines.append(json.dumps(block, default=str))
-
-        if len(block_lines) == 0:
-            return f"{role}:"
 
         return f"{role}:\n" + "\n".join(block_lines)
 
