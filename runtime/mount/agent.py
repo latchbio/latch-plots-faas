@@ -480,7 +480,7 @@ class AgentHarness:
         return msg
 
     def _build_legacy_history_message(self, msg: MessageParam) -> str:
-        role = msg["role"].capitalize()
+        role = msg["role"]
         content = msg["content"]
 
         if isinstance(content, str):
@@ -539,7 +539,7 @@ class AgentHarness:
         included_messages = [
             self._build_legacy_history_message(msg) for msg in truncated_messages
         ]
-        history_text = "\n\n".join(included_messages)
+        history_text = "\n".join(included_messages)
 
         print(
             "[agent] Injecting legacy history into first turn "
