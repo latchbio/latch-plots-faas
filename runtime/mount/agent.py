@@ -72,6 +72,7 @@ SDK_BUILTIN_ALLOWED_TOOLS = [
     "Glob",
     "Edit",
     "Write",
+    "Bash",
     "WebFetch",
     "WebSearch",
 ]
