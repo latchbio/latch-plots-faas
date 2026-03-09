@@ -544,7 +544,7 @@ class AgentHarness:
 
         print(
             "[agent] Injecting legacy history into first turn "
-            f"window_messages len={len(windowed_messages)})"
+            f"windowed_messages len={len(windowed_messages)})"
         )
 
         return (
