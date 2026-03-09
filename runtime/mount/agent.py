@@ -15,7 +15,6 @@ from pathlib import Path
 from typing import Any, Literal, TypedDict
 
 from anthropic.types import (
-    InputJSONDelta,
     MessageParam,
     RawContentBlockDeltaEvent,
     RawContentBlockStartEvent,
@@ -23,9 +22,6 @@ from anthropic.types import (
     RawMessageDeltaEvent,
     RawMessageStartEvent,
     RawMessageStopEvent,
-    TextDelta,
-    ThinkingDelta,
-    ToolUseBlock as AnthropicToolUseBlock,
 )
 from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
 from claude_agent_sdk.types import (
@@ -1425,11 +1421,13 @@ class AgentHarness:
         *,
         collected_assistant_blocks: dict[int, AssistantStreamBlock] | None = None,
     ) -> None:
-        if isinstance(event, RawMessageStartEvent):
+        event_type = event.type
+
+        if event_type == "message_start":
             self.open_stream_blocks.clear()
             return
 
-        if isinstance(event, RawContentBlockStartEvent):
+        if event_type == "content_block_start":
             block_index = event.index
             block_type = event.content_block.type
             if block_index in self.open_stream_blocks:
@@ -1453,9 +1451,7 @@ class AgentHarness:
                 "block_index": block_index,
                 "block_type": block_type,
             }
-            if block_type == "tool_use" and isinstance(
-                event.content_block, AnthropicToolUseBlock
-            ):
+            if block_type == "tool_use":
                 payload["block_id"] = event.content_block.id
                 payload["block_name"] = event.content_block.name
                 print(
@@ -1465,25 +1461,26 @@ class AgentHarness:
             await self.send(payload)
             return
 
-        if isinstance(event, RawContentBlockDeltaEvent):
+        if event_type == "content_block_delta":
             block_index = event.index
             delta = event.delta
+            delta_type = delta.type
 
-            if isinstance(delta, TextDelta):
+            if delta_type == "text_delta":
                 await self.send({
                     "type": "agent_stream_delta",
                     "block_index": block_index,
                     "block_type": "text",
                     "delta": delta.text,
                 })
-            elif isinstance(delta, ThinkingDelta):
+            elif delta_type == "thinking_delta":
                 await self.send({
                     "type": "agent_stream_delta",
                     "block_index": block_index,
                     "block_type": "thinking",
                     "delta": delta.thinking,
                 })
-            elif isinstance(delta, InputJSONDelta):
+            elif delta_type == "input_json_delta":
                 await self.send({
                     "type": "agent_stream_delta",
                     "block_index": block_index,
@@ -1494,16 +1491,16 @@ class AgentHarness:
             if collected_assistant_blocks is not None:
                 existing = collected_assistant_blocks.get(block_index)
                 if existing is not None:
-                    if isinstance(delta, TextDelta) and existing["type"] == "text":
+                    if delta_type == "text_delta" and existing["type"] == "text":
                         existing["text"] += delta.text
                     elif (
-                        isinstance(delta, ThinkingDelta)
+                        delta_type == "thinking_delta"
                         and existing["type"] == "thinking"
                     ):
                         existing["thinking"] += delta.thinking
             return
 
-        if isinstance(event, RawContentBlockStopEvent):
+        if event_type == "content_block_stop":
             block_index = event.index
             if block_index in self.open_stream_blocks:
                 self.open_stream_blocks.pop(block_index, None)
@@ -1513,10 +1510,10 @@ class AgentHarness:
             })
             return
 
-        if isinstance(event, RawMessageDeltaEvent):
+        if event_type == "message_delta":
             return
 
-        if isinstance(event, RawMessageStopEvent):
+        if event_type == "message_stop":
             await self._close_open_stream_blocks()
             return
 
@@ -1657,17 +1654,17 @@ class AgentHarness:
                                 dropping_post_submit_stream_message = False
                                 self.open_stream_blocks.clear()
                             continue
-                    if isinstance(event, RawMessageStartEvent):
+                    if event_type == "message_start":
                         stream_message_open = True
                         assistant_blocks_by_index.clear()
                         assistant_message_started_at = time.perf_counter()
                         usage_data = event.message.usage.model_dump()
-                    elif isinstance(event, RawMessageDeltaEvent):
+                    elif event_type == "message_delta":
                         usage_data = event.usage.model_dump()
                     await self._handle_stream_event(
                         event, collected_assistant_blocks=assistant_blocks_by_index
                     )
-                    if isinstance(event, RawMessageStopEvent):
+                    if event_type == "message_stop":
                         message_duration_seconds: float | None = None
                         if assistant_message_started_at is not None:
                             message_duration_seconds = max(
