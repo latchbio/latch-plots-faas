@@ -40,7 +40,7 @@ class SocketIo:
             )
         )
 
-    async def recv(self) -> Any:
+    async def recv_raw(self) -> bytes:
         async with self.rlock:
             header = await self.loop.sock_recv(self.sock, 8)
             if len(header) == 0:
@@ -55,4 +55,7 @@ class SocketIo:
                 l -= len(chunk)
                 data += chunk
 
-        return orjson.loads(data)
+        return data
+
+    async def recv(self) -> Any:
+        return orjson.loads(await self.recv_raw())
