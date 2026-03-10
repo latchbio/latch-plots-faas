@@ -2021,10 +2021,12 @@ class Kernel:
             return
 
         if msg["type"] == "h5":
-            response = await handle_h5_widget_message(msg, self.send)
-            if response is not None:
-                await self.send(response)
-            return
+            import pyinstrument
+            with pyinstrument.profile(async_mode="enabled"):
+                response = await handle_h5_widget_message(msg, self.send)
+                if response is not None:
+                    await self.send(response)
+                return
 
 
 loop: asyncio.AbstractEventLoop | None = None
