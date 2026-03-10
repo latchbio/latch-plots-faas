@@ -5,6 +5,8 @@ from collections.abc import Awaitable, Callable
 from typing import Any, overload
 from urllib.parse import quote_plus
 
+import pyinstrument
+
 from ..utils import auto_install
 from ..utils.align import align_image
 from .ops import (
@@ -78,112 +80,119 @@ async def process_h5ad_request(
 
     match op:
         case "init_data":
-            init_obsm_key = msg.get("obsm_key")
-            possible_obsm_keys = adata.obsm_keys()
-            if init_obsm_key is None:
-                for key in possible_obsm_keys:
-                    if "umap" in key.lower() or "spatial" in key.lower():
-                        init_obsm_key = key
-                        break
+            with pyinstrument.profile():
+                init_obsm_key = msg.get("obsm_key")
+                possible_obsm_keys = adata.obsm_keys()
+                if init_obsm_key is None:
+                    for key in possible_obsm_keys:
+                        if "umap" in key.lower() or "spatial" in key.lower():
+                            init_obsm_key = key
+                            break
 
-            if (
-                init_obsm_key is None or init_obsm_key not in possible_obsm_keys
-            ) and len(possible_obsm_keys) > 0:
-                init_obsm_key = possible_obsm_keys[0]
+                if (
+                    init_obsm_key is None or init_obsm_key not in possible_obsm_keys
+                ) and len(possible_obsm_keys) > 0:
+                    init_obsm_key = possible_obsm_keys[0]
 
-            possible_obs_keys = adata.obs_keys()
+                possible_obs_keys = adata.obs_keys()
 
-            init_obs_key = msg.get("obs_key")
-            assert isinstance(init_obs_key, str | None)
+                init_obs_key = msg.get("obs_key")
+                assert isinstance(init_obs_key, str | None)
 
-            init_var_key = msg.get("var_key")
-            assert isinstance(init_var_key, str | None)
+                init_var_key = msg.get("var_key")
+                assert isinstance(init_var_key, str | None)
 
-            if init_obs_key is None and init_var_key is None:
-                for key in possible_obs_keys:
-                    if "cell" in key.lower() and "type" in key.lower():
-                        init_obs_key = key
-                        break
+                if init_obs_key is None and init_var_key is None:
+                    for key in possible_obs_keys:
+                        if "cell" in key.lower() and "type" in key.lower():
+                            init_obs_key = key
+                            break
 
-            if (
-                init_obs_key is None
-                and init_var_key is None
-                and len(possible_obs_keys) > 0
-            ):
-                init_obs_key = possible_obs_keys[0]
+                if (
+                    init_obs_key is None
+                    and init_var_key is None
+                    and len(possible_obs_keys) > 0
+                ):
+                    init_obs_key = possible_obs_keys[0]
 
-            filters = msg.get("filters")
-            recomputed_index = ctx.compute_index(filters=filters, max_cells=max_cells)
+                filters = msg.get("filters")
+                recomputed_index = ctx.compute_index(
+                    filters=filters, max_cells=max_cells
+                )
 
-            obsm = None
-            if init_obsm_key is not None:
-                obsm = ctx.get_obsm(init_obsm_key)
+                obsm = None
+                if init_obsm_key is not None:
+                    obsm = ctx.get_obsm(init_obsm_key)
 
-            obs = None
-            if init_obs_key is not None:
-                obs = ctx.get_obs(init_obs_key, max_cells=max_cells)
+                obs = None
+                if init_obs_key is not None:
+                    obs = ctx.get_obs(init_obs_key, max_cells=max_cells)
 
-            gene_column = None
-            if init_var_key is not None and init_obs_key is None:
-                gene_column = ctx.get_obs_vector(init_var_key)
+                gene_column = None
+                if init_var_key is not None and init_obs_key is None:
+                    gene_column = ctx.get_obs_vector(init_var_key)
 
-            var_index, var_names = get_var_index(obj_id, adata)
+                var_index, var_names = get_var_index(obj_id, adata)
 
-            global alignment_is_running
+                global alignment_is_running
 
-            return make_response(
-                data={
-                    # display info
-                    "num_obs": adata.n_obs,
-                    "num_vars": adata.n_vars,
-                    # options
-                    "possible_obs_keys": possible_obs_keys,
-                    "possible_obs_keys_types": [
-                        str(adata.obs[key].dtype) for key in possible_obs_keys
-                    ],
-                    "possible_obsm_keys": possible_obsm_keys,
-                    # init state with these
-                    "init_obs_key": init_obs_key,
-                    "init_obsm_key": init_obsm_key,
-                    "init_recomputed_index": recomputed_index,
-                    "init_obsm_values": obsm.data.tolist()
-                    if obsm is not None
-                    else None,
-                    "init_obsm_index": obsm.index.tolist()
-                    if obsm is not None
-                    else None,
-                    "init_obsm_filters": filters,
-                    "init_obs_values": obs.data.tolist() if obs is not None else None,
-                    "init_obs_unique_values": (
-                        obs.top_values.tolist() if obs is not None else None
-                    ),
-                    "init_obs_counts": obs.top_value_counts.tolist()
-                    if obs is not None
-                    else None,
-                    "init_obs_nrof_values": obs.total_unique
-                    if obs is not None
-                    else None,
-                    "init_obs_endpoints": [obs.min, obs.max]
-                    if obs is not None
-                    else None,
-                    # var info
-                    "init_var_index": var_index.tolist(),
-                    "init_var_names": (
-                        var_names.tolist() if var_names is not None else None
-                    ),
-                    # var color by info
-                    "init_var_values": (
-                        gene_column.tolist() if gene_column is not None else None
-                    ),
-                    "init_var_key": init_var_key if init_var_key is not None else None,
-                    # alignment info
-                    "alignment_is_running": alignment_is_running,
-                    # views info
-                    "init_views": adata.uns.get("latch_views", []),
-                    # images
-                    "init_images": adata.uns.get("latch_images", {}),
-                }
-            )
+                return make_response(
+                    data={
+                        # display info
+                        "num_obs": adata.n_obs,
+                        "num_vars": adata.n_vars,
+                        # options
+                        "possible_obs_keys": possible_obs_keys,
+                        "possible_obs_keys_types": [
+                            str(adata.obs[key].dtype) for key in possible_obs_keys
+                        ],
+                        "possible_obsm_keys": possible_obsm_keys,
+                        # init state with these
+                        "init_obs_key": init_obs_key,
+                        "init_obsm_key": init_obsm_key,
+                        "init_recomputed_index": recomputed_index,
+                        "init_obsm_values": obsm.data.tolist()
+                        if obsm is not None
+                        else None,
+                        "init_obsm_index": obsm.index.tolist()
+                        if obsm is not None
+                        else None,
+                        "init_obsm_filters": filters,
+                        "init_obs_values": obs.data.tolist()
+                        if obs is not None
+                        else None,
+                        "init_obs_unique_values": (
+                            obs.top_values.tolist() if obs is not None else None
+                        ),
+                        "init_obs_counts": obs.top_value_counts.tolist()
+                        if obs is not None
+                        else None,
+                        "init_obs_nrof_values": obs.total_unique
+                        if obs is not None
+                        else None,
+                        "init_obs_endpoints": [obs.min, obs.max]
+                        if obs is not None
+                        else None,
+                        # var info
+                        "init_var_index": var_index.tolist(),
+                        "init_var_names": (
+                            var_names.tolist() if var_names is not None else None
+                        ),
+                        # var color by info
+                        "init_var_values": (
+                            gene_column.tolist() if gene_column is not None else None
+                        ),
+                        "init_var_key": init_var_key
+                        if init_var_key is not None
+                        else None,
+                        # alignment info
+                        "alignment_is_running": alignment_is_running,
+                        # views info
+                        "init_views": adata.uns.get("latch_views", []),
+                        # images
+                        "init_images": adata.uns.get("latch_images", {}),
+                    }
+                )
 
         case "get_obsm_options":
             return make_response(data=list(adata.obsm.keys()))
