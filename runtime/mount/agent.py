@@ -23,11 +23,14 @@ from anthropic.types import (
     RawMessageStartEvent,
     RawMessageStopEvent,
 )
-from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient
+from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient, HookMatcher
 from claude_agent_sdk.types import (
     AssistantMessage,
     McpSdkServerConfig,
+    HookContext,
+    PostToolUseHookInput,
     ResultMessage,
+    SyncHookJSONOutput,
     StreamEvent,
     SystemMessage,
     ToolResultBlock,
@@ -72,6 +75,24 @@ SDK_BUILTIN_ALLOWED_TOOLS = [
     "WebFetch",
     "WebSearch",
 ]
+NOTEBOOK_MUTATION_TOOL_NAMES = (
+    "create_cell",
+    "create_markdown_cell",
+    "edit_cell",
+    "delete_cell",
+    "delete_all_cells",
+    "rename_notebook",
+    "create_tab",
+    "rename_tab",
+    "restore_checkpoint",
+)
+NOTEBOOK_MUTATION_TOOL_MATCHER = (
+    "^mcp__"
+    + MCP_SERVER_NAME
+    + "__("
+    + "|".join(NOTEBOOK_MUTATION_TOOL_NAMES)
+    + ")$"
+)
 
 
 class Behavior(Enum):
@@ -666,6 +687,31 @@ class AgentHarness:
                 result_payload["summary"] = f"{tool_name} failed: {text_content[:200]}"
 
         return [{"type": "text", "text": json.dumps(result_payload)}]
+
+    async def _post_tool_use_attach_notebook_state(
+        self,
+        input_data: PostToolUseHookInput,
+        tool_use_id: str | None,
+        _context: HookContext,
+    ) -> SyncHookJSONOutput:
+        tool_name = input_data["tool_name"]
+        notebook_state = await self.refresh_cells_context()
+        self.latest_notebook_state = notebook_state
+
+        print(
+            "[agent] PostToolUse attached notebook state context "
+            f"for {tool_name} (tool_use_id={tool_use_id})"
+        )
+        return {
+            "hookSpecificOutput": {
+                "hookEventName": "PostToolUse",
+                "additionalContext": (
+                    "<current_notebook_state>\n"
+                    f"{notebook_state}\n"
+                    "</current_notebook_state>"
+                ),
+            }
+        }
 
     def _extract_tool_blocks_from_sdk_message(
         self, msg: AssistantMessage | UserMessage
@@ -1364,6 +1410,14 @@ class AgentHarness:
                 thinking={"type": "adaptive"},
                 resume=resume_session_id,
                 env=sdk_env,
+                hooks={
+                    "PostToolUse": [
+                        HookMatcher(
+                            matcher=NOTEBOOK_MUTATION_TOOL_MATCHER,
+                            hooks=[self._post_tool_use_attach_notebook_state],
+                        )
+                    ]
+                },
             )
         )
         await self.client.connect()

@@ -210,10 +210,18 @@ async def edit_cell(args: dict[str, Any]) -> dict[str, Any]:
 
     print(f"[tool] edit_cell id={cell_id}")
     original_code = ""
-    for cell in h.latest_notebook_context.get("cells", []):
-        if cell.get("cell_id") == cell_id:
-            original_code = cell.get("source", "")
-            break
+    context_result = await h.atomic_operation("get_context", {})
+    if context_result.get("status") == "success":
+        cells = context_result.get("context", {}).get("cells", [])
+        for cell in cells:
+            if cell.get("cell_id") == cell_id:
+                original_code = cell.get("source", "")
+                break
+    else:
+        print(
+            "[tool] edit_cell: failed to refresh notebook context: "
+            f"{context_result.get('error', 'Unknown error')}"
+        )
 
     params = {"cell_id": cell_id, "source": new_code, "auto_run": True}
     result = await h.atomic_operation("edit_cell", params)
