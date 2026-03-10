@@ -1383,9 +1383,8 @@ class AgentHarness:
         print(f"[agent] Unknown stream event type={event_type}")
         return None
 
-    # todo(tim): cleanup this key stuff once proxy working
     def _build_sdk_env(self) -> dict[str, str]:
-        sdk_base_url = f"{nucleus_url}/infer/plots-agent/anthropic-sdk-test"
+        sdk_base_url = f"{nucleus_url}/infer/plots-agent/anthropic"
         sdk_env = {
             "ANTHROPIC_BASE_URL": sdk_base_url,
             "ANTHROPIC_API_KEY": sdk_token,
