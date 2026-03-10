@@ -1,6 +1,7 @@
 import asyncio
 import contextlib
 import os
+import shutil
 import socket
 import sys
 import traceback
@@ -721,6 +722,13 @@ async def start_kernel_proc() -> None:
 
     print("Starting kernel subprocess")
     k_proc.proc = await asyncio.create_subprocess_exec(
+        shutil.which("py-spy"),
+        "record",
+        "--format",
+        "speedscope",
+        "--output",
+        "kernel.json",
+        "--",
         sys.executable,
         (dir_p / "kernel.py"),
         str(sock_k_fd),
