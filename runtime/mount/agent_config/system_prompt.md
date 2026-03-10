@@ -22,7 +22,7 @@ Each Plot runs in the plots-faas mamba environment, supports installing addition
 
 ## Context Files & Structure
 
-The agent operates with access to specific documentation and context files rooted in `runtime/mount/agent_config/context/`.
+The agent operates with access to specific documentation and context files rooted in `agent_config/context/`.
 
 - **Tech Docs**: `technology_docs/` (Platform-specific processes)
 - **API Docs**: `latch_api_docs/` (Widget and API reference)
@@ -33,9 +33,9 @@ The agent operates with access to specific documentation and context files roote
 
 Mandatory when using Latch-specific features (widgets, LPath, Signals/reactivity, workflows):
 
-- **All Latch APIs (Widgets, LPath, Reactivity)** → `runtime/mount/agent_config/context/latch_api_docs/latch_api_reference.md`
-- **Custom plots** → `runtime/mount/agent_config/context/latch_api_docs/plots_docs/custom-plots.mdx`
-- **Spatial annotation tasks (e.g., H5 image alignment)** → `runtime/mount/agent_config/context/latch_api_docs/spatial_annotation.md`
+- **All Latch APIs (Widgets, LPath, Reactivity)** → `latch_api_docs/latch_api_reference.md`
+- **Custom plots** → `latch_api_docs/plots_docs/custom-plots.mdx`
+- **Spatial annotation tasks (e.g., H5 image alignment)** → `latch_api_docs/spatial_annotation.md`
 
 ## Context Refreshing
 
@@ -51,8 +51,8 @@ Every turn includes the current notebook state in <current_notebook_state> tags.
 **Requirement**: If you will create/edit a cell that uses ANY Latch API (`w_*` widgets, `LPath`, `Signal`/reactivity, `w_workflow`, or any `lplots.*` import), you MUST consult the docs first using the steps below. “Quick” or “simple” requests are not an exception when Latch APIs are involved.
 
 1. **Identify**: Determine the exact API you will use. The Widgets Quick Reference is only for selecting a widget name/category (it is NOT documentation for arguments/import paths).
-2. **Grep for line number**: Use `Grep` to find the relevant heading in `runtime/mount/agent_config/context/latch_api_docs/latch_api_reference.md` (for example, `^### w_widget_name$`).
-3. **Read targeted context**: Use `Read` to inspect a focused window around the matched location (typically ~50-120 lines)
+2. **Grep for line number**: e.g `grep -n "^### w_widget_name$" latch_api_docs/latch_api_reference.md`
+3. **Read section**: Use `read_file` with offset/limit from grep result (~50 lines usually sufficient).
 4. **Copy exactly**: Use verbatim import paths, arguments, and patterns.
 
 ### Widgets Quick Reference
@@ -279,10 +279,10 @@ If the user decides to save:
 
 When the user mentions an assay platform, read the corresponding documentation:
 
-- **Takara Seeker/Trekker** → `runtime/mount/agent_config/context/technology_docs/takara/main.md`
-- **Vizgen MERFISH** → `runtime/mount/agent_config/context/technology_docs/vizgen/main.md`
-- **AtlasXOmics** → `runtime/mount/agent_config/context/technology_docs/atlasxomics/main.md`
-- **10X Xenium** → `runtime/mount/agent_config/context/technology_docs/xenium/main.md`
+- **Takara Seeker/Trekker** → `technology_docs/takara/main.md`
+- **Vizgen MERFISH** → `technology_docs/vizgen/main.md`
+- **AtlasXOmics** → `technology_docs/atlasxomics/main.md`
+- **10X Xenium** → `technology_docs/xenium/main.md`
 
 ### Detection Strategy
 
