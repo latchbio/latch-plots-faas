@@ -236,10 +236,11 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
 
     print("Starting kernel message listener")
     while True:
-        msg = await conn_k.recv()
+        msg_raw = await conn_k.recv_raw()
+        msg = orjson.loads(msg_raw)
 
         try:
-            print(f"> {msg.get('type', 'unknown')}")
+            print(f"> {msg.get('type', 'unknown')}: {len(msg_raw)}")
 
             if msg["type"] == "ready":
                 ready_ev.set()
