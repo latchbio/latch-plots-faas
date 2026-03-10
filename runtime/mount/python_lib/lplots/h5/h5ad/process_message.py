@@ -146,9 +146,7 @@ async def process_h5ad_request(
                     "init_obs_key": init_obs_key,
                     "init_obsm_key": init_obsm_key,
                     "init_recomputed_index": recomputed_index,
-                    "init_obsm_values": obsm.data.tolist()
-                    if obsm is not None
-                    else None,
+                    "init_obsm_values": obsm.data if obsm is not None else None,
                     "init_obsm_index": obsm.index.tolist()
                     if obsm is not None
                     else None,
