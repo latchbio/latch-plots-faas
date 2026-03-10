@@ -2021,13 +2021,9 @@ class Kernel:
             return
 
         if msg["type"] == "h5":
-
-            async def accept_h5() -> None:
-                response = await handle_h5_widget_message(msg, self.send)
-                if response is not None:
-                    await self.send(response)
-
-            await accept_h5()
+            response = await handle_h5_widget_message(msg, self.send)
+            if response is not None:
+                await self.send(response)
             return
 
 
