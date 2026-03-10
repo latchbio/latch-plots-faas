@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+import traceback
+from typing import TYPE_CHECKING, Any
 
 from claude_agent_sdk import create_sdk_mcp_server, tool
 from lplots import _inject
 
+if TYPE_CHECKING:
+    from agent import AgentHarness
 
 MCP_SERVER_NAME = "plots-agent-tools"
 
@@ -49,7 +52,7 @@ def ok(d: dict) -> dict[str, Any]:
     return {"content": [{"type": "text", "text": json.dumps(d)}]}
 
 
-def harness():
+def harness() -> AgentHarness:
     h = _inject.agent
     if h is None:
         raise RuntimeError("Agent harness is not initialized")
@@ -1752,7 +1755,7 @@ async def update_plan(args: dict[str, Any]) -> dict[str, Any]:
         return ok({
             "tool_name": "update_plan",
             "success": True,
-            "summary": plan_update_overview if plan_update_overview else "Plan updated",
+            "summary": plan_update_overview or "Plan updated",
         })
     except Exception as e:
         print(f"[tool] update_plan error: {e!s}")
@@ -1876,7 +1879,6 @@ async def submit_response(args: dict[str, Any]) -> dict[str, Any]:
         })
     except Exception as e:
         print(f"[tool] submit_response error: {e!s}")
-        import traceback
 
         traceback.print_exc()
         return ok({

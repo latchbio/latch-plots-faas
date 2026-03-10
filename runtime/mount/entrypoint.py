@@ -543,11 +543,13 @@ async def handle_agent_messages(conn_a: SocketIo) -> None:
     print("[entrypoint] Starting agent message listener")
     while True:
         msg = await conn_a.recv()
-        msg_type = msg.get("type", "unknown")
+        msg_type: str = msg.get("type", "unknown")
         tx_id = msg.get("tx_id")
         action = msg.get("action")
 
-        if msg_type != "agent_stream_delta" and "agent_stream_block" not in msg_type:
+        if msg_type != "agent_stream_delta" and not msg_type.startswith(
+            "agent_stream_block"
+        ):
             print(f"[entrypoint] Agent > {msg_type}")
 
         if msg_type == "agent_action":
@@ -574,7 +576,7 @@ async def handle_agent_messages(conn_a: SocketIo) -> None:
                 })
             continue
 
-        if msg_type == "agent_action" and msg.get("action") == "execute_code":
+        if msg_type == "agent_action" and action == "execute_code":
             if k_proc.conn_k is not None:
                 code = msg.get("params", {}).get("code", "")
 
@@ -592,7 +594,7 @@ async def handle_agent_messages(conn_a: SocketIo) -> None:
                 })
             continue
 
-        if msg_type == "agent_action" and msg.get("action") == "get_global_info":
+        if msg_type == "agent_action" and action == "get_global_info":
             if k_proc.conn_k is not None:
                 key = msg.get("params", {}).get("key", "")
 
@@ -805,7 +807,7 @@ async def start_kernel_proc() -> None:
 
 
 async def start_agent_proc() -> None:
-    conn_a = a_proc.conn_a = await SocketIo.from_socket(sock_a)
+    a_proc.conn_a = await SocketIo.from_socket(sock_a)
     async_tasks.append(asyncio.create_task(handle_agent_messages(a_proc.conn_a)))
 
     log_path = Path("/var/log/agent.log")

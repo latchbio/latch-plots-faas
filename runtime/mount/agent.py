@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, Literal, TypedDict
 
 from anthropic.types import (
+    MessageDeltaUsage,
     MessageParam,
     RawContentBlockDeltaEvent,
     RawContentBlockStartEvent,
@@ -22,25 +23,26 @@ from anthropic.types import (
     RawMessageDeltaEvent,
     RawMessageStartEvent,
     RawMessageStopEvent,
+    Usage,
 )
 from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient, HookMatcher
 from claude_agent_sdk.types import (
     AssistantMessage,
-    McpSdkServerConfig,
     HookContext,
+    McpSdkServerConfig,
     PostToolUseHookInput,
     ResultMessage,
-    SyncHookJSONOutput,
     StreamEvent,
+    SyncHookJSONOutput,
     SystemMessage,
     ToolResultBlock,
     ToolUseBlock,
     UserMessage,
 )
 from latch_data_validation.data_validation import validate
-from tools import MCP_ALLOWED_TOOL_NAMES, MCP_SERVER_NAME, agent_tools_mcp
 from lplots import _inject
 from socketio_thread import SocketIoThread
+from tools import MCP_ALLOWED_TOOL_NAMES, MCP_SERVER_NAME, agent_tools_mcp
 from utils import auth_token_sdk, gql_query, nucleus_url, pod_id, sdk_token
 
 sys.stdout.reconfigure(line_buffering=True)
@@ -87,11 +89,7 @@ NOTEBOOK_MUTATION_TOOL_NAMES = (
     "restore_checkpoint",
 )
 NOTEBOOK_MUTATION_TOOL_MATCHER = (
-    "^mcp__"
-    + MCP_SERVER_NAME
-    + "__("
-    + "|".join(NOTEBOOK_MUTATION_TOOL_NAMES)
-    + ")$"
+    "^mcp__" + MCP_SERVER_NAME + "__(" + "|".join(NOTEBOOK_MUTATION_TOOL_NAMES) + ")$"
 )
 
 
@@ -181,10 +179,11 @@ AnthropicStreamEvent = (
     | RawContentBlockStopEvent
 )
 
+
 @dataclass
 class AgentHarness:
     conn: SocketIoThread
-    client: ClaudeSDKClient | None = None
+    claude: ClaudeSDKClient | None = None
     system_prompt: str | None = None
     pending_operations: dict[str, asyncio.Future] = field(default_factory=dict)
     executing_cells: set[str] = field(default_factory=set)
@@ -403,7 +402,10 @@ class AgentHarness:
 
         if isinstance(content, str):
             if len(content) > 500:
-                return {"role": msg["role"], "content": content[:500] + "...[truncated]"}
+                return {
+                    "role": msg["role"],
+                    "content": content[:500] + "...[truncated]",
+                }
             return msg
 
         if isinstance(content, list):
@@ -422,7 +424,11 @@ class AgentHarness:
                     block_content = block.get("content", "{}")
 
                     if isinstance(block_content, list):
-                        text_blocks = [b for b in block_content if isinstance(b, dict) and b.get("type") == "text"]
+                        text_blocks = [
+                            b
+                            for b in block_content
+                            if isinstance(b, dict) and b.get("type") == "text"
+                        ]
                         if len(text_blocks) > 0:
                             result_str = text_blocks[0].get("text", "{}")
                             result = json.loads(result_str)
@@ -430,7 +436,7 @@ class AgentHarness:
                             truncated_blocks.append({
                                 "type": "tool_result",
                                 "tool_use_id": block.get("tool_use_id"),
-                                "content": json.dumps(result)
+                                "content": json.dumps(result),
                             })
                         else:
                             truncated_blocks.append(block)
@@ -443,22 +449,44 @@ class AgentHarness:
                     if tool_name in {"create_cell", "create_markdown_cell"}:
                         result = {k: v for k, v in result.items() if k != "code"}
                     elif tool_name == "edit_cell":
-                        result = {k: v for k, v in result.items() if k not in {"code", "original_code"}}
+                        result = {
+                            k: v
+                            for k, v in result.items()
+                            if k not in {"code", "original_code"}
+                        }
                     elif tool_name == "bash":
                         result = {k: v for k, v in result.items() if k != "output"}
                     elif tool_name == "execute_code":
                         result = {k: v for k, v in result.items() if k != "code"}
-                        if "stdout" in result and isinstance(result.get("stdout"), str) and len(result["stdout"]) > 1500:
-                            result["stdout"] = "...[truncated]\n" + result["stdout"][-1500:]
-                        if "stderr" in result and isinstance(result.get("stderr"), str) and len(result["stderr"]) > 1500:
-                            result["stderr"] = "...[truncated]\n" + result["stderr"][-1500:]
-                        if "exception" in result and isinstance(result.get("exception"), str) and len(result["exception"]) > 1500:
-                            result["exception"] = "...[truncated]\n" + result["exception"][-1500:]
+                        if (
+                            "stdout" in result
+                            and isinstance(result.get("stdout"), str)
+                            and len(result["stdout"]) > 1500
+                        ):
+                            result["stdout"] = (
+                                "...[truncated]\n" + result["stdout"][-1500:]
+                            )
+                        if (
+                            "stderr" in result
+                            and isinstance(result.get("stderr"), str)
+                            and len(result["stderr"]) > 1500
+                        ):
+                            result["stderr"] = (
+                                "...[truncated]\n" + result["stderr"][-1500:]
+                            )
+                        if (
+                            "exception" in result
+                            and isinstance(result.get("exception"), str)
+                            and len(result["exception"]) > 1500
+                        ):
+                            result["exception"] = (
+                                "...[truncated]\n" + result["exception"][-1500:]
+                            )
 
                     truncated_blocks.append({
                         "type": "tool_result",
                         "tool_use_id": block.get("tool_use_id"),
-                        "content": json.dumps(result)
+                        "content": json.dumps(result),
                     })
                     continue
 
@@ -469,11 +497,19 @@ class AgentHarness:
 
                     if isinstance(inp, dict) and tool_name is not None:
                         if tool_name in {"create_cell", "create_markdown_cell"}:
-                            truncated_inp = {k: v for k, v in inp.items() if k != "code"}
+                            truncated_inp = {
+                                k: v for k, v in inp.items() if k != "code"
+                            }
                         elif tool_name == "edit_cell":
-                            truncated_inp = {k: v for k, v in inp.items() if k != "new_code"}
+                            truncated_inp = {
+                                k: v for k, v in inp.items() if k != "new_code"
+                            }
                         elif tool_name == "update_plan":
-                            truncated_inp = {k: v for k, v in inp.items() if k not in {"plan", "plan_diff"}}
+                            truncated_inp = {
+                                k: v
+                                for k, v in inp.items()
+                                if k not in {"plan", "plan_diff"}
+                            }
 
                     truncated_blocks.append({
                         "type": "tool_use",
@@ -486,7 +522,10 @@ class AgentHarness:
                 if block_type == "text":
                     text = block.get("text", "")
                     if len(text) > 1000:
-                        truncated_blocks.append({"type": "text", "text": text[:1000] + "...[truncated]"})
+                        truncated_blocks.append({
+                            "type": "text",
+                            "text": text[:1000] + "...[truncated]",
+                        })
                     else:
                         truncated_blocks.append(block)
                     continue
@@ -514,9 +553,7 @@ class AgentHarness:
             if block_type == "tool_use":
                 tool_name = block.get("name", "unknown")
                 tool_input = json.dumps(block.get("input"), sort_keys=True, default=str)
-                block_lines.append(
-                    f"[tool_use] {tool_name} input={tool_input}"
-                )
+                block_lines.append(f"[tool_use] {tool_name} input={tool_input}")
                 continue
 
             if block_type == "tool_result":
@@ -530,7 +567,9 @@ class AgentHarness:
                     )
                 else:
                     content_text = str(block_content)
-                prefix = "[tool_result error]" if block.get("is_error") else "[tool_result]"
+                prefix = (
+                    "[tool_result error]" if block.get("is_error") else "[tool_result]"
+                )
                 block_lines.append(f"{prefix} {content_text}")
                 continue
 
@@ -621,7 +660,10 @@ class AgentHarness:
 
         await self._notify_history_updated(request_id=request_id)
 
-    def _normalize_tool_result_content(self, tool_response: Any) -> ToolResultContent:
+    def _normalize_tool_result_content(
+        self, tool_response: str | list[dict[str, Any]] | None
+    ) -> ToolResultContent:
+        # todo(rteqs): this is kinda sus. why is there a early return in the for loop.
         if isinstance(tool_response, str):
             return tool_response
 
@@ -717,7 +759,7 @@ class AgentHarness:
         self, msg: AssistantMessage | UserMessage
     ) -> tuple[list[ToolUseHistoryBlock], list[ToolResultHistoryBlock]]:
         content = msg.content
-        if not isinstance(content, list):
+        if isinstance(content, str):
             return [], []
 
         tool_use_blocks: list[ToolUseHistoryBlock] = []
@@ -743,7 +785,9 @@ class AgentHarness:
             tool_use_id = block.tool_use_id
             if tool_use_id == "":
                 continue
+
             normalized_content = self._normalize_tool_result_content(block.content)
+
             payload_block = {
                 "type": "tool_result",
                 "tool_use_id": tool_use_id,
@@ -965,8 +1009,7 @@ class AgentHarness:
             f"<turn_behavior>\n{turn_behavior_content}\n</turn_behavior>",
         )
         return final_system_prompt.replace(
-            "EXAMPLES_PLACEHOLDER",
-            f"<examples>\n{examples_content}\n</examples>",
+            "EXAMPLES_PLACEHOLDER", f"<examples>\n{examples_content}\n</examples>"
         )
 
     async def atomic_operation(
@@ -1034,20 +1077,18 @@ class AgentHarness:
 
     async def handle_action_response(self, msg: dict[str, Any]) -> None:
         tx_id = msg.get("tx_id")
+        assert tx_id is not None
+
         fut = self.pending_operations.get(tx_id)
         if fut and not fut.done():
             fut.set_result(msg)
 
-    async def _send_usage_update(self, usage: dict[str, Any]) -> None:
+    async def _send_usage_update(self, usage: Usage | MessageDeltaUsage) -> None:
         await self.send({
             "type": "agent_usage_update",
-            "input_tokens": int(usage.get("input_tokens", 0) or 0),
-            "cache_read_input_tokens": int(
-                usage.get("cache_read_input_tokens", 0) or 0
-            ),
-            "cache_creation_input_tokens": int(
-                usage.get("cache_creation_input_tokens", 0) or 0
-            ),
+            "input_tokens": usage.input_tokens if usage.input_tokens is not None else 0,
+            "cache_read_input_tokens": usage.cache_read_input_tokens,
+            "cache_creation_input_tokens": usage.cache_creation_input_tokens,
             "context_limit": 200_000,
         })
 
@@ -1293,16 +1334,16 @@ class AgentHarness:
         print("[agent] run_agent_loop: stopped")
 
     async def _disconnect_sdk_client(self) -> None:
-        if self.client is None:
+        if self.claude is None:
             return
         try:
-            await self.client.disconnect()
+            await self.claude.disconnect()
+        except Exception:
+            traceback.print_exc()
         finally:
-            self.client = None
+            self.claude = None
 
-    async def _load_claude_session_id(
-        self, session_id: int
-    ) -> str | None:
+    async def _load_claude_session_id(self, session_id: int) -> str | None:
         try:
             response = await gql_query(
                 auth=auth_token_sdk,
@@ -1362,7 +1403,9 @@ class AgentHarness:
             f"(db_session_id={self.agent_session_id}, claude_session_id={session_id})"
         )
 
-    def _parse_stream_event(self, raw_event: dict[str, Any]) -> AnthropicStreamEvent | None:
+    def _parse_stream_event(
+        self, raw_event: dict[str, Any]
+    ) -> AnthropicStreamEvent | None:
         event_type = raw_event.get("type")
         try:
             if event_type == "message_start":
@@ -1388,7 +1431,7 @@ class AgentHarness:
         sdk_env = {
             "ANTHROPIC_BASE_URL": sdk_base_url,
             "ANTHROPIC_API_KEY": sdk_token,
-            "ANTHROPIC_CUSTOM_HEADERS": f"Pod-Id: {str(pod_id)}",
+            "ANTHROPIC_CUSTOM_HEADERS": f"Pod-Id: {pod_id!s}",
         }
 
         print(f"[agent] SDK gateway mode: nucleus-proxy ({sdk_base_url})")
@@ -1398,7 +1441,7 @@ class AgentHarness:
         self.system_prompt = self._compose_turn_system_prompt()
         sdk_env = self._build_sdk_env()
 
-        self.client = ClaudeSDKClient(
+        self.claude = ClaudeSDKClient(
             options=ClaudeAgentOptions(
                 system_prompt=self.system_prompt,
                 include_partial_messages=True,
@@ -1419,10 +1462,10 @@ class AgentHarness:
                 },
             )
         )
-        await self.client.connect()
+        await self.claude.connect()
 
         try:
-            mcp_status = await self.client.get_mcp_status()
+            mcp_status = await self.claude.get_mcp_status()
             print(f"[agent] MCP status: {json.dumps(mcp_status)}")
         except Exception as e:
             print(f"[agent] Failed to fetch MCP status: {e!s}")
@@ -1474,26 +1517,28 @@ class AgentHarness:
         *,
         collected_assistant_blocks: dict[int, AssistantStreamBlock] | None = None,
     ) -> None:
-        event_type = event.type
-
-        if event_type == "message_start":
+        if event.type == "message_start":
             self.open_stream_blocks.clear()
             return
 
-        if event_type == "content_block_start":
+        if event.type == "content_block_start":
             block_index = event.index
-            block_type = event.content_block.type
+            block = event.content_block
+
             if block_index in self.open_stream_blocks:
                 await self.send({
                     "type": "agent_stream_block_stop",
                     "block_index": block_index,
                 })
-            self.open_stream_blocks[block_index] = block_type
+            self.open_stream_blocks[block_index] = block.type
 
             if collected_assistant_blocks is not None:
-                if block_type == "text":
-                    collected_assistant_blocks[block_index] = {"type": "text", "text": ""}
-                elif block_type == "thinking":
+                if block.type == "text":
+                    collected_assistant_blocks[block_index] = {
+                        "type": "text",
+                        "text": "",
+                    }
+                elif block.type == "thinking":
                     collected_assistant_blocks[block_index] = {
                         "type": "thinking",
                         "thinking": "",
@@ -1502,38 +1547,40 @@ class AgentHarness:
             payload: dict[str, Any] = {
                 "type": "agent_stream_block_start",
                 "block_index": block_index,
-                "block_type": block_type,
+                "block_type": block.type,
             }
-            if block_type == "tool_use":
-                payload["block_id"] = event.content_block.id
-                payload["block_name"] = event.content_block.name
+            if block.type == "tool_use":
+                payload["block_id"] = block.id
+                payload["block_name"] = block.name
                 print(
                     "[agent] tool_use block started "
                     f"index={block_index} name={payload['block_name']} id={payload['block_id']}"
                 )
+
             await self.send(payload)
             return
 
-        if event_type == "content_block_delta":
+        if event.type == "content_block_delta":
             block_index = event.index
             delta = event.delta
-            delta_type = delta.type
 
-            if delta_type == "text_delta":
+            if delta.type == "text_delta":
                 await self.send({
                     "type": "agent_stream_delta",
                     "block_index": block_index,
                     "block_type": "text",
                     "delta": delta.text,
                 })
-            elif delta_type == "thinking_delta":
+
+            elif delta.type == "thinking_delta":
                 await self.send({
                     "type": "agent_stream_delta",
                     "block_index": block_index,
                     "block_type": "thinking",
                     "delta": delta.thinking,
                 })
-            elif delta_type == "input_json_delta":
+
+            elif delta.type == "input_json_delta":
                 await self.send({
                     "type": "agent_stream_delta",
                     "block_index": block_index,
@@ -1544,16 +1591,16 @@ class AgentHarness:
             if collected_assistant_blocks is not None:
                 existing = collected_assistant_blocks.get(block_index)
                 if existing is not None:
-                    if delta_type == "text_delta" and existing["type"] == "text":
+                    if delta.type == "text_delta" and existing["type"] == "text":
                         existing["text"] += delta.text
                     elif (
-                        delta_type == "thinking_delta"
+                        delta.type == "thinking_delta"
                         and existing["type"] == "thinking"
                     ):
                         existing["thinking"] += delta.thinking
             return
 
-        if event_type == "content_block_stop":
+        if event.type == "content_block_stop":
             block_index = event.index
             if block_index in self.open_stream_blocks:
                 self.open_stream_blocks.pop(block_index, None)
@@ -1563,15 +1610,15 @@ class AgentHarness:
             })
             return
 
-        if event_type == "message_delta":
+        if event.type == "message_delta":
             return
 
-        if event_type == "message_stop":
+        if event.type == "message_stop":
             await self._close_open_stream_blocks()
             return
 
     async def _run_query(self, *, prompt: str, request_id: str | None) -> None:
-        assert self.client is not None
+        assert self.claude is not None
         assert self.agent_session_id is not None
 
         self.open_stream_blocks.clear()
@@ -1581,7 +1628,7 @@ class AgentHarness:
         persisted_assistant_message_this_turn = False
         final_query_error: str | None = None
         stream_complete_error: StreamCompleteErrorPayload | None = None
-        usage_data: dict[str, Any] | None = None
+        usage_data: Usage | MessageDeltaUsage | None = None
         tool_use_index: dict[str, str] = {}
         assistant_error_type: str | None = None
         stream_message_open = False
@@ -1659,7 +1706,7 @@ class AgentHarness:
             )
             try:
                 await asyncio.wait_for(
-                    self.client.query(prompt=prompt, session_id=query_session_id),
+                    self.claude.query(prompt=prompt, session_id=query_session_id),
                     timeout=10.0,
                 )
             except TimeoutError:
@@ -1671,7 +1718,7 @@ class AgentHarness:
                 })
                 return
             print(f"[agent] SDK query submitted (request_id={request_id})")
-            receive_iter = aiter(self.client.receive_response())
+            receive_iter = aiter(self.claude.receive_response())
             while True:
                 try:
                     msg = await asyncio.wait_for(anext(receive_iter), timeout=90.0)
@@ -1691,11 +1738,12 @@ class AgentHarness:
                 if isinstance(msg, StreamEvent):
                     await self._capture_claude_session_id(msg.session_id)
                     event = self._parse_stream_event(msg.event)
+
                     if event is None:
                         continue
-                    event_type = event.type
+
                     if final_submit_response_reached:
-                        if event_type == "message_start":
+                        if event.type == "message_start":
                             dropping_post_submit_stream_message = True
                             assistant_blocks_by_index.clear()
                             assistant_message_started_at = None
@@ -1703,21 +1751,23 @@ class AgentHarness:
                             self.open_stream_blocks.clear()
                             continue
                         if dropping_post_submit_stream_message:
-                            if event_type == "message_stop":
+                            if event.type == "message_stop":
                                 dropping_post_submit_stream_message = False
                                 self.open_stream_blocks.clear()
                             continue
-                    if event_type == "message_start":
+
+                    if event.type == "message_start":
                         stream_message_open = True
                         assistant_blocks_by_index.clear()
                         assistant_message_started_at = time.perf_counter()
-                        usage_data = event.message.usage.model_dump()
-                    elif event_type == "message_delta":
-                        usage_data = event.usage.model_dump()
+                        usage_data = event.message.usage
+                    elif event.type == "message_delta":
+                        usage_data = event.usage
+
                     await self._handle_stream_event(
                         event, collected_assistant_blocks=assistant_blocks_by_index
                     )
-                    if event_type == "message_stop":
+                    if event.type == "message_stop":
                         message_duration_seconds: float | None = None
                         if assistant_message_started_at is not None:
                             message_duration_seconds = max(
@@ -1824,7 +1874,7 @@ class AgentHarness:
                             "[agent] Final submit_response detected, interrupting SDK query and suppressing follow-up streamed assistant output"
                         )
                         try:
-                            await self.client.interrupt()
+                            await self.claude.interrupt()
                         except Exception as e:
                             print(
                                 f"[agent] Failed to interrupt SDK query after final submit_response: {e!s}"
@@ -1895,7 +1945,7 @@ class AgentHarness:
             await self._close_open_stream_blocks()
             if usage_data is not None:
                 await self._send_usage_update(usage_data)
-            stream_complete_payload = {"type": "agent_stream_complete"}
+            stream_complete_payload: dict[str, Any] = {"type": "agent_stream_complete"}
             if stream_complete_error is not None:
                 stream_complete_payload["error"] = stream_complete_error
             await self.send(stream_complete_payload)
@@ -1903,7 +1953,7 @@ class AgentHarness:
     async def _run_query_with_turn_prompt(
         self, *, query: str, request_id: str | None
     ) -> None:
-        assert self.client is not None
+        assert self.claude is not None
 
         try:
             turn_behavior_content, examples_content = self._load_behavior_context()
@@ -1975,7 +2025,7 @@ class AgentHarness:
             print(f"[agent] Session initialized/changed: {new_session_id}")
             self.agent_session_id = new_session_id
 
-        if self.client is not None and not session_changed:
+        if self.claude is not None and not session_changed:
             print("[agent] SDK client already initialized; skipping re-init")
             if len(self.pending_operations) > 0:
                 print(
@@ -1993,13 +2043,13 @@ class AgentHarness:
                 self._start_conversation_loop()
             return
 
-        if self.client is not None and session_changed:
+        if self.claude is not None and session_changed:
             if (
                 self.current_query_task is not None
                 and not self.current_query_task.done()
             ):
                 print("[agent] Interrupting running query due to session change")
-                await self.client.interrupt()
+                await self.claude.interrupt()
                 await self._wait_for_running_query_to_stop()
             await self._reset_for_new_session()
             await self._disconnect_sdk_client()
@@ -2011,7 +2061,7 @@ class AgentHarness:
             )
         self.claude_session_id = resume_session_id
 
-        if self.client is None:
+        if self.claude is None:
             await self._connect_sdk_client(resume_session_id=resume_session_id)
             if resume_session_id is None:
                 print("[agent] SDK initialized without resume session")
@@ -2067,8 +2117,8 @@ class AgentHarness:
         has_running_query = (
             self.current_query_task is not None and not self.current_query_task.done()
         )
-        if self.client is not None and has_running_query:
-            await self.client.interrupt()
+        if self.claude is not None and has_running_query:
+            await self.claude.interrupt()
             completed_gracefully = await self._wait_for_running_query_to_stop()
             if completed_gracefully:
                 print(f"[agent] Cancel completed for request {request_id}")
@@ -2152,7 +2202,7 @@ class AgentHarness:
         }
 
     async def update_system_prompt(self, msg: dict[str, Any]) -> dict:
-        assert self.client is not None
+        assert self.claude is not None
         new_content = msg.get("content")
         if not isinstance(new_content, str):
             return {"status": "error", "error": "Invalid content"}
@@ -2160,7 +2210,7 @@ class AgentHarness:
         system_prompt_path = context_root.parent / "system_prompt.md"
         system_prompt_path.write_text(new_content)
         self.system_prompt = new_content
-        self.client.options.system_prompt = new_content
+        self.claude.options.system_prompt = new_content
 
         full_prompt = await self.get_full_prompt()
         return {"status": "success", **full_prompt}
@@ -2332,6 +2382,7 @@ async def main() -> None:
                 await harness.accept()
             except Exception:
                 traceback.print_exc()
+                continue
 
         print("Agent shutting down...")
     finally:
