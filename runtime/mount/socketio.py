@@ -28,7 +28,7 @@ class SocketIo:
         return cls(sock=sock, loop=loop, rlock=asyncio.Lock(), wlock=asyncio.Lock())
 
     async def send_bytes(self, data: bytes) -> None:
-        data = gzip.compress(data, compresslevel=0)
+        data = gzip.compress(data, compresslevel=1)
         header = struct.pack("<q", len(data))
 
         async with self.wlock:
