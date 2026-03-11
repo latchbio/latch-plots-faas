@@ -711,16 +711,39 @@ async def capture_widget_image(args: dict[str, Any]) -> dict[str, Any]:
         widget_type = result.get("widget_type", "unknown")
         metadata = result.get("metadata", {})
         image = result.get("image")
+        if not isinstance(image, str) or not image.startswith("data:"):
+            return ok({
+                "tool_name": "capture_widget_image",
+                "success": False,
+                "summary": "Capture succeeded but image data was invalid",
+            })
 
-        return ok({
-            "tool_name": "capture_widget_image",
-            "success": True,
-            "summary": f"Captured image from {widget_type} widget '{widget_key}'",
-            "widget_key": widget_key,
-            "widget_type": widget_type,
-            "image": image,
-            "metadata": metadata,
-        })
+        header, base64_data = image.split(",", 1)
+        media_type = header.split(";")[0].removeprefix("data:")
+
+        return {
+            "content": [
+                {
+                    "type": "text",
+                    "text": json.dumps({
+                        "tool_name": "capture_widget_image",
+                        "success": True,
+                        "summary": f"Captured image from {widget_type} widget '{widget_key}'",
+                        "widget_key": widget_key,
+                        "widget_type": widget_type,
+                        "metadata": metadata,
+                    }),
+                },
+                {
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": media_type,
+                        "data": base64_data,
+                    },
+                },
+            ]
+        }
 
     return ok({
         "tool_name": "capture_widget_image",
