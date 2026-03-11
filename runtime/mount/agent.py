@@ -685,18 +685,54 @@ class AgentHarness:
                     block_type = item.get("type")
                     text_value = item.get("text")
                     source = item.get("source")
+                    image_data = item.get("data")
+                    mime_type = item.get("mimeType")
                 else:
                     block_type = getattr(item, "type", None)
                     text_value = getattr(item, "text", None)
                     source = getattr(item, "source", None)
+                    image_data = getattr(item, "data", None)
+                    mime_type = getattr(item, "mimeType", None)
 
                 if block_type == "text" and isinstance(text_value, str):
                     normalized_blocks.append({"type": "text", "text": text_value})
                     continue
 
-                if block_type == "image" and isinstance(source, dict):
-                    normalized_blocks.append(item)
-                    continue
+                if block_type == "image":
+                    if isinstance(source, dict):
+                        source_type = source.get("type")
+                        media_type = source.get("media_type")
+                        data = source.get("data")
+                    else:
+                        source_type = getattr(source, "type", None)
+                        media_type = getattr(source, "media_type", None)
+                        data = getattr(source, "data", None)
+
+                    if (
+                        source_type == "base64"
+                        and isinstance(media_type, str)
+                        and isinstance(data, str)
+                    ):
+                        normalized_blocks.append({
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": media_type,
+                                "data": data,
+                            },
+                        })
+                        continue
+
+                    if isinstance(mime_type, str) and isinstance(image_data, str):
+                        normalized_blocks.append({
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": mime_type,
+                                "data": image_data,
+                            },
+                        })
+                        continue
 
                 return json.dumps(tool_response, default=str)
 
@@ -800,6 +836,7 @@ class AgentHarness:
             tool_use_id = block.tool_use_id
             if tool_use_id == "":
                 continue
+
 
             normalized_content = self._normalize_tool_result_content(block.content)
 
