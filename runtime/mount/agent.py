@@ -643,18 +643,54 @@ class AgentHarness:
                     block_type = item.get("type")
                     text_value = item.get("text")
                     source = item.get("source")
+                    image_data = item.get("data")
+                    mime_type = item.get("mimeType")
                 else:
                     block_type = getattr(item, "type", None)
                     text_value = getattr(item, "text", None)
                     source = getattr(item, "source", None)
+                    image_data = getattr(item, "data", None)
+                    mime_type = getattr(item, "mimeType", None)
 
                 if block_type == "text" and isinstance(text_value, str):
                     normalized_blocks.append({"type": "text", "text": text_value})
                     continue
 
-                if block_type == "image" and isinstance(source, dict):
-                    normalized_blocks.append(item)
-                    continue
+                if block_type == "image":
+                    if isinstance(source, dict):
+                        source_type = source.get("type")
+                        media_type = source.get("media_type")
+                        data = source.get("data")
+                    else:
+                        source_type = getattr(source, "type", None)
+                        media_type = getattr(source, "media_type", None)
+                        data = getattr(source, "data", None)
+
+                    if (
+                        source_type == "base64"
+                        and isinstance(media_type, str)
+                        and isinstance(data, str)
+                    ):
+                        normalized_blocks.append({
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": media_type,
+                                "data": data,
+                            },
+                        })
+                        continue
+
+                    if isinstance(mime_type, str) and isinstance(image_data, str):
+                        normalized_blocks.append({
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": mime_type,
+                                "data": image_data,
+                            },
+                        })
+                        continue
 
                 return json.dumps(tool_response, default=str)
 
@@ -758,25 +794,6 @@ class AgentHarness:
             tool_use_id = block.tool_use_id
             if tool_use_id == "":
                 continue
-            raw_text_content: str | None = None
-            if isinstance(block.content, list):
-                for item in block.content:
-                    if not isinstance(item, dict):
-                        continue
-                    if item.get("type") != "text":
-                        continue
-                    text_value = item.get("text")
-                    if isinstance(text_value, str):
-                        raw_text_content = text_value
-                        break
-            if (
-                isinstance(raw_text_content, str)
-                and '"tool_name": "capture_widget_image"' in raw_text_content
-            ):
-                print(
-                    "[agent-debug] raw capture_widget_image tool_result content "
-                    f"(tool_use_id={tool_use_id}): {block.content!r}"
-                )
             normalized_content = self._normalize_tool_result_content(block.content)
             payload_block = {
                 "type": "tool_result",
@@ -828,11 +845,6 @@ class AgentHarness:
                     normalized_tool_result_block["is_error"] = block["is_error"]
 
                 tool_name = tool_use_index.get(block["tool_use_id"])
-                if tool_name == "mcp__plots-agent-tools__capture_widget_image":
-                    print(
-                        "[agent-debug] persisted capture_widget_image tool_result content "
-                        f"(tool_use_id={block['tool_use_id']}): {normalized_tool_result_block['content']!r}"
-                    )
                 if tool_name is not None:
                     normalized_tool_result_block["content"] = (
                         self._build_generic_tool_result_content(
@@ -840,11 +852,6 @@ class AgentHarness:
                             content=block["content"],
                             is_error=block.get("is_error", False),
                         )
-                    )
-                if tool_name == "mcp__plots-agent-tools__capture_widget_image":
-                    print(
-                        "[agent-debug] final capture_widget_image history content "
-                        f"(tool_use_id={block['tool_use_id']}): {normalized_tool_result_block['content']!r}"
                     )
                 normalized_tool_result_blocks.append(normalized_tool_result_block)
 
