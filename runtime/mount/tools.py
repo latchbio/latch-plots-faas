@@ -747,11 +747,8 @@ async def capture_widget_image(args: dict[str, Any]) -> dict[str, Any]:
                 },
                 {
                     "type": "image",
-                    "source": {
-                        "type": "base64",
-                        "media_type": media_type,
-                        "data": base64_data,
-                    },
+                    "data": base64_data,
+                    "mimeType": media_type,
                 },
             ]
         }
