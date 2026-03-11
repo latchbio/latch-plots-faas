@@ -647,8 +647,8 @@ class AgentHarness:
                     block_type = getattr(item, "type", None)
                     text_value = getattr(item, "text", None)
                     source = getattr(item, "source", None)
-                if block_type is None and isinstance(text_value, str):
-                    block_type = "text"
+                    if block_type is None and isinstance(text_value, str):
+                        block_type = "text"
 
                 if block_type == "text" and isinstance(text_value, str):
                     normalized_blocks.append({"type": "text", "text": text_value})
