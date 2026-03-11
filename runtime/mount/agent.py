@@ -675,22 +675,6 @@ class AgentHarness:
                             })
                             continue
 
-                    mime_type = item.get("mimeType")
-                    image_data = item.get("data")
-                    if (
-                        isinstance(mime_type, str)
-                        and isinstance(image_data, str)
-                    ):
-                        normalized_blocks.append({
-                            "type": "image",
-                            "source": {
-                                "type": "base64",
-                                "media_type": mime_type,
-                                "data": image_data,
-                            },
-                        })
-                        continue
-
                 return json.dumps(tool_response, default=str)
 
             if len(normalized_blocks) > 0:
