@@ -120,7 +120,18 @@ class TextToolResultBlock(TypedDict):
     text: str
 
 
-ToolResultContent = str | list[TextToolResultBlock]
+class ImageToolResultSource(TypedDict):
+    type: Literal["base64"]
+    media_type: str
+    data: str
+
+
+class ImageToolResultBlock(TypedDict):
+    type: Literal["image"]
+    source: ImageToolResultSource
+
+
+ToolResultContent = str | list[TextToolResultBlock | ImageToolResultBlock]
 
 
 class ToolUseHistoryBlock(TypedDict):
@@ -626,20 +637,42 @@ class AgentHarness:
             return tool_response
 
         if isinstance(tool_response, list):
-            normalized_blocks: list[TextToolResultBlock] = []
+            normalized_blocks: list[TextToolResultBlock | ImageToolResultBlock] = []
             for item in tool_response:
                 if isinstance(item, dict):
                     block_type = item.get("type")
                     text_value = item.get("text")
+                    source = item.get("source")
                 else:
                     block_type = getattr(item, "type", None)
                     text_value = getattr(item, "text", None)
+                    source = getattr(item, "source", None)
                     if block_type is None and isinstance(text_value, str):
                         block_type = "text"
 
                 if block_type == "text" and isinstance(text_value, str):
                     normalized_blocks.append({"type": "text", "text": text_value})
                     continue
+
+                if block_type == "image":
+                    # note(tim): SDK gives image tool res back nested under `source`.
+                    if isinstance(source, dict):
+                        media_type = source.get("media_type")
+                        data = source.get("data")
+                        if (
+                            source.get("type") == "base64"
+                            and isinstance(media_type, str)
+                            and isinstance(data, str)
+                        ):
+                            normalized_blocks.append({
+                                "type": "image",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": media_type,
+                                    "data": data,
+                                },
+                            })
+                            continue
 
                 return json.dumps(tool_response, default=str)
 
