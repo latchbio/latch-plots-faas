@@ -736,7 +736,7 @@ class AgentHarness:
 
                 return json.dumps(tool_response, default=str)
 
-            if normalized_blocks:
+            if len(normalized_blocks) > 0:
                 return normalized_blocks
 
             return json.dumps(tool_response, default=str)
@@ -760,12 +760,11 @@ class AgentHarness:
 
         try:
             parsed = json.loads(text_content)
-        except json.JSONDecodeError:
+        except Exception:
             parsed = None
         if isinstance(parsed, dict) and isinstance(parsed.get("tool_name"), str):
             return content
 
-        has_text_content = text_content.strip() != ""
         result_payload: GenericToolResultPayload = {
             "tool_name": tool_name,
             "success": not is_error,
@@ -773,11 +772,11 @@ class AgentHarness:
                 f"{tool_name} failed" if is_error else f"{tool_name} completed"
             ),
         }
-        if has_text_content:
+        if text_content.strip() != "":
             result_payload["raw_output"] = text_content
         if is_error:
             result_payload["error"] = text_content
-            if has_text_content:
+            if text_content.strip() != "":
                 result_payload["summary"] = f"{tool_name} failed: {text_content[:200]}"
 
         return [{"type": "text", "text": json.dumps(result_payload)}]
@@ -788,12 +787,13 @@ class AgentHarness:
         tool_use_id: str | None,
         _context: HookContext,
     ) -> SyncHookJSONOutput:
+        tool_name = input_data["tool_name"]
         notebook_state = await self.refresh_cells_context()
         self.latest_notebook_state = notebook_state
 
         print(
             "[agent] PostToolUse attached notebook state context "
-            f"for {input_data['tool_name']} (tool_use_id={tool_use_id})"
+            f"for {tool_name} (tool_use_id={tool_use_id})"
         )
         return {
             "hookSpecificOutput": {
@@ -867,7 +867,7 @@ class AgentHarness:
         for block in tool_use_blocks:
             tool_use_index[block["id"]] = block["name"]
 
-        if tool_use_blocks:
+        if len(tool_use_blocks) > 0:
             try:
                 await self._insert_history(
                     role=message_role,
@@ -877,7 +877,7 @@ class AgentHarness:
             except Exception as e:
                 print(f"[agent] Failed to persist message tool_use blocks: {e!s}")
 
-        if tool_result_blocks:
+        if len(tool_result_blocks) > 0:
             normalized_tool_result_blocks: list[ToolResultHistoryBlock] = []
             for block in tool_result_blocks:
                 normalized_tool_result_block: ToolResultHistoryBlock = {
