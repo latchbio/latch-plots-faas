@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import re
 import socket
 import sys
 import time
@@ -120,7 +121,18 @@ class TextToolResultBlock(TypedDict):
     text: str
 
 
-ToolResultContent = str | list[TextToolResultBlock]
+class ImageToolResultSource(TypedDict):
+    type: Literal["base64"]
+    media_type: str
+    data: str
+
+
+class ImageToolResultBlock(TypedDict):
+    type: Literal["image"]
+    source: ImageToolResultSource
+
+
+ToolResultContent = str | list[TextToolResultBlock | ImageToolResultBlock]
 
 
 class ToolUseHistoryBlock(TypedDict):
@@ -658,6 +670,83 @@ class AgentHarness:
                 return block["text"]
         return None
 
+    def _extract_capture_widget_image_result(
+        self, content: ToolResultContent
+    ) -> dict[str, Any] | None:
+        text_content = self._extract_tool_result_text(content)
+        if text_content is None:
+            return None
+
+        try:
+            parsed = json.loads(text_content)
+        except json.JSONDecodeError:
+            match = re.search(r"Full output saved to:\s*(\S+)", text_content)
+            if match is None:
+                return None
+
+            persisted_output_path = Path(match.group(1))
+            if not persisted_output_path.exists():
+                print(
+                    "[agent] persisted tool result path missing: "
+                    f"{persisted_output_path.as_posix()}"
+                )
+                return None
+
+            try:
+                persisted_content = json.loads(
+                    persisted_output_path.read_text(encoding="utf-8")
+                )
+            except Exception as e:
+                print(
+                    "[agent] Failed to load persisted tool result content "
+                    f"from {persisted_output_path.as_posix()}: {e!s}"
+                )
+                return None
+
+            persisted_text = self._extract_tool_result_text(
+                self._normalize_tool_result_content(persisted_content)
+            )
+            if persisted_text is None:
+                return None
+
+            try:
+                parsed = json.loads(persisted_text)
+            except json.JSONDecodeError:
+                return None
+
+        if not isinstance(parsed, dict):
+            return None
+
+        return parsed
+
+    def _build_capture_widget_image_tool_result_content(
+        self, result: dict[str, Any]
+    ) -> ToolResultContent:
+        image_data: str = result.get("image", "")
+        if not image_data.startswith("data:"):
+            raise ValueError("Image data is not a data URL")
+
+        header, base64_data = image_data.split(",", 1)
+        media_type = header.split(";")[0].removeprefix("data:")
+        image_data = base64_data
+
+        result_without_image = {k: v for k, v in result.items() if k != "image"}
+
+        return [
+            {
+                "type": "text",
+                "text": json.dumps(result_without_image),
+            },
+            {
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": media_type,
+                    "data": image_data,
+                },
+            },
+        ]
+
     def _build_generic_tool_result_content(
         self, *, tool_name: str, content: ToolResultContent, is_error: bool
     ) -> ToolResultContent:
@@ -795,6 +884,30 @@ class AgentHarness:
 
                 tool_name = tool_use_index.get(block["tool_use_id"])
                 if tool_name is not None:
+                    if (
+                        tool_name.removeprefix(f"mcp__{MCP_SERVER_NAME}__")
+                        == "capture_widget_image"
+                    ):
+                        capture_widget_image_result = (
+                            self._extract_capture_widget_image_result(
+                                block["content"]
+                            )
+                        )
+                        if (
+                            capture_widget_image_result is not None
+                            and capture_widget_image_result.get("success")
+                            and capture_widget_image_result.get("image") is not None
+                        ):
+                            normalized_tool_result_block["content"] = (
+                                self._build_capture_widget_image_tool_result_content(
+                                    capture_widget_image_result
+                                )
+                            )
+                            normalized_tool_result_blocks.append(
+                                normalized_tool_result_block
+                            )
+                            continue
+
                     normalized_tool_result_block["content"] = (
                         self._build_generic_tool_result_content(
                             tool_name=tool_name,
