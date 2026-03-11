@@ -655,6 +655,7 @@ class AgentHarness:
                     continue
 
                 if block_type == "image":
+                    # note(tim): SDK gives image tool res back nested under `source`.
                     if isinstance(source, dict):
                         media_type = source.get("media_type")
                         data = source.get("data")
