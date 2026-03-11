@@ -700,30 +700,29 @@ class AgentHarness:
 
                 if block_type == "image":
                     if isinstance(source, dict):
-                        source_type = source.get("type")
                         media_type = source.get("media_type")
                         data = source.get("data")
-                    else:
-                        source_type = getattr(source, "type", None)
-                        media_type = getattr(source, "media_type", None)
-                        data = getattr(source, "data", None)
+                        if (
+                            source.get("type") == "base64"
+                            and isinstance(media_type, str)
+                            and isinstance(data, str)
+                        ):
+                            normalized_blocks.append({
+                                "type": "image",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": media_type,
+                                    "data": data,
+                                },
+                            })
+                            continue
 
+                    mime_type = item.get("mimeType")
+                    image_data = item.get("data")
                     if (
-                        source_type == "base64"
-                        and isinstance(media_type, str)
-                        and isinstance(data, str)
+                        isinstance(mime_type, str)
+                        and isinstance(image_data, str)
                     ):
-                        normalized_blocks.append({
-                            "type": "image",
-                            "source": {
-                                "type": "base64",
-                                "media_type": media_type,
-                                "data": data,
-                            },
-                        })
-                        continue
-
-                    if isinstance(mime_type, str) and isinstance(image_data, str):
                         normalized_blocks.append({
                             "type": "image",
                             "source": {
