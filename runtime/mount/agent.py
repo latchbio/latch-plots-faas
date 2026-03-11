@@ -639,18 +639,20 @@ class AgentHarness:
         if isinstance(tool_response, list):
             normalized_blocks: list[TextToolResultBlock | ImageToolResultBlock] = []
             for item in tool_response:
-                if not isinstance(item, dict):
-                    return json.dumps(tool_response, default=str)
-
-                block_type = item.get("type")
-                text_value = item.get("text")
-                source = item.get("source")
+                if isinstance(item, dict):
+                    block_type = item.get("type")
+                    text_value = item.get("text")
+                    source = item.get("source")
+                else:
+                    block_type = getattr(item, "type", None)
+                    text_value = getattr(item, "text", None)
+                    source = getattr(item, "source", None)
 
                 if block_type == "text" and isinstance(text_value, str):
                     normalized_blocks.append({"type": "text", "text": text_value})
                     continue
 
-                if block_type == "image" and isinstance(source, dict):
+                if block_type == "image" and isinstance(item, dict) and isinstance(source, dict):
                     normalized_blocks.append(item)
                     continue
 
