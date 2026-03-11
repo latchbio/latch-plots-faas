@@ -758,6 +758,25 @@ class AgentHarness:
             tool_use_id = block.tool_use_id
             if tool_use_id == "":
                 continue
+            raw_text_content: str | None = None
+            if isinstance(block.content, list):
+                for item in block.content:
+                    if not isinstance(item, dict):
+                        continue
+                    if item.get("type") != "text":
+                        continue
+                    text_value = item.get("text")
+                    if isinstance(text_value, str):
+                        raw_text_content = text_value
+                        break
+            if (
+                isinstance(raw_text_content, str)
+                and '"tool_name": "capture_widget_image"' in raw_text_content
+            ):
+                print(
+                    "[agent-debug] raw capture_widget_image tool_result content "
+                    f"(tool_use_id={tool_use_id}): {block.content!r}"
+                )
             normalized_content = self._normalize_tool_result_content(block.content)
             payload_block = {
                 "type": "tool_result",
@@ -809,6 +828,11 @@ class AgentHarness:
                     normalized_tool_result_block["is_error"] = block["is_error"]
 
                 tool_name = tool_use_index.get(block["tool_use_id"])
+                if tool_name == "mcp__plots-agent-tools__capture_widget_image":
+                    print(
+                        "[agent-debug] persisted capture_widget_image tool_result content "
+                        f"(tool_use_id={block['tool_use_id']}): {normalized_tool_result_block['content']!r}"
+                    )
                 if tool_name is not None:
                     normalized_tool_result_block["content"] = (
                         self._build_generic_tool_result_content(
@@ -816,6 +840,11 @@ class AgentHarness:
                             content=block["content"],
                             is_error=block.get("is_error", False),
                         )
+                    )
+                if tool_name == "mcp__plots-agent-tools__capture_widget_image":
+                    print(
+                        "[agent-debug] final capture_widget_image history content "
+                        f"(tool_use_id={block['tool_use_id']}): {normalized_tool_result_block['content']!r}"
                     )
                 normalized_tool_result_blocks.append(normalized_tool_result_block)
 
