@@ -694,7 +694,7 @@ class AgentHarness:
                     normalized_blocks.append({"type": "text", "text": text_value})
                     continue
 
-                if block_type == "image" and isinstance(item, dict) and isinstance(source, dict):
+                if block_type == "image" and isinstance(source, dict):
                     normalized_blocks.append(item)
                     continue
 
