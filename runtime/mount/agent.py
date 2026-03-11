@@ -1,7 +1,6 @@
 import asyncio
 import json
 import os
-import re
 import socket
 import sys
 import time
@@ -680,24 +679,49 @@ class AgentHarness:
             return tool_response
 
         if isinstance(tool_response, list):
-            normalized_blocks: list[TextToolResultBlock] = []
+            normalized_blocks: list[TextToolResultBlock | ImageToolResultBlock] = []
             for item in tool_response:
                 if isinstance(item, dict):
                     block_type = item.get("type")
                     text_value = item.get("text")
+                    source = item.get("source")
                 else:
                     block_type = getattr(item, "type", None)
                     text_value = getattr(item, "text", None)
-                    if block_type is None and isinstance(text_value, str):
-                        block_type = "text"
+                    source = getattr(item, "source", None)
 
                 if block_type == "text" and isinstance(text_value, str):
                     normalized_blocks.append({"type": "text", "text": text_value})
                     continue
 
+                if block_type == "image":
+                    if isinstance(source, dict):
+                        source_type = source.get("type")
+                        media_type = source.get("media_type")
+                        data = source.get("data")
+                    else:
+                        source_type = getattr(source, "type", None)
+                        media_type = getattr(source, "media_type", None)
+                        data = getattr(source, "data", None)
+
+                    if (
+                        source_type == "base64"
+                        and isinstance(media_type, str)
+                        and isinstance(data, str)
+                    ):
+                        normalized_blocks.append({
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": media_type,
+                                "data": data,
+                            },
+                        })
+                        continue
+
                 return json.dumps(tool_response, default=str)
 
-            if len(normalized_blocks) > 0:
+            if normalized_blocks:
                 return normalized_blocks
 
             return json.dumps(tool_response, default=str)
@@ -712,83 +736,6 @@ class AgentHarness:
                 return block["text"]
         return None
 
-    def _extract_capture_widget_image_result(
-        self, content: ToolResultContent
-    ) -> dict[str, Any] | None:
-        text_content = self._extract_tool_result_text(content)
-        if text_content is None:
-            return None
-
-        try:
-            parsed = json.loads(text_content)
-        except json.JSONDecodeError:
-            match = re.search(r"Full output saved to:\s*(\S+)", text_content)
-            if match is None:
-                return None
-
-            persisted_output_path = Path(match.group(1))
-            if not persisted_output_path.exists():
-                print(
-                    "[agent] persisted tool result path missing: "
-                    f"{persisted_output_path.as_posix()}"
-                )
-                return None
-
-            try:
-                persisted_content = json.loads(
-                    persisted_output_path.read_text(encoding="utf-8")
-                )
-            except Exception as e:
-                print(
-                    "[agent] Failed to load persisted tool result content "
-                    f"from {persisted_output_path.as_posix()}: {e!s}"
-                )
-                return None
-
-            persisted_text = self._extract_tool_result_text(
-                self._normalize_tool_result_content(persisted_content)
-            )
-            if persisted_text is None:
-                return None
-
-            try:
-                parsed = json.loads(persisted_text)
-            except json.JSONDecodeError:
-                return None
-
-        if not isinstance(parsed, dict):
-            return None
-
-        return parsed
-
-    def _build_capture_widget_image_tool_result_content(
-        self, result: dict[str, Any]
-    ) -> ToolResultContent:
-        image_data: str = result.get("image", "")
-        if not image_data.startswith("data:"):
-            raise ValueError("Image data is not a data URL")
-
-        header, base64_data = image_data.split(",", 1)
-        media_type = header.split(";")[0].removeprefix("data:")
-        image_data = base64_data
-
-        result_without_image = {k: v for k, v in result.items() if k != "image"}
-
-        return [
-            {
-                "type": "text",
-                "text": json.dumps(result_without_image),
-            },
-            {
-                "type": "image",
-                "source": {
-                    "type": "base64",
-                    "media_type": media_type,
-                    "data": image_data,
-                },
-            },
-        ]
-
     def _build_generic_tool_result_content(
         self, *, tool_name: str, content: ToolResultContent, is_error: bool
     ) -> ToolResultContent:
@@ -798,11 +745,12 @@ class AgentHarness:
 
         try:
             parsed = json.loads(text_content)
-        except Exception:
+        except json.JSONDecodeError:
             parsed = None
         if isinstance(parsed, dict) and isinstance(parsed.get("tool_name"), str):
             return content
 
+        has_text_content = text_content.strip() != ""
         result_payload: GenericToolResultPayload = {
             "tool_name": tool_name,
             "success": not is_error,
@@ -810,11 +758,11 @@ class AgentHarness:
                 f"{tool_name} failed" if is_error else f"{tool_name} completed"
             ),
         }
-        if text_content.strip() != "":
+        if has_text_content:
             result_payload["raw_output"] = text_content
         if is_error:
             result_payload["error"] = text_content
-            if text_content.strip() != "":
+            if has_text_content:
                 result_payload["summary"] = f"{tool_name} failed: {text_content[:200]}"
 
         return [{"type": "text", "text": json.dumps(result_payload)}]
@@ -825,13 +773,12 @@ class AgentHarness:
         tool_use_id: str | None,
         _context: HookContext,
     ) -> SyncHookJSONOutput:
-        tool_name = input_data["tool_name"]
         notebook_state = await self.refresh_cells_context()
         self.latest_notebook_state = notebook_state
 
         print(
             "[agent] PostToolUse attached notebook state context "
-            f"for {tool_name} (tool_use_id={tool_use_id})"
+            f"for {input_data['tool_name']} (tool_use_id={tool_use_id})"
         )
         return {
             "hookSpecificOutput": {
@@ -905,7 +852,7 @@ class AgentHarness:
         for block in tool_use_blocks:
             tool_use_index[block["id"]] = block["name"]
 
-        if len(tool_use_blocks) > 0:
+        if tool_use_blocks:
             try:
                 await self._insert_history(
                     role=message_role,
@@ -915,7 +862,7 @@ class AgentHarness:
             except Exception as e:
                 print(f"[agent] Failed to persist message tool_use blocks: {e!s}")
 
-        if len(tool_result_blocks) > 0:
+        if tool_result_blocks:
             normalized_tool_result_blocks: list[ToolResultHistoryBlock] = []
             for block in tool_result_blocks:
                 normalized_tool_result_block: ToolResultHistoryBlock = {
@@ -928,30 +875,6 @@ class AgentHarness:
 
                 tool_name = tool_use_index.get(block["tool_use_id"])
                 if tool_name is not None:
-                    if (
-                        tool_name.removeprefix(f"mcp__{MCP_SERVER_NAME}__")
-                        == "capture_widget_image"
-                    ):
-                        capture_widget_image_result = (
-                            self._extract_capture_widget_image_result(
-                                block["content"]
-                            )
-                        )
-                        if (
-                            capture_widget_image_result is not None
-                            and capture_widget_image_result.get("success")
-                            and capture_widget_image_result.get("image") is not None
-                        ):
-                            normalized_tool_result_block["content"] = (
-                                self._build_capture_widget_image_tool_result_content(
-                                    capture_widget_image_result
-                                )
-                            )
-                            normalized_tool_result_blocks.append(
-                                normalized_tool_result_block
-                            )
-                            continue
-
                     normalized_tool_result_block["content"] = (
                         self._build_generic_tool_result_content(
                             tool_name=tool_name,
