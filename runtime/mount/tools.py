@@ -720,32 +720,26 @@ async def capture_widget_image(args: dict[str, Any]) -> dict[str, Any]:
 
         header, base64_data = image.split(",", 1)
         media_type = header.split(";")[0].removeprefix("data:")
-        response_content = [
-            {
-                "type": "text",
-                "text": json.dumps({
-                    "tool_name": "capture_widget_image",
-                    "success": True,
-                    "summary": f"Captured image from {widget_type} widget '{widget_key}'",
-                    "widget_key": widget_key,
-                    "widget_type": widget_type,
-                    "metadata": metadata,
-                }),
-            },
-            {
-                "type": "image",
-                "data": base64_data,
-                "mimeType": media_type,
-            },
-        ]
-        print(
-            "[tool-debug] capture_widget_image returning content "
-            f"types={[block['type'] for block in response_content]!r} "
-            f"image_keys={sorted(response_content[1].keys())!r}"
-        )
 
         return {
-            "content": response_content
+            "content": [
+                {
+                    "type": "text",
+                    "text": json.dumps({
+                        "tool_name": "capture_widget_image",
+                        "success": True,
+                        "summary": f"Captured image from {widget_type} widget '{widget_key}'",
+                        "widget_key": widget_key,
+                        "widget_type": widget_type,
+                        "metadata": metadata,
+                    }),
+                },
+                {
+                    "type": "image",
+                    "data": base64_data,
+                    "mimeType": media_type,
+                },
+            ]
         }
 
     return ok({

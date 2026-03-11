@@ -775,46 +775,6 @@ class AgentHarness:
             tool_use_id = block.tool_use_id
             if tool_use_id == "":
                 continue
-            if isinstance(block.content, list):
-                should_log_capture_widget_image = False
-                raw_content_summary: list[dict[str, Any]] = []
-                for item in block.content:
-                    if isinstance(item, dict):
-                        item_type = item.get("type")
-                        text_value = item.get("text")
-                        source = item.get("source")
-                        raw_content_summary.append({
-                            "type": item_type,
-                            "keys": sorted(item.keys()),
-                            "source_keys": (
-                                sorted(source.keys()) if isinstance(source, dict) else None
-                            ),
-                        })
-                    else:
-                        item_type = getattr(item, "type", None)
-                        text_value = getattr(item, "text", None)
-                        source = getattr(item, "source", None)
-                        raw_content_summary.append({
-                            "type": item_type,
-                            "keys": sorted(vars(item).keys())
-                            if hasattr(item, "__dict__")
-                            else None,
-                            "source_keys": (
-                                sorted(source.keys()) if isinstance(source, dict) else None
-                            ),
-                        })
-
-                    if (
-                        isinstance(text_value, str)
-                        and '"tool_name": "capture_widget_image"' in text_value
-                    ):
-                        should_log_capture_widget_image = True
-
-                if should_log_capture_widget_image:
-                    print(
-                        "[agent-debug] capture_widget_image raw sdk content "
-                        f"(tool_use_id={tool_use_id}): {raw_content_summary!r}"
-                    )
             normalized_content = self._normalize_tool_result_content(block.content)
             payload_block = {
                 "type": "tool_result",
