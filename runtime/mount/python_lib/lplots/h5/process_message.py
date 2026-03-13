@@ -1,4 +1,6 @@
+import asyncio
 import time
+import traceback
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any, Literal
@@ -16,6 +18,8 @@ from lplots.h5.utils import auto_install
 from .. import _inject
 
 ad = auto_install.ad
+
+_h5ad_init_tasks: dict[str, asyncio.Task[None]] = {}
 
 
 async def handle_h5_widget_message(
@@ -45,6 +49,50 @@ async def handle_h5_widget_message(
                     "error": f"AnnData object with ID {obj_id} not found in cache"
                 },
             }
+
+        if msg.get("op") == "init_data":
+            prev_task = _h5ad_init_tasks.get(widget_session_key)
+            if prev_task is not None and not prev_task.done():
+                prev_task.cancel()
+
+            async def run_init_data() -> None:
+                try:
+                    response = await process_h5ad_request(
+                        msg,
+                        widget_session_key=widget_session_key,
+                        obj_id=obj_id,
+                        send=send,
+                    )
+                    if response is not None:
+                        await send(response)
+                except asyncio.CancelledError:
+                    # Expected when a newer init_data request supersedes this one.
+                    await send(
+                        {
+                            "type": "h5",
+                            "op": "init_data",
+                            "data_type": "h5ad",
+                            "key": widget_session_key,
+                            "value": {
+                                "error": (
+                                    "init_data request canceled because a newer request was received"
+                                )
+                            },
+                        }
+                    )
+                    return
+                except Exception:
+                    traceback.print_exc()
+
+            task = asyncio.create_task(run_init_data())
+            _h5ad_init_tasks[widget_session_key] = task
+
+            def cleanup_finished_task(t: asyncio.Task[None]) -> None:
+                if _h5ad_init_tasks.get(widget_session_key) is t:
+                    _h5ad_init_tasks.pop(widget_session_key, None)
+
+            task.add_done_callback(cleanup_finished_task)
+            return None
 
         return await process_h5ad_request(
             msg, widget_session_key=widget_session_key, obj_id=obj_id, send=send
