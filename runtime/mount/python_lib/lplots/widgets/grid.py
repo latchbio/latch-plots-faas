@@ -1,6 +1,6 @@
 import types
 from dataclasses import dataclass, field
-from typing import Literal, Self
+from typing import Literal, Self, overload
 
 from . import _emit, _state, widget
 from .widget import BaseWidget
@@ -39,45 +39,52 @@ class Grid(widget.BaseWidget):
     ) -> None:
         pass
 
-    def add(
-        self,
-        item: BaseWidget,
-        col_span: int = 1,
-        row_span: int = 1,
-    ) -> None:
-        grid_item = GridItem(
-            item=item._key,
-            col_span=col_span,
-            row_span=row_span,
-        )
+    def add(self, item: BaseWidget, col_span: int = 1, row_span: int = 1) -> None:
+        grid_item = GridItem(item=item._key, col_span=col_span, row_span=row_span)
 
         return self._state["grid_items"].append(grid_item)
 
 
 # todo(manske): allow for custom css to define layout
+@overload
 def w_grid(
     *,
     key: str | None = None,
     columns: int,
     rows: int | None = None,
+    template: None = None,
+) -> Grid: ...
+
+
+@overload
+def w_grid(
+    *, key: str | None = None, columns: None = None, rows: None = None, template: str
+) -> Grid: ...
+
+
+def w_grid(
+    *,
+    key: str | None = None,
+    columns: int | None = None,
+    rows: int | None = None,
+    template: str | None = None,
 ) -> Grid:
     key = _state.use_state_key(key=key)
 
-    column_template = f"repeat({columns}, 1fr)"
+    if template is None:
+        if columns is None:
+            raise ValueError("w_grid: either `template` or `columns` must be set")
 
-    row_template = "none"
-    if rows is not None:
-        row_template = f"repeat({rows}, auto)"
+        column_template = f"repeat({columns}, 1fr)"
 
-    template = f"{row_template} / {column_template}"
+        row_template = "none"
+        if rows is not None:
+            row_template = f"repeat({rows}, auto)"
+
+        template = f"{row_template} / {column_template}"
 
     res = Grid(
-        _key=key,
-        _state={
-            "type": "grid",
-            "grid_items": [],
-            "template": template,
-        },
+        _key=key, _state={"type": "grid", "grid_items": [], "template": template}
     )
 
     _emit.emit_widget(key, res._state)
