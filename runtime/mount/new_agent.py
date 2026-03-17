@@ -183,7 +183,7 @@ class AgentQuery(TypedDict):
 class AgentHarness:
     conn: SocketIoThread
     claude: ClaudeSDKClient | None = None
-    system_prompt: str | None = None
+    system_prompy: str | None = None
     pending_operations: dict[str, asyncio.Future] = field(default_factory=dict)
     executing_cells: set[str] = field(default_factory=set)
     operation_counter: int = 0
@@ -639,16 +639,18 @@ class AgentHarness:
         for _ in range(tries):
             try:
                 await self.claude.connect()
+                break
 
-                server_info = await self.claude.get_server_info()
-                print(server_info)
-                if server_info is None:
-                    continue
+                # server_info = await self.claude.get_server_info()
+                # print(server_info)
+                # if server_info is None:
+                #     continue
 
-                session_id = server_info.get("session_id")
-                if session_id is not None:
-                    self.claude_session_id = session_id
-                    break
+                # session_id = server_info.get("session_id")
+                # if session_id is not None:
+                #     self.claude_session_id = session_id
+                # break
+
             except Exception:
                 traceback.print_exc()
         else:
@@ -857,7 +859,7 @@ class AgentHarness:
     async def query(self, msg: AgentQuery) -> None:
         # todo(rteqs): implement logic for wait for connnetion
         assert self.claude is not None
-        assert self.claude_session_id is not None
+        # assert self.claude_session_id is not None
 
         prompt = await self.create_prompt(msg)
 
