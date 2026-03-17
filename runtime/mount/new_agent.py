@@ -894,14 +894,16 @@ class AgentHarness:
                         await self._insert_history(
                             role="assistant",
                             request_id=msg["request_id"],
-                            payload={"type": "text", "text": c.text},
+                            payload={"content": {"type": "text", "text": c.text}},
                         )
 
                     elif isinstance(c, ThinkingBlock):
                         await self._insert_history(
                             role="assistant",
                             request_id=msg["request_id"],
-                            payload={"type": "text", "thinking": c.thinking},
+                            payload={
+                                "content": {"type": "thinking", "thinking": c.thinking}
+                            },
                         )
 
                     elif isinstance(c, ToolUseBlock):
@@ -909,10 +911,12 @@ class AgentHarness:
                             role="assistant",
                             request_id=msg["request_id"],
                             payload={
-                                "type": "tool_use",
-                                "id": c.id,
-                                "name": c.name,
-                                "input": c.input,
+                                "content": {
+                                    "type": "tool_use",
+                                    "id": c.id,
+                                    "name": c.name,
+                                    "input": c.input,
+                                }
                             },
                         )
 
@@ -921,7 +925,7 @@ class AgentHarness:
                     await self._insert_history(
                         role="user",
                         request_id=msg["request_id"],
-                        payload={"type": "text", "text": res.content},
+                        payload={"content": res.content},
                     )
                     continue
 
@@ -930,7 +934,7 @@ class AgentHarness:
                         await self._insert_history(
                             role="user",
                             request_id=msg["request_id"],
-                            payload={"type": "text", "text": c.text},
+                            payload={"content": {"type": "text", "text": c.text}},
                         )
 
                     if isinstance(c, ToolResultBlock):
@@ -940,10 +944,12 @@ class AgentHarness:
                             role="user",
                             request_id=msg["request_id"],
                             payload={
-                                "type": "tool_result",
-                                "tool_use_id": c.tool_use_id,
-                                "content": c.content,
-                                "is_error": c.is_error,
+                                "content": {
+                                    "type": "tool_result",
+                                    "tool_use_id": c.tool_use_id,
+                                    "content": c.content,
+                                    "is_error": c.is_error,
+                                }
                             },
                         )
 
