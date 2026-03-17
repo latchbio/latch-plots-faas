@@ -1484,7 +1484,7 @@ class AgentHarness:
                 mcp_servers={MCP_SERVER_NAME: self.mcp_server},
                 allowed_tools=[*self.mcp_allowed_tools, *SDK_BUILTIN_ALLOWED_TOOLS],
                 permission_mode="acceptEdits",
-                model="claude-opus-4-5",
+                model="claude-opus-4-6",
                 thinking={"type": "adaptive"},
                 setting_sources=["project"],
                 resume=resume_session_id,
