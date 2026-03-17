@@ -854,7 +854,7 @@ class AgentHarness:
     async def create_prompt(self, query: AgentQuery) -> str:
         # todo(rteqs): implement
         # logic from _wait_for_message, _run_query_with_trun_prompt, _run_query here
-        return ""
+        return query["query"]
 
     async def query(self, msg: AgentQuery) -> None:
         # todo(rteqs): implement logic for wait for connnetion
@@ -877,10 +877,7 @@ class AgentHarness:
         await self._insert_history(
             role="user",
             request_id=msg["request_id"],
-            payload={
-                "content": msg["query"],
-                "display_query": msg["query"],
-            },
+            payload={"content": msg["query"], "display_query": msg["query"]},
         )
         await self.claude.query(prompt=prompt, session_id=self.claude_session_id)
 
