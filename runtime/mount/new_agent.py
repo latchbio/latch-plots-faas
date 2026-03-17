@@ -948,8 +948,8 @@ class AgentHarness:
                         )
 
             elif isinstance(res, ResultMessage):
-                if res.session_id != self.claude_session_id:
-                    continue
+                # if res.session_id != self.claude_session_id:
+                #     continue
 
                 usage = validate(res.usage, Usage)
                 await self._send_usage_update(usage)
