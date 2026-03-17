@@ -4,7 +4,12 @@ import json
 import traceback
 from typing import TYPE_CHECKING, Any
 
-from claude_agent_sdk import create_sdk_mcp_server, tool
+from claude_agent_sdk import (
+    PermissionResultAllow,
+    ToolPermissionContext,
+    create_sdk_mcp_server,
+    tool,
+)
 from lplots import _inject
 
 if TYPE_CHECKING:
@@ -1923,3 +1928,14 @@ all_tools = [
 ]
 
 agent_tools_mcp = create_sdk_mcp_server(name=MCP_SERVER_NAME, tools=all_tools)
+
+
+async def can_use_tool(
+    tool_name: str, input_data: dict[str, Any], context: ToolPermissionContext
+) -> PermissionResultAllow:
+    if tool_name == "AskUserQuestion":
+        ...
+        # todo(rteqs): send to console and wait for input
+        # return await handle_ask_user_question(input_data)
+
+    return PermissionResultAllow(updated_input=input_data)
