@@ -817,7 +817,7 @@ async def start_agent_proc() -> None:
     print("Starting agent subprocess")
     a_proc.proc = await asyncio.create_subprocess_exec(
         sys.executable,
-        (dir_p / "agent.py"),
+        (dir_p / "new_agent.py"),
         str(sock_agent_fd),
         pass_fds=[sock_agent_fd],
         stdin=asyncio.subprocess.DEVNULL,
