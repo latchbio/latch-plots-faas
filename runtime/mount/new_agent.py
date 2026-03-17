@@ -15,7 +15,6 @@ from typing import Any, Literal, NotRequired, TypedDict
 
 from anthropic.types import (
     MessageDeltaUsage,
-    MessageParam,
     RawContentBlockDeltaEvent,
     RawContentBlockStartEvent,
     RawContentBlockStopEvent,
@@ -34,6 +33,7 @@ from claude_agent_sdk import (
     ThinkingBlock,
     ToolResultBlock,
     ToolUseBlock,
+    get_session_messages,
 )
 from claude_agent_sdk.types import (
     AssistantMessage,
@@ -221,389 +221,7 @@ class AgentHarness:
             **({"request_id": request_id} if request_id else {}),
         })
 
-    async def _fetch_history_from_db(self) -> list[dict]:
-        if skip_db_history:
-            return self.in_memory_history
-        assert self.agent_session_id is not None
-        resp = await gql_query(
-            auth=auth_token_sdk,
-            query="""
-                query AgentHistory($sessionId: BigInt!) {
-                    agentHistories(condition: {sessionId: $sessionId, removed: false}, orderBy: ID_ASC) {
-                        nodes { id payload requestId templateVersionId }
-                    }
-                }
-            """,
-            variables={"sessionId": str(self.agent_session_id)},
-        )
-        nodes = resp.get("data", {}).get("agentHistories", {}).get("nodes", [])
-        return [
-            {
-                "payload": n.get("payload"),
-                "request_id": n.get("requestId"),
-                "template_version_id": n.get("templateVersionId"),
-            }
-            for n in nodes
-        ]
-
-    # todo(rteqs): history stuff. look and simplify later.
-    async def _build_messages_from_db(
-        self, *, exclude_request_id: str | None = None
-    ) -> list[MessageParam]:
-        history = await self._fetch_history_from_db()
-        anthropic_messages: list[MessageParam] = []
-
-        for item in history:
-            if (
-                exclude_request_id is not None
-                and item.get("request_id") == exclude_request_id
-            ):
-                continue
-
-            payload = item.get("payload")
-
-            t = payload.get("type") if isinstance(payload, dict) else None
-            if t == "anthropic_message":
-                role = payload.get("role")
-                content = payload.get("content")
-
-                display_widgets = payload.get("display_widgets")
-                if (
-                    role == "user"
-                    and display_widgets is not None
-                    and isinstance(content, str)
-                ):
-                    for widget in display_widgets:
-                        ref_pattern = f"@({widget['widgetKey']}|{widget['id']})"
-                        inline_widget = f'<Widget label="{widget["label"]}" type="{widget["widgetType"]}" widget_key="{widget["widgetKey"]}" cell="{widget["cellDisplayName"]}"/>'
-                        content = content.replace(ref_pattern, inline_widget)
-
-                if (
-                    role == "user"
-                    and isinstance(content, dict)
-                    and content.get("type") == "cell_result"
-                ):
-                    exception = content.get("exception")
-                    logs = content.get("logs")
-                    message = content.get("message", "Cell execution completed")
-
-                    content = message
-                    if exception:
-                        content = f"{message}\n\nException: {exception}"
-                    if logs:
-                        content = f"{content}\n\nLogs:\n{logs}"
-
-                if isinstance(content, list):
-                    cleaned_content = []
-                    for block in content:
-                        if (
-                            isinstance(block, dict)
-                            and block.get("type") == "thinking_summary"
-                        ):
-                            continue
-
-                        if (
-                            isinstance(block, dict)
-                            and block.get("type") == "tool_result"
-                        ):
-                            block = block.copy()
-                            block_content = block.get("content", "{}")
-                            if isinstance(block_content, str):
-                                try:
-                                    result = json.loads(block_content)
-                                except json.JSONDecodeError:
-                                    print(
-                                        f"[agent] tool_result parse failed tool_use_id={block.get('tool_use_id', '?')}"
-                                    )
-                                    result = None
-                                if (
-                                    isinstance(result, dict)
-                                    and "original_code" in result
-                                ):
-                                    result.pop("original_code")
-                                    block["content"] = json.dumps(
-                                        result, sort_keys=True
-                                    )
-                        cleaned_content.append(block)
-                    content = cleaned_content
-
-                template_version_id = item.get("template_version_id")
-                if role == "user" and template_version_id is not None:
-                    checkpoint_content = f"[auto-generated metadata] template_version_id={template_version_id}"
-                    anthropic_messages.append({
-                        "role": "user",
-                        "content": checkpoint_content,
-                    })
-
-                if role in {"user", "assistant"} and (isinstance(content, (str, list))):
-                    anthropic_messages.append({"role": role, "content": content})
-
-            elif t == "cancellation":
-                anthropic_messages.append({
-                    "role": "user",
-                    "content": "[Request cancelled by user]",
-                })
-
-        reordered: list[MessageParam] = []
-        pending_tool_ids: set[str] = set()
-        deferred: list[MessageParam] = []
-
-        for msg in anthropic_messages:
-            role = msg.get("role")
-            content = msg.get("content")
-
-            if role == "assistant" and isinstance(content, list):
-                for block in content:
-                    if isinstance(block, dict) and block.get("type") == "tool_use":
-                        tool_id = block.get("id")
-                        if tool_id is not None:
-                            pending_tool_ids.add(tool_id)
-
-            if len(pending_tool_ids) > 0 and role == "user":
-                is_tool_result_msg = isinstance(content, list) and any(
-                    isinstance(b, dict) and b.get("type") == "tool_result"
-                    for b in content
-                )
-                if is_tool_result_msg:
-                    reordered.append(msg)
-                    for block in content:
-                        if (
-                            isinstance(block, dict)
-                            and block.get("type") == "tool_result"
-                        ):
-                            tool_result_id = block.get("tool_use_id")
-                            if tool_result_id is not None:
-                                pending_tool_ids.discard(tool_result_id)
-                    if len(pending_tool_ids) == 0:
-                        reordered.extend(deferred)
-                        deferred.clear()
-                    continue
-
-                deferred.append(msg)
-                continue
-
-            reordered.append(msg)
-
-        reordered.extend(deferred)
-
-        print(f"[agent] Built {len(reordered)} messages from DB")
-
-        return reordered
-
-    @staticmethod
-    def _truncate_legacy_history_message(msg: MessageParam) -> MessageParam:
-        content = msg.get("content")
-
-        if isinstance(content, str):
-            if len(content) > 500:
-                return {
-                    "role": msg["role"],
-                    "content": content[:500] + "...[truncated]",
-                }
-            return msg
-
-        if isinstance(content, list):
-            truncated_blocks = []
-            for block in content:
-                if not isinstance(block, dict):
-                    truncated_blocks.append(block)
-                    continue
-
-                block_type = block.get("type")
-
-                if block_type in {"thinking", "redacted_thinking"}:
-                    continue
-
-                if block_type == "tool_result":
-                    block_content = block.get("content", "{}")
-
-                    if isinstance(block_content, list):
-                        text_blocks = [
-                            b
-                            for b in block_content
-                            if isinstance(b, dict) and b.get("type") == "text"
-                        ]
-                        if len(text_blocks) > 0:
-                            result_str = text_blocks[0].get("text", "{}")
-                            result = json.loads(result_str)
-                            result["_note"] = "image removed during truncation"
-                            truncated_blocks.append({
-                                "type": "tool_result",
-                                "tool_use_id": block.get("tool_use_id"),
-                                "content": json.dumps(result),
-                            })
-                        else:
-                            truncated_blocks.append(block)
-                        continue
-
-                    result_str = block_content
-                    result = json.loads(result_str)
-                    tool_name = result.get("tool_name")
-
-                    if tool_name in {"create_cell", "create_markdown_cell"}:
-                        result = {k: v for k, v in result.items() if k != "code"}
-                    elif tool_name == "edit_cell":
-                        result = {
-                            k: v
-                            for k, v in result.items()
-                            if k not in {"code", "original_code"}
-                        }
-                    elif tool_name == "bash":
-                        result = {k: v for k, v in result.items() if k != "output"}
-                    elif tool_name == "execute_code":
-                        result = {k: v for k, v in result.items() if k != "code"}
-                        if (
-                            "stdout" in result
-                            and isinstance(result.get("stdout"), str)
-                            and len(result["stdout"]) > 1500
-                        ):
-                            result["stdout"] = (
-                                "...[truncated]\n" + result["stdout"][-1500:]
-                            )
-                        if (
-                            "stderr" in result
-                            and isinstance(result.get("stderr"), str)
-                            and len(result["stderr"]) > 1500
-                        ):
-                            result["stderr"] = (
-                                "...[truncated]\n" + result["stderr"][-1500:]
-                            )
-                        if (
-                            "exception" in result
-                            and isinstance(result.get("exception"), str)
-                            and len(result["exception"]) > 1500
-                        ):
-                            result["exception"] = (
-                                "...[truncated]\n" + result["exception"][-1500:]
-                            )
-
-                    truncated_blocks.append({
-                        "type": "tool_result",
-                        "tool_use_id": block.get("tool_use_id"),
-                        "content": json.dumps(result),
-                    })
-                    continue
-
-                if block_type == "tool_use":
-                    tool_name = block.get("name")
-                    inp = block.get("input")
-                    truncated_inp = inp
-
-                    if isinstance(inp, dict) and tool_name is not None:
-                        if tool_name in {"create_cell", "create_markdown_cell"}:
-                            truncated_inp = {
-                                k: v for k, v in inp.items() if k != "code"
-                            }
-                        elif tool_name == "edit_cell":
-                            truncated_inp = {
-                                k: v for k, v in inp.items() if k != "new_code"
-                            }
-                        elif tool_name == "update_plan":
-                            truncated_inp = {
-                                k: v
-                                for k, v in inp.items()
-                                if k not in {"plan", "plan_diff"}
-                            }
-
-                    truncated_blocks.append({
-                        "type": "tool_use",
-                        "id": block.get("id"),
-                        "name": tool_name,
-                        "input": truncated_inp,
-                    })
-                    continue
-
-                if block_type == "text":
-                    text = block.get("text", "")
-                    if len(text) > 1000:
-                        truncated_blocks.append({
-                            "type": "text",
-                            "text": text[:1000] + "...[truncated]",
-                        })
-                    else:
-                        truncated_blocks.append(block)
-                    continue
-
-                truncated_blocks.append(block)
-
-            return {"role": msg["role"], "content": truncated_blocks}
-
-        return msg
-
-    def _build_legacy_history_message(self, msg: MessageParam) -> str:
-        role = msg["role"]
-        content = msg["content"]
-
-        if isinstance(content, str):
-            return f"{role}:\n{content}"
-
-        block_lines: list[str] = []
-        for block in content:
-            block_type = block.get("type")
-            if block_type == "text":
-                block_lines.append(block["text"])
-                continue
-
-            if block_type == "tool_use":
-                tool_name = block.get("name", "unknown")
-                tool_input = json.dumps(block.get("input"), sort_keys=True, default=str)
-                block_lines.append(f"[tool_use] {tool_name} input={tool_input}")
-                continue
-
-            if block_type == "tool_result":
-                block_content = block.get("content", "")
-                if isinstance(block_content, list):
-                    tool_result_text = block_content
-                    # todo(rteqs): unfuck this
-                    # self._extract_tool_result_text(block_content)
-                    content_text = (
-                        tool_result_text
-                        if tool_result_text is not None
-                        else json.dumps(block_content, default=str)
-                    )
-                else:
-                    content_text = str(block_content)
-                prefix = (
-                    "[tool_result error]" if block.get("is_error") else "[tool_result]"
-                )
-                block_lines.append(f"{prefix} {content_text}")
-                continue
-
-            block_lines.append(json.dumps(block, default=str))
-
-        return f"{role}:\n" + "\n".join(block_lines)
-
-    # this shit is kinda stupid
-    async def _build_legacy_history_prompt_block(
-        self, *, exclude_request_id: str | None
-    ) -> str | None:
-        if self.claude_session_id is not None:
-            return None
-
-        messages = await self._build_messages_from_db(
-            exclude_request_id=exclude_request_id
-        )
-        if len(messages) == 0:
-            return None
-
-        windowed_messages = messages[-legacy_history_window_size:]
-        truncated_messages = [
-            self._truncate_legacy_history_message(msg) for msg in windowed_messages
-        ]
-        included_messages = [
-            self._build_legacy_history_message(msg) for msg in truncated_messages
-        ]
-        history_text = "\n".join(included_messages)
-
-        print(
-            "[agent] Injecting legacy history into first turn "
-            f"windowed_messages len={len(windowed_messages)})"
-        )
-
-        return (
-            "This is prior conversation context. Older turns may be omitted.\n"
-            f"{history_text}"
-        )
+    # todo(rteqs): for old sessions that need to be migrated. we need to inject out session history from vacuole into the .jsonl history file
 
     async def _insert_history(
         self,
@@ -893,11 +511,6 @@ class AgentHarness:
             "context_limit": 200_000,
         })
 
-    def _normalize_claude_session_id(self, raw_session_id: str | None) -> str | None:
-        if raw_session_id is None or raw_session_id == "":
-            return None
-        return raw_session_id
-
     async def _wait_for_running_query_to_stop(
         self, timeout_seconds: float = 2.0
     ) -> bool:
@@ -986,7 +599,8 @@ class AgentHarness:
         print(f"[agent] Unknown stream event type={event_type}")
         return None
 
-    async def _connect_sdk_client(self, *, resume_session_id: str | None) -> None:
+    # todo(rteqs): make reliable / fault tolerant
+    async def connect(self, *, resume_session_id: str | None) -> None:
         self.system_prompt = (context_root.parent / "system_prompt.md").read_text()
 
         nucleus_llm_url = f"{nucleus_url}/infer/plots-agent/anthropic"
@@ -1046,7 +660,7 @@ class AgentHarness:
         except Exception as e:
             print(f"[agent] Failed to fetch MCP status: {e!s}")
 
-    async def _disconnect_sdk_client(self) -> None:
+    async def disconnect(self) -> None:
         if self.claude is None:
             return
         try:
@@ -1067,13 +681,6 @@ class AgentHarness:
                 "fatal": False,
             })
             return
-
-        raw_init_claude_session_id = msg.get("claude_session_id")
-        init_claude_session_id = self._normalize_claude_session_id(
-            raw_init_claude_session_id
-            if isinstance(raw_init_claude_session_id, str)
-            else None
-        )
 
         session_changed = new_session_id != self.agent_session_id
         if session_changed:
@@ -1105,17 +712,17 @@ class AgentHarness:
                 await self.claude.interrupt()
                 await self._wait_for_running_query_to_stop()
             await self._reset_for_new_session()
-            await self._disconnect_sdk_client()
+            await self.disconnect()
 
-        resume_session_id = init_claude_session_id
-        if resume_session_id is None:
+        resume_session_id = msg.get("claude_session_id")
+        if resume_session_id is None or resume_session_id == "":
             resume_session_id = await self._load_claude_session_id(
                 self.agent_session_id
             )
         self.claude_session_id = resume_session_id
 
         if self.claude is None:
-            await self._connect_sdk_client(resume_session_id=resume_session_id)
+            await self.connect(resume_session_id=resume_session_id)
             if resume_session_id is None:
                 print("[agent] SDK initialized without resume session")
             else:
@@ -1416,7 +1023,10 @@ class AgentHarness:
 
     async def get_full_prompt(self) -> dict:
         self.system_prompt = (context_root.parent / "system_prompt.md").read_text()
-        messages = await self._build_messages_from_db()
+
+        messages = None
+        if self.claude_session_id is not None:
+            messages = get_session_messages(self.claude_session_id)
 
         def build_tree(path: Path, prefix: str = "") -> list[str]:
             lines = []
@@ -1630,7 +1240,7 @@ async def main() -> None:
     finally:
         if harness is not None:
             try:
-                await harness._disconnect_sdk_client()
+                await harness.disconnect()
             except Exception:
                 traceback.print_exc()
         socket_io_thread.shutdown.set()
