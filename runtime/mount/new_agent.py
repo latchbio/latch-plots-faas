@@ -641,6 +641,7 @@ class AgentHarness:
                 await self.claude.connect()
 
                 server_info = await self.claude.get_server_info()
+                print(server_info)
                 if server_info is None:
                     continue
 
