@@ -190,8 +190,8 @@ class ResultMessageUsage:
     output_tokens: int
     server_tool_use: ServerToolUsage | None
     service_tier: Literal["standard", "priority", "batch"] | None
-    infernce_geo: str
-    interations: list
+    inference_geo: str
+    iterations: list
     speed: str
 
 
@@ -878,13 +878,14 @@ class AgentHarness:
             request_id=msg["request_id"],
             payload={"content": msg["query"], "display_query": msg["query"]},
         )
-        session_id = (
-            self.claude_session_id if self.claude_session_id is not None else "default"
-        )
-        await self.claude.query(prompt=prompt, session_id=session_id)
+
+        if self.claude_session_id is None:
+            await self.claude.query(prompt=prompt)
+        else:
+            await self.claude.query(prompt=prompt, session_id=self.claude_session_id)
 
         # todo(rteqs): there is almost no business logic here but to transform payload structure to match frontend.
-        # we should look to just store messages in the form anthropic sends and have frontend parse that.
+        # we should just store messages in the form anthropic sends and have frontend parse that.
         async for res in self.claude.receive_response():
             # todo(rteqs): pretend we can't be interrupted for now
             if (
