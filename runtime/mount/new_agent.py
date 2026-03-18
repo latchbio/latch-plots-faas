@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, Literal, NotRequired, TypedDict
 
 from anthropic.types import (
+    CacheCreation,
     MessageDeltaUsage,
     RawContentBlockDeltaEvent,
     RawContentBlockStartEvent,
@@ -21,6 +22,7 @@ from anthropic.types import (
     RawMessageDeltaEvent,
     RawMessageStartEvent,
     RawMessageStopEvent,
+    ServerToolUsage,
     Usage,
 )
 from claude_agent_sdk import (
@@ -179,6 +181,20 @@ class AgentQuery(TypedDict):
     selected_widgets: NotRequired[list[dict[str, Any]]]  # todo(rteqs): type properly
 
 
+@dataclass(frozen=True)
+class ResultMessageUsage:
+    cache_creation: CacheCreation | None
+    cache_creation_input_tokens: int | None
+    cache_read_input_tokens: int | None
+    input_tokens: int
+    output_tokens: int
+    server_tool_use: ServerToolUsage | None
+    service_tier: Literal["standard", "priority", "batch"] | None
+    infernce_geo: str
+    interations: list
+    speed: str
+
+
 @dataclass
 class AgentHarness:
     conn: SocketIoThread
@@ -221,8 +237,7 @@ class AgentHarness:
             **({"request_id": request_id} if request_id else {}),
         })
 
-    # todo(rteqs): for old sessions that need to be migrated. we need to inject out session history from vacuole into the .jsonl history file
-
+    # todo(rteqs):
     async def _insert_history(
         self,
         *,
@@ -502,7 +517,9 @@ class AgentHarness:
         if fut and not fut.done():
             fut.set_result(msg)
 
-    async def _send_usage_update(self, usage: Usage | MessageDeltaUsage) -> None:
+    async def _send_usage_update(
+        self, usage: Usage | MessageDeltaUsage | ResultMessageUsage
+    ) -> None:
         await self.send({
             "type": "agent_usage_update",
             "input_tokens": usage.input_tokens if usage.input_tokens is not None else 0,
@@ -635,27 +652,9 @@ class AgentHarness:
             )
         )
 
-        tries = 3
-        for _ in range(tries):
-            try:
-                await self.claude.connect()
-                break
-
-                # server_info = await self.claude.get_server_info()
-                # print(server_info)
-                # if server_info is None:
-                #     continue
-
-                # session_id = server_info.get("session_id")
-                # if session_id is not None:
-                #     self.claude_session_id = session_id
-                # break
-
-            except Exception:
-                traceback.print_exc()
-        else:
-            print("[agent] Failed to connect ")
-            raise RuntimeError("failed to connect")
+        # todo(rteqs): validate claude_session_id matches. currently the only way to receive claude_session_id is from messages after making a query.
+        # reverse engineer claude code and write to the process directly
+        await self.claude.connect()
 
         try:
             mcp_status = await self.claude.get_mcp_status()
@@ -674,6 +673,7 @@ class AgentHarness:
             self.claude = None
 
     async def handle_init(self, msg: dict[str, Any]) -> None:
+        # todo(rteqs): for old sessions that need to be migrated. we need to inject out session history from vacuole into the .jsonl history file
         try:
             new_session_id = int(msg.get("session_id"))
         except Exception:
@@ -685,6 +685,7 @@ class AgentHarness:
             })
             return
 
+        # todo(rteqs): we should not change sessions from init messages. this should be done by the server
         session_changed = new_session_id != self.agent_session_id
         if session_changed:
             print(f"[agent] Session initialized/changed: {new_session_id}")
@@ -857,9 +858,8 @@ class AgentHarness:
         return query["query"]
 
     async def query(self, msg: AgentQuery) -> None:
-        # todo(rteqs): implement logic for wait for connnetion
         assert self.claude is not None
-        # assert self.claude_session_id is not None
+        assert self.claude_session_id is not None
 
         prompt = await self.create_prompt(msg)
 
@@ -881,8 +881,18 @@ class AgentHarness:
         )
         await self.claude.query(prompt=prompt, session_id=self.claude_session_id)
 
+        # todo(rteqs): there is almost no business logic here but to transform payload structure to match frontend.
+        # we should look to just store messages in the form anthropic sends and have frontend parse that.
         async for res in self.claude.receive_response():
             # todo(rteqs): pretend we can't be interrupted for now
+            if (
+                isinstance(res, SystemMessage)
+                and res.subtype == "init"
+                and self.claude_session_id is None
+                # note(rteqs): this is always the first message for every query
+            ):
+                self.claude_session_id = res.data.get("session_id")
+
             if isinstance(res, StreamEvent):
                 await self._handle_stream_event(res)
 
@@ -962,14 +972,13 @@ class AgentHarness:
                         )
 
             elif isinstance(res, ResultMessage):
-                # if res.session_id != self.claude_session_id:
-                #     continue
+                if res.session_id != self.claude_session_id:
+                    continue
 
-                usage = validate(res.usage, Usage)
+                usage = validate(res.usage, ResultMessageUsage)
                 await self._send_usage_update(usage)
 
-                # todo(rteqs): do we need to send a message frontend or history to say we're done?
-                # if res.
+                # todo(rteqs): send message to frontend saying we're done. instead of tool Rresult
                 if res.subtype == "success":
                     break
 
@@ -977,13 +986,7 @@ class AgentHarness:
                 assert res.is_error is True
 
                 # todo(rteqs): self.handle_error_result
-
                 break
-
-            elif isinstance(res, SystemMessage):
-                ...
-                # todo(rteqs): handle this for processing subagent messages
-                # note: we should just ignore init messages. nothing important and we shouldn't be changing our session_id mid query
 
     async def interrupt(self, msg: dict[str, Any]) -> None:
         # todo(rteqs): clean up
@@ -1041,7 +1044,7 @@ class AgentHarness:
     async def get_full_prompt(self) -> dict:
         self.system_prompt = (context_root.parent / "system_prompt.md").read_text()
 
-        messages = None
+        messages = []
         if self.claude_session_id is not None:
             messages = get_session_messages(self.claude_session_id)
 
