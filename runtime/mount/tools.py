@@ -618,12 +618,13 @@ async def execute_code(args: dict[str, Any]) -> dict[str, Any]:
     result = await h.atomic_operation("execute_code", {"code": code})
     return ok({
         "tool_name": "execute_code",
-        "success": True,
+        "success": result.get("status") == "success",
         "summary": "Code executed",
         "code": code,
         "stdout": result.get("stdout"),
         "stderr": result.get("stderr"),
         "exception": result.get("exception"),
+        "error": result.get("error"),
     })
 
 
