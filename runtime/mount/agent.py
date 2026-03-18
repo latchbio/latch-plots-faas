@@ -93,6 +93,7 @@ NOTEBOOK_MUTATION_TOOL_MATCHER = (
     + "|".join(NOTEBOOK_MUTATION_TOOL_NAMES)
     + ")$"
 )
+PLOTS_AGENT_MODEL = os.environ.get("LATCH_PLOTS_AGENT_MODEL", "claude-opus-4-6")
 
 
 class Behavior(Enum):
@@ -1045,7 +1046,7 @@ class AgentHarness:
             duration = time.time() - start_time
             print(f"[agent] {action} timed out after {duration:.3f}s")
 
-            if not force_backend_browser_retry:
+            if action != "execute_code" and not force_backend_browser_retry:
                 print(f"[agent] Retrying {action} with backend browser")
                 return await self.atomic_operation(
                     action,
@@ -1055,7 +1056,7 @@ class AgentHarness:
 
             return {
                 "status": "error",
-                "error": f"OPERATION FAILED: '{action}' timed out after 10 seconds. This operation did NOT complete.",
+                "error": f"OPERATION FAILED: '{action}' timed out after {timeout:g} seconds. This operation did NOT complete.",
                 "tx_id": tx_id,
             }
         finally:
@@ -1081,6 +1082,7 @@ class AgentHarness:
             "cache_creation_input_tokens": int(
                 usage.get("cache_creation_input_tokens", 0) or 0
             ),
+            "output_tokens": int(usage.get("output_tokens", 0) or 0),
             "context_limit": 200_000,
         })
 
@@ -1328,10 +1330,45 @@ class AgentHarness:
     async def _disconnect_sdk_client(self) -> None:
         if self.client is None:
             return
+        if self._sdk_client_process_returncode() is not None:
+            self.client = None
+            return
         try:
             await self.client.disconnect()
         finally:
             self.client = None
+
+    def _sdk_client_process_returncode(self) -> int | None:
+        if self.client is None:
+            return None
+
+        transport = getattr(self.client, "_transport", None)
+        process = getattr(transport, "_process", None)
+        if process is None:
+            return None
+
+        returncode = getattr(process, "returncode", None)
+        if callable(returncode):
+            with suppress(Exception):
+                returncode = returncode()
+
+        return returncode if isinstance(returncode, int) else None
+
+    async def _ensure_live_sdk_client(self) -> None:
+        if self.client is None:
+            await self._connect_sdk_client(resume_session_id=self.claude_session_id)
+            return
+
+        returncode = self._sdk_client_process_returncode()
+        if returncode is None:
+            return
+
+        print(
+            "[agent] SDK client process exited before query "
+            f"(returncode={returncode}); reconnecting SDK client"
+        )
+        self.client = None
+        await self._connect_sdk_client(resume_session_id=self.claude_session_id)
 
     async def _load_claude_session_id(
         self, session_id: int
@@ -1438,7 +1475,7 @@ class AgentHarness:
                 mcp_servers={MCP_SERVER_NAME: self.mcp_server},
                 allowed_tools=[*self.mcp_allowed_tools, *SDK_BUILTIN_ALLOWED_TOOLS],
                 permission_mode="acceptEdits",
-                model="claude-opus-4-6",
+                model=PLOTS_AGENT_MODEL,
                 thinking={"type": "adaptive"},
                 resume=resume_session_id,
                 env=sdk_env,
@@ -1604,7 +1641,6 @@ class AgentHarness:
             return
 
     async def _run_query(self, *, prompt: str, request_id: str | None) -> None:
-        assert self.client is not None
         assert self.agent_session_id is not None
 
         self.open_stream_blocks.clear()
@@ -1681,6 +1717,8 @@ class AgentHarness:
         })
 
         try:
+            await self._ensure_live_sdk_client()
+            assert self.client is not None
             query_session_id = self.claude_session_id
             if query_session_id is None:
                 query_session_id = "default"
@@ -1691,10 +1729,29 @@ class AgentHarness:
                 f"claude_session_id={query_session_id})"
             )
             try:
-                await asyncio.wait_for(
-                    self.client.query(prompt=prompt, session_id=query_session_id),
-                    timeout=10.0,
-                )
+                for attempt in range(2):
+                    try:
+                        await asyncio.wait_for(
+                            self.client.query(prompt=prompt, session_id=query_session_id),
+                            timeout=10.0,
+                        )
+                        break
+                    except Exception as e:
+                        if (
+                            attempt == 0
+                            and "terminated process" in str(e).lower()
+                        ):
+                            print(
+                                "[agent] SDK query submission hit terminated SDK process; "
+                                "reconnecting and retrying once"
+                            )
+                            self.client = None
+                            await self._connect_sdk_client(
+                                resume_session_id=self.claude_session_id
+                            )
+                            assert self.client is not None
+                            continue
+                        raise
             except TimeoutError:
                 final_query_error = "Timed out submitting prompt to Claude runtime"
                 await self.send({
@@ -2177,7 +2234,7 @@ class AgentHarness:
         return {
             "system_prompt": self.system_prompt,
             "messages": messages,
-            "model": "claude-opus-4-5",
+            "model": PLOTS_AGENT_MODEL,
             "cells": self.latest_notebook_state
             if self.latest_notebook_state is not None
             else "Interact with agent to populate notebook state.",
