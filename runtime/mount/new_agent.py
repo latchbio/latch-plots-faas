@@ -859,7 +859,6 @@ class AgentHarness:
 
     async def query(self, msg: AgentQuery) -> None:
         assert self.claude is not None
-        assert self.claude_session_id is not None
 
         prompt = await self.create_prompt(msg)
 
@@ -879,7 +878,10 @@ class AgentHarness:
             request_id=msg["request_id"],
             payload={"content": msg["query"], "display_query": msg["query"]},
         )
-        await self.claude.query(prompt=prompt, session_id=self.claude_session_id)
+        session_id = (
+            self.claude_session_id if self.claude_session_id is not None else "default"
+        )
+        await self.claude.query(prompt=prompt, session_id=session_id)
 
         # todo(rteqs): there is almost no business logic here but to transform payload structure to match frontend.
         # we should look to just store messages in the form anthropic sends and have frontend parse that.
@@ -891,7 +893,10 @@ class AgentHarness:
                 and self.claude_session_id is None
                 # note(rteqs): this is always the first message for every query
             ):
-                self.claude_session_id = res.data.get("session_id")
+                self.claude_session_id = s_id = res.data.get("session_id")
+
+                if s_id is not None:
+                    await self._persist_claude_session_id(s_id)
 
             if isinstance(res, StreamEvent):
                 await self._handle_stream_event(res)
