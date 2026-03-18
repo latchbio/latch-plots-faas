@@ -238,7 +238,6 @@ class AgentHarness:
             **({"request_id": request_id} if request_id else {}),
         })
 
-    # todo(rteqs):
     async def _insert_history(
         self,
         *,
@@ -856,9 +855,20 @@ class AgentHarness:
             return
 
     async def create_prompt(self, query: AgentQuery) -> str:
-        # todo(rteqs): implement
-        # logic from _wait_for_message, _run_query_with_trun_prompt, _run_query here
-        return query["query"]
+        # todo(rteqs): we should probably move notebook state to a tool or pull it in everytime the model needs it instead of just the prompt
+        self.latest_notebook_state = await self.refresh_cells_context()
+
+        context_blocks = [
+            f"<current_notebook_state>\n{self.latest_notebook_state}\n</current_notebook_state>"
+        ]
+
+        if self.current_plan is not None:
+            plan_content = json.dumps(self.current_plan, indent=2)
+            context_blocks.append(f"<current_plan>\n{plan_content}\n</current_plan>")
+
+        context_blocks.append(f"<user_query>\n{query['query']}\n</user_query>")
+
+        return "\n\n".join(context_blocks)
 
     async def query(self, msg: AgentQuery) -> None:
         assert self.claude is not None
