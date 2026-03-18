@@ -44,6 +44,7 @@ from claude_agent_sdk.types import (
     PostToolUseHookInput,
     StreamEvent,
     SyncHookJSONOutput,
+    SystemPromptPreset,
     UserMessage,
 )
 from latch_data_validation.data_validation import validate
@@ -631,7 +632,9 @@ class AgentHarness:
         self.claude = ClaudeSDKClient(
             options=ClaudeAgentOptions(
                 # todo(rteqs): claude code + our system prompt
-                system_prompt=self.system_prompt,
+                system_prompt=SystemPromptPreset(
+                    type="preset", preset="claude_code", append=self.system_prompt
+                ),
                 include_partial_messages=False,
                 mcp_servers={MCP_SERVER_NAME: self.mcp_server},
                 allowed_tools=[*self.mcp_allowed_tools, *SDK_BUILTIN_ALLOWED_TOOLS],
@@ -1090,7 +1093,9 @@ class AgentHarness:
         system_prompt_path = context_root.parent / "system_prompt.md"
         system_prompt_path.write_text(new_content)
         self.system_prompt = new_content
-        self.claude.options.system_prompt = new_content
+        self.claude.options.system_prompt = SystemPromptPreset(
+            type="preset", preset="claude_code", append=self.system_prompt
+        )
 
         full_prompt = await self.get_full_prompt()
         return {"status": "success", **full_prompt}
