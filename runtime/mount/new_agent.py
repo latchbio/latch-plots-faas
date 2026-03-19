@@ -14,7 +14,6 @@ from pathlib import Path
 from typing import Any, Literal, NotRequired, TypedDict
 
 from anthropic.types import (
-    CacheCreation,
     MessageDeltaUsage,
     RawContentBlockDeltaEvent,
     RawContentBlockStartEvent,
@@ -22,7 +21,6 @@ from anthropic.types import (
     RawMessageDeltaEvent,
     RawMessageStartEvent,
     RawMessageStopEvent,
-    ServerToolUsage,
     Usage,
 )
 from claude_agent_sdk import (
@@ -184,12 +182,12 @@ class AgentQuery(TypedDict):
 
 @dataclass(frozen=True)
 class ResultMessageUsage:
-    cache_creation: CacheCreation | None
+    cache_creation: dict | None
     cache_creation_input_tokens: int | None
     cache_read_input_tokens: int | None
     input_tokens: int
     output_tokens: int
-    server_tool_use: ServerToolUsage | None
+    server_tool_use: dict | None
     service_tier: Literal["standard", "priority", "batch"] | None
     inference_geo: str
     iterations: list

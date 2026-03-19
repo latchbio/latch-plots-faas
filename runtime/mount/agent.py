@@ -1065,7 +1065,7 @@ class AgentHarness:
 
             return {
                 "status": "error",
-                "error": f"OPERATION FAILED: '{action}' timed out after 10 seconds. This operation did NOT complete.",
+                "error": f"OPERATION FAILED: '{action}' timed out after {timeout} seconds. This operation did NOT complete.",
                 "tx_id": tx_id,
             }
         finally:
@@ -2215,8 +2215,7 @@ class AgentHarness:
         full_prompt = await self.get_full_prompt()
         return {"status": "success", **full_prompt}
 
-    async def accept(self) -> None:
-        msg = await self.conn.recv()
+    async def accept(self, msg) -> None:
         msg_type = msg.get("type")
         msg_request_id = msg.get("request_id")
         print(
@@ -2377,12 +2376,14 @@ async def main() -> None:
 
         await harness.send({"type": "ready"})
 
-        while True:
-            try:
-                await harness.accept()
-            except Exception:
-                traceback.print_exc()
-                continue
+        async with asyncio.TaskGroup() as tg:
+            while True:
+                try:
+                    msg = await harness.conn.recv()
+                    tg.create_task(harness.accept(msg))
+                except Exception:
+                    traceback.print_exc()
+                    continue
 
         print("Agent shutting down...")
     finally:
