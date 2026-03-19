@@ -794,6 +794,10 @@ class AgentHarness:
             return
 
         if event.type == "message_start":
+            await self.send({
+                "type": "agent_stream_start",
+                "timestamp": int(time.time() * 1000),
+            })
             # todo(rteqs): send to browser to start stream?
             return
 
@@ -882,11 +886,6 @@ class AgentHarness:
         assert self.claude is not None
 
         prompt = await self.create_prompt(msg)
-
-        await self.send({
-            "type": "agent_stream_start",
-            "timestamp": int(time.time() * 1000),
-        })
 
         print(
             "[agent] starting SDK query "
