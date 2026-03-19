@@ -323,6 +323,77 @@ class AgentHarness:
             }
         }
 
+    # todo(rteqs): refactor _normalize_tool_content, _extract_tool_result_text, _build_generic_tool_result_content
+    def _normalize_tool_result_content(
+        self, tool_response: str | list[dict[str, Any]] | None
+    ) -> ToolResultContent:
+        # todo(rteqs): this is kinda sus. why is there a early return in the for loop.
+        if isinstance(tool_response, str):
+            return tool_response
+
+        if isinstance(tool_response, list):
+            normalized_blocks: list[TextToolResultBlock] = []
+            for item in tool_response:
+                if isinstance(item, dict):
+                    block_type = item.get("type")
+                    text_value = item.get("text")
+                else:
+                    block_type = getattr(item, "type", None)
+                    text_value = getattr(item, "text", None)
+                    if block_type is None and isinstance(text_value, str):
+                        block_type = "text"
+
+                if block_type == "text" and isinstance(text_value, str):
+                    normalized_blocks.append({"type": "text", "text": text_value})
+                    continue
+
+                return json.dumps(tool_response, default=str)
+
+            if len(normalized_blocks) > 0:
+                return normalized_blocks
+
+            return json.dumps(tool_response, default=str)
+
+        return json.dumps(tool_response, default=str)
+
+    def _extract_tool_result_text(self, content: ToolResultContent) -> str | None:
+        if isinstance(content, str):
+            return content
+        for block in content:
+            if block["type"] == "text":
+                return block["text"]
+        return None
+
+    def _build_generic_tool_result_content(
+        self, *, tool_name: str, content: ToolResultContent, is_error: bool
+    ) -> ToolResultContent:
+        text_content = self._extract_tool_result_text(content)
+        if text_content is None:
+            return content
+
+        try:
+            parsed = json.loads(text_content)
+        except Exception:
+            parsed = None
+        if isinstance(parsed, dict) and isinstance(parsed.get("tool_name"), str):
+            return content
+
+        result_payload: GenericToolResultPayload = {
+            "tool_name": tool_name,
+            "success": not is_error,
+            "summary": (
+                f"{tool_name} failed" if is_error else f"{tool_name} completed"
+            ),
+        }
+        if text_content.strip() != "":
+            result_payload["raw_output"] = text_content
+        if is_error:
+            result_payload["error"] = text_content
+            if text_content.strip() != "":
+                result_payload["summary"] = f"{tool_name} failed: {text_content[:200]}"
+
+        return [{"type": "text", "text": json.dumps(result_payload)}]
+
     async def refresh_cells_context(self) -> str:
         context_result, reactivity_result = await asyncio.gather(
             self.atomic_operation("get_context"),
@@ -905,8 +976,9 @@ class AgentHarness:
         else:
             await self.claude.query(prompt=prompt, session_id=self.claude_session_id)
 
-        # todo(rteqs): there is almost no business logic here but to transform payload structure to match frontend.
-        # we should just store messages in the form anthropic sends and have frontend parse that.
+        tool_name_by_tool_use_id: dict[str, str] = {}
+
+        # todo(rteqs): we should just store messages in the form anthropic sends and have frontend parse that.
         async for res in self.claude.receive_response():
             # todo(rteqs): pretend we can't be interrupted for now
             if (
@@ -948,6 +1020,7 @@ class AgentHarness:
                         )
 
                     elif isinstance(c, ToolUseBlock):
+                        tool_name_by_tool_use_id[c.id] = c.name
                         await self._insert_history(
                             role="assistant",
                             request_id=msg["request_id"],
@@ -981,23 +1054,10 @@ class AgentHarness:
                         )
 
                     if isinstance(c, ToolResultBlock):
-                        # todo(rteqs): update console AgentToolResult to have is_error
-                        # todo(rteqs): pass c.content to get GenericToolResult
+                        tool_name = tool_name_by_tool_use_id.get(
+                            c.tool_use_id, "Unknown"
+                        )
                         is_error = c.is_error if c.is_error is not None else False
-
-                        if isinstance(c.content, str):
-                            content = c.content
-                        elif isinstance(c.content, list):
-                            content = next(
-                                (
-                                    b["text"]
-                                    for b in c.content
-                                    if b.get("type") == "text"
-                                ),
-                                "null",
-                            )
-                        else:
-                            content = "null"
 
                         await self._insert_history(
                             role="user",
@@ -1007,8 +1067,13 @@ class AgentHarness:
                                     {
                                         "type": "tool_result",
                                         "tool_use_id": c.tool_use_id,
-                                        "content": content,
-                                        "is_error": is_error,
+                                        "content": self._build_generic_tool_result_content(
+                                            tool_name=tool_name,
+                                            content=self._normalize_tool_result_content(
+                                                c.content
+                                            ),
+                                            is_error=is_error,
+                                        ),
                                     }
                                 ]
                             },
