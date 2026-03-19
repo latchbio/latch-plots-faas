@@ -1118,8 +1118,7 @@ class AgentHarness:
         full_prompt = await self.get_full_prompt()
         return {"status": "success", **full_prompt}
 
-    async def accept(self) -> None:
-        msg = await self.conn.recv()
+    async def accept(self, msg: Any) -> None:
         msg_type = msg.get("type")
         msg_request_id = msg.get("request_id")
         print(
@@ -1278,12 +1277,14 @@ async def main() -> None:
 
         await harness.send({"type": "ready"})
 
-        while True:
-            try:
-                await harness.accept()
-            except Exception:
-                traceback.print_exc()
-                continue
+        async with asyncio.TaskGroup() as tg:
+            while True:
+                try:
+                    msg = await harness.conn.recv()
+                    tg.create_task(harness.accept(msg))
+                except Exception:
+                    traceback.print_exc()
+                    continue
 
         print("Agent shutting down...")
     finally:
