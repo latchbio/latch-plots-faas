@@ -983,6 +983,22 @@ class AgentHarness:
                     if isinstance(c, ToolResultBlock):
                         # todo(rteqs): update console AgentToolResult to have is_error
                         # todo(rteqs): pass c.content to get GenericToolResult
+                        is_error = c.is_error if c.is_error is not None else False
+
+                        if isinstance(c.content, str):
+                            content = c.content
+                        elif isinstance(c.content, list):
+                            content = next(
+                                (
+                                    b["text"]
+                                    for b in c.content
+                                    if b.get("type") == "text"
+                                ),
+                                "null",
+                            )
+                        else:
+                            content = "null"
+
                         await self._insert_history(
                             role="user",
                             request_id=msg["request_id"],
@@ -991,8 +1007,8 @@ class AgentHarness:
                                     {
                                         "type": "tool_result",
                                         "tool_use_id": c.tool_use_id,
-                                        "content": json.dumps(c.content),
-                                        "is_error": c.is_error,
+                                        "content": content,
+                                        "is_error": is_error,
                                     }
                                 ]
                             },
