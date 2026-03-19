@@ -180,14 +180,24 @@ class AgentQuery(TypedDict):
     selected_widgets: NotRequired[list[dict[str, Any]]]  # todo(rteqs): type properly
 
 
+class CacheCreation(TypedDict):
+    ephemeral_1h_input_tokens: int
+    ephemeral_5m_input_tokens: int
+
+
+class ServerToolUsage(TypedDict):
+    web_search_requests: int
+    web_fetch_requests: int
+
+
 @dataclass(frozen=True)
 class ResultMessageUsage:
-    cache_creation: dict | None
+    cache_creation: CacheCreation | None
     cache_creation_input_tokens: int | None
     cache_read_input_tokens: int | None
     input_tokens: int
     output_tokens: int
-    server_tool_use: dict | None
+    server_tool_use: ServerToolUsage | None
     service_tier: Literal["standard", "priority", "batch"] | None
     inference_geo: str
     iterations: list
