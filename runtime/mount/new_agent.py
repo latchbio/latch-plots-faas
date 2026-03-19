@@ -991,7 +991,7 @@ class AgentHarness:
                                     {
                                         "type": "tool_result",
                                         "tool_use_id": c.tool_use_id,
-                                        "content": c.content,
+                                        "content": json.dumps(c.content),
                                         "is_error": c.is_error,
                                     }
                                 ]
@@ -1163,9 +1163,9 @@ class AgentHarness:
             # todo(rteqs): fill in logic from wait_for_message for cell_result and set_widget_value
             if nested_type == "cell_result":
                 cell_id = nested_msg.get("cell_id")
-                has_exception = nested_msg.get("has_exception", False)
+                success = not nested_msg.get("has_exception", False)
                 exception = nested_msg.get("exception")
-                display_name = nested_msg.get("display_name")
+                cell_name = nested_msg.get("display_name")
 
                 logs = nested_msg.get("logs", None)
                 if logs is not None and len(logs) > 4096:
@@ -1189,19 +1189,42 @@ class AgentHarness:
                     )
                     return
 
-                # if self.current_request_id is not None:
-                #     await self.pending_messages.put({
-                #         "type": "cell_result",
-                #         "cell_id": cell_id,
-                #         "success": not has_exception,
-                #         "exception": exception,
-                #         "logs": logs,
-                #         "display_name": display_name,
-                #     })
-                # else:
-                #     print(
-                #         f"        Cell {cell_id} completed but no active request - updating executing_cells only"
-                #     )
+                # todo(rteqs): mcp tool call should add cell to "pending cell result"
+                if self.current_request_id is None:
+                    print(
+                        f"[agent] Ignoring cell_result for {msg.get('cell_id')} - no active request"
+                    )
+                    return
+
+                if success:
+                    result_message = (
+                        f"✓ Cell {cell_name} ({cell_id}) executed successfully"
+                    )
+                    result_content = {
+                        "type": "cell_result",
+                        "message": result_message,
+                        "cell_id": cell_id,
+                        "cell_name": cell_name,
+                        "success": success,
+                        "logs": logs,
+                    }
+                    print(f"[agent] Cell {cell_id} succeeded")
+                else:
+                    exception = msg.get("exception", "Unknown error")
+                    result_message = f"✗ Cell {cell_name} ({cell_id}) execution failed"
+                    result_content = {
+                        "type": "cell_result",
+                        "message": result_message,
+                        "cell_id": cell_id,
+                        "cell_name": cell_name,
+                        "success": False,
+                        "exception": exception,
+                        "logs": logs,
+                    }
+                    print(f"[agent] Cell {cell_id} failed")
+                    # todo(rteqs): pass result back to model
+
+                await self._insert_history(payload={"content": result_content})
 
             elif nested_type == "start_cell":
                 cell_id = nested_msg.get("cell_id")
@@ -1219,10 +1242,15 @@ class AgentHarness:
 
                     if all(v is not None for v in self.expected_widgets.values()):
                         self.current_status = "thinking"
-                        # await self.pending_messages.put({
-                        #     "type": "set_widget_value",
-                        #     "data": self.expected_widgets,
-                        # })
+
+                        data = msg.get("data", {})
+                        widget_info = ", ".join(f"{k}={v}" for k, v in data.items())
+                        content = f"User provided input via widget(s): {widget_info}"
+
+                        await self._insert_history(
+                            payload={"content": content, "hidden": True}
+                        )
+                        # todo(rteqs): pass result back to model
                         print("        Finished waiting for widget input")
             else:
                 print("        Ignored")
