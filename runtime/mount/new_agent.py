@@ -897,6 +897,7 @@ class AgentHarness:
             role="user",
             request_id=msg["request_id"],
             payload={"content": msg["query"], "display_query": msg["query"]},
+            template_version_id=msg["template_version_id"],
         )
 
         if self.claude_session_id is None:
