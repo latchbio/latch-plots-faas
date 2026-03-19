@@ -2050,29 +2050,13 @@ class AgentHarness:
             except Exception as e:
                 print(f"[agent] Fatal: SDK client connection failed: {e!s}")
                 traceback.print_exc()
-
                 self.client = None
-
-                if resume_session_id is not None:
-                    print("[agent] Retrying SDK connection without resume session")
-                    try:
-                        await self._connect_sdk_client(resume_session_id=None)
-                    except Exception as retry_err:
-                        print(f"[agent] Fatal: SDK client retry also failed: {retry_err!s}")
-                        self.client = None
-                        await self.send({
-                            "type": "agent_error",
-                            "error": f"Agent failed to initialize: {retry_err!s}",
-                            "fatal": True,
-                        })
-                        return
-                else:
-                    await self.send({
-                        "type": "agent_error",
-                        "error": f"Agent failed to initialize: {e!s}",
-                        "fatal": True,
-                    })
-                    return
+                await self.send({
+                    "type": "agent_error",
+                    "error": f"Agent failed to initialize: {e!s}",
+                    "fatal": True,
+                })
+                return
 
             if resume_session_id is None:
                 print("[agent] SDK initialized without resume session")
