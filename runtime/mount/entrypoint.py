@@ -807,7 +807,8 @@ async def start_kernel_proc() -> None:
         stderr=a_proc.log_io,
         preexec_fn=lambda: os.nice(1),
     )
-    k_proc.started.notify_all()
+    async with k_proc.started:
+        k_proc.started.notify_all()
 
     _ = Path(f"/proc/{k_proc.proc.pid}/oom_score_adj").write_text(
         "100\n", encoding="utf-8"
@@ -907,7 +908,8 @@ async def start_agent_proc() -> None:
         stderr=a_proc.log_io,
         preexec_fn=lambda: os.nice(5),
     )
-    a_proc.started.notify_all()
+    async with a_proc.started:
+        a_proc.started.notify_all()
 
     _ = Path(f"/proc/{a_proc.proc.pid}/oom_score_adj").write_text(
         "200\n", encoding="utf-8"
