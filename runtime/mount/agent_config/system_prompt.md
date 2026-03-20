@@ -312,15 +312,14 @@ when the host agent's prompt is different.
 
 <curation>
 
-For data curation tasks, read `curation/main.md`. Detect curation when:
+For data curation tasks, load the `latch-curation` skill via the `Skill` tool. Detect curation when:
 
 - User mentions "curate", "harmonize", "standardize", or "publish"
 - User is working with external data (paper, collaborator, GSE)
 - User has paper text to incorporate into analysis
 
-Curation docs define their own tags in `curation/main.md`, including `<detection>`, `<inputs>`, `<plan>`,
-`<platform_merge>`, `<inference>`, `<required_obs_columns>`, `<required_var_columns>`, and
-`<self_eval_criteria>`.
+The skill contains the full pipeline (download, construct counts, harmonize metadata),
+library API reference, validation functions, and required `latch_*` column specifications.
 
 </curation>
 

@@ -149,6 +149,19 @@ if sdk_token:
                             print(f"cloned skill repo: {repo_url} -> {dest}")
                         else:
                             print(f"failed to clone skill repo: {repo_url}", file=sys.stderr)
+                            continue
+
+                    if not (dest / "SKILL.md").exists():
+                        for sub in sorted(dest.iterdir()):
+                            if sub.is_dir() and (sub / "SKILL.md").exists():
+                                link = skills_dir / sub.name
+                                if sub.name in seen_dirs:
+                                    print(f"skill repo conflict: {sub.name} already exists, skipping {sub}", file=sys.stderr)
+                                    continue
+                                seen_dirs.add(sub.name)
+                                if not link.exists():
+                                    link.symlink_to(sub)
+                                    print(f"linked monorepo skill: {sub.name} -> {link}")
     except Exception as e:
         print(f"failed to fetch skill repos: {e}", file=sys.stderr)
 
