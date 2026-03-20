@@ -100,8 +100,8 @@ NOTEBOOK_MUTATION_TOOL_MATCHER = (
     "^mcp__" + MCP_SERVER_NAME + "__(" + "|".join(NOTEBOOK_MUTATION_TOOL_NAMES) + ")$"
 )
 
-
-Behavior = Literal["plan", "build"]
+# todo(rteqs): "plan", "build"
+Behavior = Literal["step_by_step", "proactive"]
 
 HistoryRole = Literal["user", "assistant", "system"]
 
@@ -175,7 +175,7 @@ AnthropicStreamEvent = (
 class AgentQuery(TypedDict):
     type: Literal["agent_query"]
     request_id: str
-    query: str  # todo(rteqs): rename to prompt
+    query: str
     behavior: Behavior
     template_version_id: str
     contextual_node_data: NotRequired[dict[str, Any]]  # todo(rteqs): type properly
@@ -222,7 +222,7 @@ class AgentHarness:
     latest_notebook_context: dict = field(default_factory=dict)
     current_status: str | None = None
     expected_widgets: dict[str, Any | None] = field(default_factory=dict)
-    behavior: Behavior = "plan"
+    behavior: Behavior = "step_by_step"
     latest_notebook_state: str | None = None
     current_plan: dict | None = None
     in_memory_history: list[dict] = field(default_factory=list)
@@ -696,7 +696,6 @@ class AgentHarness:
         print(f"[agent] Unknown stream event type={event_type}")
         return None
 
-    # todo(rteqs): make reliable / fault tolerant
     async def connect(self, *, resume_session_id: str | None) -> None:
         self.system_prompt = (context_root.parent / "system_prompt.md").read_text()
 
@@ -710,7 +709,6 @@ class AgentHarness:
 
         self.claude = ClaudeSDKClient(
             options=ClaudeAgentOptions(
-                # todo(rteqs): claude code + our system prompt
                 system_prompt=SystemPromptPreset(
                     type="preset", preset="claude_code", append=self.system_prompt
                 ),
@@ -767,7 +765,6 @@ class AgentHarness:
             })
             return
 
-        # todo(rteqs): we should not change sessions from init messages. this should be done by the server
         session_changed = new_session_id != self.agent_session_id
         if session_changed:
             print(f"[agent] Session initialized/changed: {new_session_id}")
@@ -938,12 +935,26 @@ class AgentHarness:
             })
             return
 
+    # todo(rteqs): remove this once we move to "plan", "build"
+    def _load_behavior_context(self) -> tuple[str, str]:
+        behavior_file = (
+            "proactive.md" if self.behavior == "proactive" else "step_by_step.md"
+        )
+        turn_behavior_content = (
+            context_root / "turn_behavior" / behavior_file
+        ).read_text()
+        examples_content = (context_root / "examples" / behavior_file).read_text()
+        return turn_behavior_content, examples_content
+
     async def create_prompt(self, query: AgentQuery) -> str:
         # todo(rteqs): we should probably move notebook state to a tool or pull it in everytime the model needs it instead of just the prompt
         self.latest_notebook_state = await self.refresh_cells_context()
+        turn_behavior_content, examples_content = self._load_behavior_context()
 
         context_blocks = [
-            f"<current_notebook_state>\n{self.latest_notebook_state}\n</current_notebook_state>"
+            f"<turn_behavior>\n{turn_behavior_content}\n</turn_behavior>",
+            f"<examples>\n{examples_content}\n</examples>",
+            f"<current_notebook_state>\n{self.latest_notebook_state}\n</current_notebook_state>",
         ]
 
         if self.current_plan is not None:
