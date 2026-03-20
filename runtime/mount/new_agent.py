@@ -994,13 +994,15 @@ class AgentHarness:
         error_type: AssistantMessageError | None = None
         async for res in self.claude.receive_response():
             # todo(rteqs): pretend we can't be interrupted for now
+            if isinstance(res, SystemMessage):
+                print(res)
+
             if (
                 isinstance(res, SystemMessage)
                 and res.subtype == "init"
                 and self.claude_session_id is None
                 # note(rteqs): this is always the first message for every query
             ):
-                print(res)
                 self.claude_session_id = s_id = res.data.get("session_id")
 
                 if s_id is not None:
