@@ -1,12 +1,13 @@
 import asyncio
 import contextlib
 import os
-import shutil
 import socket
 import sys
 import traceback
 from asyncio.subprocess import Process
-from dataclasses import dataclass
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass, field
+from io import TextIOWrapper
 from pathlib import Path
 from typing import IO, TypedDict, TypeVar
 
@@ -30,15 +31,6 @@ dir_p = Path(__file__).parent
 
 
 T = TypeVar("T")
-
-
-sock, sock_k = socket.socketpair(family=socket.AF_UNIX)
-sock.setblocking(False)
-sock_k_fd = sock_k.detach()
-
-sock_a, sock_agent = socket.socketpair(family=socket.AF_UNIX)
-sock_a.setblocking(False)
-sock_agent_fd = sock_agent.detach()
 
 ready_ev = asyncio.Event()
 
@@ -65,7 +57,7 @@ class KernelSnapshotState:
 
 kernel_snapshot_state = KernelSnapshotState()
 
-async_tasks: list[asyncio.Task] = []
+async_tasks: list[asyncio.Task[object]] = []
 
 
 latch_p = Path("/root/.latch")
@@ -95,7 +87,7 @@ pending_user_browser_actions: dict[str, dict] = {}  # tx_id -> original message
 
 
 def mark_action_handled(tx_id: str) -> None:
-    pending_user_browser_actions.pop(tx_id, None)
+    _ = pending_user_browser_actions.pop(tx_id, None)
 
 
 async def handle_user_disconnect_fallback() -> None:
@@ -105,8 +97,8 @@ async def handle_user_disconnect_fallback() -> None:
     for tx_id, msg in actions_to_fallback:
         if action_handler_ctx is not None:
             await action_handler_ctx.send_message(orjson.dumps(msg).decode())
-        elif a_proc.conn_a is not None:
-            await a_proc.conn_a.send({
+        elif a_proc.msg_io is not None:
+            await a_proc.msg_io.send({
                 "type": "agent_action_response",
                 "tx_id": tx_id,
                 "status": "error",
@@ -114,23 +106,88 @@ async def handle_user_disconnect_fallback() -> None:
             })
 
 
-@dataclass
-class KernelProc:
-    conn_k: SocketIo | None = None
+shutting_down = False
+
+
+@dataclass(kw_only=True)
+class ProcessManager:
+    name: str
     proc: Process | None = None
+    msg_io: SocketIo | None = None
+    log_io: TextIOWrapper | None = None
+
+    started: asyncio.Condition = field(default_factory=asyncio.Condition)
+
+    async def create_msg_io(self) -> int:
+        sock, sock_k = socket.socketpair(family=socket.AF_UNIX)
+        sock.setblocking(False)  # noqa: FBT003
+        sock_k_fd = sock_k.detach()
+
+        self.msg_io = await SocketIo.from_socket(sock)
+        return sock_k_fd
+
+    async def wait_for_start(self) -> Process:
+        async with self.started:
+            while True:
+                if self.proc is not None:
+                    return self.proc
+
+                _ = await self.started.wait()
+
+    async def stop(self) -> None:
+        if self.proc is not None and self.proc.returncode is None:
+            try:
+                try:
+                    self.proc.terminate()
+                    _ = await asyncio.wait_for(self.proc.wait(), timeout=2)
+                except TimeoutError:
+                    print(f"Process did not terminate in 2 seconds: {self.name}")
+                    self.proc.kill()
+                    _ = await self.proc.wait()
+                except ProcessLookupError:
+                    pass
+            except Exception:
+                traceback.print_exc()
+
+        if self.log_io is not None:
+            try:
+                self.log_io.close()
+            except Exception:
+                traceback.print_exc()
+        self.log_io = None
+
+        if self.msg_io is not None:
+            try:
+                self.msg_io.sock.shutdown(socket.SHUT_RDWR)
+                self.msg_io.sock.close()
+            except Exception:
+                traceback.print_exc()
+        self.msg_io = None
+
+    async def watchdog(
+        self, *, cleanup: Callable[..., Awaitable[object]] | None = None
+    ) -> None:
+        while True:
+            proc = await self.wait_for_start()
+
+            code = await proc.wait()
+            if shutting_down:
+                return
+
+            await plots_ctx_manager.broadcast_message(
+                orjson.dumps({
+                    "type": "managed_process_exit",
+                    "name": self.name,
+                    "exit_code": code,
+                }).decode()
+            )
+
+            if cleanup is not None:
+                _ = await cleanup()
 
 
-k_proc = KernelProc()
-
-
-@dataclass
-class AgentProc:
-    conn_a: SocketIo | None = None
-    proc: Process | None = None
-    log_file: IO[str] | None = None
-
-
-a_proc = AgentProc()
+k_proc = ProcessManager(name="kernel")
+a_proc = ProcessManager(name="agent")
 
 headless_browser: HeadlessBrowser | None = None
 latest_local_storage: dict[str, str] | None = None
@@ -482,11 +539,11 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
             elif msg["type"] == "globals_summary" and "agent_tx_id" in msg:
                 tx_id = msg.get("agent_tx_id")
 
-                if a_proc.conn_a is not None:
+                if a_proc.msg_io is not None:
                     print(
                         f"[entrypoint] Routing globals response to agent (tx_id={tx_id})"
                     )
-                    await a_proc.conn_a.send({
+                    await a_proc.msg_io.send({
                         "type": "agent_action_response",
                         "tx_id": tx_id,
                         "status": "success",
@@ -502,11 +559,11 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
             elif msg["type"] == "execute_code_response" and "agent_tx_id" in msg:
                 tx_id = msg.get("agent_tx_id")
 
-                if a_proc.conn_a is not None:
+                if a_proc.msg_io is not None:
                     print(
                         f"[entrypoint] Routing execute_code response to agent (tx_id={tx_id})"
                     )
-                    await a_proc.conn_a.send({
+                    await a_proc.msg_io.send({
                         "type": "agent_action_response",
                         "tx_id": tx_id,
                         "status": msg.get("status", "error"),
@@ -521,11 +578,11 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
             elif msg["type"] == "get_global_info_response" and "agent_tx_id" in msg:
                 tx_id = msg.get("agent_tx_id")
 
-                if a_proc.conn_a is not None:
+                if a_proc.msg_io is not None:
                     print(
                         f"[entrypoint] Routing get_global_info response to agent (tx_id={tx_id})"
                     )
-                    await a_proc.conn_a.send({
+                    await a_proc.msg_io.send({
                         "type": "agent_action_response",
                         "tx_id": tx_id,
                         "status": msg.get("status", "error"),
@@ -577,10 +634,10 @@ async def handle_agent_messages(conn_a: SocketIo) -> None:
             continue
 
         if msg_type == "agent_action" and msg.get("action") == "execute_code":
-            if k_proc.conn_k is not None:
+            if k_proc.msg_io is not None:
                 code = msg.get("params", {}).get("code", "")
 
-                await k_proc.conn_k.send({
+                await k_proc.msg_io.send({
                     "type": "execute_code",
                     "code": code,
                     "agent_tx_id": tx_id,
@@ -595,10 +652,10 @@ async def handle_agent_messages(conn_a: SocketIo) -> None:
             continue
 
         if msg_type == "agent_action" and msg.get("action") == "get_global_info":
-            if k_proc.conn_k is not None:
+            if k_proc.msg_io is not None:
                 key = msg.get("params", {}).get("key", "")
 
-                await k_proc.conn_k.send({
+                await k_proc.msg_io.send({
                     "type": "get_global_info",
                     "key": key,
                     "agent_tx_id": tx_id,
@@ -701,8 +758,8 @@ async def handle_agent_messages(conn_a: SocketIo) -> None:
                 mark_action_handled(tx_id)
                 if action_handler_ctx is not None:
                     await action_handler_ctx.send_message(orjson.dumps(msg).decode())
-                elif a_proc.conn_a is not None:
-                    await a_proc.conn_a.send({
+                elif a_proc.msg_io is not None:
+                    await a_proc.msg_io.send({
                         "type": "agent_action_response",
                         "tx_id": tx_id,
                         "status": "error",
@@ -711,15 +768,29 @@ async def handle_agent_messages(conn_a: SocketIo) -> None:
 
 
 async def start_kernel_proc() -> None:
+    cell_status.clear()
+    cell_sequencers.clear()
+    cell_last_run_outputs.clear()
+
     global latest_reactivity_summary
 
     latest_reactivity_summary = None
 
+    kernel_snapshot_state.status = "done"
+
     await add_pod_event(auth=auth_token_sdk, event_type="runtime_starting")
-    conn_k = k_proc.conn_k = await SocketIo.from_socket(sock)
+
+    sock_k_fd = await k_proc.create_msg_io()
+    assert k_proc.msg_io is not None
+
     async_tasks.append(
-        asyncio.create_task(handle_kernel_messages(k_proc.conn_k, auth_token_sdk))
+        asyncio.create_task(handle_kernel_messages(k_proc.msg_io, auth_token_sdk))
     )
+
+    # todo(maximsmol): log rotation? syslog?
+    log_path = Path("/var/log/kernel.log")
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    a_proc.log_io = Path(log_path).open("a", encoding="utf-8")
 
     print("Starting kernel subprocess")
     k_proc.proc = await asyncio.create_subprocess_exec(
@@ -728,6 +799,8 @@ async def start_kernel_proc() -> None:
         str(sock_k_fd),
         pass_fds=[sock_k_fd],
         stdin=asyncio.subprocess.DEVNULL,
+        stdout=a_proc.log_io,
+        stderr=a_proc.log_io,
         preexec_fn=lambda: os.nice(1),
     )
 
@@ -793,8 +866,8 @@ async def start_kernel_proc() -> None:
         session_snapshot_mode = False
 
     await add_pod_event(auth=auth_token_sdk, event_type="runtime_ready")
-    await ready_ev.wait()
-    await conn_k.send({
+    _ = await ready_ev.wait()
+    await k_proc.msg_io.send({
         "type": "init",
         "widget_states": k_state.widget_states,
         "cell_output_selections": k_state.cell_output_selections,
@@ -807,12 +880,16 @@ async def start_kernel_proc() -> None:
 
 
 async def start_agent_proc() -> None:
-    conn_a = a_proc.conn_a = await SocketIo.from_socket(sock_a)
-    async_tasks.append(asyncio.create_task(handle_agent_messages(a_proc.conn_a)))
+    # todo(maximsmol): unify with start_kernel_proc
+
+    sock_agent_fd = await a_proc.create_msg_io()
+    assert a_proc.msg_io is not None
+
+    async_tasks.append(asyncio.create_task(handle_agent_messages(a_proc.msg_io)))
 
     log_path = Path("/var/log/agent.log")
     log_path.parent.mkdir(parents=True, exist_ok=True)
-    a_proc.log_file = open(log_path, "a")
+    a_proc.log_io = Path(log_path).open("a", encoding="utf-8")
 
     print("Starting agent subprocess")
     a_proc.proc = await asyncio.create_subprocess_exec(
@@ -821,49 +898,14 @@ async def start_agent_proc() -> None:
         str(sock_agent_fd),
         pass_fds=[sock_agent_fd],
         stdin=asyncio.subprocess.DEVNULL,
-        stdout=a_proc.log_file,
-        stderr=a_proc.log_file,
+        stdout=a_proc.log_io,
+        stderr=a_proc.log_io,
         preexec_fn=lambda: os.nice(5),
     )
 
-
-async def stop_kernel_proc() -> None:
-    ready_ev.clear()
-
-    proc = k_proc.proc
-    if proc is not None:
-        try:
-            proc.terminate()
-            await asyncio.wait_for(proc.wait(), timeout=10)
-        except TimeoutError:
-            print("Error terminating kernel process")
-            proc.kill()
-            await proc.wait()
-
-    for task in async_tasks:
-        task.cancel()
-
-
-async def stop_agent_proc() -> None:
-    proc = a_proc.proc
-    if proc is not None:
-        if proc.returncode is None:
-            try:
-                proc.terminate()
-                await asyncio.wait_for(proc.wait(), timeout=2)
-            except TimeoutError:
-                print("Error terminating agent process")
-                proc.kill()
-                await proc.wait()
-            except ProcessLookupError:
-                pass
-        else:
-            print(
-                f"[entrypoint] Agent process already exited with code {proc.returncode}"
-            )
-
-    if a_proc.log_file is not None:
-        a_proc.log_file.close()
+    _ = Path(f"/proc/{a_proc.proc.pid}/oom_score_adj").write_text(
+        "200\n", encoding="utf-8"
+    )
 
 
 async def start_headless_browser(
@@ -925,25 +967,37 @@ async def restart_headless_browser() -> None:
     await start_headless_browser(notebook_id, local_storage)
 
 
+async def startup() -> None:
+    await start_kernel_proc()
+
+    async def kernel_died() -> None:
+        for k, v in cell_status.items():
+            if v != "running":
+                continue
+
+            cell_status[k] = "ran"
+
+    async_tasks.append(asyncio.create_task(k_proc.watchdog(cleanup=kernel_died)))
+    async_tasks.append(asyncio.create_task(a_proc.watchdog()))
+
+
 async def shutdown() -> None:
-    await stop_kernel_proc()
-    await stop_agent_proc()
+    global shutting_down
+    shutting_down = True
+
+    await k_proc.stop()
+    await a_proc.stop()
+
+    for task in async_tasks:
+        _ = task.cancel()
+
+    _ = await asyncio.gather(*async_tasks)
 
     global headless_browser
     if headless_browser is not None:
         with contextlib.suppress(Exception):
             await headless_browser.stop()
         headless_browser = None
-
-    with contextlib.suppress(Exception):
-        sock_k.close()
-    with contextlib.suppress(Exception):
-        sock_agent.close()
-
-    with contextlib.suppress(Exception):
-        sock.close()
-    with contextlib.suppress(Exception):
-        sock_a.close()
 
     with contextlib.suppress(Exception):
         sess = get_global_http_sess()

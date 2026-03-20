@@ -18,6 +18,7 @@ from latch_o11y.o11y import trace_app_function_with_span
 from opentelemetry.trace import Span
 
 from ..entrypoint import (
+    a_proc,
     cell_last_run_outputs,
     cell_sequencers,
     cell_status,
@@ -27,6 +28,8 @@ from ..entrypoint import (
     pod_id,
     pod_session_id,
     ready_ev,
+    start_agent_proc,
+    start_kernel_proc,
 )
 from ..plots_context_manager import agent_session_sub
 from ..utils import gql_query
@@ -143,8 +146,6 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
     if not data.data.plotsSignerHasNotebookAccess:
         raise WebsocketBadMessage(f"Signer cannot access notebook {notebook_id}")
 
-    conn_k = k_proc.conn_k
-    assert conn_k is not None
     user_key = await plots_ctx_manager.add_context(
         sess_hash=sess_hash,
         ctx=ctx,
@@ -156,10 +157,12 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
     # todo(aidan): set when the kernel first starts up
     plots_ctx_manager.notebook_id = notebook_id
 
-    try:
-        await ready_ev.wait()
+    async def send_ready() -> None:
+        _ = await ready_ev.wait()
 
-        assert k_proc.proc is not None
+        proc = k_proc.proc
+        assert proc is not None
+
         await ctx.send_message(
             orjson.dumps({
                 "type": "ready",
@@ -168,10 +171,13 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
                 "cell_sequencers": cell_sequencers,
                 "cell_outputs": cell_last_run_outputs,
                 "kernel_snapshot_status": kernel_snapshot_state.status,
-                "kernel_pid": k_proc.proc.pid,
+                "kernel_status": "running" if proc.returncode is None else "dead",
+                "kernel_pid": proc.pid,
             }).decode()
         )
 
+    try:
+        await send_ready()
         connection_idx += 1
 
         is_agent_session = auth0_sub == agent_session_sub
@@ -196,15 +202,24 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
 
             if msg["type"] == "dispose_cell":
                 cell_id = msg["cell_id"]
+                assert isinstance(cell_id, str)
 
-                if cell_status.get(cell_id) == "running" and k_proc.proc is not None:
+                if (
+                    cell_status.get(cell_id) == "running"
+                    and k_proc.proc is not None
+                    and k_proc.proc.returncode is None
+                ):
                     k_proc.proc.send_signal(signal=signal.SIGINT)
 
-                cell_status.pop(cell_id, None)
-                cell_last_run_outputs.pop(cell_id, None)
-                cell_sequencers.pop(cell_id, None)
+                _ = cell_status.pop(cell_id, None)
+                _ = cell_last_run_outputs.pop(cell_id, None)
+                _ = cell_sequencers.pop(cell_id, None)
 
-            if msg["type"] == "stop_cell" and k_proc.proc is not None:
+            if (
+                msg["type"] == "stop_cell"
+                and k_proc.proc is not None
+                and k_proc.proc.returncode is None
+            ):
                 k_proc.proc.send_signal(signal=signal.SIGINT)
                 continue
 
@@ -212,7 +227,40 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
                 await plots_ctx_manager.override_session_owner(msg["user_key"])
                 continue
 
-            await conn_k.send(msg)
+            if msg["type"] == "managed_process_restart":
+                if msg["name"] == "kernel":
+                    await k_proc.stop()
+                    await start_kernel_proc()
+                    await send_ready()
+
+                    continue
+
+                if msg["name"] == "agent":
+                    await a_proc.stop()
+                    await start_agent_proc()
+                    continue
+
+                await ctx.send_message(
+                    orjson.dumps({
+                        "type": "error",
+                        "data": {"message": f"unknown managed process: {msg['name']}"},
+                    }).decode()
+                )
+
+                continue
+
+            if k_proc.msg_io is None:
+                await ctx.send_message(
+                    orjson.dumps({
+                        "type": "error",
+                        "data": {
+                            "message": f"kernel is dead, cannot handle message: {msg['type']}"
+                        },
+                    }).decode()
+                )
+                continue
+
+            await k_proc.msg_io.send(msg)
     except WebsocketConnectionClosedError:
         ...
     finally:
