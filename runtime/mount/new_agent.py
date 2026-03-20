@@ -1000,6 +1000,7 @@ class AgentHarness:
                 and self.claude_session_id is None
                 # note(rteqs): this is always the first message for every query
             ):
+                print(res)
                 self.claude_session_id = s_id = res.data.get("session_id")
 
                 if s_id is not None:
