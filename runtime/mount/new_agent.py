@@ -1282,6 +1282,7 @@ class AgentHarness:
                 if logs is not None and len(logs) > 4096:
                     logs = logs[-4096:]
 
+                print(f"{nested_msg=}, {cell_id=}, {self.executing_cells=}")
                 if cell_id not in self.executing_cells:
                     print(f"[agent] Ignoring cell_result for {msg.get('cell_id')} ")
                     return
