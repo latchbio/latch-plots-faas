@@ -37,6 +37,7 @@ from claude_agent_sdk import (
 )
 from claude_agent_sdk.types import (
     AssistantMessage,
+    AssistantMessageError,
     HookContext,
     McpSdkServerConfig,
     PostToolUseHookInput,
@@ -157,7 +158,8 @@ class ErrorHistoryPayload(TypedDict, total=False):
     should_contact_support: bool
     should_clear_history: bool
     raw_error: str
-    assistant_error_type: str
+    assistant_error_type: str | None
+    subtype: str
 
 
 AnthropicStreamEvent = (
@@ -526,7 +528,7 @@ class AgentHarness:
         return "\n".join(cell_lines)
 
     async def atomic_operation(
-        self, action: str, params: dict | None = None, timeout: float = 10.0
+        self, action: str, params: dict | None = None, timeout: float | None = 10.0
     ) -> dict:
         if params is None:
             params: dict = {}
@@ -625,7 +627,6 @@ class AgentHarness:
             return True
 
     async def _load_claude_session_id(self, session_id: int) -> str | None:
-        # todo(rteqs): still cringe
         try:
             response = await gql_query(
                 auth=auth_token_sdk,
@@ -979,6 +980,7 @@ class AgentHarness:
         tool_name_by_tool_use_id: dict[str, str] = {}
 
         # todo(rteqs): we should just store messages in the form anthropic sends and have frontend parse that.
+        error_type: AssistantMessageError | None = None
         async for res in self.claude.receive_response():
             # todo(rteqs): pretend we can't be interrupted for now
             if (
@@ -997,7 +999,7 @@ class AgentHarness:
 
             elif isinstance(res, AssistantMessage):
                 if res.error is not None:
-                    # todo(rteqs): do we care here? doesn't ResultMessage give us the error also?
+                    error_type = res.error
                     print(f"[agent] assistant message error={res.error}")
 
                 for c in res.content:
@@ -1086,14 +1088,32 @@ class AgentHarness:
                 usage = validate(res.usage, ResultMessageUsage)
                 await self._send_usage_update(usage)
 
-                # todo(rteqs): send message to frontend saying we're done. instead of tool Rresult
                 if res.subtype == "success":
+                    # todo(rteqs): send message to frontend saying we're done. instead of relying on the submit_response tool
                     break
 
                 assert res.result is None
                 assert res.is_error is True
+                assert res.stop_reason is not None
 
-                # todo(rteqs): self.handle_error_result
+                # todo(rteqs): the old error handling is erroneous. we know from the docs that res.result will be None if subtype != success.
+                # subtype and assistant_error_type (from latest AssistantMessage) alone are too broad to pinpoint what the exact error is and
+                # there doesn't seem to be a fixed schema for res.stop_reason. The below is just a best effor implementation
+                error_history_payload: ErrorHistoryPayload = {
+                    "message": res.stop_reason,
+                    "raw_error": res.stop_reason,
+                    "assistant_error_type": error_type,
+                    "subtype": res.subtype,
+                    "should_clear_history": "prompt is too long" in res.stop_reason,
+                    "should_contact_support": res.subtype == "error_during_execution",
+                }
+
+                await self._insert_history(
+                    role="system",
+                    event_type="error",
+                    payload=error_history_payload,
+                    request_id=msg["request_id"],
+                )
                 break
 
     async def interrupt(self, msg: dict[str, Any]) -> None:
