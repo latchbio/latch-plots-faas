@@ -1909,7 +1909,6 @@ all_tools = [
     get_global_info,
     capture_widget_image,
     update_plan,
-    submit_response,
     set_widget,
     h5_filter_by,
     h5_color_by,
@@ -1932,10 +1931,36 @@ agent_tools_mcp = create_sdk_mcp_server(name=MCP_SERVER_NAME, tools=all_tools)
 
 async def can_use_tool(
     tool_name: str, input_data: dict[str, Any], context: ToolPermissionContext
-) -> PermissionResultAllow:
+) -> PermissionResultAllow | PermissionResultDeny:
     if tool_name == "AskUserQuestion":
-        ...
-        # todo(rteqs): send to console and wait for input
-        # return await handle_ask_user_question(input_data)
+        h = harness()
+
+        # todo(rteqs): we should really just derive this from the tool
+        questions = input_data.get("questions")
+        if questions is None:
+            return PermissionResultAllow(updated_input=input_data)
+
+        await h.send({"type": "agent_status", "status": "awaiting_user_response"})
+
+        try:
+            result = await h.atomic_operation(
+                "ask_user_question", {"questions": input_data.get("questions", [])}
+            )
+        except Exception as e:
+            print(f"[agent] AskUserQuestion failed: {e!s}")
+            return PermissionResultDeny(message=f"Failed to get user response: {e!s}")
+
+        if result.get("status") == "success":
+            answers = result.get("answers", {})
+            return PermissionResultAllow(
+                updated_input={
+                    "questions": input_data.get("questions", []),
+                    "answers": answers,
+                }
+            )
+
+        return PermissionResultDeny(
+            message=f"Failed to get user response: {result.get('error', 'Unknown error')}"
+        )
 
     return PermissionResultAllow(updated_input=input_data)
