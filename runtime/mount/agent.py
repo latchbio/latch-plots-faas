@@ -74,6 +74,7 @@ SDK_BUILTIN_ALLOWED_TOOLS = [
     "Bash",
     "WebFetch",
     "WebSearch",
+    "Skill",
 ]
 NOTEBOOK_MUTATION_TOOL_NAMES = (
     "create_cell",
@@ -1440,6 +1441,7 @@ class AgentHarness:
                 permission_mode="acceptEdits",
                 model="claude-opus-4-6",
                 thinking={"type": "adaptive"},
+                setting_sources=["project"],
                 resume=resume_session_id,
                 env=sdk_env,
                 hooks={
