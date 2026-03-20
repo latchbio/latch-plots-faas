@@ -63,6 +63,22 @@ sdk_token = (latch_p / "token").read_text().strip() if (latch_p / "token").exist
 skills_dir = Path("/opt/latch/plots-faas/.claude/skills")
 skills_dir.mkdir(parents=True, exist_ok=True)
 
+latch_skills_dest = skills_dir / "latch-skills"
+if not latch_skills_dest.exists():
+    ret = os.system(f"git clone --depth 1 https://github.com/latchbio/latch-skills.git {latch_skills_dest}")
+    if ret == 0:
+        print(f"cloned public latch-skills -> {latch_skills_dest}")
+    else:
+        print("failed to clone public latch-skills", file=sys.stderr)
+
+if latch_skills_dest.exists():
+    for sub in sorted(latch_skills_dest.iterdir()):
+        if sub.is_dir() and (sub / "SKILL.md").exists():
+            link = skills_dir / sub.name
+            if not link.exists():
+                link.symlink_to(sub)
+                print(f"linked latch skill: {sub.name} -> {link}")
+
 if sdk_token:
     try:
         gql_body = json.dumps({
