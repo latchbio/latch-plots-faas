@@ -1,7 +1,7 @@
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from ...agent import Agent
+    from ...new_agent import Agent
     from ...kernel import Kernel
 
 
