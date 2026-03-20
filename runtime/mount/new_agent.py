@@ -1337,6 +1337,11 @@ class AgentHarness:
 
                 await self._insert_history(payload={"content": result_content})
 
+                assert self.claude is not None
+                await self.claude.query(
+                    json.dumps(result_content), self.claude_session_id or "default"
+                )
+
             elif nested_type == "start_cell":
                 cell_id = nested_msg.get("cell_id")
                 if cell_id is not None and self.current_request_id is not None:
