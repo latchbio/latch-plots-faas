@@ -168,12 +168,14 @@ class ProcessManager:
         self, *, cleanup: Callable[..., Awaitable[object]] | None = None
     ) -> None:
         while True:
+            print(f"[watchdog] <{self.name}> Starting")
             proc = await self.wait_for_start()
 
             code = await proc.wait()
             if shutting_down:
                 return
 
+            print(f"[watchdog] <{self.name}> Exited with code {code}")
             await plots_ctx_manager.broadcast_message(
                 orjson.dumps({
                     "type": "managed_process_exit",
@@ -805,6 +807,7 @@ async def start_kernel_proc() -> None:
         stderr=a_proc.log_io,
         preexec_fn=lambda: os.nice(1),
     )
+    k_proc.started.notify_all()
 
     _ = Path(f"/proc/{k_proc.proc.pid}/oom_score_adj").write_text(
         "100\n", encoding="utf-8"
@@ -904,6 +907,7 @@ async def start_agent_proc() -> None:
         stderr=a_proc.log_io,
         preexec_fn=lambda: os.nice(5),
     )
+    a_proc.started.notify_all()
 
     _ = Path(f"/proc/{a_proc.proc.pid}/oom_score_adj").write_text(
         "200\n", encoding="utf-8"
