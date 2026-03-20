@@ -101,7 +101,7 @@ class PlotsContextManager:
     async def broadcast_message(self, msg: str) -> None:
         async with asyncio.TaskGroup() as tg:
             for ctx, _ in self.contexts.values():
-                tg.create_task(try_send_message(ctx, msg))
+                _ = tg.create_task(try_send_message(ctx, msg))
 
     async def broadcast_users(self) -> None:
         visible_users = [u for u in self.unique_users if not u.is_agent]

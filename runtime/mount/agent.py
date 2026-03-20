@@ -2066,7 +2066,19 @@ class AgentHarness:
         self.claude_session_id = resume_session_id
 
         if self.client is None:
-            await self._connect_sdk_client(resume_session_id=resume_session_id)
+            try:
+                await self._connect_sdk_client(resume_session_id=resume_session_id)
+            except Exception as e:
+                print(f"[agent] Fatal: SDK client connection failed: {e!s}")
+                traceback.print_exc()
+                self.client = None
+                await self.send({
+                    "type": "agent_error",
+                    "error": f"Agent failed to initialize: {e!s}",
+                    "fatal": True,
+                })
+                return
+
             if resume_session_id is None:
                 print("[agent] SDK initialized without resume session")
             else:
@@ -2198,7 +2210,7 @@ class AgentHarness:
         return {
             "system_prompt": self.system_prompt,
             "messages": messages,
-            "model": "claude-opus-4-6",
+            "model": "claude-opus-4-5",
             "cells": self.latest_notebook_state
             if self.latest_notebook_state is not None
             else "Interact with agent to populate notebook state.",
