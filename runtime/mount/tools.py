@@ -1958,6 +1958,16 @@ async def can_use_tool(
 
         if result.get("status") == "success":
             answers = result.get("answers", {})
+
+            qa_content = {
+                "type": "answers",
+                "content": [
+                    {"question": q, "answer": a}
+                    for q, a in answers.items()
+                ],
+            }
+            await h._insert_history(payload={"content": qa_content})
+
             return PermissionResultAllow(
                 updated_input={
                     "questions": input_data.get("questions", []),
