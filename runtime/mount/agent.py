@@ -74,6 +74,7 @@ SDK_BUILTIN_ALLOWED_TOOLS = [
     "Bash",
     "WebFetch",
     "WebSearch",
+    "Skill",
 ]
 NOTEBOOK_MUTATION_TOOL_NAMES = (
     "create_cell",
@@ -223,6 +224,7 @@ class AgentHarness:
     )
     current_query_task: asyncio.Task | None = None
     open_stream_blocks: dict[int, str] = field(default_factory=dict)
+    hidden_stream_blocks: set[int] = field(default_factory=set)
 
     async def send(self, msg: dict[str, Any]) -> None:
         msg_type = msg.get("type", "unknown")
@@ -1440,6 +1442,7 @@ class AgentHarness:
                 permission_mode="acceptEdits",
                 model="claude-opus-4-6",
                 thinking={"type": "adaptive"},
+                setting_sources=["project"],
                 resume=resume_session_id,
                 env=sdk_env,
                 hooks={
@@ -1511,6 +1514,7 @@ class AgentHarness:
 
         if event_type == "message_start":
             self.open_stream_blocks.clear()
+            self.hidden_stream_blocks.clear()
             return
 
         if event_type == "content_block_start":
@@ -1522,6 +1526,17 @@ class AgentHarness:
                     "block_index": block_index,
                 })
             self.open_stream_blocks[block_index] = block_type
+
+            if (
+                block_type == "tool_use"
+                and getattr(event.content_block, "name", None) == "Skill"
+            ):
+                self.hidden_stream_blocks.add(block_index)
+                print(
+                    "[agent] tool_use block started (hidden) "
+                    f"index={block_index} name=Skill id={event.content_block.id}"
+                )
+                return
 
             if collected_assistant_blocks is not None:
                 if block_type == "text":
@@ -1549,6 +1564,8 @@ class AgentHarness:
 
         if event_type == "content_block_delta":
             block_index = event.index
+            if block_index in self.hidden_stream_blocks:
+                return
             delta = event.delta
             delta_type = delta.type
 
@@ -1588,6 +1605,10 @@ class AgentHarness:
 
         if event_type == "content_block_stop":
             block_index = event.index
+            if block_index in self.hidden_stream_blocks:
+                self.hidden_stream_blocks.discard(block_index)
+                self.open_stream_blocks.pop(block_index, None)
+                return
             if block_index in self.open_stream_blocks:
                 self.open_stream_blocks.pop(block_index, None)
             await self.send({

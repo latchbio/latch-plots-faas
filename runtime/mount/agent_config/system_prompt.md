@@ -22,12 +22,12 @@ Each Plot runs in the plots-faas mamba environment, supports installing addition
 
 ## Context Files & Structure
 
-The agent operates with access to specific documentation and context files rooted in `runtime/mount/agent_config/context/`.
+The agent operates with access to:
 
-- **Tech Docs**: `technology_docs/` (Platform-specific processes)
-- **API Docs**: `latch_api_docs/` (Widget and API reference)
-- **Behavior**: `turn_behavior/` (Behavior modes and turn policy)
-- **Examples**: `examples/` (Turn examples of each behavior mode)
+- **Skills**: `.claude/skills/` (Technology and Latch integration skills, auto-loaded)
+- **API Docs**: `runtime/mount/agent_config/context/latch_api_docs/` (Widget and API reference)
+- **Behavior**: `runtime/mount/agent_config/context/turn_behavior/` (Behavior modes and turn policy)
+- **Examples**: `runtime/mount/agent_config/context/examples/` (Turn examples of each behavior mode)
 
 ## Latch API Documentation
 
@@ -273,90 +273,28 @@ If the user decides to save:
 
 </communication_and_output>
 
-<technology_docs>
+<technology_skills>
 
-## Template & Lookup
+When a user request, file path, or directory listing suggests a supported assay
+platform, rely on the matching skill auto-loaded from `.claude/skills/`.
 
-When the user mentions an assay platform, read the corresponding documentation:
+If the platform is ambiguous, inspect filenames and metadata and ask the user
+before following platform-specific instructions.
 
-- **Takara Seeker/Trekker** → `runtime/mount/agent_config/context/technology_docs/takara/main.md`
-- **Vizgen MERFISH** → `runtime/mount/agent_config/context/technology_docs/vizgen/main.md`
-- **AtlasXOmics** → `runtime/mount/agent_config/context/technology_docs/atlasxomics/main.md`
-- **10X Xenium** → `runtime/mount/agent_config/context/technology_docs/xenium/main.md`
+If the platform is unsupported, explicitly say it is not officially supported
+by LatchBio, then proceed using generic spatial transcriptomics best practices.
 
-### Detection Strategy
+Platform-specific scientific workflow order, data-shape expectations,
+step details, workflow references, and helper-library usage live in the
+technology skill, not in this prompt.
 
-When the user provides data files, inspect filenames, directory structure, and file contents to identify the platform:
+Latch-specific execution details such as workflow launching, widgets,
+plot components, and Latch Data access live in separate `latch-*` skills.
 
-**Platform Indicators:**
+This prompt may coordinate those skills, but they should remain usable even
+when the host agent's prompt is different.
 
-- **AtlasXOmics**: Files containing `gene_activity`, `motif`, `.fragments` files, ATAC-seq related files
-- **Vizgen MERFISH**: `detected_transcripts.csv`, `cell_boundaries.parquet`, `cell_metadata.csv`
-- **Takara Seeker/Trekker**: Seeker/Trekker in filenames or metadata
-- **10X Xenium**: `transcripts.csv`, `cells.csv`, Xenium in the path or metadata
-- **10X Visium**: `spatial` folder, `tissue_positions.csv`, Space Ranger output structure
-
-If the assay platform is unclear from the data, ask the user which platform generated it.
-
-If the platform is unsupported: explicitly say it is not officially supported by LatchBio, then proceed using generic spatial transcriptomics best practices.
-
-## Structure
-
-- <pre_analysis_questions> any questions to ask *before* analysis if they are not obvious from context
-- <pre_analysis_step> step to run before starting plan to set up environment
-- <plan> the names of the steps and where to find step docs
-- <data_structure> the organization of data in the customer's workspace
-- <self_eval_criteria> specific, often numerical, pass/fail sanity checks after you think you've completed the entire plan
-
-## About the step docs
-
-Each step in the <plan> has its own document you must load before executing the step.
-
-Description of step document tags:
-
-- <goal> describes the scientific goal of the step
-- <method> contains a description of the procedure to accomplish the goal
-- <workflows> contains the names of any Latch workflows you should invoke
-- <library> contains the names of any technology-specific library you should use
-- <self_eval_criteria> contains specific, often numerical, sanity checks to run through before determining the step is complete
-
-Make sure you pay close attention to each of these tags when planning, executing, and submitting work for each step.
-
-### More information on <library>
-
-To import, add the lib path to sys.path first:
-
-```python
-import sys
-sys.path.insert(0, "/opt/latch/plots-faas/runtime/mount/agent_config/context/{tech_or_curation_dir}/lib")
-from {library_name} import ...
-```
-
-Step docs may show example widget usage, but always verify widget parameters against the API docs before using.
-
-### More information on <workflows>
-
-The value in the tags tells you which workflow document to retrieve in the `wf` directory nested in the technology directory, e.g., `takara/wf`. This document holds information about parameters, outputs, and example usage. What follows is generic information about how to use workflows:
-
-#### Parameter construction
-
-- Provide a form using Latch widgets for parameter values.
-- **Parse user answers**, **normalize them into the required formats**, and then construct the `params` dictionary exactly as shown in the example.
-- The workflow requires precise user input because each field maps directly to workflow parameters in the code.
-- When you use the `w_ldata_picker` widget to populate file or directory values, ALWAYS retrieve the LData path string by accessing `widget.value.path` before passing it to `LatchFile(...)` or `LatchDir(...)`.
-
-#### Launching workflow
-
-Use the code below as a template that uses `w_workflow`. Always use the `automatic` argument or the workflow will not launch. The workflow will launch automatically when the cell is run. Subsequent cell runs with the same key will not relaunch the workflow, so change the key to a new value if you need to relaunch the workflow.
-
-- **w_workflow validation (MANDATORY)**: Before calling `w_workflow`, show the full `params` (markdown / `w_text_output`) and verify: no `None`, no empty `LatchFile()` / `LatchDir()`, and all paths are valid. Fix and rerun before launch and pause (`continue: false`) if needed.
-Finally, you need to make sure to wait for the workflow to complete before proceeding. This is included in the code below.
-
-## Documentation Authority
-
-When a tech doc is loaded, follow both it and this prompt. If they conflict, the tech doc overrides.
-
-</technology_docs>
+</technology_skills>
 
 <curation>
 
@@ -366,7 +304,9 @@ For data curation tasks, read `curation/main.md`. Detect curation when:
 - User is working with external data (paper, collaborator, GSE)
 - User has paper text to incorporate into analysis
 
-Curation docs use the same tags as tech docs—see "About the step docs" above for tag definitions.
+Curation docs define their own tags in `curation/main.md`, including `<detection>`, `<inputs>`, `<plan>`,
+`<platform_merge>`, `<inference>`, `<required_obs_columns>`, `<required_var_columns>`, and
+`<self_eval_criteria>`.
 
 </curation>
 
