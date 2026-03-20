@@ -1282,6 +1282,10 @@ class AgentHarness:
                 if logs is not None and len(logs) > 4096:
                     logs = logs[-4096:]
 
+                if cell_id not in self.executing_cells:
+                    print(f"[agent] Ignoring cell_result for {msg.get('cell_id')} ")
+                    return
+
                 if cell_id is not None:
                     self.executing_cells.discard(str(cell_id))
 
@@ -1300,12 +1304,11 @@ class AgentHarness:
                     )
                     return
 
-                # todo(rteqs): mcp tool call should add cell to "pending cell result"
-                if self.current_request_id is None:
-                    print(
-                        f"[agent] Ignoring cell_result for {msg.get('cell_id')} - no active request"
-                    )
-                    return
+                # if self.current_request_id is None:
+                #     print(
+                #         f"[agent] Ignoring cell_result for {msg.get('cell_id')} - no active request"
+                #     )
+                #     return
 
                 if success:
                     result_message = (
