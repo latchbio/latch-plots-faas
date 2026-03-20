@@ -59,16 +59,9 @@ os.chdir("/opt/latch/plots-faas")
 
 os.system("/opt/mamba/envs/plots-faas/bin/pip install --upgrade latch")
 
-technology_docs = Path(
-    "/opt/latch/plots-faas/runtime/mount/agent_config/context/technology_docs"
-)
-for sp_requirements in technology_docs.glob("*/requirements.txt"):
-    os.system(
-        f"/opt/mamba/envs/plots-faas/bin/pip install -c /opt/latch/requirements-plots.txt -r {sp_requirements}"
-    )
-
 sdk_token = (latch_p / "token").read_text().strip() if (latch_p / "token").exists() else ""
 skills_dir = Path("/opt/latch/plots-faas/.claude/skills")
+skills_dir.mkdir(parents=True, exist_ok=True)
 
 if sdk_token:
     try:
