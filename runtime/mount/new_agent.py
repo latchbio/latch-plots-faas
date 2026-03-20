@@ -1282,10 +1282,9 @@ class AgentHarness:
                 if logs is not None and len(logs) > 4096:
                     logs = logs[-4096:]
 
-                print(f"{nested_msg=}, {cell_id=}, {self.executing_cells=}")
-                if cell_id not in self.executing_cells:
-                    print(f"[agent] Ignoring cell_result for {msg.get('cell_id')} ")
-                    return
+                # if cell_id not in self.executing_cells:
+                #     print(f"[agent] Ignoring cell_result for {msg.get('cell_id')} ")
+                #     return
 
                 if cell_id is not None:
                     self.executing_cells.discard(str(cell_id))
@@ -1337,7 +1336,6 @@ class AgentHarness:
                         "logs": logs,
                     }
                     print(f"[agent] Cell {cell_id} failed")
-                    # todo(rteqs): pass result back to model
 
                 await self._insert_history(payload={"content": result_content})
 
