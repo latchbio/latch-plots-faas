@@ -3,9 +3,7 @@ from typing import Literal
 
 import orjson
 from latch_asgi.context.websocket import Context, HandlerResult
-from latch_asgi.framework.websocket import (
-    receive_json,
-)
+from latch_asgi.framework.websocket import receive_json
 from latch_o11y.o11y import trace_app_function_with_span
 from opentelemetry.trace import Span
 
@@ -44,16 +42,16 @@ async def agent(s: Span, ctx: Context) -> HandlerResult:
     connection_role: ConnectionRole = "unknown"
 
     async with agent_start_lock:
-        if a_proc.conn_a is None:
+        if a_proc.msg_io is None:
             await start_agent_proc()
 
-    conn_a = a_proc.conn_a
+    conn_a = a_proc.msg_io
     if conn_a is None:
         await ctx.send_message(
             orjson.dumps({
                 "type": "agent_error",
                 "error": "Agent process failed to start",
-                "fatal": True
+                "fatal": True,
             }).decode()
         )
         return "Agent not available"
