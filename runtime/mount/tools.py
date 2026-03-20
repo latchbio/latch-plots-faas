@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 from claude_agent_sdk import (
     PermissionResultAllow,
+    PermissionResultDeny,
     ToolPermissionContext,
     create_sdk_mcp_server,
     tool,
@@ -23,7 +24,6 @@ MCP_TOOL_NAMES = [
     "edit_cell",
     "run_cell",
     "update_plan",
-    "submit_response",
     "delete_cell",
     "stop_cell",
     "delete_all_cells",
@@ -1924,7 +1924,6 @@ all_tools = [
     h5_manage_obs,
     redeem_package,
     smart_ui_spotlight,
-    submit_response
 ]
 
 agent_tools_mcp = create_sdk_mcp_server(name=MCP_SERVER_NAME, tools=all_tools)
@@ -1945,7 +1944,9 @@ async def can_use_tool(
 
         try:
             result = await h.atomic_operation(
-                "ask_user_question", {"questions": input_data.get("questions", [])}
+                "ask_user_question",
+                {"questions": input_data.get("questions", [])},
+                timeout=None,
             )
         except Exception as e:
             print(f"[agent] AskUserQuestion failed: {e!s}")
