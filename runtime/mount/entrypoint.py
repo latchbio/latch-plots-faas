@@ -129,7 +129,7 @@ class ProcessManager:
     async def wait_for_start(self) -> Process:
         async with self.started:
             while True:
-                if self.proc is not None:
+                if self.proc is not None and self.proc.returncode is None:
                     return self.proc
 
                 _ = await self.started.wait()
@@ -768,6 +768,8 @@ async def handle_agent_messages(conn_a: SocketIo) -> None:
 
 
 async def start_kernel_proc() -> None:
+    ready_ev.clear()
+
     cell_status.clear()
     cell_sequencers.clear()
     cell_last_run_outputs.clear()
