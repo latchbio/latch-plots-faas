@@ -255,6 +255,7 @@ async def edit_cell(args: dict[str, Any]) -> dict[str, Any]:
     })
 
 
+# todo(rteqs): when ClaudeCode support MCP tasks (https://modelcontextprotocol.io/seps/1686-tasks) we should make this a background task and handle tasks from SystemMessges
 @tool(
     "run_cell",
     "Execute a specific cell.",
@@ -266,10 +267,6 @@ async def edit_cell(args: dict[str, Any]) -> dict[str, Any]:
             "action_summary": {
                 "type": "string",
                 "description": "Summary of the purpose of the run.",
-            },
-            "run_in_background": {
-                "type": "boolean",
-                "description": "run tool in background",
             },
         },
         "required": ["cell_id", "title", "action_summary"],
@@ -742,6 +739,7 @@ async def capture_widget_image(args: dict[str, Any]) -> dict[str, Any]:
     })
 
 
+# todo(rteqs): when ClaudeCode support MCP tasks (https://modelcontextprotocol.io/seps/1686-tasks) we should make this a background task and handle tasks from SystemMessges
 @tool(
     "set_widget",
     "Set a single widget value by widget key.",
