@@ -1924,6 +1924,7 @@ all_tools = [
     h5_manage_obs,
     redeem_package,
     smart_ui_spotlight,
+    submit_response
 ]
 
 agent_tools_mcp = create_sdk_mcp_server(name=MCP_SERVER_NAME, tools=all_tools)
