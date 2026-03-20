@@ -267,6 +267,10 @@ async def edit_cell(args: dict[str, Any]) -> dict[str, Any]:
                 "type": "string",
                 "description": "Summary of the purpose of the run.",
             },
+            "run_in_background": {
+                "type": "boolean",
+                "description": "run tool in background",
+            },
         },
         "required": ["cell_id", "title", "action_summary"],
     },
