@@ -994,9 +994,6 @@ class AgentHarness:
         error_type: AssistantMessageError | None = None
         async for res in self.claude.receive_response():
             # todo(rteqs): pretend we can't be interrupted for now
-            if isinstance(res, SystemMessage):
-                print(res)
-
             if (
                 isinstance(res, SystemMessage)
                 and res.subtype == "init"
@@ -1275,7 +1272,6 @@ class AgentHarness:
             nested_type = nested_msg.get("type")
             print(f"[agent] Kernel message: {nested_type}")
 
-            # todo(rteqs): fill in logic from wait_for_message for cell_result and set_widget_value
             if nested_type == "cell_result":
                 cell_id = nested_msg.get("cell_id")
                 success = not nested_msg.get("has_exception", False)
