@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import contextlib
 import io
 import os
 import random
@@ -24,8 +25,6 @@ from yarl import URL
 
 # todo(rteqs): get rid of this
 sys.path.append(str(Path(__file__).parent.parent.absolute()))
-import contextlib
-
 from config import config
 
 latch_p = Path(os.environ.get("LATCH_SANDBOX_ROOT", "/root/.latch"))
@@ -119,6 +118,12 @@ def _retry_delay(attempt: int) -> float:
     return delay + jitter
 
 
+def _should_retry(exc: Exception) -> bool:
+    if isinstance(exc, ClientResponseError):
+        return exc.status in retryable_status_codes
+    return isinstance(exc, (ServerDisconnectedError, ClientConnectionError, OSError))
+
+
 async def gql_query(
     query: str, variables: dict[str, Any], auth: str, *, max_retries: int = 5
 ) -> Any:
@@ -130,30 +135,11 @@ async def gql_query(
         "Authorization": auth,
     }
 
-    last_exc: BaseException | None = None
-
     for attempt in range(max_retries + 1):
         try:
             async with sess.post(
                 url, headers=headers, json={"query": query, "variables": variables}
             ) as resp:
-                if resp.status in retryable_status_codes and attempt < max_retries:
-                    body = await resp.text()
-                    delay = _retry_delay(attempt)
-
-                    retry_after = resp.headers.get("Retry-After")
-                    if retry_after is not None:
-                        with contextlib.suppress(ValueError):
-                            delay = max(delay, float(retry_after))
-
-                    print(
-                        f"[gql_query] retryable status {resp.status} on attempt"
-                        f" {attempt + 1}/{max_retries + 1}, retrying in"
-                        f" {delay:.1f}s (body={body[:200]})"
-                    )
-                    await asyncio.sleep(delay)
-                    continue
-
                 resp.raise_for_status()
 
                 res = await resp.json()
@@ -167,12 +153,15 @@ async def gql_query(
             ClientResponseError,
             OSError,
         ) as e:
-            is_retryable = not isinstance(e, ClientResponseError) or (
-                e.status in retryable_status_codes
-            )
-            last_exc = e
-            if is_retryable and attempt < max_retries:
+            if _should_retry(e) and attempt < max_retries:
                 delay = _retry_delay(attempt)
+
+                if isinstance(e, ClientResponseError) and e.headers is not None:
+                    retry_after = e.headers.get("Retry-After")
+                    if retry_after is not None:
+                        with contextlib.suppress(ValueError):
+                            delay = max(delay, float(retry_after))
+
                 print(
                     f"[gql_query] {type(e).__name__} on attempt"
                     f" {attempt + 1}/{max_retries + 1}, retrying in {delay:.1f}s: {e}"
@@ -181,9 +170,7 @@ async def gql_query(
                 continue
             raise
 
-    if last_exc is not None:
-        raise last_exc
-    raise RuntimeError(f"gql_query failed after {max_retries + 1} attempts")
+    raise AssertionError("unreachable")
 
 
 def plot_to_webp_string(
