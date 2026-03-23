@@ -1099,11 +1099,19 @@ class AgentHarness:
                 usage = validate(res.usage, ResultMessageUsage)
                 await self._send_usage_update(usage)
 
+                print(f"ResultMessage {res=}")
                 if res.subtype == "success":
-                    print(f"ResultMessage {res.result=}")
+                    await self._insert_history(
+                        request_id=msg["request_id"],
+                        payload={
+                            "type": "result",
+                            "content": {"type": "result", "content": res.result},
+                        },
+                    )
                     await self.send({"type": "agent_status", "status": "done"})
                     break
 
+                # todo(rteqs): sometimes this breaks because anthropic sends nonsense
                 assert res.result is None
                 assert res.is_error is True
                 assert res.stop_reason is not None
