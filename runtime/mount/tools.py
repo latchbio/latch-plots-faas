@@ -1784,10 +1784,6 @@ async def update_plan(args: dict[str, Any]) -> dict[str, Any]:
                 "type": "string",
                 "description": "User-facing progress, responses, or next step. Use markdown bullets if needed.",
             },
-            "questions": {
-                "type": "string",
-                "description": "User-facing questions. Put finalized question text here.",
-            },
             "next_status": {
                 "type": "string",
                 "description": "What the agent will do next",
@@ -1829,10 +1825,6 @@ async def submit_response(args: dict[str, Any]) -> dict[str, Any]:
         if summary is not None and not isinstance(summary, str):
             summary = None
 
-        questions = args.get("questions")
-        if questions is not None and not isinstance(questions, str):
-            questions = None
-
         next_status = args.get("next_status")
         if not isinstance(next_status, str) or next_status not in {
             "executing",
@@ -1856,7 +1848,6 @@ async def submit_response(args: dict[str, Any]) -> dict[str, Any]:
         print("[tool] submit_response called with:")
         print(f"  - next_status: {next_status}")
         print(f"  - summary: {summary}")
-        print(f"  - questions: {questions}")
         print(f"  - continue: {should_continue}")
         print(f"  - expected_widgets: {expected_widgets}")
 
@@ -1961,10 +1952,7 @@ async def can_use_tool(
 
             qa_content = {
                 "type": "answers",
-                "content": [
-                    {"question": q, "answer": a}
-                    for q, a in answers.items()
-                ],
+                "content": [{"question": q, "answer": a} for q, a in answers.items()],
             }
             await h._insert_history(payload={"content": qa_content})
 
