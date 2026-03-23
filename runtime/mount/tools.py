@@ -24,7 +24,6 @@ MCP_TOOL_NAMES = [
     "edit_cell",
     "run_cell",
     "update_plan",
-    "submit_response",
     "delete_cell",
     "stop_cell",
     "delete_all_cells",
@@ -1774,117 +1773,117 @@ async def update_plan(args: dict[str, Any]) -> dict[str, Any]:
         })
 
 
-@tool(
-    "submit_response",
-    "Submit the user-facing response with next_status, questions, and summary. At least one of summary or questions is REQUIRED. Call this at the end of every turn.",
-    {
-        "type": "object",
-        "properties": {
-            "summary": {
-                "type": "string",
-                "description": "User-facing progress, responses, or next step. Use markdown bullets if needed.",
-            },
-            "next_status": {
-                "type": "string",
-                "description": "What the agent will do next",
-                "enum": [
-                    "executing",
-                    "fixing",
-                    "thinking",
-                    "awaiting_user_response",
-                    "awaiting_cell_execution",
-                    "awaiting_user_widget_input",
-                    "done",
-                ],
-            },
-            "expected_widgets": {
-                "type": "array",
-                "items": {"type": "string"},
-                "description": (
-                    "Optional list of full widget keys (<tf_id>/<widget_id>) to await "
-                    "when next_status is 'awaiting_user_widget_input'"
-                ),
-            },
-            "continue": {
-                "type": "boolean",
-                "description": (
-                    "Set to true to immediately continue to the next step without "
-                    "waiting for user input. Set to false when waiting for user input "
-                    "or when all work is complete."
-                ),
-                "default": False,
-            },
-        },
-        "required": ["next_status"],
-    },
-)
-async def submit_response(args: dict[str, Any]) -> dict[str, Any]:
-    h = harness()
-    try:
-        summary = args.get("summary")
-        if summary is not None and not isinstance(summary, str):
-            summary = None
+# @tool(
+#     "submit_response",
+#     "Submit the user-facing response with next_status, questions, and summary. At least one of summary or questions is REQUIRED. Call this at the end of every turn.",
+#     {
+#         "type": "object",
+#         "properties": {
+#             "summary": {
+#                 "type": "string",
+#                 "description": "User-facing progress, responses, or next step. Use markdown bullets if needed.",
+#             },
+#             "next_status": {
+#                 "type": "string",
+#                 "description": "What the agent will do next",
+#                 "enum": [
+#                     "executing",
+#                     "fixing",
+#                     "thinking",
+#                     "awaiting_user_response",
+#                     "awaiting_cell_execution",
+#                     "awaiting_user_widget_input",
+#                     "done",
+#                 ],
+#             },
+#             "expected_widgets": {
+#                 "type": "array",
+#                 "items": {"type": "string"},
+#                 "description": (
+#                     "Optional list of full widget keys (<tf_id>/<widget_id>) to await "
+#                     "when next_status is 'awaiting_user_widget_input'"
+#                 ),
+#             },
+#             "continue": {
+#                 "type": "boolean",
+#                 "description": (
+#                     "Set to true to immediately continue to the next step without "
+#                     "waiting for user input. Set to false when waiting for user input "
+#                     "or when all work is complete."
+#                 ),
+#                 "default": False,
+#             },
+#         },
+#         "required": ["next_status"],
+#     },
+# )
+# async def submit_response(args: dict[str, Any]) -> dict[str, Any]:
+#     h = harness()
+#     try:
+#         summary = args.get("summary")
+#         if summary is not None and not isinstance(summary, str):
+#             summary = None
 
-        next_status = args.get("next_status")
-        if not isinstance(next_status, str) or next_status not in {
-            "executing",
-            "fixing",
-            "thinking",
-            "awaiting_user_response",
-            "awaiting_cell_execution",
-            "awaiting_user_widget_input",
-            "done",
-        }:
-            print(f"[agent] Invalid next_status: {next_status}")
-            return ok({
-                "tool_name": "submit_response",
-                "success": False,
-                "message": "Please provide a valid next_status",
-            })
+#         next_status = args.get("next_status")
+#         if not isinstance(next_status, str) or next_status not in {
+#             "executing",
+#             "fixing",
+#             "thinking",
+#             "awaiting_user_response",
+#             "awaiting_cell_execution",
+#             "awaiting_user_widget_input",
+#             "done",
+#         }:
+#             print(f"[agent] Invalid next_status: {next_status}")
+#             return ok({
+#                 "tool_name": "submit_response",
+#                 "success": False,
+#                 "message": "Please provide a valid next_status",
+#             })
 
-        should_continue = args.get("continue", False)
-        expected_widgets = args.get("expected_widgets", [])
+#         should_continue = args.get("continue", False)
+#         expected_widgets = args.get("expected_widgets", [])
 
-        print("[tool] submit_response called with:")
-        print(f"  - next_status: {next_status}")
-        print(f"  - summary: {summary}")
-        print(f"  - continue: {should_continue}")
-        print(f"  - expected_widgets: {expected_widgets}")
+#         print("[tool] submit_response called with:")
+#         print(f"  - next_status: {next_status}")
+#         print(f"  - summary: {summary}")
+#         print(f"  - continue: {should_continue}")
+#         print(f"  - expected_widgets: {expected_widgets}")
 
-        if should_continue and h.executing_cells:
-            print(
-                f"[tool] Deferring auto-continue - {len(h.executing_cells)} cells still executing: {h.executing_cells}"
-            )
-            h.should_auto_continue = False
-            h.pending_auto_continue = True
-        else:
-            h.should_auto_continue = should_continue
-            h.pending_auto_continue = False
+#         if should_continue and h.executing_cells:
+#             print(
+#                 f"[tool] Deferring auto-continue - {len(h.executing_cells)} cells still executing: {h.executing_cells}"
+#             )
+#             h.should_auto_continue = False
+#             h.pending_auto_continue = True
+#         else:
+#             h.should_auto_continue = should_continue
+#             h.pending_auto_continue = False
 
-        terminal_statuses = {"done", "awaiting_user_response"}
-        if not should_continue and next_status in terminal_statuses:
-            h.pause_until_user_query = True
-        else:
-            h.pause_until_user_query = False
+#         terminal_statuses = {"done", "awaiting_user_response"}
+#         if not should_continue and next_status in terminal_statuses:
+#             h.pause_until_user_query = True
+#         else:
+#             h.pause_until_user_query = False
 
-        h.current_status = next_status
-        if next_status == "awaiting_user_widget_input":
-            h.expected_widgets = {str(k): None for k in expected_widgets}
+#         h.current_status = next_status
+#         if next_status == "awaiting_user_widget_input":
+#             h.expected_widgets = {str(k): None for k in expected_widgets}
 
-        return ok({
-            "tool_name": "submit_response",
-            "success": True,
-            "summary": "Response submitted successfully",
-        })
-    except Exception as e:
-        print(f"[tool] submit_response error: {e!s}")
+#         return ok({
+#             "tool_name": "submit_response",
+#             "success": True,
+#             "summary": "Response submitted successfully",
+#         })
+#     except Exception as e:
+#         print(f"[tool] submit_response error: {e!s}")
 
-        traceback.print_exc()
-        return ok({
-            "tool_name": "submit_response",
-            "success": False,
-            "summary": f"Error submitting response: {e!s}",
-        })
+#         traceback.print_exc()
+#         return ok({
+#             "tool_name": "submit_response",
+#             "success": False,
+#             "summary": f"Error submitting response: {e!s}",
+#         })
 
 
 all_tools = [
@@ -1903,7 +1902,6 @@ all_tools = [
     get_global_info,
     capture_widget_image,
     update_plan,
-    submit_response,
     set_widget,
     h5_filter_by,
     h5_color_by,

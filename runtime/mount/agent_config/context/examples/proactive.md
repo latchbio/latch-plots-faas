@@ -90,11 +90,3 @@ update_plan(
 
 # [Agent does QC, then evaluates <self_eval_criteria>]
 # [Self-eval criterion failed: retention=2% (<20% target) at 500 counts]
-
-```python
-submit_response(
-    summary="QC retained too few cells (retention=2% at 500 counts; target ≥20%). I will relax the threshold to 300 and re-run.",
-    continue=True,
-    next_status="executing"
-)
-```
