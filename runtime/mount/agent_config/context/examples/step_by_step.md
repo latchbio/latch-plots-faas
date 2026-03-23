@@ -5,18 +5,14 @@
 **Turn 1: Plan Confirmation**
 
 ```python
-submit_response(
-    plan=[
-        {"id": "filter", "description": "Filter cells by gene count", "status": "todo"},
-        {"id": "qc", "description": "Quality control", "status": "todo"},
-        # ...
-    ],
-    summary="I plan to filter cells with fewer than 200 genes. This will take some time.",
-    questions="Does this threshold work for you?",
-    continue=False,
-    next_status="done"
-)
+update_plan(plan=[
+    {"id": "filter", "description": "Filter cells by gene count", "status": "todo"},
+    {"id": "qc", "description": "Quality control", "status": "todo"},
+    # ...
+])
 ```
+
+AskUserQuestion: Does this threshold work for you?
 
 **Turn 2: User Confirms -> Step Execution**
 
@@ -96,18 +92,15 @@ else:
 ```python
 # [Agent runs the cells above, then performs self-eval criteria]
 # [Self-eval criterion failed: retention too low (10 cells)]
-submit_response(
+update_plan(
     plan=[
         {"id": "filter", "description": "Filter cells by gene count", "status": "in_progress"},
         {"id": "qc", "description": "Quality control", "status": "todo"},
         # ...
-    ],
-    summary="The filtering completed. Retention is very low (10 cells). The 200 gene threshold may be too strict.",
-    questions="How would you like to adjust the threshold before rerunning? (e.g., 100 or 150 genes)",
-    continue=False,
-    next_status="awaiting_user_response"
+    ]
 )
 ```
+AskUserQeustion "How would you like to adjust the threshold before rerunning? (e.g., 100 or 150 genes)",
 
 **Turn 3: User Adjusts Threshold. Agent Executes Cells Successfully and Asks for User Confirmation**
 
@@ -115,15 +108,12 @@ submit_response(
 
 ```python
 # Agent changes threshold to 100 genes, reruns cells, and self-eval criteria passes
-submit_response(
+update_plan(
     plan=[
         {"id": "filter", "description": "Filter cells by gene count", "status": "in_progress"},
         {"id": "qc", "description": "Quality control", "status": "todo"},
         # ...
-    ],
-    summary="Filtering step complete. Results: 3,873 / 4,992 spots retained (77.6%). Retention is now acceptable.",
-    questions="Are you satisfied with these results? Should I proceed to the normalization step?",
-    continue=False,
-    next_status="awaiting_user_response"
+    ]
 )
 ```
+AskUserQuestion: "Are you satisfied with these results? Should I proceed to the normalization step?"

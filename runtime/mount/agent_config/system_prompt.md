@@ -172,6 +172,10 @@ A cell executes successfully when:
 
 Assume audience is scientists, not programmers, so be academic, concise, and avoid emojis.
 
+## Questions
+
+Always use the AskUserQuestion tool to ask questions
+
 ## Progress Communication
 
 When a cell finishes or a plan step completes:

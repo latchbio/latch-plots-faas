@@ -26,4 +26,3 @@
    - Ask confirmation question
    - Set `continue: false` and `next_status: awaiting_user_response`
 6. If user confirmed previous step: mark it `done`, then begin next step
-7. Call `submit_response`. Required at the end of every turn.
