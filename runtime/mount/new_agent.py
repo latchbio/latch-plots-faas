@@ -1284,14 +1284,15 @@ class AgentHarness:
                 success = not nested_msg.get("has_exception", False)
                 exception = nested_msg.get("exception")
                 cell_name = nested_msg.get("display_name")
+                loro_cell_id = nested_msg.get("loro_cell_id")
 
                 logs = nested_msg.get("logs", None)
                 if logs is not None and len(logs) > 4096:
                     logs = logs[-4096:]
 
-                # if cell_id not in self.executing_cells:
-                #     print(f"[agent] Ignoring cell_result for {msg.get('cell_id')} ")
-                #     return
+                if loro_cell_id not in self.executing_cells:
+                    print(f"[agent] Ignoring cell_result for {msg.get('cell_id')} ")
+                    return
 
                 if cell_id is not None:
                     self.executing_cells.discard(str(cell_id))
@@ -1310,12 +1311,6 @@ class AgentHarness:
                         f"        Not adding cell {cell_id} result because {self.current_status}"
                     )
                     return
-
-                # if self.current_request_id is None:
-                #     print(
-                #         f"[agent] Ignoring cell_result for {msg.get('cell_id')} - no active request"
-                #     )
-                #     return
 
                 if success:
                     result_message = (
