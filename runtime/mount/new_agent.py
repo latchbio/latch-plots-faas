@@ -1100,7 +1100,6 @@ class AgentHarness:
                 usage = validate(res.usage, ResultMessageUsage)
                 await self._send_usage_update(usage)
 
-                print(f"ResultMessage {res=}")
                 if res.subtype == "success":
                     await self._insert_history(
                         request_id=msg["request_id"],
