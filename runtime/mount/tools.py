@@ -260,7 +260,7 @@ async def edit_cell(args: dict[str, Any]) -> dict[str, Any]:
     {
         "type": "object",
         "properties": {
-            "cell_id": {"type": "string", "description": "ID of the cell to run"},
+            "cell_id": {"type": "string", "description": "ID of the cell to run (note: loro_cell_id, not tf_id)"},
             "title": {"type": "string", "description": "Name of the cell to run"},
             "action_summary": {
                 "type": "string",
