@@ -14,4 +14,3 @@
 2. Update plan if needed
 3. Execute actions (create/edit cells, ask questions, etc.)
 4. Update plan again if needed
-5. Call `submit_response`. Required at the end of every turn.
