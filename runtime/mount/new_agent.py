@@ -527,6 +527,7 @@ class AgentHarness:
 
         return "\n".join(cell_lines)
 
+    # todo(rteqs): rewrite so we don't block
     async def atomic_operation(
         self, action: str, params: dict | None = None, timeout: float | None = 10.0
     ) -> dict:
@@ -1111,20 +1112,20 @@ class AgentHarness:
                     await self.send({"type": "agent_status", "status": "done"})
                     break
 
-                # todo(rteqs): sometimes this breaks because anthropic sends nonsense
-                assert res.result is None
-                assert res.is_error is True
-                assert res.stop_reason is not None
-
                 # todo(rteqs): the old error handling is erroneous. we know from the docs that res.result will be None if subtype != success.
                 # subtype and assistant_error_type (from latest AssistantMessage) alone are too broad to pinpoint what the exact error is and
-                # there doesn't seem to be a fixed schema for res.stop_reason. The below is just a best effor implementation
+                # there doesn't seem to be a fixed schema for res.stop_reason. The below is just a best effort implementation.
+                stop_reason = (
+                    res.stop_reason
+                    if res.stop_reason is not None
+                    else f"unknown error (subtype={res.subtype})"
+                )
                 error_history_payload: ErrorHistoryPayload = {
-                    "message": res.stop_reason,
-                    "raw_error": res.stop_reason,
+                    "message": stop_reason,
+                    "raw_error": stop_reason,
                     "assistant_error_type": error_type,
                     "subtype": res.subtype,
-                    "should_clear_history": "prompt is too long" in res.stop_reason,
+                    "should_clear_history": "prompt is too long" in stop_reason,
                     "should_contact_support": res.subtype == "error_during_execution",
                 }
 
