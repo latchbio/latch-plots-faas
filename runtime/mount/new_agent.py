@@ -1280,17 +1280,18 @@ class AgentHarness:
             print(f"[agent] Kernel message: {nested_type}")
 
             if nested_type == "cell_result":
-                cell_id = nested_msg.get("cell_id")
+                # todo(rteqs): we gotta fix the key names for tf_id and loro_cell_id
+                tf_id = nested_msg.get("cell_id")
                 success = not nested_msg.get("has_exception", False)
                 exception = nested_msg.get("exception")
                 cell_name = nested_msg.get("display_name")
-                loro_cell_id = nested_msg.get("loro_cell_id")
+                cell_id = nested_msg.get("loro_cell_id")
 
                 logs = nested_msg.get("logs", None)
                 if logs is not None and len(logs) > 4096:
                     logs = logs[-4096:]
 
-                if loro_cell_id not in self.executing_cells:
+                if cell_id not in self.executing_cells:
                     print(f"[agent] Ignoring cell_result for {msg.get('cell_id')} ")
                     return
 
@@ -1320,6 +1321,7 @@ class AgentHarness:
                         "type": "cell_result",
                         "message": result_message,
                         "cell_id": cell_id,
+                        "tf_id": tf_id,
                         "cell_name": cell_name,
                         "success": success,
                         "logs": logs,
@@ -1332,6 +1334,7 @@ class AgentHarness:
                         "type": "cell_result",
                         "message": result_message,
                         "cell_id": cell_id,
+                        "tf_id": tf_id,
                         "cell_name": cell_name,
                         "success": False,
                         "exception": exception,
