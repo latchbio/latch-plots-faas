@@ -1236,7 +1236,7 @@ class AgentHarness:
                     }
                     print(f"[agent] Cell {cell_id} succeeded")
                 else:
-                    exception = msg.get("exception", "Unknown error")
+                    exception = msg.get("exception", '"Unknown error"')
                     result_message = f"✗ Cell {cell_name} ({cell_id}) execution failed"
                     result_content = {
                         "type": "cell_result",
