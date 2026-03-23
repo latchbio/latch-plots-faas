@@ -1104,10 +1104,7 @@ class AgentHarness:
                 if res.subtype == "success":
                     await self._insert_history(
                         request_id=msg["request_id"],
-                        payload={
-                            "type": "result",
-                            "content": {"type": "result", "content": res.result},
-                        },
+                        payload={"content": {"type": "result", "content": res.result}},
                     )
                     await self.send({"type": "agent_status", "status": "done"})
                     break
