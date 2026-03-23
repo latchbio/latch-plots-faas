@@ -1100,7 +1100,8 @@ class AgentHarness:
                 await self._send_usage_update(usage)
 
                 if res.subtype == "success":
-                    # todo(rteqs): send message to frontend saying we're done. instead of relying on the submit_response tool
+                    print(f"ResultMessage {res.result=}")
+                    await self.send({"type": "agent_status", "status": "done"})
                     break
 
                 assert res.result is None
