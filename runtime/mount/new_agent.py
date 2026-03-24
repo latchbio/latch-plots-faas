@@ -177,7 +177,7 @@ class AgentQuery(TypedDict):
     request_id: str
     query: str
     behavior: Behavior
-    template_version_id: str
+    template_version_id: str | None
     contextual_node_data: NotRequired[dict[str, Any]]  # todo(rteqs): type properly
     selected_widgets: NotRequired[list[dict[str, Any]]]  # todo(rteqs): type properly
 
@@ -977,13 +977,6 @@ class AgentHarness:
             f"claude_session_id={self.claude_session_id})"
         )
 
-        await self._insert_history(
-            role="user",
-            request_id=msg["request_id"],
-            payload={"content": msg["query"], "display_query": msg["query"]},
-            template_version_id=msg["template_version_id"],
-        )
-
         if self.claude_session_id is None:
             await self.claude.query(prompt=prompt)
         else:
@@ -1253,6 +1246,12 @@ class AgentHarness:
             print(
                 f"[agent] accept: dispatching to handle_query (query={query_preview}, request_id={request_id})"
             )
+            await self._insert_history(
+                role="user",
+                request_id=msg["request_id"],
+                payload={"content": msg["query"], "display_query": msg["query"]},
+                template_version_id=msg["template_version_id"],
+            )
             handle_start = time.time()
             await self.query(msg)
             handle_elapsed = time.time() - handle_start
@@ -1344,8 +1343,23 @@ class AgentHarness:
                 await self._insert_history(payload={"content": result_content})
 
                 assert self.claude is not None
-                await self.claude.query(
-                    json.dumps(result_content), self.claude_session_id or "default"
+
+                prompt_content = f"Cell execution update:\n\n {result_message}"
+                if not success:
+                    exception = result_content.get("exception")
+                    if exception:
+                        prompt_content = f"{prompt_content}\n\nException: {exception}"
+                if logs:
+                    prompt_content = f"{prompt_content}\n\nLogs:\n{logs}"
+
+                await self.query(
+                    AgentQuery(
+                        type="agent_query",
+                        request_id="",
+                        query=prompt_content,
+                        behavior=self.behavior,
+                        template_version_id=None,
+                    )
                 )
 
             elif nested_type == "start_cell":
@@ -1372,7 +1386,15 @@ class AgentHarness:
                         await self._insert_history(
                             payload={"content": content, "hidden": True}
                         )
-                        # todo(rteqs): pass result back to model
+                        await self.query(
+                            AgentQuery(
+                                type="agent_query",
+                                request_id="",
+                                query=content,
+                                behavior=self.behavior,
+                                template_version_id=None,
+                            )
+                        )
                         print("        Finished waiting for widget input")
             else:
                 print("        Ignored")
