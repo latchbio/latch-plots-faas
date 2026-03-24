@@ -834,7 +834,8 @@ class AgentHarness:
                 print(
                     f"[agent] Failing {len(self.pending_operations)} pending operations for retry"
                 )
-                for future in self.pending_operations.values():
+                for op in self.pending_operations.values():
+                    future = op.fut
                     if not future.done():
                         future.set_result({
                             "status": "error",
@@ -883,7 +884,8 @@ class AgentHarness:
             print(
                 f"[agent] Failing {len(self.pending_operations)} pending operation(s) for new session"
             )
-            for future in self.pending_operations.values():
+            for op in self.pending_operations.values():
+                future = op.fut
                 if not future.done():
                     future.set_result({
                         "status": "error",
@@ -1254,7 +1256,8 @@ class AgentHarness:
             print(
                 f"[agent] Cancelling {len(self.pending_operations)} pending operations"
             )
-            for tx_id, future in list(self.pending_operations.items()):
+            for tx_id, op in list(self.pending_operations.items()):
+                future = op.fut
                 if not future.done():
                     future.cancel()
                     print(f"[agent]   Cancelled: {tx_id}")
