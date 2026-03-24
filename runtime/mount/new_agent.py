@@ -1369,33 +1369,32 @@ class AgentHarness:
                     print(f"        Added cell {cell_id} to executing_cells")
 
             elif nested_type == "set_widget_value":
-                if self.current_status == "awaiting_user_widget_input":
-                    data = nested_msg.get("data", {})
-                    for key, value in data.items():
-                        if key in self.expected_widgets:
-                            self.expected_widgets[key] = value
-                            print(f"        Set widget {key}")
+                data = nested_msg.get("data", {})
+                for key, value in data.items():
+                    if key in self.expected_widgets:
+                        self.expected_widgets[key] = value
+                        print(f"        Set widget {key}")
 
-                    if all(v is not None for v in self.expected_widgets.values()):
-                        self.current_status = "thinking"
+                if all(v is not None for v in self.expected_widgets.values()):
+                    self.current_status = "thinking"
 
-                        data = msg.get("data", {})
-                        widget_info = ", ".join(f"{k}={v}" for k, v in data.items())
-                        content = f"User provided input via widget(s): {widget_info}"
+                    data = msg.get("data", {})
+                    widget_info = ", ".join(f"{k}={v}" for k, v in data.items())
+                    content = f"User provided input via widget(s): {widget_info}"
 
-                        await self._insert_history(
-                            payload={"content": content, "hidden": True}
+                    await self._insert_history(
+                        payload={"content": content, "hidden": True}
+                    )
+                    await self.query(
+                        AgentQuery(
+                            type="agent_query",
+                            request_id="",
+                            query=content,
+                            behavior=self.behavior,
+                            template_version_id=None,
                         )
-                        await self.query(
-                            AgentQuery(
-                                type="agent_query",
-                                request_id="",
-                                query=content,
-                                behavior=self.behavior,
-                                template_version_id=None,
-                            )
-                        )
-                        print("        Finished waiting for widget input")
+                    )
+                    print("        Finished waiting for widget input")
             else:
                 print("        Ignored")
         elif msg_type == "get_full_prompt":
