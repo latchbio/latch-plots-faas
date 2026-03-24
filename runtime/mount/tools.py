@@ -1863,7 +1863,7 @@ async def can_use_tool(
 
         return PermissionResultDeny(
             message=f"Failed to get user response: {result.get('error', 'Unknown error')}",
-            interrupt=True
+            interrupt=True,
         )
 
     return PermissionResultAllow(updated_input=input_data)

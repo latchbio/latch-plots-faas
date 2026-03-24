@@ -1034,11 +1034,9 @@ class AgentHarness:
 
         tool_name_by_tool_use_id: dict[str, str] = {}
 
-        # todo(rteqs): we should just store messages in the form anthropic sends and have frontend parse that.
         error_type: AssistantMessageError | None = None
         assistant_message_started_at: float | None = None
         async for res in self.claude.receive_response():
-            # todo(rteqs): pretend we can't be interrupted for now
             if (
                 isinstance(res, SystemMessage)
                 and res.subtype == "init"
