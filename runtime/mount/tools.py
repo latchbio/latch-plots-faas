@@ -13,7 +13,7 @@ from claude_agent_sdk import (
 from lplots import _inject
 
 if TYPE_CHECKING:
-    from agent import AgentHarness
+    from new_agent import AgentHarness
 
 MCP_SERVER_NAME = "plots-agent-tools"
 
@@ -715,6 +715,10 @@ async def capture_widget_image(args: dict[str, Any]) -> dict[str, Any]:
         })
 
     print(f"[tool] capture_widget_image: {widget_key}")
+
+    await h.set_agent_status("awaiting_user_widget_input")
+    h.expected_widgets[widget_key] = None
+
     result = await h.atomic_operation(
         "capture_widget_image", {"widget_key": widget_key}
     )
@@ -1822,7 +1826,7 @@ async def can_use_tool(
         if questions is None:
             return PermissionResultAllow(updated_input=input_data)
 
-        await h.send({"type": "agent_status", "status": "awaiting_user_response"})
+        await h.set_agent_status("awaiting_user_response")
 
         try:
             result = await h.atomic_operation(

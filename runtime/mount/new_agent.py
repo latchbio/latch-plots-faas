@@ -610,6 +610,10 @@ class AgentHarness:
             "context_limit": 200_000,
         })
 
+    async def set_agent_status(self, status: str) -> None:
+        self.current_status = status
+        await self.send({"type": "agent_status", "status": status})
+
     async def _wait_for_running_query_to_stop(
         self, timeout_seconds: float = 2.0
     ) -> bool:
@@ -1093,12 +1097,16 @@ class AgentHarness:
                 usage = validate(res.usage, ResultMessageUsage)
                 await self._send_usage_update(usage)
 
+                if len(self.executing_cells) > 0:
+                    await self.set_agent_status("awaiting_cell_execution")
+                else:
+                    await self.set_agent_status("done")
+
                 if res.subtype == "success":
                     await self._insert_history(
                         request_id=msg["request_id"],
                         payload={"content": {"type": "result", "content": res.result}},
                     )
-                    await self.send({"type": "agent_status", "status": "done"})
                     break
 
                 # todo(rteqs): the old error handling is erroneous. we know from the docs that res.result will be None if subtype != success.
@@ -1361,12 +1369,6 @@ class AgentHarness:
                         template_version_id=None,
                     )
                 )
-
-            elif nested_type == "start_cell":
-                cell_id = nested_msg.get("cell_id")
-                if cell_id is not None and self.current_request_id is not None:
-                    self.executing_cells.add(str(cell_id))
-                    print(f"        Added cell {cell_id} to executing_cells")
 
             elif nested_type == "set_widget_value":
                 data = nested_msg.get("data", {})
