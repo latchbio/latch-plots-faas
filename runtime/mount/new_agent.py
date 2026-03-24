@@ -973,6 +973,8 @@ class AgentHarness:
     async def query(self, msg: AgentQuery) -> None:
         assert self.claude is not None
 
+        await self.set_agent_status("thinking")
+
         prompt = await self.create_prompt(msg)
 
         print(
@@ -1099,6 +1101,8 @@ class AgentHarness:
 
                 if len(self.executing_cells) > 0:
                     await self.set_agent_status("awaiting_cell_execution")
+                elif len(self.expected_widgets) > 0:
+                    await self.set_agent_status("awaiting_user_widget_input")
                 else:
                     await self.set_agent_status("done")
 
@@ -1378,7 +1382,7 @@ class AgentHarness:
                         print(f"        Set widget {key}")
 
                 if all(v is not None for v in self.expected_widgets.values()):
-                    self.current_status = "thinking"
+                    await self.set_agent_status("thinking")
 
                     data = msg.get("data", {})
                     widget_info = ", ".join(f"{k}={v}" for k, v in data.items())
