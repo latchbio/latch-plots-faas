@@ -830,18 +830,18 @@ class AgentHarness:
 
         if self.claude is not None and not session_changed:
             print("[agent] SDK client already initialized; skipping re-init")
-            if len(self.pending_operations) > 0:
-                print(
-                    f"[agent] Failing {len(self.pending_operations)} pending operations for retry"
-                )
-                for op in self.pending_operations.values():
-                    future = op.fut
-                    if not future.done():
-                        future.set_result({
-                            "status": "error",
-                            "error": "Connection was reset during operation. Please retry.",
-                        })
-                self.pending_operations.clear()
+            # if len(self.pending_operations) > 0:
+            #     print(
+            #         f"[agent] Failing {len(self.pending_operations)} pending operations for retry"
+            #     )
+            #     for op in self.pending_operations.values():
+            #         future = op.fut
+            #         if not future.done():
+            #             future.set_result({
+            #                 "status": "error",
+            #                 "error": "Connection was reset during operation. Please retry.",
+            #             })
+            #     self.pending_operations.clear()
             await self.send({"type": "agent_status", "status": "ready"})
             return
 
