@@ -872,11 +872,9 @@ class AgentHarness:
                 "type": "agent_stream_start",
                 "timestamp": int(time.time() * 1000),
             })
-            # todo(rteqs): send to browser to start stream?
             return
 
         if event.type == "message_delta":
-            # todo(rteqs): handle stop_reason
             return
 
         if event.type == "message_stop":
@@ -992,6 +990,7 @@ class AgentHarness:
 
         # todo(rteqs): we should just store messages in the form anthropic sends and have frontend parse that.
         error_type: AssistantMessageError | None = None
+        assistant_message_started_at: float | None = None
         async for res in self.claude.receive_response():
             # todo(rteqs): pretend we can't be interrupted for now
             if (
@@ -1006,9 +1005,23 @@ class AgentHarness:
                     await self._persist_claude_session_id(s_id)
 
             if isinstance(res, StreamEvent):
+                event = self._parse_stream_event(res.event)
+                if (
+                    event is not None
+                    and event.type == "message_start"
+                    and assistant_message_started_at is None
+                ):
+                    assistant_message_started_at = time.perf_counter()
                 await self._handle_stream_event(res)
 
             elif isinstance(res, AssistantMessage):
+                turn_duration: float | None = None
+                if assistant_message_started_at is not None:
+                    turn_duration = max(
+                        0.0, time.perf_counter() - assistant_message_started_at
+                    )
+                assistant_message_started_at = None
+
                 if res.error is not None:
                     error_type = res.error
                     print(f"[agent] assistant message error={res.error}")
@@ -1018,7 +1031,14 @@ class AgentHarness:
                         await self._insert_history(
                             role="assistant",
                             request_id=msg["request_id"],
-                            payload={"content": [{"type": "text", "text": c.text}]},
+                            payload={
+                                "content": [{"type": "text", "text": c.text}],
+                                **(
+                                    {"duration": turn_duration}
+                                    if turn_duration is not None
+                                    else {}
+                                ),
+                            },
                         )
 
                     elif isinstance(c, ThinkingBlock):
@@ -1028,7 +1048,12 @@ class AgentHarness:
                             payload={
                                 "content": [
                                     {"type": "thinking", "thinking": c.thinking}
-                                ]
+                                ],
+                                **(
+                                    {"duration": turn_duration}
+                                    if turn_duration is not None
+                                    else {}
+                                ),
                             },
                         )
 
@@ -1045,7 +1070,12 @@ class AgentHarness:
                                         "name": c.name,
                                         "input": c.input,
                                     }
-                                ]
+                                ],
+                                **(
+                                    {"duration": turn_duration}
+                                    if turn_duration is not None
+                                    else {}
+                                ),
                             },
                         )
 
