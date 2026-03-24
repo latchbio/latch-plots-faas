@@ -1089,7 +1089,7 @@ class AgentHarness:
             "input_tokens": usage.input_tokens if usage.input_tokens is not None else 0,
             "cache_read_input_tokens": usage.cache_read_input_tokens,
             "cache_creation_input_tokens": usage.cache_creation_input_tokens,
-            "context_limit": 200_000,
+            "context_limit": 1_000_000,
         })
 
     def _normalize_claude_session_id(self, raw_session_id: str | None) -> str | None:
