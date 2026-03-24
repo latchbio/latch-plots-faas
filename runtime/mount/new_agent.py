@@ -8,7 +8,7 @@ import traceback
 import uuid
 from collections.abc import Iterable
 from contextlib import suppress
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal, NotRequired, TypedDict
@@ -641,7 +641,7 @@ class AgentHarness:
                     msg=AgentQuery(
                         type="agent_query",
                         behavior=self.behavior,
-                        query=json.dumps(PermissionResultAllow(updated_input=answers)),
+                        query=json.dumps(asdict(PermissionResultAllow(updated_input=answers))),
                         template_version_id=None,
                     )
                 )
