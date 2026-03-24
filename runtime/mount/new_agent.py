@@ -27,6 +27,7 @@ from claude_agent_sdk import (
     ClaudeAgentOptions,
     ClaudeSDKClient,
     HookMatcher,
+    PermissionResultAllow,
     ResultMessage,
     SystemMessage,
     TextBlock,
@@ -174,7 +175,7 @@ AnthropicStreamEvent = (
 
 class AgentQuery(TypedDict):
     type: Literal["agent_query"]
-    request_id: str
+    request_id: NotRequired[str]
     query: str
     behavior: Behavior
     template_version_id: str | None
@@ -206,13 +207,22 @@ class ResultMessageUsage:
     speed: str
 
 
+@dataclass(frozen=True, kw_only=True)
+class PendingOperation:
+    fut: asyncio.Future
+    start_time: float
+    action: str
+    params: dict
+
+
 @dataclass
 class AgentHarness:
     conn: SocketIoThread
     claude: ClaudeSDKClient | None = None
     system_prompy: str | None = None
-    pending_operations: dict[str, asyncio.Future] = field(default_factory=dict)
-    executing_cells: set[str] = field(default_factory=set)
+    pending_operations: dict[str, PendingOperation] = field(default_factory=dict)
+    pending_cells: set[str] = field(default_factory=set)
+    pending_widgets: dict[str, Any | None] = field(default_factory=dict)
     operation_counter: int = 0
     current_request_id: str | None = None
 
@@ -221,7 +231,6 @@ class AgentHarness:
     claude_session_id: str | None = None
     latest_notebook_context: dict = field(default_factory=dict)
     current_status: str | None = None
-    expected_widgets: dict[str, Any | None] = field(default_factory=dict)
     behavior: Behavior = "step_by_step"
     latest_notebook_state: str | None = None
     current_plan: dict | None = None
@@ -527,23 +536,23 @@ class AgentHarness:
 
         return "\n".join(cell_lines)
 
-    # todo(rteqs): rewrite so we don't block
-    async def atomic_operation(
-        self, action: str, params: dict | None = None, timeout: float | None = 10.0
-    ) -> dict:
+    async def create_atomic_operation(
+        self, action: str, params: dict | None = None
+    ) -> str:
         if params is None:
             params: dict = {}
 
         self.operation_counter += 1
 
-        force_backend_browser_retry = params.get("force_backend_browser_retry", False)
-
         tx_id = f"tx_{uuid.uuid4().hex[:12]}"
         loop = asyncio.get_running_loop()
         response_future = loop.create_future()
-        self.pending_operations[tx_id] = response_future
 
         start_time = time.time()
+        self.pending_operations[tx_id] = PendingOperation(
+            fut=response_future, start_time=start_time, action=action, params=params
+        )
+
         try:
             print(f"[agent] -> {action}")
             await self.send({
@@ -552,50 +561,94 @@ class AgentHarness:
                 "params": params,
                 "tx_id": tx_id,
             })
-        except Exception as e:
+        except Exception:
             self.pending_operations.pop(tx_id, None)
-            return {"status": "error", "error": f"Send failed: {e!s}"}
+            raise
+
+        return tx_id
+
+    async def wait_for_operation(
+        self, tx_id: str, timeout: float | None = 10.0
+    ) -> dict:
+        assert tx_id in self.pending_operations
+
+        op = self.pending_operations[tx_id]
+        force_backend_browser_retry = op.params.get(
+            "force_backend_browser_retry", False
+        )
 
         try:
-            return await asyncio.wait_for(response_future, timeout=timeout)
+            return await asyncio.wait_for(op.fut, timeout=timeout)
         except asyncio.CancelledError:
             print(
-                f"[agent] Operation cancelled (session reinitialized): action={action}, tx_id={tx_id}"
+                f"[agent] Operation cancelled (session reinitialized): action={op.action}, tx_id={tx_id}"
             )
             return {
                 "status": "error",
-                "error": f"OPERATION FAILED: '{action}' was interrupted because the session was reinitialized. This operation did NOT complete. You must retry or inform the user.",
+                "error": f"OPERATION FAILED: '{op.action}' was interrupted because the session was reinitialized. This operation did NOT complete. You must retry or inform the user.",
             }
         except TimeoutError:
             self.pending_operations.pop(tx_id, None)
-            duration = time.time() - start_time
-            print(f"[agent] {action} timed out after {duration:.3f}s")
+            duration = time.time() - op.start_time
+            print(f"[agent] {op.action} timed out after {duration:.3f}s")
 
             if not force_backend_browser_retry:
-                print(f"[agent] Retrying {action} with backend browser")
+                print(f"[agent] Retrying {op.action} with backend browser")
                 return await self.atomic_operation(
-                    action,
-                    {**params, "force_backend_browser_retry": True},
+                    op.action,
+                    {**op.params, "force_backend_browser_retry": True},
                     timeout=timeout,
                 )
 
             return {
                 "status": "error",
-                "error": f"OPERATION FAILED: '{action}' timed out after 10 seconds. This operation did NOT complete.",
+                "error": f"OPERATION FAILED: '{op.action}' timed out after 10 seconds. This operation did NOT complete.",
                 "tx_id": tx_id,
             }
         finally:
             ret = self.pending_operations.pop(tx_id, None)
 
             if ret is not None:
-                duration = time.time() - start_time
-                print(f"[agent] {action} took {duration:.3f}s")
+                duration = time.time() - op.start_time
+                print(f"[agent] {op.action} took {duration:.3f}s")
+
+    async def atomic_operation(
+        self, action: str, params: dict | None = None, timeout: float | None = 10.0
+    ) -> dict:
+        try:
+            tx_id = await self.create_atomic_operation(action, params)
+        except Exception as e:
+            return {"status": "error", "error": f"Send failed: {e!s}"}
+
+        return await self.wait_for_operation(tx_id, timeout)
 
     async def handle_action_response(self, msg: dict[str, Any]) -> None:
         tx_id = msg.get("tx_id")
         assert tx_id is not None
 
-        fut = self.pending_operations.get(tx_id)
+        op = self.pending_operations.get(tx_id)
+        if op is None:
+            if "answers" in msg:
+                answers = msg.get("answers", {})
+                qa_content = {
+                    "type": "answers",
+                    "content": [
+                        {"question": q, "answer": a} for q, a in answers.items()
+                    ],
+                }
+                await self._insert_history(payload={"content": qa_content})
+                await self.query(
+                    msg=AgentQuery(
+                        type="agent_query",
+                        behavior=self.behavior,
+                        query=json.dumps(PermissionResultAllow(updated_input=answers)),
+                        template_version_id=None,
+                    )
+                )
+
+            return
+
+        fut = op.fut
         if fut and not fut.done():
             fut.set_result(msg)
 
@@ -838,8 +891,8 @@ class AgentHarness:
                     })
             self.pending_operations.clear()
 
-        self.executing_cells.clear()
-        self.expected_widgets.clear()
+        self.pending_cells.clear()
+        self.pending_widgets.clear()
         self.current_request_id = None
         self.current_status = None
         self.current_plan = None
@@ -974,10 +1027,11 @@ class AgentHarness:
         await self.set_agent_status("thinking")
 
         prompt = await self.create_prompt(msg)
+        request_id = msg.get("request_id")
 
         print(
             "[agent] starting SDK query "
-            f"(request_id={msg['request_id']}, db_session_id={self.agent_session_id}, "
+            f"(request_id={request_id}, db_session_id={self.agent_session_id}, "
             f"claude_session_id={self.claude_session_id})"
         )
 
@@ -1030,7 +1084,7 @@ class AgentHarness:
                     if isinstance(c, TextBlock):
                         await self._insert_history(
                             role="assistant",
-                            request_id=msg["request_id"],
+                            request_id=request_id,
                             payload={
                                 "content": [{"type": "text", "text": c.text}],
                                 **(
@@ -1044,7 +1098,7 @@ class AgentHarness:
                     elif isinstance(c, ThinkingBlock):
                         await self._insert_history(
                             role="assistant",
-                            request_id=msg["request_id"],
+                            request_id=request_id,
                             payload={
                                 "content": [
                                     {"type": "thinking", "thinking": c.thinking}
@@ -1061,7 +1115,7 @@ class AgentHarness:
                         tool_name_by_tool_use_id[c.id] = c.name
                         await self._insert_history(
                             role="assistant",
-                            request_id=msg["request_id"],
+                            request_id=request_id,
                             payload={
                                 "content": [
                                     {
@@ -1083,7 +1137,7 @@ class AgentHarness:
                 if isinstance(res.content, str):
                     await self._insert_history(
                         role="user",
-                        request_id=msg["request_id"],
+                        request_id=request_id,
                         payload={"content": res.content},
                     )
                     continue
@@ -1092,7 +1146,7 @@ class AgentHarness:
                     if isinstance(c, TextBlock):
                         await self._insert_history(
                             role="user",
-                            request_id=msg["request_id"],
+                            request_id=request_id,
                             payload={"content": [{"type": "text", "text": c.text}]},
                         )
 
@@ -1104,7 +1158,7 @@ class AgentHarness:
 
                         await self._insert_history(
                             role="user",
-                            request_id=msg["request_id"],
+                            request_id=request_id,
                             payload={
                                 "content": [
                                     {
@@ -1129,16 +1183,16 @@ class AgentHarness:
                 usage = validate(res.usage, ResultMessageUsage)
                 await self._send_usage_update(usage)
 
-                if len(self.executing_cells) > 0:
+                if len(self.pending_cells) > 0:
                     await self.set_agent_status("awaiting_cell_execution")
-                elif len(self.expected_widgets) > 0:
+                elif len(self.pending_widgets) > 0:
                     await self.set_agent_status("awaiting_user_widget_input")
                 else:
                     await self.set_agent_status("done")
 
                 if res.subtype == "success":
                     await self._insert_history(
-                        request_id=msg["request_id"],
+                        request_id=request_id,
                         payload={"content": {"type": "result", "content": res.result}},
                     )
                     break
@@ -1164,7 +1218,7 @@ class AgentHarness:
                     role="system",
                     event_type="error",
                     payload=error_history_payload,
-                    request_id=msg["request_id"],
+                    request_id=request_id,
                 )
                 break
 
@@ -1192,9 +1246,9 @@ class AgentHarness:
             self.current_query_task = None
 
         self.current_request_id = None
-        self.expected_widgets.clear()
+        self.pending_widgets.clear()
         self.current_status = None
-        self.executing_cells.clear()
+        self.pending_cells.clear()
 
         if len(self.pending_operations) > 0:
             print(
@@ -1314,6 +1368,9 @@ class AgentHarness:
                 f"[agent] {msg.get('action', 'unknown')} -> {msg.get('status', 'unknown')}"
             )
             await self.handle_action_response(msg)
+        elif msg_type == "answer":
+            print(f"[agent] {msg.get('answers')}")
+
         elif msg_type == "kernel_message":
             nested_msg = msg.get("message", {})
             nested_type = nested_msg.get("type")
@@ -1329,12 +1386,12 @@ class AgentHarness:
                 if logs is not None and len(logs) > 4096:
                     logs = logs[-4096:]
 
-                if cell_id not in self.executing_cells:
+                if cell_id not in self.pending_cells:
                     print(f"[agent] Ignoring cell_result for {msg.get('cell_id')} ")
                     return
 
                 if cell_id is not None:
-                    self.executing_cells.discard(str(cell_id))
+                    self.pending_cells.discard(str(cell_id))
 
                 execution_statuses = {
                     "executing",
@@ -1393,7 +1450,6 @@ class AgentHarness:
                 await self.query(
                     AgentQuery(
                         type="agent_query",
-                        request_id="",
                         query=prompt_content,
                         behavior=self.behavior,
                         template_version_id=None,
@@ -1403,11 +1459,11 @@ class AgentHarness:
             elif nested_type == "set_widget_value":
                 data = nested_msg.get("data", {})
                 for key, value in data.items():
-                    if key in self.expected_widgets:
-                        self.expected_widgets[key] = value
+                    if key in self.pending_widgets:
+                        self.pending_widgets[key] = value
                         print(f"        Set widget {key}")
 
-                if all(v is not None for v in self.expected_widgets.values()):
+                if all(v is not None for v in self.pending_widgets.values()):
                     await self.set_agent_status("thinking")
 
                     data = msg.get("data", {})
@@ -1420,7 +1476,6 @@ class AgentHarness:
                     await self.query(
                         AgentQuery(
                             type="agent_query",
-                            request_id="",
                             query=content,
                             behavior=self.behavior,
                             template_version_id=None,

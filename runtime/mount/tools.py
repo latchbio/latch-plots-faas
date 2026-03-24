@@ -281,7 +281,7 @@ async def run_cell(args: dict[str, Any]) -> dict[str, Any]:
 
     params = {"cell_id": cell_id}
     await h.send({"type": "agent_action", "action": "run_cell", "params": params})
-    h.executing_cells.add(cell_id)
+    h.pending_cells.add(cell_id)
 
     return ok({
         "tool_name": "run_cell",
@@ -373,7 +373,7 @@ async def stop_cell(args: dict[str, Any]) -> dict[str, Any]:
 
     result = await h.atomic_operation("stop_cell", params)
     if result.get("status") == "success":
-        h.executing_cells.discard(cell_id)
+        h.pending_cells.discard(cell_id)
         return ok({
             "tool_name": "stop_cell",
             "summary": f"Stopped cell {cell_id}",
@@ -717,7 +717,7 @@ async def capture_widget_image(args: dict[str, Any]) -> dict[str, Any]:
     print(f"[tool] capture_widget_image: {widget_key}")
 
     await h.set_agent_status("awaiting_user_widget_input")
-    h.expected_widgets[widget_key] = None
+    h.pending_widgets[widget_key] = None
 
     result = await h.atomic_operation(
         "capture_widget_image", {"widget_key": widget_key}
@@ -1826,17 +1826,27 @@ async def can_use_tool(
         if questions is None:
             return PermissionResultAllow(updated_input=input_data)
 
+        try:
+            tx_id = await h.create_atomic_operation(
+                "ask_user_question", {"questions": input_data.get("questions", [])}
+            )
+        except Exception as e:
+            return PermissionResultDeny(
+                message=f"Failed to send question: {e!s}", interrupt=True
+            )
+
+        await h._insert_history(
+            payload={"type": "ask_user_question", "question": questions, "tx_id": tx_id}
+        )
         await h.set_agent_status("awaiting_user_response")
 
         try:
-            result = await h.atomic_operation(
-                "ask_user_question",
-                {"questions": input_data.get("questions", [])},
-                timeout=None,
-            )
+            result = await h.wait_for_operation(tx_id, timeout=300)
         except Exception as e:
             print(f"[agent] AskUserQuestion failed: {e!s}")
-            return PermissionResultDeny(message=f"Failed to get user response: {e!s}")
+            return PermissionResultDeny(
+                message=f"Failed to get user response: {e!s}", interrupt=True
+            )
 
         if result.get("status") == "success":
             answers = result.get("answers", {})
@@ -1848,14 +1858,12 @@ async def can_use_tool(
             await h._insert_history(payload={"content": qa_content})
 
             return PermissionResultAllow(
-                updated_input={
-                    "questions": input_data.get("questions", []),
-                    "answers": answers,
-                }
+                updated_input={"questions": questions, "answers": answers}
             )
 
         return PermissionResultDeny(
-            message=f"Failed to get user response: {result.get('error', 'Unknown error')}"
+            message=f"Failed to get user response: {result.get('error', 'Unknown error')}",
+            interrupt=True
         )
 
     return PermissionResultAllow(updated_input=input_data)
