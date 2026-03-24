@@ -713,7 +713,7 @@ class AgentHarness:
                 system_prompt=SystemPromptPreset(
                     type="preset", preset="claude_code", append=self.system_prompt
                 ),
-                include_partial_messages=False,
+                include_partial_messages=True,
                 mcp_servers={MCP_SERVER_NAME: self.mcp_server},
                 allowed_tools=[*self.mcp_allowed_tools, *SDK_BUILTIN_ALLOWED_TOOLS],
                 permission_mode="acceptEdits",
