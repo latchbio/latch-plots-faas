@@ -1371,7 +1371,6 @@ class AgentHarness:
             if result.get("status") != "success":
                 print(f"[agent] Failed to reset kernel: {result.get('error')}")
         elif msg_type == "agent_action_response":
-            print("agent_action_response", msg)
             print(
                 f"[agent] {msg.get('action', 'unknown')} -> {msg.get('status', 'unknown')}"
             )
