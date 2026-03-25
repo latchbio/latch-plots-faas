@@ -1839,7 +1839,6 @@ async def can_use_tool(
 
         await h.pending_question_event.wait()
         tx_id = h.pending_question_tx_id
-        print(f"[debug] can_use_tool: {tx_id}")
         assert tx_id is not None
 
         await h.set_agent_status("awaiting_user_response")

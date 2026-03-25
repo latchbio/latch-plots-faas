@@ -663,6 +663,7 @@ class AgentHarness:
         op = self.pending_operations.get(tx_id)
         if op is None:
             if msg.get("action") == "ask_user_question":
+                self.pending_question_event.clear()
                 if msg.get("skip") is True:
                     return
 
