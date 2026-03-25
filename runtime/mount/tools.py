@@ -1843,6 +1843,11 @@ async def can_use_tool(
             h.pending_question_event.clear()
 
         if result.get("status") == "success":
+            if result.get("skip") is True:
+                return PermissionResultDeny(
+                    message="User skipped question", interrupt=True
+                )
+
             answers = result.get("answers", {})
 
             qa_content = {

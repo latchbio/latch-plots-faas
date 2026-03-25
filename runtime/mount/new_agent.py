@@ -630,7 +630,10 @@ class AgentHarness:
 
         op = self.pending_operations.get(tx_id)
         if op is None:
-            if "answers" in msg:
+            if msg.get("action") == "ask_user_question":
+                if msg.get("skip") is True:
+                    return
+
                 answers = msg.get("answers", {})
                 qa_content = {
                     "type": "answers",
