@@ -5,6 +5,7 @@ This directory contains agent context files which can be modified to customize t
 ## Overview
 - **`system_prompt.md`** - Agent system instructions including documentation guidance
 - **`context/`** - Documentation library accessed via file tools
+- **`.claude/skills/`** - Skills auto-discovered by the agent (technology and Latch integration)
 
 ## File Structure
 
@@ -12,24 +13,29 @@ This directory contains agent context files which can be modified to customize t
 agent_config/
 ├── system_prompt.md              # System prompt
 ├── context/
-│   ├── turn_behavior/                 # Per-behavior-mode turn guidelines
+│   ├── turn_behavior/            # Per-behavior-mode turn guidelines
 │   │   ├── proactive.md
 │   │   └── step_by_step.md
 │   ├── examples/                 # Per-behavior-mode examples
 │   │   ├── proactive.md
 │   │   └── step_by_step.md
-│   ├── technology_docs/          # Platform-specific documentation
-│   │   ├── vizgen.md
-│   │   ├── atlasxomics.md
-│   │   └── takara.md
 │   ├── latch_api_docs/           # Latch API references
-│   │   ├── lpath.md
+│   │   ├── latch_api_reference.md
 │   │   └── plots_docs/
 │   │       ├── custom-plots.mdx
 │   │       ├── reactivity.mdx
 │   │       └── widget-types.mdx
 │   └── agent_scratch/            # Agent-created notes and state
 └── README.md                     # This file
+
+.claude/skills/                   # Cloned at runtime into /opt/latch/plots-faas/.claude/skills/
+├── takara-devkit/                # Takara Seeker/Trekker technology skill
+├── xenium-devkit/                # 10X Xenium technology skill
+├── vizgen-devkit/                # Vizgen MERFISH technology skill
+├── atlasx-devkit/                # AtlasXomics technology skill
+├── latch-workflows/              # Latch workflow launching skill
+├── latch-plots-ui/               # Latch UI and plot widget skill
+└── latch-data-access/            # Latch Data path handling skill
 ```
 
 ## Modifying Agent Behavior
@@ -38,29 +44,23 @@ agent_config/
 
 The `system_prompt.md` file contains all behavior instructions and documentation guidance.
 
-### 2. Add Documentation Files
+### 2. Skills
+
+Skills are auto-discovered from `.claude/skills/` at runtime. Each skill repo must have a `SKILL.md` at the root with YAML frontmatter (`name` and `description`).
+
+There are two kinds of skills:
+
+- **Technology skills** hold platform-specific scientific guidance (workflow order, step docs, helper libraries). They are portable and do not assume a Latch-specific system prompt.
+- **`latch-*` skills** hold reusable Latch-specific workflow, UI, and data-access guidance.
+
+Technology skills should prefer matching `latch-*` skills when available but fall back to their own local docs when not.
+
+### 3. Add Documentation Files
 
 The agent accesses documentation on-demand using file tools. To add new documentation:
 
-1. **Create the documentation file** in the appropriate subdirectory:
-   - Assay platform documentation → `context/technology_docs/`
-   - Latch APIs → `context/latch_api_docs/`
-
-2. **Update `system_prompt.md`** to reference the new documentation:
-
-Add to the `<workflow_intake>` and `<documentation_access>` section:
-
-```markdown
-## Assay Platform Documentation
-
-Once identified, read corresponding documentation from `technology_docs/`:
-- Takara → `takara.md`
-- AtlasXOmics → `atlasxomics.md`
-- Vizgen MERFISH → `vizgen.md`
-- Proteomics → `proteomics.md`  # ← New addition
-```
-
-The agent will use this guidance to decide when to read your documentation.
+1. **Create the documentation file** in the appropriate subdirectory under `context/`
+2. **Update `system_prompt.md`** to reference the new documentation
 
 ## How It Works
 
@@ -68,41 +68,13 @@ The agent will use this guidance to decide when to read your documentation.
 
 1. Agent starts up (`agent.py::handle_init`)
 2. Agent loads `system_prompt.md` for complete instructions
-3. System prompt is loaded directly into the agent
+3. Skills are auto-loaded from `.claude/skills/` based on user request matching
+4. System prompt is loaded directly into the agent
 
-### On-Demand Documentation Access
+### Skill Loading
 
-When the agent needs specific information (e.g., user mentions "Vizgen"), it:
-1. Checks the `<workflow_intake>` or `<documentation_access>` section in its system prompt
-2. Uses `Grep`/`Read` to inspect `technology_docs/vizgen.md`
-3. Follows the documented steps from that file
-
-## Testing Changes
-
-1. Changes to `system_prompt.md` apply on next agent initialization
-2. Changes to docs in `context/` are available immediately (agent reads on-demand)
-
-## Examples
-
-### Example: Add Proteomics Support
-
-1. **Create assay platform documentation:**
-
-   Create `context/technology_docs/proteomics.md`:
-   ```markdown
-   ## Proteomics Analysis Workflow
-   
-   1. **Data Loading** - Load mass spec data using Pandas
-   2. **Quality Control** - Filter low-quality peptides
-   3. **Normalization** - Apply log transformation
-   4. **Statistical Analysis** - Run differential expression tests
-   ...
-   ```
-
-2. **Update the system prompt:**
-   
-   Edit `system_prompt.md` in the `<documentation_access>` section
-
-3. **Optionally add trigger guidance:**
-   
-   In the `<workflow_intake>` section, you can add platform specific identification guidance.
+When the user mentions a supported platform (e.g., "Takara", "Visium"), the agent:
+1. Matches the request against skill descriptions in `.claude/skills/*/SKILL.md`
+2. Loads the matching technology skill
+3. Follows the skill's workflow order, step docs, and helper-library guidance
+4. Uses `latch-*` skills for Latch-specific execution details when available

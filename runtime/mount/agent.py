@@ -76,6 +76,7 @@ SDK_BUILTIN_ALLOWED_TOOLS = [
     "Bash",
     "WebFetch",
     "WebSearch",
+    "Skill",
 ]
 NOTEBOOK_MUTATION_TOOL_NAMES = (
     "create_cell",
@@ -118,7 +119,18 @@ class TextToolResultBlock(TypedDict):
     text: str
 
 
-ToolResultContent = str | list[TextToolResultBlock]
+class ImageToolResultSource(TypedDict):
+    type: Literal["base64"]
+    media_type: str
+    data: str
+
+
+class ImageToolResultBlock(TypedDict):
+    type: Literal["image"]
+    source: ImageToolResultSource
+
+
+ToolResultContent = str | list[TextToolResultBlock | ImageToolResultBlock]
 
 
 class ToolUseHistoryBlock(TypedDict):
@@ -668,20 +680,42 @@ class AgentHarness:
             return tool_response
 
         if isinstance(tool_response, list):
-            normalized_blocks: list[TextToolResultBlock] = []
+            normalized_blocks: list[TextToolResultBlock | ImageToolResultBlock] = []
             for item in tool_response:
                 if isinstance(item, dict):
                     block_type = item.get("type")
                     text_value = item.get("text")
+                    source = item.get("source")
                 else:
                     block_type = getattr(item, "type", None)
                     text_value = getattr(item, "text", None)
+                    source = getattr(item, "source", None)
                     if block_type is None and isinstance(text_value, str):
                         block_type = "text"
 
                 if block_type == "text" and isinstance(text_value, str):
                     normalized_blocks.append({"type": "text", "text": text_value})
                     continue
+
+                if block_type == "image":
+                    # note(tim): SDK gives image tool res back nested under `source`.
+                    if isinstance(source, dict):
+                        media_type = source.get("media_type")
+                        data = source.get("data")
+                        if (
+                            source.get("type") == "base64"
+                            and isinstance(media_type, str)
+                            and isinstance(data, str)
+                        ):
+                            normalized_blocks.append({
+                                "type": "image",
+                                "source": {
+                                    "type": "base64",
+                                    "media_type": media_type,
+                                    "data": data,
+                                },
+                            })
+                            continue
 
                 return json.dumps(tool_response, default=str)
 
@@ -785,6 +819,7 @@ class AgentHarness:
             tool_use_id = block.tool_use_id
             if tool_use_id == "":
                 continue
+
 
             normalized_content = self._normalize_tool_result_content(block.content)
 
@@ -1450,6 +1485,7 @@ class AgentHarness:
                 permission_mode="acceptEdits",
                 model="claude-opus-4-6",
                 thinking={"type": "adaptive"},
+                setting_sources=["project"],
                 resume=resume_session_id,
                 env=sdk_env,
                 hooks={
@@ -2062,7 +2098,20 @@ class AgentHarness:
         self.claude_session_id = resume_session_id
 
         if self.claude is None:
-            await self._connect_sdk_client(resume_session_id=resume_session_id)
+            try:
+                await self._connect_sdk_client(resume_session_id=resume_session_id)
+            except Exception as e:
+                print(f"[agent] Fatal: SDK client connection failed: {e!s}")
+                traceback.print_exc()
+
+                self.claude = None
+                await self.send({
+                    "type": "agent_error",
+                    "error": f"Agent failed to initialize: {e!s}",
+                    "fatal": True,
+                })
+                return
+
             if resume_session_id is None:
                 print("[agent] SDK initialized without resume session")
             else:
@@ -2194,7 +2243,7 @@ class AgentHarness:
         return {
             "system_prompt": self.system_prompt,
             "messages": messages,
-            "model": "claude-opus-4-6",
+            "model": "claude-opus-4-5",
             "cells": self.latest_notebook_state
             if self.latest_notebook_state is not None
             else "Interact with agent to populate notebook state.",

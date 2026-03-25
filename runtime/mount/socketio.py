@@ -1,4 +1,5 @@
 import asyncio
+import gzip
 import socket
 import struct
 import sys
@@ -27,6 +28,7 @@ class SocketIo:
         return cls(sock=sock, loop=loop, rlock=asyncio.Lock(), wlock=asyncio.Lock())
 
     async def send_bytes(self, data: bytes) -> None:
+        data = gzip.compress(data, compresslevel=1)
         header = struct.pack("<q", len(data))
 
         async with self.wlock:
@@ -40,7 +42,7 @@ class SocketIo:
             )
         )
 
-    async def recv(self) -> Any:
+    async def recv_raw(self) -> bytes:
         async with self.rlock:
             header = await self.loop.sock_recv(self.sock, 8)
             if len(header) == 0:
@@ -55,4 +57,7 @@ class SocketIo:
                 l -= len(chunk)
                 data += chunk
 
-        return orjson.loads(data)
+        return gzip.decompress(data)
+
+    async def recv(self) -> Any:
+        return orjson.loads(await self.recv_raw())
