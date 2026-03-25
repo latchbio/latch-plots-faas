@@ -124,7 +124,18 @@ class TextToolResultBlock(TypedDict):
     text: str
 
 
-ToolResultContent = str | list[TextToolResultBlock]
+class ImageToolResultSource(TypedDict):
+    type: Literal["base64"]
+    media_type: str
+    data: str
+
+
+class ImageToolResultBlock(TypedDict):
+    type: Literal["image"]
+    source: ImageToolResultSource
+
+
+ToolResultContent = str | list[TextToolResultBlock | ImageToolResultBlock]
 
 
 class GenericToolResultPayload(TypedDict, total=False):
@@ -345,20 +356,41 @@ class AgentHarness:
             return tool_response
 
         if isinstance(tool_response, list):
-            normalized_blocks: list[TextToolResultBlock] = []
+            normalized_blocks: list[TextToolResultBlock | ImageToolResultBlock] = []
             for item in tool_response:
                 if isinstance(item, dict):
                     block_type = item.get("type")
                     text_value = item.get("text")
+                    source = item.get("source")
                 else:
                     block_type = getattr(item, "type", None)
                     text_value = getattr(item, "text", None)
+                    source = item.get("source")
                     if block_type is None and isinstance(text_value, str):
                         block_type = "text"
 
                 if block_type == "text" and isinstance(text_value, str):
                     normalized_blocks.append({"type": "text", "text": text_value})
                     continue
+
+                if block_type == "image" and isinstance(source, dict):
+                    # note(tim): SDK gives image tool res back nested under `source`.
+                    media_type = source.get("media_type")
+                    data = source.get("data")
+                    if (
+                        source.get("type") == "base64"
+                        and isinstance(media_type, str)
+                        and isinstance(data, str)
+                    ):
+                        normalized_blocks.append({
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": media_type,
+                                "data": data,
+                            },
+                        })
+                        continue
 
                 return json.dumps(tool_response, default=str)
 
@@ -604,7 +636,7 @@ class AgentHarness:
 
             return {
                 "status": "error",
-                "error": f"OPERATION FAILED: '{op.action}' timed out after 10 seconds. This operation did NOT complete.",
+                "error": f"OPERATION FAILED: '{op.action}' timed out after {timeout} seconds. This operation did NOT complete.",
                 "tx_id": tx_id,
             }
         finally:
@@ -783,6 +815,7 @@ class AgentHarness:
                 permission_mode="acceptEdits",
                 model="claude-opus-4-6",
                 thinking={"type": "adaptive"},
+                setting_sources=["project"],
                 resume=resume_session_id,
                 env=sdk_env,
                 hooks={
@@ -859,13 +892,19 @@ class AgentHarness:
         self.claude_session_id = resume_session_id
 
         if self.claude is None:
-            await self.connect(resume_session_id=resume_session_id)
-            if resume_session_id is None:
-                print("[agent] SDK initialized without resume session")
-            else:
-                print(
-                    f"[agent] SDK initialized with resume session {resume_session_id}"
-                )
+            try:
+                await self.connect(resume_session_id=resume_session_id)
+            except Exception as e:
+                print(f"[agent] Fatal: SDK client connection failed: {e!s}")
+                traceback.print_exc()
+
+                self.claude = None
+                await self.send({
+                    "type": "agent_error",
+                    "error": f"Agent failed to initialize: {e!s}",
+                    "fatal": True,
+                })
+                return
 
         await self.send({"type": "agent_status", "status": "ready"})
         print(
