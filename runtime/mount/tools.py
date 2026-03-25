@@ -48,6 +48,7 @@ MCP_TOOL_NAMES = [
     "h5_manage_obs",
     "redeem_package",
     "smart_ui_spotlight",
+    "submit_response",
 ]
 MCP_ALLOWED_TOOL_NAMES = [f"mcp__{MCP_SERVER_NAME}__{name}" for name in MCP_TOOL_NAMES]
 
@@ -1795,6 +1796,93 @@ async def update_plan(args: dict[str, Any]) -> dict[str, Any]:
         })
 
 
+@tool(
+    "submit_response",
+    "Submit the user-facing response with next_status, questions, and summary. Call this at the end of every loop.",
+    {
+        "type": "object",
+        "properties": {
+            "summary": {
+                "type": "string",
+                "description": "User-facing progress, responses, or next step. Use markdown bullets if needed.",
+            },
+            "next_status": {
+                "type": "string",
+                "description": "What the agent will do next",
+                "enum": [
+                    "executing",
+                    "fixing",
+                    "thinking",
+                    "awaiting_user_response",
+                    "awaiting_cell_execution",
+                    "awaiting_user_widget_input",
+                    "done",
+                ],
+            },
+            "expected_widgets": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": (
+                    "Optional list of full widget keys (<tf_id>/<widget_id>) to await "
+                    "when next_status is 'awaiting_user_widget_input'"
+                ),
+            },
+        },
+        "required": ["next_status"],
+    },
+)
+async def submit_response(args: dict[str, Any]) -> dict[str, Any]:
+    h = harness()
+    try:
+        summary = args.get("summary")
+        if summary is not None and not isinstance(summary, str):
+            summary = None
+
+        next_status = args.get("next_status", "done")
+        if not isinstance(next_status, str) or next_status not in {
+            "executing",
+            "fixing",
+            "thinking",
+            "awaiting_user_response",
+            "awaiting_cell_execution",
+            "awaiting_user_widget_input",
+            "done",
+        }:
+            print(f"[agent] Invalid next_status: {next_status}")
+            return ok({
+                "tool_name": "submit_response",
+                "success": False,
+                "message": "Please provide a valid next_status",
+            })
+
+        expected_widgets = args.get("expected_widgets", [])
+
+        print("[tool] submit_response called with:")
+        print(f"  - next_status: {next_status}")
+        print(f"  - summary: {summary}")
+        print(f"  - expected_widgets: {expected_widgets}")
+
+        h.current_status = next_status
+        if next_status == "awaiting_user_widget_input":
+            h.pending_widgets = {str(k): None for k in expected_widgets}
+
+        return ok({
+            "tool_name": "submit_response",
+            "success": True,
+            "summary": "Response submitted successfully",
+        })
+    except Exception as e:
+        print(f"[tool] submit_response error: {e!s}")
+        import traceback
+
+        traceback.print_exc()
+        return ok({
+            "tool_name": "submit_response",
+            "success": False,
+            "summary": f"Error submitting response: {e!s}",
+        })
+
+
 all_tools = [
     create_cell,
     create_markdown_cell,
@@ -1826,6 +1914,7 @@ all_tools = [
     h5_manage_obs,
     redeem_package,
     smart_ui_spotlight,
+    submit_response,
 ]
 
 agent_tools_mcp = create_sdk_mcp_server(name=MCP_SERVER_NAME, tools=all_tools)

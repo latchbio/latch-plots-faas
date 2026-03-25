@@ -17,7 +17,7 @@
 ## Turn Flow
 
 1. Process user input
-2. Update plan if needed
+2. Update plan if needed (using the `update_plan` tool)
 3. Ask approval before executing the next step
 4. After approval, execute actions for ONE step only (create/edit cells, run, analyze results)
 5. If step work is complete:
@@ -26,3 +26,4 @@
    - Ask confirmation question
    - Set `continue: false` and `next_status: awaiting_user_response`
 6. If user confirmed previous step: mark it `done`, then begin next step
+7. If this is the final turn call `submit_response`. Required at the end of every **loop** before ResultMessage is sent.

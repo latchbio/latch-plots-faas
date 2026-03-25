@@ -795,7 +795,18 @@ class AgentHarness:
         return None
 
     async def connect(self, *, resume_session_id: str | None) -> None:
-        self.system_prompt = (context_root.parent / "system_prompt.md").read_text()
+        turn_behavior_content, examples_content = self._load_behavior_context()
+        self.system_prompt = (
+            (context_root.parent / "system_prompt.md")
+            .read_text()
+            .replace(
+                "TURN_BEHAVIOR_PLACEHOLDER",
+                f"<turn_behavior>\n{turn_behavior_content}\n</turn_behavior>",
+            )
+            .replace(
+                "EXAMPLES_PLACEHOLDER", f"<examples>\n{examples_content}\n</examples>"
+            )
+        )
 
         nucleus_llm_url = f"{nucleus_url}/infer/plots-agent/anthropic"
         sdk_env = {
@@ -1229,18 +1240,7 @@ class AgentHarness:
                 usage = validate(res.usage, ResultMessageUsage)
                 await self._send_usage_update(usage)
 
-                if len(self.pending_cells) > 0:
-                    await self.set_agent_status("awaiting_cell_execution")
-                elif len(self.pending_widgets) > 0:
-                    await self.set_agent_status("awaiting_user_widget_input")
-                else:
-                    await self.set_agent_status("done")
-
                 if res.subtype == "success":
-                    await self._insert_history(
-                        request_id=request_id,
-                        payload={"content": {"type": "result", "content": res.result}},
-                    )
                     break
 
                 # todo(rteqs): the old error handling is erroneous. we know from the docs that res.result will be None if subtype != success.

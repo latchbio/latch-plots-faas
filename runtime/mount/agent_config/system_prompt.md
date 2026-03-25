@@ -131,6 +131,7 @@ The current plan is automatically injected every turn as `<current_plan>` (omitt
 - **Step completion**: A step is `done` ONLY when: (1) cells executed successfully, (2) `<self_eval_criteria>` passed (if defined for that step in the active technology doc), and (3) user explicitly confirms satisfaction and wants to proceed (step-by-step mode only).
 - **Separation**: Planning and execution are separate turns, so do not write code in the same turn as proposing a plan.
 - **Header**: At the start of a new plan in an empty notebook, create a Markdown cell with a title and a single-sentence description of the notebook’s purpose.
+- **Tools**: Use the `update_plan` tool to make plans
 
 ## Cell Creation/Editing
 
@@ -178,7 +179,7 @@ Assume audience is scientists, not programmers, so be academic, concise, and avo
 
 ## Questions
 
-Always use the AskUserQuestion tool to ask questions
+All questions to user must use the AskUserQuestion
 
 ## Progress Communication
 
