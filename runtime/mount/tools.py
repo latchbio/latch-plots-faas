@@ -1826,18 +1826,10 @@ async def can_use_tool(
         if questions is None:
             return PermissionResultAllow(updated_input=input_data)
 
-        try:
-            tx_id = await h.create_atomic_operation(
-                "ask_user_question", {"questions": input_data.get("questions", [])}
-            )
-        except Exception as e:
-            return PermissionResultDeny(
-                message=f"Failed to send question: {e!s}", interrupt=True
-            )
+        await h.pending_question_event.wait()
+        tx_id = h.pending_question_tx_id
+        assert tx_id is not None
 
-        await h._insert_history(
-            payload={"type": "ask_user_question", "question": questions, "tx_id": tx_id}
-        )
         await h.set_agent_status("awaiting_user_response")
 
         try:
@@ -1847,6 +1839,8 @@ async def can_use_tool(
             return PermissionResultDeny(
                 message=f"Failed to get user response: {e!s}", interrupt=True
             )
+        finally:
+            h.pending_question_event.clear()
 
         if result.get("status") == "success":
             answers = result.get("answers", {})

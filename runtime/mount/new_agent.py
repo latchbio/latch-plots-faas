@@ -223,6 +223,8 @@ class AgentHarness:
     pending_operations: dict[str, PendingOperation] = field(default_factory=dict)
     pending_cells: set[str] = field(default_factory=set)
     pending_widgets: dict[str, Any | None] = field(default_factory=dict)
+    pending_question_tx_id: str | None = None
+    pending_question_event: asyncio.Event = field(default_factory=asyncio.Event)
     operation_counter: int = 0
     current_request_id: str | None = None
 
@@ -1103,6 +1105,17 @@ class AgentHarness:
 
                     elif isinstance(c, ToolUseBlock):
                         tool_name_by_tool_use_id[c.id] = c.name
+                        if c.name == "AskUserQuestion":
+                            try:
+                                tx_id = await self.create_atomic_operation(
+                                    "ask_user_question",
+                                    {"questions": c.input.get("questions", [])},
+                                )
+                                self.pending_question_tx_id = c.input["tx_id"] = tx_id
+                                self.pending_question_event.set()
+                            except Exception:
+                                ...
+
                         await self._insert_history(
                             role="assistant",
                             request_id=request_id,
