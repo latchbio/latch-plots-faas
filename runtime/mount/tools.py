@@ -749,11 +749,7 @@ async def capture_widget_image(args: dict[str, Any]) -> dict[str, Any]:
                         "metadata": metadata,
                     }),
                 },
-                {
-                    "type": "image",
-                    "data": base64_data,
-                    "mimeType": media_type,
-                },
+                {"type": "image", "data": base64_data, "mimeType": media_type},
             ]
         }
 
@@ -1841,13 +1837,9 @@ async def can_use_tool(
     if tool_name == "AskUserQuestion":
         h = harness()
 
-        # todo(rteqs): we should really just derive this from the tool
-        questions = input_data.get("questions")
-        if questions is None:
-            return PermissionResultAllow(updated_input=input_data)
-
         await h.pending_question_event.wait()
         tx_id = h.pending_question_tx_id
+        print(f"[debug] can_use_tool: {tx_id}")
         assert tx_id is not None
 
         await h.set_agent_status("awaiting_user_response")
@@ -1868,6 +1860,7 @@ async def can_use_tool(
                     message="User skipped question", interrupt=True
                 )
 
+            questions = input_data.get("questions")
             answers = result.get("answers", {})
 
             qa_content = {
