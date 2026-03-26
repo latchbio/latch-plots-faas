@@ -1503,8 +1503,6 @@ class AgentHarness:
                 )
 
             elif nested_type == "set_widget_value":
-                print(f"[debug] {nested_msg}")
-                print(f"[debug] {self.pending_widgets=}")
                 data = nested_msg.get("data", {})
                 for key, value in data.items():
                     if key in self.pending_widgets:
