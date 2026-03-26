@@ -1,14 +1,20 @@
 import asyncio
 import base64
+import contextlib
 import io
 import os
+import random
 import sys
 from enum import Enum
 from pathlib import Path
 from typing import Any, Literal, NotRequired, TypedDict
 
 from aiohttp import ClientSession
-from aiohttp.client_exceptions import ServerDisconnectedError
+from aiohttp.client_exceptions import (
+    ClientConnectionError,
+    ClientResponseError,
+    ServerDisconnectedError,
+)
 from latch.types.directory import LatchDir
 from latch.types.file import LatchFile
 from lplots.utils.nothing import _Nothing
@@ -103,20 +109,36 @@ async def get_presigned_url(path: str) -> str:
         return res["data"]["url"]
 
 
-async def gql_query(query: str, variables: dict[str, Any], auth: str) -> Any:
-    sess = get_global_http_sess()
-    delays = [0.5, 1.0, 2.0]
+retryable_status_codes = frozenset({429, 500, 502, 503, 504})
 
-    for attempt in range(len(delays) + 1):
+
+def _retry_delay(attempt: int) -> float:
+    delay = min(0.5 * (2**attempt), 30.0)
+    jitter = delay * 0.5 * random.random()  # noqa: S311
+    return delay + jitter
+
+
+def _should_retry(exc: Exception) -> bool:
+    if isinstance(exc, ClientResponseError):
+        return exc.status in retryable_status_codes
+    return isinstance(exc, (ServerDisconnectedError, ClientConnectionError, OSError))
+
+
+async def gql_query(
+    query: str, variables: dict[str, Any], auth: str, *, max_retries: int = 5
+) -> Any:
+    sess = get_global_http_sess()
+    url = URL(f"https://vacuole.{config.domain}") / "graphql"
+    headers = {
+        "Content-Type": "application/json",
+        "User-Agent": "LatchPlotsFaas/0.2.0",
+        "Authorization": auth,
+    }
+
+    for attempt in range(max_retries + 1):
         try:
             async with sess.post(
-                URL(f"https://vacuole.{config.domain}") / "graphql",
-                headers={
-                    "Content-Type": "application/json",
-                    "User-Agent": "LatchPlotsFaas/0.2.0",
-                    "Authorization": auth,
-                },
-                json={"query": query, "variables": variables},
+                url, headers=headers, json={"query": query, "variables": variables}
             ) as resp:
                 resp.raise_for_status()
 
@@ -124,13 +146,31 @@ async def gql_query(query: str, variables: dict[str, Any], auth: str) -> Any:
                 if "errors" in res:
                     raise RuntimeError(f"graphql error: {res}")
                 return res
-        except ServerDisconnectedError:
-            if attempt < len(delays):
-                await asyncio.sleep(delays[attempt])
-            else:
-                raise
 
-    raise RuntimeError(f"Failed to execute graphql query after {len(delays)} attempts")
+        except (
+            ServerDisconnectedError,
+            ClientConnectionError,
+            ClientResponseError,
+            OSError,
+        ) as e:
+            if _should_retry(e) and attempt < max_retries:
+                delay = _retry_delay(attempt)
+
+                if isinstance(e, ClientResponseError) and e.headers is not None:
+                    retry_after = e.headers.get("Retry-After")
+                    if retry_after is not None:
+                        with contextlib.suppress(ValueError):
+                            delay = max(delay, float(retry_after))
+
+                print(
+                    f"[gql_query] {type(e).__name__} on attempt"
+                    f" {attempt + 1}/{max_retries + 1}, retrying in {delay:.1f}s: {e}"
+                )
+                await asyncio.sleep(delay)
+                continue
+            raise
+
+    raise AssertionError("unreachable")
 
 
 def plot_to_webp_string(
