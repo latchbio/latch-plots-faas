@@ -13,7 +13,7 @@ from claude_agent_sdk import (
 from lplots import _inject
 
 if TYPE_CHECKING:
-    from new_agent import AgentHarness
+    from agent import AgentHarness
 
 MCP_SERVER_NAME = "plots-agent-tools"
 
