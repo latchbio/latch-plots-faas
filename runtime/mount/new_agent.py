@@ -7,7 +7,6 @@ import time
 import traceback
 import uuid
 from collections.abc import Iterable
-from contextlib import suppress
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -252,7 +251,6 @@ class AgentHarness:
     mcp_allowed_tools: list[str] = field(
         default_factory=lambda: list(MCP_ALLOWED_TOOL_NAMES)
     )
-    current_query_task: asyncio.Task | None = None
 
     async def send(self, msg: dict[str, Any]) -> None:
         msg_type = msg.get("type", "unknown")
@@ -707,23 +705,6 @@ class AgentHarness:
         self.current_status = status
         await self.send({"type": "agent_status", "status": status})
 
-    async def _wait_for_running_query_to_stop(
-        self, timeout_seconds: float = 2.0
-    ) -> bool:
-        if self.current_query_task is None or self.current_query_task.done():
-            return True
-
-        try:
-            await asyncio.wait_for(self.current_query_task, timeout=timeout_seconds)
-            return True
-        except TimeoutError:
-            self.current_query_task.cancel()
-            with suppress(asyncio.CancelledError):
-                await self.current_query_task
-            return False
-        except asyncio.CancelledError:
-            return True
-
     async def _load_claude_session_id(self, session_id: int) -> str | None:
         try:
             response = await gql_query(
@@ -886,13 +867,8 @@ class AgentHarness:
             return
 
         if self.claude is not None and session_changed:
-            if (
-                self.current_query_task is not None
-                and not self.current_query_task.done()
-            ):
-                print("[agent] Interrupting running query due to session change")
-                await self.claude.interrupt()
-                await self._wait_for_running_query_to_stop()
+            print("[agent] Interrupting running query due to session change")
+            await self.claude.interrupt()
             await self._reset_for_new_session()
             await self.disconnect()
 
@@ -1093,6 +1069,7 @@ class AgentHarness:
         error_type: AssistantMessageError | None = None
         assistant_message_started_at: float | None = None
         async for res in self.claude.receive_response():
+            self.current_request_id = request_id
             if (
                 isinstance(res, SystemMessage)
                 and res.subtype == "init"
@@ -1273,23 +1250,10 @@ class AgentHarness:
         request_id = msg.get("request_id", "unknown")
         print(f"[agent] Cancelling request {request_id}")
 
-        has_running_query = (
-            self.current_query_task is not None and not self.current_query_task.done()
-        )
-        if self.claude is not None and has_running_query:
+        if self.claude is not None:
             await self.claude.interrupt()
-            completed_gracefully = await self._wait_for_running_query_to_stop()
-            if completed_gracefully:
-                print(f"[agent] Cancel completed for request {request_id}")
-            else:
-                print(
-                    f"[agent] Cancel forced task cancellation for request {request_id}"
-                )
         else:
             print(f"[agent] No active query to interrupt for request {request_id}")
-
-        if self.current_query_task is not None and self.current_query_task.done():
-            self.current_query_task = None
 
         self.current_request_id = None
         self.pending_widgets.clear()
@@ -1386,6 +1350,7 @@ class AgentHarness:
             query = msg.get("query", "")
             query_preview = query[:60] + "…" if len(query) > 60 else query
             request_id = msg.get("request_id", "unknown")
+
             print(
                 f"[agent] accept: dispatching to handle_query (query={query_preview}, request_id={request_id})"
             )
