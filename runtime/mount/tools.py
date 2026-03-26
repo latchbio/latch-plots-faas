@@ -111,6 +111,10 @@ async def create_cell(args: dict[str, Any]) -> dict[str, Any]:
     if result.get("status") == "success":
         cell_id = result.get("cell_id", "unknown")
 
+        # todo(rteqs): we can run into a case where create cell finishes before we get here.
+        # fix this by having fronten return cell_id first then running the cell
+        h.pending_cells.add(cell_id)
+
         tf_id = result.get("tf_id", "unknown")
         msg = f"Created cell at position {position} (cell_id: {cell_id}, tf_id: {tf_id}, title: {title})"
         print(f"[tool] create_cell -> {msg}")
@@ -216,6 +220,8 @@ async def edit_cell(args: dict[str, Any]) -> dict[str, Any]:
     new_code = args["new_code"]
     title = args["title"]
     action_summary = args["action_summary"]
+
+    h.pending_cells.add(cell_id)
 
     print(f"[tool] edit_cell id={cell_id}")
     original_code = ""
