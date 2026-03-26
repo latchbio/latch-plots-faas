@@ -820,6 +820,7 @@ class AgentHarness:
                     ]
                 },
                 can_use_tool=can_use_tool,
+                max_buffer_size=10 * 1024 * 1024,
             )
         )
 
@@ -1068,182 +1069,206 @@ class AgentHarness:
 
         error_type: AssistantMessageError | None = None
         assistant_message_started_at: float | None = None
-        async for res in self.claude.receive_response():
-            self.current_request_id = request_id
-            if (
-                isinstance(res, SystemMessage)
-                and res.subtype == "init"
-                and self.claude_session_id is None
-                # note(rteqs): this is always the first message for every query
-            ):
-                self.claude_session_id = s_id = res.data.get("session_id")
-
-                if s_id is not None:
-                    await self._persist_claude_session_id(s_id)
-
-            if isinstance(res, StreamEvent):
-                event = self._parse_stream_event(res.event)
+        try:
+            async for res in self.claude.receive_response():
+                self.current_request_id = request_id
                 if (
-                    event is not None
-                    and event.type == "message_start"
-                    and assistant_message_started_at is None
+                    isinstance(res, SystemMessage)
+                    and res.subtype == "init"
+                    and self.claude_session_id is None
+                    # note(rteqs): this is always the first message for every query
                 ):
-                    assistant_message_started_at = time.perf_counter()
-                await self._handle_stream_event(res)
+                    self.claude_session_id = s_id = res.data.get("session_id")
 
-            elif isinstance(res, AssistantMessage):
-                turn_duration: float | None = None
-                if assistant_message_started_at is not None:
-                    turn_duration = max(
-                        0.0, time.perf_counter() - assistant_message_started_at
-                    )
-                assistant_message_started_at = None
+                    if s_id is not None:
+                        await self._persist_claude_session_id(s_id)
 
-                if res.error is not None:
-                    error_type = res.error
-                    print(f"[agent] assistant message error={res.error}")
+                if isinstance(res, StreamEvent):
+                    event = self._parse_stream_event(res.event)
+                    if (
+                        event is not None
+                        and event.type == "message_start"
+                        and assistant_message_started_at is None
+                    ):
+                        assistant_message_started_at = time.perf_counter()
+                    await self._handle_stream_event(res)
 
-                for c in res.content:
-                    if isinstance(c, TextBlock):
-                        await self._insert_history(
-                            role="assistant",
-                            request_id=request_id,
-                            payload={
-                                "content": [{"type": "text", "text": c.text}],
-                                **(
-                                    {"duration": turn_duration}
-                                    if turn_duration is not None
-                                    else {}
-                                ),
-                            },
+                elif isinstance(res, AssistantMessage):
+                    turn_duration: float | None = None
+                    if assistant_message_started_at is not None:
+                        turn_duration = max(
+                            0.0, time.perf_counter() - assistant_message_started_at
                         )
+                    assistant_message_started_at = None
 
-                    elif isinstance(c, ThinkingBlock):
-                        await self._insert_history(
-                            role="assistant",
-                            request_id=request_id,
-                            payload={
-                                "content": [
-                                    {"type": "thinking", "thinking": c.thinking}
-                                ],
-                                **(
-                                    {"duration": turn_duration}
-                                    if turn_duration is not None
-                                    else {}
-                                ),
-                            },
-                        )
+                    if res.error is not None:
+                        error_type = res.error
+                        print(f"[agent] assistant message error={res.error}")
 
-                    elif isinstance(c, ToolUseBlock):
-                        tool_name_by_tool_use_id[c.id] = c.name
-                        if c.name == "AskUserQuestion":
-                            try:
-                                tx_id = await self.create_atomic_operation(
-                                    "ask_user_question",
-                                    {"questions": c.input.get("questions", [])},
-                                )
-                                self.pending_question_tx_id = c.input["tx_id"] = tx_id
-                                self.pending_question_event.set()
-                            except Exception:
-                                ...
+                    for c in res.content:
+                        if isinstance(c, TextBlock):
+                            await self._insert_history(
+                                role="assistant",
+                                request_id=request_id,
+                                payload={
+                                    "content": [{"type": "text", "text": c.text}],
+                                    **(
+                                        {"duration": turn_duration}
+                                        if turn_duration is not None
+                                        else {}
+                                    ),
+                                },
+                            )
 
-                        await self._insert_history(
-                            role="assistant",
-                            request_id=request_id,
-                            payload={
-                                "content": [
-                                    {
-                                        "type": "tool_use",
-                                        "id": c.id,
-                                        "name": c.name,
-                                        "input": c.input,
-                                    }
-                                ],
-                                **(
-                                    {"duration": turn_duration}
-                                    if turn_duration is not None
-                                    else {}
-                                ),
-                            },
-                        )
+                        elif isinstance(c, ThinkingBlock):
+                            await self._insert_history(
+                                role="assistant",
+                                request_id=request_id,
+                                payload={
+                                    "content": [
+                                        {"type": "thinking", "thinking": c.thinking}
+                                    ],
+                                    **(
+                                        {"duration": turn_duration}
+                                        if turn_duration is not None
+                                        else {}
+                                    ),
+                                },
+                            )
 
-            elif isinstance(res, UserMessage):
-                if isinstance(res.content, str):
-                    await self._insert_history(
-                        role="user",
-                        request_id=request_id,
-                        payload={"content": res.content},
-                    )
-                    continue
+                        elif isinstance(c, ToolUseBlock):
+                            tool_name_by_tool_use_id[c.id] = c.name
+                            if c.name == "AskUserQuestion":
+                                try:
+                                    tx_id = await self.create_atomic_operation(
+                                        "ask_user_question",
+                                        {"questions": c.input.get("questions", [])},
+                                    )
+                                    self.pending_question_tx_id = c.input["tx_id"] = (
+                                        tx_id
+                                    )
+                                    self.pending_question_event.set()
+                                except Exception:
+                                    ...
 
-                for c in res.content:
-                    if isinstance(c, TextBlock):
-                        await self._insert_history(
-                            role="user",
-                            request_id=request_id,
-                            payload={"content": [{"type": "text", "text": c.text}]},
-                        )
+                            await self._insert_history(
+                                role="assistant",
+                                request_id=request_id,
+                                payload={
+                                    "content": [
+                                        {
+                                            "type": "tool_use",
+                                            "id": c.id,
+                                            "name": c.name,
+                                            "input": c.input,
+                                        }
+                                    ],
+                                    **(
+                                        {"duration": turn_duration}
+                                        if turn_duration is not None
+                                        else {}
+                                    ),
+                                },
+                            )
 
-                    if isinstance(c, ToolResultBlock):
-                        tool_name = tool_name_by_tool_use_id.get(
-                            c.tool_use_id, "Unknown"
-                        )
-                        is_error = c.is_error if c.is_error is not None else False
-
+                elif isinstance(res, UserMessage):
+                    if isinstance(res.content, str):
                         await self._insert_history(
                             role="user",
                             request_id=request_id,
-                            payload={
-                                "content": [
-                                    {
-                                        "type": "tool_result",
-                                        "tool_use_id": c.tool_use_id,
-                                        "content": self._build_generic_tool_result_content(
-                                            tool_name=tool_name,
-                                            content=self._normalize_tool_result_content(
-                                                c.content
+                            payload={"content": res.content},
+                        )
+                        continue
+
+                    for c in res.content:
+                        if isinstance(c, TextBlock):
+                            await self._insert_history(
+                                role="user",
+                                request_id=request_id,
+                                payload={"content": [{"type": "text", "text": c.text}]},
+                            )
+
+                        if isinstance(c, ToolResultBlock):
+                            tool_name = tool_name_by_tool_use_id.get(
+                                c.tool_use_id, "Unknown"
+                            )
+                            is_error = c.is_error if c.is_error is not None else False
+
+                            await self._insert_history(
+                                role="user",
+                                request_id=request_id,
+                                payload={
+                                    "content": [
+                                        {
+                                            "type": "tool_result",
+                                            "tool_use_id": c.tool_use_id,
+                                            "content": self._build_generic_tool_result_content(
+                                                tool_name=tool_name,
+                                                content=self._normalize_tool_result_content(
+                                                    c.content
+                                                ),
+                                                is_error=is_error,
                                             ),
-                                            is_error=is_error,
-                                        ),
-                                    }
-                                ]
-                            },
-                        )
+                                        }
+                                    ]
+                                },
+                            )
 
-            elif isinstance(res, ResultMessage):
-                if res.session_id != self.claude_session_id:
-                    continue
+                elif isinstance(res, ResultMessage):
+                    if res.session_id != self.claude_session_id:
+                        continue
 
-                usage = validate(res.usage, ResultMessageUsage)
-                await self._send_usage_update(usage)
+                    usage = validate(res.usage, ResultMessageUsage)
+                    await self._send_usage_update(usage)
 
-                if res.subtype == "success":
+                    if res.subtype == "success":
+                        break
+
+                    # todo(rteqs): the old error handling is erroneous. we know from the docs that res.result will be None if subtype != success.
+                    # subtype and assistant_error_type (from latest AssistantMessage) alone are too broad to pinpoint what the exact error is and
+                    # there doesn't seem to be a fixed schema for res.stop_reason. The below is just a best effort implementation.
+                    stop_reason = (
+                        res.stop_reason
+                        if res.stop_reason is not None
+                        else f"unknown error (subtype={res.subtype})"
+                    )
+                    error_history_payload: ErrorHistoryPayload = {
+                        "message": stop_reason,
+                        "raw_error": stop_reason,
+                        "assistant_error_type": error_type,
+                        "subtype": res.subtype,
+                        "should_clear_history": "prompt is too long" in stop_reason,
+                        "should_contact_support": res.subtype
+                        == "error_during_execution",
+                    }
+
+                    await self._insert_history(
+                        role="system",
+                        event_type="error",
+                        payload=error_history_payload,
+                        request_id=request_id,
+                    )
                     break
-
-                # todo(rteqs): the old error handling is erroneous. we know from the docs that res.result will be None if subtype != success.
-                # subtype and assistant_error_type (from latest AssistantMessage) alone are too broad to pinpoint what the exact error is and
-                # there doesn't seem to be a fixed schema for res.stop_reason. The below is just a best effort implementation.
-                stop_reason = (
-                    res.stop_reason
-                    if res.stop_reason is not None
-                    else f"unknown error (subtype={res.subtype})"
-                )
-                error_history_payload: ErrorHistoryPayload = {
-                    "message": stop_reason,
-                    "raw_error": stop_reason,
-                    "assistant_error_type": error_type,
-                    "subtype": res.subtype,
-                    "should_clear_history": "prompt is too long" in stop_reason,
-                    "should_contact_support": res.subtype == "error_during_execution",
-                }
-
+        except Exception as e:
+            print(f"[agent] query failed with unhandled error: {e!s}")
+            traceback.print_exc()
+            await self.send({
+                "type": "agent_error",
+                "error": f"Agent query failed: {e!s}",
+                "fatal": False,
+            })
+            try:
                 await self._insert_history(
-                    role="system",
                     event_type="error",
-                    payload=error_history_payload,
+                    role="system",
+                    payload={
+                        "message": f"Agent query failed: {e!s}",
+                        "should_contact_support": True,
+                    },
                     request_id=request_id,
                 )
-                break
+            except Exception:
+                print("[agent] Failed to persist error history")
 
     async def interrupt(self, msg: dict[str, Any]) -> None:
         # todo(rteqs): clean up
