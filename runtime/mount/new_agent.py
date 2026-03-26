@@ -41,6 +41,7 @@ from claude_agent_sdk.types import (
     HookContext,
     McpSdkServerConfig,
     PostToolUseHookInput,
+    PreCompactHookInput,
     StreamEvent,
     SyncHookJSONOutput,
     SystemPromptPreset,
@@ -332,7 +333,7 @@ class AgentHarness:
 
         print(
             "[agent] PostToolUse attached notebook state context "
-            f"for {tool_name} (tool_use_id={tool_use_id})"
+            f"for {tool_name} ({tool_use_id=})"
         )
         return {
             "hookSpecificOutput": {
@@ -344,6 +345,25 @@ class AgentHarness:
                 ),
             }
         }
+
+    async def _pre_compact_hook(
+        self,
+        input_data: PreCompactHookInput,
+        tool_use_id: str | None,
+        _context: HookContext,
+    ) -> SyncHookJSONOutput:
+        trigger = input_data.get("trigger", "unknown")
+
+        print(f"[agent] PreCompact hook fired ({trigger=}) ({tool_use_id=}) ")
+
+        await self._insert_history(
+            event_type="compaction_start",
+            role="system",
+            payload=dict(input_data),
+            request_id=self.current_request_id,
+        )
+
+        return {"continue_": True}
 
     # todo(rteqs): refactor _normalize_tool_content, _extract_tool_result_text, _build_generic_tool_result_content
     def _normalize_tool_result_content(
@@ -817,7 +837,8 @@ class AgentHarness:
                             matcher=NOTEBOOK_MUTATION_TOOL_MATCHER,
                             hooks=[self._post_tool_use_attach_notebook_state],
                         )
-                    ]
+                    ],
+                    "PreCompact": [HookMatcher(hooks=[self._pre_compact_hook])],
                 },
                 can_use_tool=can_use_tool,
                 max_buffer_size=10 * 1024 * 1024,
