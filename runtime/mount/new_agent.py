@@ -1429,21 +1429,6 @@ class AgentHarness:
                 if cell_id is not None:
                     self.pending_cells.discard(str(cell_id))
 
-                execution_statuses = {
-                    "executing",
-                    "awaiting_cell_execution",
-                    "thinking",
-                    "fixing",
-                }
-                if (
-                    self.current_status is not None
-                    and self.current_status not in execution_statuses
-                ):
-                    print(
-                        f"        Not adding cell {cell_id} result because {self.current_status}"
-                    )
-                    return
-
                 if success:
                     result_message = (
                         f"✓ Cell {cell_name} ({cell_id}) executed successfully"
