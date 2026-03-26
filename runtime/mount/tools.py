@@ -110,6 +110,8 @@ async def create_cell(args: dict[str, Any]) -> dict[str, Any]:
 
     if result.get("status") == "success":
         cell_id = result.get("cell_id", "unknown")
+        h.pending_cells.add(cell_id)
+
         tf_id = result.get("tf_id", "unknown")
         msg = f"Created cell at position {position} (cell_id: {cell_id}, tf_id: {tf_id}, title: {title})"
         print(f"[tool] create_cell -> {msg}")
@@ -232,6 +234,7 @@ async def edit_cell(args: dict[str, Any]) -> dict[str, Any]:
         )
 
     params = {"cell_id": cell_id, "source": new_code, "auto_run": True}
+    h.pending_cells.add(cell_id)
     result = await h.atomic_operation("edit_cell", params)
 
     if result.get("status") == "success":
