@@ -1,11 +1,19 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from claude_agent_sdk import create_sdk_mcp_server, tool
+from claude_agent_sdk import (
+    PermissionResultAllow,
+    PermissionResultDeny,
+    ToolPermissionContext,
+    create_sdk_mcp_server,
+    tool,
+)
 from lplots import _inject
 
+if TYPE_CHECKING:
+    from agent import AgentHarness
 
 MCP_SERVER_NAME = "plots-agent-tools"
 
@@ -15,7 +23,6 @@ MCP_TOOL_NAMES = [
     "edit_cell",
     "run_cell",
     "update_plan",
-    "submit_response",
     "delete_cell",
     "stop_cell",
     "delete_all_cells",
@@ -41,6 +48,7 @@ MCP_TOOL_NAMES = [
     "h5_manage_obs",
     "redeem_package",
     "smart_ui_spotlight",
+    "submit_response",
 ]
 MCP_ALLOWED_TOOL_NAMES = [f"mcp__{MCP_SERVER_NAME}__{name}" for name in MCP_TOOL_NAMES]
 
@@ -49,7 +57,7 @@ def ok(d: dict) -> dict[str, Any]:
     return {"content": [{"type": "text", "text": json.dumps(d)}]}
 
 
-def harness():
+def harness() -> AgentHarness:
     h = _inject.agent
     if h is None:
         raise RuntimeError("Agent harness is not initialized")
@@ -102,6 +110,11 @@ async def create_cell(args: dict[str, Any]) -> dict[str, Any]:
 
     if result.get("status") == "success":
         cell_id = result.get("cell_id", "unknown")
+
+        # todo(rteqs): we can run into a case where create cell finishes before we get here.
+        # fix this by having fronten return cell_id first then running the cell
+        h.pending_cells.add(cell_id)
+
         tf_id = result.get("tf_id", "unknown")
         msg = f"Created cell at position {position} (cell_id: {cell_id}, tf_id: {tf_id}, title: {title})"
         print(f"[tool] create_cell -> {msg}")
@@ -208,6 +221,8 @@ async def edit_cell(args: dict[str, Any]) -> dict[str, Any]:
     title = args["title"]
     action_summary = args["action_summary"]
 
+    h.pending_cells.add(cell_id)
+
     print(f"[tool] edit_cell id={cell_id}")
     original_code = ""
     context_result = await h.atomic_operation("get_context", {})
@@ -246,13 +261,17 @@ async def edit_cell(args: dict[str, Any]) -> dict[str, Any]:
     })
 
 
+# todo(rteqs): when ClaudeCode support MCP tasks (https://modelcontextprotocol.io/seps/1686-tasks) we should make this a background task and handle tasks from SystemMessges
 @tool(
     "run_cell",
     "Execute a specific cell.",
     {
         "type": "object",
         "properties": {
-            "cell_id": {"type": "string", "description": "ID of the cell to run"},
+            "cell_id": {
+                "type": "string",
+                "description": "ID of the cell to run (note: loro_cell_id, not tf_id)",
+            },
             "title": {"type": "string", "description": "Name of the cell to run"},
             "action_summary": {
                 "type": "string",
@@ -270,7 +289,7 @@ async def run_cell(args: dict[str, Any]) -> dict[str, Any]:
 
     params = {"cell_id": cell_id}
     await h.send({"type": "agent_action", "action": "run_cell", "params": params})
-    h.executing_cells.add(cell_id)
+    h.pending_cells.add(cell_id)
 
     return ok({
         "tool_name": "run_cell",
@@ -362,7 +381,7 @@ async def stop_cell(args: dict[str, Any]) -> dict[str, Any]:
 
     result = await h.atomic_operation("stop_cell", params)
     if result.get("status") == "success":
-        h.executing_cells.discard(cell_id)
+        h.pending_cells.discard(cell_id)
         return ok({
             "tool_name": "stop_cell",
             "summary": f"Stopped cell {cell_id}",
@@ -704,6 +723,10 @@ async def capture_widget_image(args: dict[str, Any]) -> dict[str, Any]:
         })
 
     print(f"[tool] capture_widget_image: {widget_key}")
+
+    await h.set_agent_status("awaiting_user_widget_input")
+    h.pending_widgets[widget_key] = None
+
     result = await h.atomic_operation(
         "capture_widget_image", {"widget_key": widget_key}
     )
@@ -734,11 +757,7 @@ async def capture_widget_image(args: dict[str, Any]) -> dict[str, Any]:
                         "metadata": metadata,
                     }),
                 },
-                {
-                    "type": "image",
-                    "data": base64_data,
-                    "mimeType": media_type,
-                },
+                {"type": "image", "data": base64_data, "mimeType": media_type},
             ]
         }
 
@@ -749,6 +768,7 @@ async def capture_widget_image(args: dict[str, Any]) -> dict[str, Any]:
     })
 
 
+# todo(rteqs): when ClaudeCode support MCP tasks (https://modelcontextprotocol.io/seps/1686-tasks) we should make this a background task and handle tasks from SystemMessges
 @tool(
     "set_widget",
     "Set a single widget value by widget key.",
@@ -1772,7 +1792,7 @@ async def update_plan(args: dict[str, Any]) -> dict[str, Any]:
         return ok({
             "tool_name": "update_plan",
             "success": True,
-            "summary": plan_update_overview if plan_update_overview else "Plan updated",
+            "summary": plan_update_overview or "Plan updated",
         })
     except Exception as e:
         print(f"[tool] update_plan error: {e!s}")
@@ -1785,17 +1805,13 @@ async def update_plan(args: dict[str, Any]) -> dict[str, Any]:
 
 @tool(
     "submit_response",
-    "Submit the user-facing response with next_status, questions, and summary. At least one of summary or questions is REQUIRED. Call this at the end of every turn.",
+    "Submit the user-facing response with next_status, questions, and summary. Call this at the end of every loop.",
     {
         "type": "object",
         "properties": {
             "summary": {
                 "type": "string",
                 "description": "User-facing progress, responses, or next step. Use markdown bullets if needed.",
-            },
-            "questions": {
-                "type": "string",
-                "description": "User-facing questions. Put finalized question text here.",
             },
             "next_status": {
                 "type": "string",
@@ -1818,15 +1834,6 @@ async def update_plan(args: dict[str, Any]) -> dict[str, Any]:
                     "when next_status is 'awaiting_user_widget_input'"
                 ),
             },
-            "continue": {
-                "type": "boolean",
-                "description": (
-                    "Set to true to immediately continue to the next step without "
-                    "waiting for user input. Set to false when waiting for user input "
-                    "or when all work is complete."
-                ),
-                "default": False,
-            },
         },
         "required": ["next_status"],
     },
@@ -1838,11 +1845,7 @@ async def submit_response(args: dict[str, Any]) -> dict[str, Any]:
         if summary is not None and not isinstance(summary, str):
             summary = None
 
-        questions = args.get("questions")
-        if questions is not None and not isinstance(questions, str):
-            questions = None
-
-        next_status = args.get("next_status")
+        next_status = args.get("next_status", "done")
         if not isinstance(next_status, str) or next_status not in {
             "executing",
             "fixing",
@@ -1859,36 +1862,18 @@ async def submit_response(args: dict[str, Any]) -> dict[str, Any]:
                 "message": "Please provide a valid next_status",
             })
 
-        should_continue = args.get("continue", False)
         expected_widgets = args.get("expected_widgets", [])
 
         print("[tool] submit_response called with:")
         print(f"  - next_status: {next_status}")
         print(f"  - summary: {summary}")
-        print(f"  - questions: {questions}")
-        print(f"  - continue: {should_continue}")
         print(f"  - expected_widgets: {expected_widgets}")
-
-        if should_continue and h.executing_cells:
-            print(
-                f"[tool] Deferring auto-continue - {len(h.executing_cells)} cells still executing: {h.executing_cells}"
-            )
-            h.should_auto_continue = False
-            h.pending_auto_continue = True
-        else:
-            h.should_auto_continue = should_continue
-            h.pending_auto_continue = False
-
-        terminal_statuses = {"done", "awaiting_user_response"}
-        if not should_continue and next_status in terminal_statuses:
-            h.pause_until_user_query = True
-        else:
-            h.pause_until_user_query = False
 
         h.current_status = next_status
         if next_status == "awaiting_user_widget_input":
-            h.expected_widgets = {str(k): None for k in expected_widgets}
+            h.pending_widgets = {str(k): None for k in expected_widgets}
 
+        await h.set_agent_status(next_status)
         return ok({
             "tool_name": "submit_response",
             "success": True,
@@ -1922,7 +1907,6 @@ all_tools = [
     get_global_info,
     capture_widget_image,
     update_plan,
-    submit_response,
     set_widget,
     h5_filter_by,
     h5_color_by,
@@ -1938,6 +1922,56 @@ all_tools = [
     h5_manage_obs,
     redeem_package,
     smart_ui_spotlight,
+    submit_response,
 ]
 
 agent_tools_mcp = create_sdk_mcp_server(name=MCP_SERVER_NAME, tools=all_tools)
+
+
+async def can_use_tool(
+    tool_name: str, input_data: dict[str, Any], context: ToolPermissionContext
+) -> PermissionResultAllow | PermissionResultDeny:
+    if tool_name == "AskUserQuestion":
+        h = harness()
+
+        await h.pending_question_event.wait()
+        tx_id = h.pending_question_tx_id
+        assert tx_id is not None
+
+        await h.set_agent_status("awaiting_user_response")
+
+        try:
+            result = await h.wait_for_operation(tx_id, timeout=300)
+        except Exception as e:
+            print(f"[agent] AskUserQuestion failed: {e!s}")
+            return PermissionResultDeny(
+                message=f"Failed to get user response: {e!s}", interrupt=True
+            )
+        finally:
+            h.pending_question_event.clear()
+
+        if result.get("status") == "success":
+            if result.get("skip") is True:
+                return PermissionResultDeny(
+                    message="User skipped question", interrupt=True
+                )
+
+            questions = input_data.get("questions")
+            answers = result.get("answers", {})
+
+            qa_content = {
+                "type": "answers",
+                "content": [{"question": q, "answer": a} for q, a in answers.items()],
+            }
+            await h._insert_history(payload={"content": qa_content})
+
+            return PermissionResultAllow(
+                updated_input={"questions": questions, "answers": answers}
+            )
+
+        return PermissionResultDeny(
+            message=f"Failed to get user response: {result.get('error', 'Unknown error')}",
+            interrupt=True,
+        )
+
+    return PermissionResultAllow(updated_input=input_data)

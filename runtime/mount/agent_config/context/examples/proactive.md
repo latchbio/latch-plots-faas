@@ -5,15 +5,12 @@
 **Turn 1: Full Plan & Continue**
 
 ```python
-submit_response(
+update_plan(
     plan=[
         {"id": "load", "status": "todo"},
         {"id": "qc", "status": "todo"},
         {"id": "cluster", "status": "todo"}
-    ],
-    summary="I'll handle the full analysis: Load -> QC -> Clustering. Starting now.",
-    continue=True,
-    next_status="executing"
+    ]
 )
 ```
 
@@ -80,22 +77,16 @@ else:
 
 ```python
 # [Agent observes load success]
-submit_response(
+update_plan(
     plan=[{"id": "load", "status": "done"}, {"id": "qc", "status": "in_progress"}, {"id": "cluster", "status": "todo"}],
-    summary="Data loaded. Proceeding directly to Quality Control.",
-    continue=True,
-    next_status="executing"
+    plan_diff=[
+        #...
+    ],
+    plan_update_overview="..."
 )
 ```
 
 **Turn 3: Auto-Correction**
 
-```python
 # [Agent does QC, then evaluates <self_eval_criteria>]
 # [Self-eval criterion failed: retention=2% (<20% target) at 500 counts]
-submit_response(
-    summary="QC retained too few cells (retention=2% at 500 counts; target ≥20%). I will relax the threshold to 300 and re-run.",
-    continue=True,
-    next_status="executing"
-)
-```

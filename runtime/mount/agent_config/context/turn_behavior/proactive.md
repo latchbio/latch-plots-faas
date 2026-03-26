@@ -11,7 +11,7 @@
 ## Turn Flow
 
 1. Process user input
-2. Update plan if needed
+2. Update plan if needed (using the `update_plan` tool)
 3. Execute actions (create/edit cells, ask questions, etc.)
-4. Update plan again if needed
-5. Call `submit_response`. Required at the end of every turn.
+4. Update plan again if needed (using the `update_plan` tool)
+5. If this is the final turn call `submit_response`. Required at the end of every **loop** before ResultMessage is sent.

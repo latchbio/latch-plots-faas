@@ -7,40 +7,50 @@ import time
 import traceback
 import uuid
 from collections.abc import Iterable
-from contextlib import suppress
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
-from enum import Enum
 from pathlib import Path
-from typing import Any, Literal, TypedDict
+from typing import Any, Literal, NotRequired, TypedDict
 
 from anthropic.types import (
-    MessageParam,
+    MessageDeltaUsage,
     RawContentBlockDeltaEvent,
     RawContentBlockStartEvent,
     RawContentBlockStopEvent,
     RawMessageDeltaEvent,
     RawMessageStartEvent,
     RawMessageStopEvent,
+    Usage,
 )
-from claude_agent_sdk import ClaudeAgentOptions, ClaudeSDKClient, HookMatcher
-from claude_agent_sdk.types import (
-    AssistantMessage,
-    McpSdkServerConfig,
-    HookContext,
-    PostToolUseHookInput,
+from claude_agent_sdk import (
+    ClaudeAgentOptions,
+    ClaudeSDKClient,
+    HookMatcher,
+    PermissionResultAllow,
     ResultMessage,
-    SyncHookJSONOutput,
-    StreamEvent,
     SystemMessage,
+    TextBlock,
+    ThinkingBlock,
     ToolResultBlock,
     ToolUseBlock,
+    get_session_messages,
+)
+from claude_agent_sdk.types import (
+    AssistantMessage,
+    AssistantMessageError,
+    HookContext,
+    McpSdkServerConfig,
+    PostToolUseHookInput,
+    PreCompactHookInput,
+    StreamEvent,
+    SyncHookJSONOutput,
+    SystemPromptPreset,
     UserMessage,
 )
 from latch_data_validation.data_validation import validate
-from tools import MCP_ALLOWED_TOOL_NAMES, MCP_SERVER_NAME, agent_tools_mcp
 from lplots import _inject
 from socketio_thread import SocketIoThread
+from tools import MCP_ALLOWED_TOOL_NAMES, MCP_SERVER_NAME, agent_tools_mcp, can_use_tool
 from utils import auth_token_sdk, gql_query, nucleus_url, pod_id, sdk_token
 
 sys.stdout.reconfigure(line_buffering=True)
@@ -74,6 +84,7 @@ SDK_BUILTIN_ALLOWED_TOOLS = [
     "Bash",
     "WebFetch",
     "WebSearch",
+    "AskUserQuestion",
 ]
 NOTEBOOK_MUTATION_TOOL_NAMES = (
     "create_cell",
@@ -87,18 +98,11 @@ NOTEBOOK_MUTATION_TOOL_NAMES = (
     "restore_checkpoint",
 )
 NOTEBOOK_MUTATION_TOOL_MATCHER = (
-    "^mcp__"
-    + MCP_SERVER_NAME
-    + "__("
-    + "|".join(NOTEBOOK_MUTATION_TOOL_NAMES)
-    + ")$"
+    "^mcp__" + MCP_SERVER_NAME + "__(" + "|".join(NOTEBOOK_MUTATION_TOOL_NAMES) + ")$"
 )
 
-
-class Behavior(Enum):
-    proactive = "proactive"
-    step_by_step = "step_by_step"
-
+# todo(rteqs): "plan", "build"
+Behavior = Literal["step_by_step", "proactive"]
 
 HistoryRole = Literal["user", "assistant", "system"]
 
@@ -134,20 +138,6 @@ class ImageToolResultBlock(TypedDict):
 ToolResultContent = str | list[TextToolResultBlock | ImageToolResultBlock]
 
 
-class ToolUseHistoryBlock(TypedDict):
-    type: Literal["tool_use"]
-    id: str
-    name: str
-    input: dict[str, Any]
-
-
-class ToolResultHistoryBlock(TypedDict, total=False):
-    type: Literal["tool_result"]
-    tool_use_id: str
-    content: ToolResultContent
-    is_error: bool
-
-
 class GenericToolResultPayload(TypedDict, total=False):
     tool_name: str
     success: bool
@@ -180,7 +170,8 @@ class ErrorHistoryPayload(TypedDict, total=False):
     should_contact_support: bool
     should_clear_history: bool
     raw_error: str
-    assistant_error_type: str
+    assistant_error_type: str | None
+    subtype: str
 
 
 AnthropicStreamEvent = (
@@ -192,28 +183,68 @@ AnthropicStreamEvent = (
     | RawContentBlockStopEvent
 )
 
+
+class AgentQuery(TypedDict):
+    type: Literal["agent_query"]
+    request_id: NotRequired[str]
+    query: str
+    behavior: Behavior
+    template_version_id: str | None
+    contextual_node_data: NotRequired[dict[str, Any]]  # todo(rteqs): type properly
+    selected_widgets: NotRequired[list[dict[str, Any]]]  # todo(rteqs): type properly
+
+
+class CacheCreation(TypedDict):
+    ephemeral_1h_input_tokens: int
+    ephemeral_5m_input_tokens: int
+
+
+class ServerToolUsage(TypedDict):
+    web_search_requests: int
+    web_fetch_requests: int
+
+
+@dataclass(frozen=True)
+class ResultMessageUsage:
+    cache_creation: CacheCreation | None
+    cache_creation_input_tokens: int | None
+    cache_read_input_tokens: int | None
+    input_tokens: int
+    output_tokens: int
+    server_tool_use: ServerToolUsage | None
+    service_tier: Literal["standard", "priority", "batch"] | None
+    inference_geo: str
+    iterations: list
+    speed: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class PendingOperation:
+    fut: asyncio.Future
+    start_time: float
+    action: str
+    params: dict
+
+
 @dataclass
 class AgentHarness:
     conn: SocketIoThread
-    client: ClaudeSDKClient | None = None
-    system_prompt: str | None = None
-    pending_operations: dict[str, asyncio.Future] = field(default_factory=dict)
-    executing_cells: set[str] = field(default_factory=set)
+    claude: ClaudeSDKClient | None = None
+    system_prompy: str | None = None
+    pending_operations: dict[str, PendingOperation] = field(default_factory=dict)
+    pending_cells: set[str] = field(default_factory=set)
+    pending_widgets: dict[str, Any | None] = field(default_factory=dict)
+    pending_question_tx_id: str | None = None
+    pending_question_event: asyncio.Event = field(default_factory=asyncio.Event)
     operation_counter: int = 0
     current_request_id: str | None = None
-    should_auto_continue: bool = False
-    pending_auto_continue: bool = False
-    pause_until_user_query: bool = False
 
-    pending_messages: asyncio.Queue = field(default_factory=asyncio.Queue)
     conversation_task: asyncio.Task | None = None
-    conversation_running: bool = False
-    agent_session_id: int | None = None
+    agent_session_id: int | None = None  # db_session_id
     claude_session_id: str | None = None
     latest_notebook_context: dict = field(default_factory=dict)
     current_status: str | None = None
-    expected_widgets: dict[str, Any | None] = field(default_factory=dict)
-    behavior: Behavior = Behavior.step_by_step
+    behavior: Behavior = "step_by_step"
     latest_notebook_state: str | None = None
     current_plan: dict | None = None
     in_memory_history: list[dict] = field(default_factory=list)
@@ -221,8 +252,6 @@ class AgentHarness:
     mcp_allowed_tools: list[str] = field(
         default_factory=lambda: list(MCP_ALLOWED_TOOL_NAMES)
     )
-    current_query_task: asyncio.Task | None = None
-    open_stream_blocks: dict[int, str] = field(default_factory=dict)
 
     async def send(self, msg: dict[str, Any]) -> None:
         msg_type = msg.get("type", "unknown")
@@ -239,346 +268,6 @@ class AgentHarness:
             else None,
             **({"request_id": request_id} if request_id else {}),
         })
-
-    async def _fetch_history_from_db(self) -> list[dict]:
-        if skip_db_history:
-            return self.in_memory_history
-        assert self.agent_session_id is not None
-        resp = await gql_query(
-            auth=auth_token_sdk,
-            query="""
-                query AgentHistory($sessionId: BigInt!) {
-                    agentHistories(condition: {sessionId: $sessionId, removed: false}, orderBy: ID_ASC) {
-                        nodes { id payload requestId templateVersionId }
-                    }
-                }
-            """,
-            variables={"sessionId": str(self.agent_session_id)},
-        )
-        nodes = resp.get("data", {}).get("agentHistories", {}).get("nodes", [])
-        return [
-            {
-                "payload": n.get("payload"),
-                "request_id": n.get("requestId"),
-                "template_version_id": n.get("templateVersionId"),
-            }
-            for n in nodes
-        ]
-
-    async def _build_messages_from_db(
-        self, *, exclude_request_id: str | None = None
-    ) -> list[MessageParam]:
-        history = await self._fetch_history_from_db()
-        anthropic_messages: list[MessageParam] = []
-
-        for item in history:
-            if (
-                exclude_request_id is not None
-                and item.get("request_id") == exclude_request_id
-            ):
-                continue
-
-            payload = item.get("payload")
-
-            t = payload.get("type") if isinstance(payload, dict) else None
-            if t == "anthropic_message":
-                role = payload.get("role")
-                content = payload.get("content")
-
-                display_widgets = payload.get("display_widgets")
-                if (
-                    role == "user"
-                    and display_widgets is not None
-                    and isinstance(content, str)
-                ):
-                    for widget in display_widgets:
-                        ref_pattern = f"@({widget['widgetKey']}|{widget['id']})"
-                        inline_widget = f'<Widget label="{widget["label"]}" type="{widget["widgetType"]}" widget_key="{widget["widgetKey"]}" cell="{widget["cellDisplayName"]}"/>'
-                        content = content.replace(ref_pattern, inline_widget)
-
-                if (
-                    role == "user"
-                    and isinstance(content, dict)
-                    and content.get("type") == "cell_result"
-                ):
-                    exception = content.get("exception")
-                    logs = content.get("logs")
-                    message = content.get("message", "Cell execution completed")
-
-                    content = message
-                    if exception:
-                        content = f"{message}\n\nException: {exception}"
-                    if logs:
-                        content = f"{content}\n\nLogs:\n{logs}"
-
-                if isinstance(content, list):
-                    cleaned_content = []
-                    for block in content:
-                        if (
-                            isinstance(block, dict)
-                            and block.get("type") == "thinking_summary"
-                        ):
-                            continue
-
-                        if (
-                            isinstance(block, dict)
-                            and block.get("type") == "tool_result"
-                        ):
-                            block = block.copy()
-                            block_content = block.get("content", "{}")
-                            if isinstance(block_content, str):
-                                try:
-                                    result = json.loads(block_content)
-                                except json.JSONDecodeError:
-                                    print(
-                                        f"[agent] tool_result parse failed tool_use_id={block.get('tool_use_id', '?')}"
-                                    )
-                                    result = None
-                                if (
-                                    isinstance(result, dict)
-                                    and "original_code" in result
-                                ):
-                                    result.pop("original_code")
-                                    block["content"] = json.dumps(
-                                        result, sort_keys=True
-                                    )
-                        cleaned_content.append(block)
-                    content = cleaned_content
-
-                template_version_id = item.get("template_version_id")
-                if role == "user" and template_version_id is not None:
-                    checkpoint_content = f"[auto-generated metadata] template_version_id={template_version_id}"
-                    anthropic_messages.append({
-                        "role": "user",
-                        "content": checkpoint_content,
-                    })
-
-                if role in {"user", "assistant"} and (isinstance(content, (str, list))):
-                    anthropic_messages.append({"role": role, "content": content})
-
-            elif t == "cancellation":
-                anthropic_messages.append({
-                    "role": "user",
-                    "content": "[Request cancelled by user]",
-                })
-
-        reordered: list[MessageParam] = []
-        pending_tool_ids: set[str] = set()
-        deferred: list[MessageParam] = []
-
-        for msg in anthropic_messages:
-            role = msg.get("role")
-            content = msg.get("content")
-
-            if role == "assistant" and isinstance(content, list):
-                for block in content:
-                    if isinstance(block, dict) and block.get("type") == "tool_use":
-                        tool_id = block.get("id")
-                        if tool_id is not None:
-                            pending_tool_ids.add(tool_id)
-
-            if len(pending_tool_ids) > 0 and role == "user":
-                is_tool_result_msg = isinstance(content, list) and any(
-                    isinstance(b, dict) and b.get("type") == "tool_result"
-                    for b in content
-                )
-                if is_tool_result_msg:
-                    reordered.append(msg)
-                    for block in content:
-                        if (
-                            isinstance(block, dict)
-                            and block.get("type") == "tool_result"
-                        ):
-                            tool_result_id = block.get("tool_use_id")
-                            if tool_result_id is not None:
-                                pending_tool_ids.discard(tool_result_id)
-                    if len(pending_tool_ids) == 0:
-                        reordered.extend(deferred)
-                        deferred.clear()
-                    continue
-
-                deferred.append(msg)
-                continue
-
-            reordered.append(msg)
-
-        reordered.extend(deferred)
-
-        print(f"[agent] Built {len(reordered)} messages from DB")
-
-        return reordered
-
-    @staticmethod
-    def _truncate_legacy_history_message(msg: MessageParam) -> MessageParam:
-        content = msg.get("content")
-
-        if isinstance(content, str):
-            if len(content) > 500:
-                return {"role": msg["role"], "content": content[:500] + "...[truncated]"}
-            return msg
-
-        if isinstance(content, list):
-            truncated_blocks = []
-            for block in content:
-                if not isinstance(block, dict):
-                    truncated_blocks.append(block)
-                    continue
-
-                block_type = block.get("type")
-
-                if block_type in {"thinking", "redacted_thinking"}:
-                    continue
-
-                if block_type == "tool_result":
-                    block_content = block.get("content", "{}")
-
-                    if isinstance(block_content, list):
-                        text_blocks = [b for b in block_content if isinstance(b, dict) and b.get("type") == "text"]
-                        if len(text_blocks) > 0:
-                            result_str = text_blocks[0].get("text", "{}")
-                            result = json.loads(result_str)
-                            result["_note"] = "image removed during truncation"
-                            truncated_blocks.append({
-                                "type": "tool_result",
-                                "tool_use_id": block.get("tool_use_id"),
-                                "content": json.dumps(result)
-                            })
-                        else:
-                            truncated_blocks.append(block)
-                        continue
-
-                    result_str = block_content
-                    result = json.loads(result_str)
-                    tool_name = result.get("tool_name")
-
-                    if tool_name in {"create_cell", "create_markdown_cell"}:
-                        result = {k: v for k, v in result.items() if k != "code"}
-                    elif tool_name == "edit_cell":
-                        result = {k: v for k, v in result.items() if k not in {"code", "original_code"}}
-                    elif tool_name == "bash":
-                        result = {k: v for k, v in result.items() if k != "output"}
-                    elif tool_name == "execute_code":
-                        result = {k: v for k, v in result.items() if k != "code"}
-                        if "stdout" in result and isinstance(result.get("stdout"), str) and len(result["stdout"]) > 1500:
-                            result["stdout"] = "...[truncated]\n" + result["stdout"][-1500:]
-                        if "stderr" in result and isinstance(result.get("stderr"), str) and len(result["stderr"]) > 1500:
-                            result["stderr"] = "...[truncated]\n" + result["stderr"][-1500:]
-                        if "exception" in result and isinstance(result.get("exception"), str) and len(result["exception"]) > 1500:
-                            result["exception"] = "...[truncated]\n" + result["exception"][-1500:]
-
-                    truncated_blocks.append({
-                        "type": "tool_result",
-                        "tool_use_id": block.get("tool_use_id"),
-                        "content": json.dumps(result)
-                    })
-                    continue
-
-                if block_type == "tool_use":
-                    tool_name = block.get("name")
-                    inp = block.get("input")
-                    truncated_inp = inp
-
-                    if isinstance(inp, dict) and tool_name is not None:
-                        if tool_name in {"create_cell", "create_markdown_cell"}:
-                            truncated_inp = {k: v for k, v in inp.items() if k != "code"}
-                        elif tool_name == "edit_cell":
-                            truncated_inp = {k: v for k, v in inp.items() if k != "new_code"}
-                        elif tool_name == "update_plan":
-                            truncated_inp = {k: v for k, v in inp.items() if k not in {"plan", "plan_diff"}}
-
-                    truncated_blocks.append({
-                        "type": "tool_use",
-                        "id": block.get("id"),
-                        "name": tool_name,
-                        "input": truncated_inp,
-                    })
-                    continue
-
-                if block_type == "text":
-                    text = block.get("text", "")
-                    if len(text) > 1000:
-                        truncated_blocks.append({"type": "text", "text": text[:1000] + "...[truncated]"})
-                    else:
-                        truncated_blocks.append(block)
-                    continue
-
-                truncated_blocks.append(block)
-
-            return {"role": msg["role"], "content": truncated_blocks}
-
-        return msg
-
-    def _build_legacy_history_message(self, msg: MessageParam) -> str:
-        role = msg["role"]
-        content = msg["content"]
-
-        if isinstance(content, str):
-            return f"{role}:\n{content}"
-
-        block_lines: list[str] = []
-        for block in content:
-            block_type = block.get("type")
-            if block_type == "text":
-                block_lines.append(block["text"])
-                continue
-
-            if block_type == "tool_use":
-                tool_name = block.get("name", "unknown")
-                tool_input = json.dumps(block.get("input"), sort_keys=True, default=str)
-                block_lines.append(
-                    f"[tool_use] {tool_name} input={tool_input}"
-                )
-                continue
-
-            if block_type == "tool_result":
-                block_content = block.get("content", "")
-                if isinstance(block_content, list):
-                    tool_result_text = self._extract_tool_result_text(block_content)
-                    content_text = (
-                        tool_result_text
-                        if tool_result_text is not None
-                        else json.dumps(block_content, default=str)
-                    )
-                else:
-                    content_text = str(block_content)
-                prefix = "[tool_result error]" if block.get("is_error") else "[tool_result]"
-                block_lines.append(f"{prefix} {content_text}")
-                continue
-
-            block_lines.append(json.dumps(block, default=str))
-
-        return f"{role}:\n" + "\n".join(block_lines)
-
-    async def _build_legacy_history_prompt_block(
-        self, *, exclude_request_id: str | None
-    ) -> str | None:
-        if self.claude_session_id is not None:
-            return None
-
-        messages = await self._build_messages_from_db(
-            exclude_request_id=exclude_request_id
-        )
-        if len(messages) == 0:
-            return None
-
-        windowed_messages = messages[-legacy_history_window_size:]
-        truncated_messages = [
-            self._truncate_legacy_history_message(msg) for msg in windowed_messages
-        ]
-        included_messages = [
-            self._build_legacy_history_message(msg) for msg in truncated_messages
-        ]
-        history_text = "\n".join(included_messages)
-
-        print(
-            "[agent] Injecting legacy history into first turn "
-            f"windowed_messages len={len(windowed_messages)})"
-        )
-
-        return (
-            "This is prior conversation context. Older turns may be omitted.\n"
-            f"{history_text}"
-        )
 
     async def _insert_history(
         self,
@@ -632,7 +321,55 @@ class AgentHarness:
 
         await self._notify_history_updated(request_id=request_id)
 
-    def _normalize_tool_result_content(self, tool_response: Any) -> ToolResultContent:
+    async def _post_tool_use_attach_notebook_state(
+        self,
+        input_data: PostToolUseHookInput,
+        tool_use_id: str | None,
+        _context: HookContext,
+    ) -> SyncHookJSONOutput:
+        tool_name = input_data["tool_name"]
+        notebook_state = await self.refresh_cells_context()
+        self.latest_notebook_state = notebook_state
+
+        print(
+            "[agent] PostToolUse attached notebook state context "
+            f"for {tool_name} ({tool_use_id=})"
+        )
+        return {
+            "hookSpecificOutput": {
+                "hookEventName": "PostToolUse",
+                "additionalContext": (
+                    "<current_notebook_state>\n"
+                    f"{notebook_state}\n"
+                    "</current_notebook_state>"
+                ),
+            }
+        }
+
+    async def _pre_compact_hook(
+        self,
+        input_data: PreCompactHookInput,
+        tool_use_id: str | None,
+        _context: HookContext,
+    ) -> SyncHookJSONOutput:
+        trigger = input_data.get("trigger", "unknown")
+
+        print(f"[agent] PreCompact hook fired ({trigger=}) ({tool_use_id=}) ")
+
+        await self._insert_history(
+            event_type="compaction_start",
+            role="system",
+            payload=dict(input_data),
+            request_id=self.current_request_id,
+        )
+
+        return {"continue_": True}
+
+    # todo(rteqs): refactor _normalize_tool_content, _extract_tool_result_text, _build_generic_tool_result_content
+    def _normalize_tool_result_content(
+        self, tool_response: str | list[dict[str, Any]] | None
+    ) -> ToolResultContent:
+        # todo(rteqs): this is kinda sus. why is there a early return in the for loop.
         if isinstance(tool_response, str):
             return tool_response
 
@@ -646,7 +383,7 @@ class AgentHarness:
                 else:
                     block_type = getattr(item, "type", None)
                     text_value = getattr(item, "text", None)
-                    source = getattr(item, "source", None)
+                    source = item.get("source")
                     if block_type is None and isinstance(text_value, str):
                         block_type = "text"
 
@@ -654,25 +391,24 @@ class AgentHarness:
                     normalized_blocks.append({"type": "text", "text": text_value})
                     continue
 
-                if block_type == "image":
+                if block_type == "image" and isinstance(source, dict):
                     # note(tim): SDK gives image tool res back nested under `source`.
-                    if isinstance(source, dict):
-                        media_type = source.get("media_type")
-                        data = source.get("data")
-                        if (
-                            source.get("type") == "base64"
-                            and isinstance(media_type, str)
-                            and isinstance(data, str)
-                        ):
-                            normalized_blocks.append({
-                                "type": "image",
-                                "source": {
-                                    "type": "base64",
-                                    "media_type": media_type,
-                                    "data": data,
-                                },
-                            })
-                            continue
+                    media_type = source.get("media_type")
+                    data = source.get("data")
+                    if (
+                        source.get("type") == "base64"
+                        and isinstance(media_type, str)
+                        and isinstance(data, str)
+                    ):
+                        normalized_blocks.append({
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": media_type,
+                                "data": data,
+                            },
+                        })
+                        continue
 
                 return json.dumps(tool_response, default=str)
 
@@ -720,131 +456,6 @@ class AgentHarness:
                 result_payload["summary"] = f"{tool_name} failed: {text_content[:200]}"
 
         return [{"type": "text", "text": json.dumps(result_payload)}]
-
-    async def _post_tool_use_attach_notebook_state(
-        self,
-        input_data: PostToolUseHookInput,
-        tool_use_id: str | None,
-        _context: HookContext,
-    ) -> SyncHookJSONOutput:
-        tool_name = input_data["tool_name"]
-        notebook_state = await self.refresh_cells_context()
-        self.latest_notebook_state = notebook_state
-
-        print(
-            "[agent] PostToolUse attached notebook state context "
-            f"for {tool_name} (tool_use_id={tool_use_id})"
-        )
-        return {
-            "hookSpecificOutput": {
-                "hookEventName": "PostToolUse",
-                "additionalContext": (
-                    "<current_notebook_state>\n"
-                    f"{notebook_state}\n"
-                    "</current_notebook_state>"
-                ),
-            }
-        }
-
-    def _extract_tool_blocks_from_sdk_message(
-        self, msg: AssistantMessage | UserMessage
-    ) -> tuple[list[ToolUseHistoryBlock], list[ToolResultHistoryBlock]]:
-        content = msg.content
-        if not isinstance(content, list):
-            return [], []
-
-        tool_use_blocks: list[ToolUseHistoryBlock] = []
-        tool_result_blocks: list[ToolResultHistoryBlock] = []
-
-        for block in content:
-            if isinstance(block, ToolUseBlock):
-                tool_use_id = block.id
-                tool_name = block.name
-                if tool_use_id == "" or tool_name == "":
-                    continue
-                tool_use_blocks.append({
-                    "type": "tool_use",
-                    "id": tool_use_id,
-                    "name": tool_name,
-                    "input": block.input,
-                })
-                continue
-
-            if not isinstance(block, ToolResultBlock):
-                continue
-
-            tool_use_id = block.tool_use_id
-            if tool_use_id == "":
-                continue
-            normalized_content = self._normalize_tool_result_content(block.content)
-            payload_block = {
-                "type": "tool_result",
-                "tool_use_id": tool_use_id,
-                "content": normalized_content,
-            }
-            if isinstance(block.is_error, bool):
-                payload_block["is_error"] = block.is_error
-            tool_result_blocks.append(payload_block)
-
-        return tool_use_blocks, tool_result_blocks
-
-    async def _persist_tool_blocks_from_sdk_message(
-        self,
-        *,
-        msg: AssistantMessage | UserMessage,
-        request_id: str | None,
-        tool_use_index: dict[str, str],
-    ) -> None:
-        tool_use_blocks, tool_result_blocks = (
-            self._extract_tool_blocks_from_sdk_message(msg)
-        )
-        message_role: Literal["assistant", "user"] = (
-            "assistant" if isinstance(msg, AssistantMessage) else "user"
-        )
-
-        for block in tool_use_blocks:
-            tool_use_index[block["id"]] = block["name"]
-
-        if len(tool_use_blocks) > 0:
-            try:
-                await self._insert_history(
-                    role=message_role,
-                    payload={"content": tool_use_blocks},
-                    request_id=request_id,
-                )
-            except Exception as e:
-                print(f"[agent] Failed to persist message tool_use blocks: {e!s}")
-
-        if len(tool_result_blocks) > 0:
-            normalized_tool_result_blocks: list[ToolResultHistoryBlock] = []
-            for block in tool_result_blocks:
-                normalized_tool_result_block: ToolResultHistoryBlock = {
-                    "type": "tool_result",
-                    "tool_use_id": block["tool_use_id"],
-                    "content": block["content"],
-                }
-                if "is_error" in block:
-                    normalized_tool_result_block["is_error"] = block["is_error"]
-
-                tool_name = tool_use_index.get(block["tool_use_id"])
-                if tool_name is not None:
-                    normalized_tool_result_block["content"] = (
-                        self._build_generic_tool_result_content(
-                            tool_name=tool_name,
-                            content=block["content"],
-                            is_error=block.get("is_error", False),
-                        )
-                    )
-                normalized_tool_result_blocks.append(normalized_tool_result_block)
-
-            try:
-                await self._insert_history(
-                    role=message_role,
-                    payload={"content": normalized_tool_result_blocks},
-                    request_id=request_id,
-                )
-            except Exception as e:
-                print(f"[agent] Failed to persist message tool_result blocks: {e!s}")
 
     async def refresh_cells_context(self) -> str:
         context_result, reactivity_result = await asyncio.gather(
@@ -977,47 +588,23 @@ class AgentHarness:
 
         return "\n".join(cell_lines)
 
-    def _load_behavior_context(self) -> tuple[str, str]:
-        behavior_file = (
-            "proactive.md" if self.behavior == Behavior.proactive else "step_by_step.md"
-        )
-        turn_behavior_content = (
-            context_root / "turn_behavior" / behavior_file
-        ).read_text()
-        examples_content = (context_root / "examples" / behavior_file).read_text()
-        return turn_behavior_content, examples_content
-
-    def _compose_turn_system_prompt(self) -> str:
-        self.system_prompt = (context_root.parent / "system_prompt.md").read_text()
-        assert self.system_prompt is not None
-
-        turn_behavior_content, examples_content = self._load_behavior_context()
-
-        final_system_prompt = self.system_prompt.replace(
-            "TURN_BEHAVIOR_PLACEHOLDER",
-            f"<turn_behavior>\n{turn_behavior_content}\n</turn_behavior>",
-        )
-        return final_system_prompt.replace(
-            "EXAMPLES_PLACEHOLDER",
-            f"<examples>\n{examples_content}\n</examples>",
-        )
-
-    async def atomic_operation(
-        self, action: str, params: dict | None = None, timeout: float = 10.0
-    ) -> dict:
+    async def create_atomic_operation(
+        self, action: str, params: dict | None = None
+    ) -> str:
         if params is None:
             params: dict = {}
 
         self.operation_counter += 1
 
-        force_backend_browser_retry = params.get("force_backend_browser_retry", False)
-
         tx_id = f"tx_{uuid.uuid4().hex[:12]}"
         loop = asyncio.get_running_loop()
         response_future = loop.create_future()
-        self.pending_operations[tx_id] = response_future
 
         start_time = time.time()
+        self.pending_operations[tx_id] = PendingOperation(
+            fut=response_future, start_time=start_time, action=action, params=params
+        )
+
         try:
             print(f"[agent] -> {action}")
             await self.send({
@@ -1026,321 +613,124 @@ class AgentHarness:
                 "params": params,
                 "tx_id": tx_id,
             })
-        except Exception as e:
+        except Exception:
             self.pending_operations.pop(tx_id, None)
-            return {"status": "error", "error": f"Send failed: {e!s}"}
+            raise
+
+        return tx_id
+
+    async def wait_for_operation(
+        self, tx_id: str, timeout: float | None = 10.0
+    ) -> dict:
+        assert tx_id in self.pending_operations
+
+        op = self.pending_operations[tx_id]
+        force_backend_browser_retry = op.params.get(
+            "force_backend_browser_retry", False
+        )
 
         try:
-            return await asyncio.wait_for(response_future, timeout=timeout)
+            return await asyncio.wait_for(op.fut, timeout=timeout)
         except asyncio.CancelledError:
             print(
-                f"[agent] Operation cancelled (session reinitialized): action={action}, tx_id={tx_id}"
+                f"[agent] Operation cancelled (session reinitialized): action={op.action}, tx_id={tx_id}"
             )
             return {
                 "status": "error",
-                "error": f"OPERATION FAILED: '{action}' was interrupted because the session was reinitialized. This operation did NOT complete. You must retry or inform the user.",
+                "error": f"OPERATION FAILED: '{op.action}' was interrupted because the session was reinitialized. This operation did NOT complete. You must retry or inform the user.",
             }
         except TimeoutError:
             self.pending_operations.pop(tx_id, None)
-            duration = time.time() - start_time
-            print(f"[agent] {action} timed out after {duration:.3f}s")
+            duration = time.time() - op.start_time
+            print(f"[agent] {op.action} timed out after {duration:.3f}s")
 
             if not force_backend_browser_retry:
-                print(f"[agent] Retrying {action} with backend browser")
+                print(f"[agent] Retrying {op.action} with backend browser")
                 return await self.atomic_operation(
-                    action,
-                    {**params, "force_backend_browser_retry": True},
+                    op.action,
+                    {**op.params, "force_backend_browser_retry": True},
                     timeout=timeout,
                 )
 
             return {
                 "status": "error",
-                "error": f"OPERATION FAILED: '{action}' timed out after 10 seconds. This operation did NOT complete.",
+                "error": f"OPERATION FAILED: '{op.action}' timed out after {timeout} seconds. This operation did NOT complete.",
                 "tx_id": tx_id,
             }
         finally:
             ret = self.pending_operations.pop(tx_id, None)
 
             if ret is not None:
-                duration = time.time() - start_time
-                print(f"[agent] {action} took {duration:.3f}s")
+                duration = time.time() - op.start_time
+                print(f"[agent] {op.action} took {duration:.3f}s")
+
+    async def atomic_operation(
+        self, action: str, params: dict | None = None, timeout: float | None = 10.0
+    ) -> dict:
+        try:
+            tx_id = await self.create_atomic_operation(action, params)
+        except Exception as e:
+            return {"status": "error", "error": f"Send failed: {e!s}"}
+
+        return await self.wait_for_operation(tx_id, timeout)
 
     async def handle_action_response(self, msg: dict[str, Any]) -> None:
         tx_id = msg.get("tx_id")
-        fut = self.pending_operations.get(tx_id)
+        assert tx_id is not None
+
+        op = self.pending_operations.get(tx_id)
+        if op is None:
+            if msg.get("action") == "ask_user_question":
+                self.pending_question_event.clear()
+                if msg.get("skip") is True:
+                    return
+
+                answers = msg.get("answers", {})
+                qa_content = {
+                    "type": "answers",
+                    "content": [
+                        {"question": q, "answer": a} for q, a in answers.items()
+                    ],
+                }
+                await self._insert_history(payload={"content": qa_content})
+                await self.query(
+                    msg=AgentQuery(
+                        type="agent_query",
+                        behavior=self.behavior,
+                        query=json.dumps(
+                            asdict(PermissionResultAllow(updated_input=answers))
+                        ),
+                        template_version_id=None,
+                    )
+                )
+
+            return
+
+        fut = op.fut
         if fut and not fut.done():
             fut.set_result(msg)
 
-    async def _send_usage_update(self, usage: dict[str, Any]) -> None:
+    async def _send_usage_update(
+        self, usage: Usage | MessageDeltaUsage | ResultMessageUsage
+    ) -> None:
         await self.send({
             "type": "agent_usage_update",
-            "input_tokens": int(usage.get("input_tokens", 0) or 0),
-            "cache_read_input_tokens": int(
-                usage.get("cache_read_input_tokens", 0) or 0
-            ),
-            "cache_creation_input_tokens": int(
-                usage.get("cache_creation_input_tokens", 0) or 0
-            ),
-            "context_limit": 200_000,
+            "input_tokens": usage.input_tokens if usage.input_tokens is not None else 0,
+            "cache_read_input_tokens": usage.cache_read_input_tokens,
+            "cache_creation_input_tokens": usage.cache_creation_input_tokens,
+            "context_limit": 1_000_000,
         })
 
-    def _normalize_claude_session_id(self, raw_session_id: str | None) -> str | None:
-        if raw_session_id is None or raw_session_id == "":
-            return None
-        return raw_session_id
+    async def set_agent_status(self, status: str) -> None:
+        self.current_status = status
+        await self.send({"type": "agent_status", "status": status})
 
-    async def _close_open_stream_blocks(self) -> None:
-        if len(self.open_stream_blocks) == 0:
-            return
-
-        pending_blocks = sorted(self.open_stream_blocks)
-        print(
-            f"[agent] Closing {len(pending_blocks)} dangling stream block(s): {pending_blocks}"
-        )
-        for block_index in pending_blocks:
-            await self.send({
-                "type": "agent_stream_block_stop",
-                "block_index": block_index,
-            })
-        self.open_stream_blocks.clear()
-
-    async def _wait_for_running_query_to_stop(
-        self, timeout_seconds: float = 2.0
-    ) -> bool:
-        if self.current_query_task is None or self.current_query_task.done():
-            return True
-
-        try:
-            await asyncio.wait_for(self.current_query_task, timeout=timeout_seconds)
-            return True
-        except TimeoutError:
-            self.current_query_task.cancel()
-            with suppress(asyncio.CancelledError):
-                await self.current_query_task
-            return False
-        except asyncio.CancelledError:
-            return True
-
-    async def _stop_conversation_loop(self) -> None:
-        self.conversation_running = False
-        if self.conversation_task is None:
-            return
-        if not self.conversation_task.done():
-            self.conversation_task.cancel()
-            with suppress(asyncio.CancelledError):
-                await self.conversation_task
-        self.conversation_task = None
-
-    def _start_conversation_loop(self) -> None:
-        self.conversation_task = asyncio.create_task(self.run_agent_loop())
-
-        def _task_done_callback(task: asyncio.Task) -> None:
-            try:
-                task.result()
-            except asyncio.CancelledError:
-                pass
-            except Exception as e:
-                print(f"[agent] conversation_task raised exception: {e}")
-                traceback.print_exc()
-
-        self.conversation_task.add_done_callback(_task_done_callback)
-
-    async def _wait_for_message(self) -> tuple[str, str | None]:
-        print("[agent] _wait_for_message: waiting for message...")
-        while True:
-            msg = await self.pending_messages.get()
-            msg_type = msg.get("type")
-
-            if self.pause_until_user_query and msg_type in {
-                "resume",
-                "cell_result",
-                "set_widget_value",
-            }:
-                print(f"[agent] Suppressing follow-up message type={msg_type}")
-                continue
-
-            if msg_type == "resume":
-                request_id = msg.get("request_id")
-                if isinstance(request_id, str):
-                    self.current_request_id = request_id
-                self.current_status = "thinking"
-                content = msg.get("content")
-                if isinstance(content, str) and content.strip() != "":
-                    return content, self.current_request_id
-                return "Continue with the next step.", self.current_request_id
-
-            if msg_type == "user_query":
-                request_id = msg.get("request_id")
-                self.current_request_id = (
-                    request_id if isinstance(request_id, str) else None
-                )
-                self.current_status = "thinking"
-                self.pause_until_user_query = False
-
-                payload = {"content": msg["content"]}
-
-                if msg.get("display_query") is not None:
-                    payload["display_query"] = msg["display_query"]
-                if msg.get("display_nodes") is not None:
-                    payload["display_nodes"] = msg["display_nodes"]
-                if msg.get("display_widgets") is not None:
-                    payload["display_widgets"] = msg["display_widgets"]
-                if msg.get("hidden") is not None:
-                    payload["hidden"] = msg["hidden"]
-
-                template_version_id = msg.get("template_version_id")
-
-                await self._insert_history(
-                    payload=payload,
-                    request_id=self.current_request_id,
-                    template_version_id=template_version_id,
-                )
-
-                content = msg.get("content")
-                if isinstance(content, str) and content.strip() != "":
-                    return content, self.current_request_id
-                print("[agent] Ignoring user_query with empty content")
-                continue
-
-            if msg_type == "cell_result":
-                if self.current_request_id is None:
-                    print(
-                        f"[agent] Ignoring cell_result for {msg.get('cell_id')} - no active request"
-                    )
-                    continue
-
-                cell_id = msg.get("cell_id")
-                success = bool(msg.get("success", True))
-                cell_name = msg.get("display_name")
-                logs = msg.get("logs")
-
-                if success:
-                    result_message = (
-                        f"✓ Cell {cell_name} ({cell_id}) executed successfully"
-                    )
-                    result_content = {
-                        "type": "cell_result",
-                        "message": result_message,
-                        "cell_id": cell_id,
-                        "cell_name": cell_name,
-                        "success": success,
-                        "logs": logs,
-                    }
-                    print(f"[agent] Cell {cell_id} succeeded")
-                else:
-                    exception = msg.get("exception", "Unknown error")
-                    result_message = f"✗ Cell {cell_name} ({cell_id}) execution failed"
-                    result_content = {
-                        "type": "cell_result",
-                        "message": result_message,
-                        "cell_id": cell_id,
-                        "cell_name": cell_name,
-                        "success": False,
-                        "exception": exception,
-                        "logs": logs,
-                    }
-                    print(f"[agent] Cell {cell_id} failed")
-
-                await self._insert_history(payload={"content": result_content})
-
-                prompt_content = result_message
-                if not success:
-                    exception = result_content.get("exception")
-                    if exception:
-                        prompt_content = f"{prompt_content}\n\nException: {exception}"
-                if logs:
-                    prompt_content = f"{prompt_content}\n\nLogs:\n{logs}"
-
-                if self.pending_auto_continue and len(self.executing_cells) == 0:
-                    self.pending_auto_continue = False
-                    return (
-                        "Continue with the next step.\n\n" + prompt_content,
-                        self.current_request_id,
-                    )
-
-                return (
-                    "Cell execution update:\n\n" + prompt_content,
-                    self.current_request_id,
-                )
-
-            if msg_type == "set_widget_value":
-                data = msg.get("data", {})
-                widget_info = ", ".join(f"{k}={v}" for k, v in data.items())
-                content = f"User provided input via widget(s): {widget_info}"
-
-                await self._insert_history(payload={"content": content, "hidden": True})
-
-                return content, self.current_request_id
-
-            print(f"[agent] Unknown pending message type={msg_type}, ignoring")
-
-    async def _complete_turn(self) -> None:
-        if self.current_request_id is None:
-            return
-
-        should_continue = self.should_auto_continue
-        self.should_auto_continue = False
-        self.pending_auto_continue = False
-
-        await self._notify_history_updated(request_id=self.current_request_id)
-
-        if should_continue:
-            print("[agent] Auto-continuing as requested by model")
-            await self.pending_messages.put({
-                "type": "user_query",
-                "content": "Continue with the next step.",
-                "request_id": self.current_request_id,
-                "hidden": True,
-            })
-
-    async def run_agent_loop(self) -> None:
-        print("[agent] run_agent_loop: started")
-        self.conversation_running = True
-
-        while self.conversation_running:
-            try:
-                query, request_id = await self._wait_for_message()
-            except asyncio.CancelledError:
-                break
-            except Exception as e:
-                print(f"[agent] _wait_for_message failed: {e!s}")
-                continue
-
-            if not self.conversation_running:
-                break
-
-            turn_task: asyncio.Task | None = None
-            try:
-                turn_task = asyncio.create_task(
-                    self._run_query_with_turn_prompt(query=query, request_id=request_id)
-                )
-                self.current_query_task = turn_task
-                await turn_task
-            except Exception as e:
-                print(f"[agent] run_agent_loop turn failed: {e!s}")
-            finally:
-                if turn_task is not None and self.current_query_task is turn_task:
-                    self.current_query_task = None
-                await self._complete_turn()
-
-        print("[agent] run_agent_loop: stopped")
-
-    async def _disconnect_sdk_client(self) -> None:
-        if self.client is None:
-            return
-        try:
-            await self.client.disconnect()
-        finally:
-            self.client = None
-
-    async def _load_claude_session_id(
-        self, session_id: int
-    ) -> str | None:
+    async def _load_claude_session_id(self, session_id: int) -> str | None:
         try:
             response = await gql_query(
                 auth=auth_token_sdk,
                 query="""
-                    query AgentSessionClaudeSessionId($id: BigInt!) {
+                   query AgentSessionClaudeSessionId($id: BigInt!) {
                         agentSession(id: $id) {
                             claudeSessionId
                         }
@@ -1348,10 +738,16 @@ class AgentHarness:
                 """,
                 variables={"id": session_id},
             )
-            parsed_response = validate(response, AgentSessionQueryResp)
-            return self._normalize_claude_session_id(
-                parsed_response["data"]["agentSession"]["claudeSessionId"]
-            )
+            data = validate(response, AgentSessionQueryResp)["data"]
+
+            if data is None:
+                return None
+
+            agent_session = data["agentSession"]
+            if agent_session is None:
+                return None
+
+            return agent_session["claudeSessionId"]
         except Exception as e:
             print(f"[agent] Failed to load agent claude_session_id: {e!s}")
             return None
@@ -1375,27 +771,10 @@ class AgentHarness:
             },
         )
 
-    async def _capture_claude_session_id(self, raw_session_id: str | None) -> None:
-        session_id = self._normalize_claude_session_id(raw_session_id)
-        if session_id is None or self.agent_session_id is None:
-            return
-
-        if self.claude_session_id == session_id:
-            return
-
-        self.claude_session_id = session_id
-        try:
-            await self._persist_claude_session_id(session_id)
-        except Exception as e:
-            print(f"[agent] Failed to persist Claude session id: {e!s}")
-            return
-
-        print(
-            "[agent] Persisted Claude session id "
-            f"(db_session_id={self.agent_session_id}, claude_session_id={session_id})"
-        )
-
-    def _parse_stream_event(self, raw_event: dict[str, Any]) -> AnthropicStreamEvent | None:
+    def _parse_stream_event(
+        self, raw_event: dict[str, Any]
+    ) -> AnthropicStreamEvent | None:
+        # todo(rteqs): use latch_validation
         event_type = raw_event.get("type")
         try:
             if event_type == "message_start":
@@ -1416,30 +795,40 @@ class AgentHarness:
         print(f"[agent] Unknown stream event type={event_type}")
         return None
 
-    def _build_sdk_env(self) -> dict[str, str]:
-        sdk_base_url = f"{nucleus_url}/infer/plots-agent/anthropic"
+    async def connect(self, *, resume_session_id: str | None) -> None:
+        turn_behavior_content, examples_content = self._load_behavior_context()
+        self.system_prompt = (
+            (context_root.parent / "system_prompt.md")
+            .read_text()
+            .replace(
+                "TURN_BEHAVIOR_PLACEHOLDER",
+                f"<turn_behavior>\n{turn_behavior_content}\n</turn_behavior>",
+            )
+            .replace(
+                "EXAMPLES_PLACEHOLDER", f"<examples>\n{examples_content}\n</examples>"
+            )
+        )
+
+        nucleus_llm_url = f"{nucleus_url}/infer/plots-agent/anthropic"
         sdk_env = {
-            "ANTHROPIC_BASE_URL": sdk_base_url,
+            "ANTHROPIC_BASE_URL": nucleus_llm_url,
+            # todo(rteqs): sdk_token here is latch_sdk_token. refactor this so it doesn't confuse
             "ANTHROPIC_API_KEY": sdk_token,
-            "ANTHROPIC_CUSTOM_HEADERS": f"Pod-Id: {str(pod_id)}",
+            "ANTHROPIC_CUSTOM_HEADERS": f"Pod-Id: {pod_id!s}",
         }
 
-        print(f"[agent] SDK gateway mode: nucleus-proxy ({sdk_base_url})")
-        return sdk_env
-
-    async def _connect_sdk_client(self, *, resume_session_id: str | None) -> None:
-        self.system_prompt = self._compose_turn_system_prompt()
-        sdk_env = self._build_sdk_env()
-
-        self.client = ClaudeSDKClient(
+        self.claude = ClaudeSDKClient(
             options=ClaudeAgentOptions(
-                system_prompt=self.system_prompt,
+                system_prompt=SystemPromptPreset(
+                    type="preset", preset="claude_code", append=self.system_prompt
+                ),
                 include_partial_messages=True,
                 mcp_servers={MCP_SERVER_NAME: self.mcp_server},
                 allowed_tools=[*self.mcp_allowed_tools, *SDK_BUILTIN_ALLOWED_TOOLS],
                 permission_mode="acceptEdits",
                 model="claude-opus-4-6",
                 thinking={"type": "adaptive"},
+                setting_sources=["project"],
                 resume=resume_session_id,
                 env=sdk_env,
                 hooks={
@@ -1448,543 +837,36 @@ class AgentHarness:
                             matcher=NOTEBOOK_MUTATION_TOOL_MATCHER,
                             hooks=[self._post_tool_use_attach_notebook_state],
                         )
-                    ]
+                    ],
+                    "PreCompact": [HookMatcher(hooks=[self._pre_compact_hook])],
                 },
+                can_use_tool=can_use_tool,
+                max_buffer_size=10 * 1024 * 1024,
             )
         )
-        await self.client.connect()
+
+        # todo(rteqs): validate claude_session_id matches. currently the only way to receive claude_session_id is from messages after making a query.
+        # reverse engineer claude code and write to the process directly
+        await self.claude.connect()
 
         try:
-            mcp_status = await self.client.get_mcp_status()
+            mcp_status = await self.claude.get_mcp_status()
             print(f"[agent] MCP status: {json.dumps(mcp_status)}")
         except Exception as e:
             print(f"[agent] Failed to fetch MCP status: {e!s}")
 
-    async def _reset_for_new_session(self) -> None:
-        await self._stop_conversation_loop()
-
-        if len(self.pending_operations) > 0:
-            print(
-                f"[agent] Failing {len(self.pending_operations)} pending operation(s) for new session"
-            )
-            for future in self.pending_operations.values():
-                if not future.done():
-                    future.set_result({
-                        "status": "error",
-                        "error": "Operation interrupted due to session change. Retry in the new session.",
-                    })
-            self.pending_operations.clear()
-
-        self.pause_until_user_query = False
-        self.executing_cells.clear()
-        self.expected_widgets.clear()
-        self.open_stream_blocks.clear()
-        self.current_request_id = None
-        self.current_status = None
-        self.should_auto_continue = False
-        self.pending_auto_continue = False
-        self.current_plan = None
-
-        while not self.pending_messages.empty():
-            try:
-                self.pending_messages.get_nowait()
-            except asyncio.QueueEmpty:
-                break
-
-        if skip_db_history:
-            self.in_memory_history.clear()
-
-        for file in (context_root / "agent_scratch").rglob("*"):
-            if file.name == ".gitkeep":
-                continue
-            file.unlink()
-
-        self.claude_session_id = None
-
-    async def _handle_stream_event(
-        self,
-        event: AnthropicStreamEvent,
-        *,
-        collected_assistant_blocks: dict[int, AssistantStreamBlock] | None = None,
-    ) -> None:
-        event_type = event.type
-
-        if event_type == "message_start":
-            self.open_stream_blocks.clear()
+    async def disconnect(self) -> None:
+        if self.claude is None:
             return
-
-        if event_type == "content_block_start":
-            block_index = event.index
-            block_type = event.content_block.type
-            if block_index in self.open_stream_blocks:
-                await self.send({
-                    "type": "agent_stream_block_stop",
-                    "block_index": block_index,
-                })
-            self.open_stream_blocks[block_index] = block_type
-
-            if collected_assistant_blocks is not None:
-                if block_type == "text":
-                    collected_assistant_blocks[block_index] = {"type": "text", "text": ""}
-                elif block_type == "thinking":
-                    collected_assistant_blocks[block_index] = {
-                        "type": "thinking",
-                        "thinking": "",
-                    }
-
-            payload: dict[str, Any] = {
-                "type": "agent_stream_block_start",
-                "block_index": block_index,
-                "block_type": block_type,
-            }
-            if block_type == "tool_use":
-                payload["block_id"] = event.content_block.id
-                payload["block_name"] = event.content_block.name
-                print(
-                    "[agent] tool_use block started "
-                    f"index={block_index} name={payload['block_name']} id={payload['block_id']}"
-                )
-            await self.send(payload)
-            return
-
-        if event_type == "content_block_delta":
-            block_index = event.index
-            delta = event.delta
-            delta_type = delta.type
-
-            if delta_type == "text_delta":
-                await self.send({
-                    "type": "agent_stream_delta",
-                    "block_index": block_index,
-                    "block_type": "text",
-                    "delta": delta.text,
-                })
-            elif delta_type == "thinking_delta":
-                await self.send({
-                    "type": "agent_stream_delta",
-                    "block_index": block_index,
-                    "block_type": "thinking",
-                    "delta": delta.thinking,
-                })
-            elif delta_type == "input_json_delta":
-                await self.send({
-                    "type": "agent_stream_delta",
-                    "block_index": block_index,
-                    "block_type": "tool_use",
-                    "delta": delta.partial_json,
-                })
-
-            if collected_assistant_blocks is not None:
-                existing = collected_assistant_blocks.get(block_index)
-                if existing is not None:
-                    if delta_type == "text_delta" and existing["type"] == "text":
-                        existing["text"] += delta.text
-                    elif (
-                        delta_type == "thinking_delta"
-                        and existing["type"] == "thinking"
-                    ):
-                        existing["thinking"] += delta.thinking
-            return
-
-        if event_type == "content_block_stop":
-            block_index = event.index
-            if block_index in self.open_stream_blocks:
-                self.open_stream_blocks.pop(block_index, None)
-            await self.send({
-                "type": "agent_stream_block_stop",
-                "block_index": block_index,
-            })
-            return
-
-        if event_type == "message_delta":
-            return
-
-        if event_type == "message_stop":
-            await self._close_open_stream_blocks()
-            return
-
-    async def _run_query(self, *, prompt: str, request_id: str | None) -> None:
-        assert self.client is not None
-        assert self.agent_session_id is not None
-
-        self.open_stream_blocks.clear()
-        run_started_at = time.perf_counter()
-        assistant_blocks_by_index: dict[int, AssistantStreamBlock] = {}
-        assistant_message_started_at: float | None = None
-        persisted_assistant_message_this_turn = False
-        final_query_error: str | None = None
-        stream_complete_error: StreamCompleteErrorPayload | None = None
-        usage_data: dict[str, Any] | None = None
-        tool_use_index: dict[str, str] = {}
-        assistant_error_type: str | None = None
-        stream_message_open = False
-        buffered_tool_messages: list[AssistantMessage | UserMessage] = []
-        final_submit_response_reached = False
-        dropping_post_submit_stream_message = False
-
-        async def persist_current_assistant_message(
-            *, duration_seconds: float | None = None
-        ) -> bool:
-            if len(assistant_blocks_by_index) == 0:
-                return False
-
-            assistant_content = [
-                assistant_blocks_by_index[idx]
-                for idx in sorted(assistant_blocks_by_index)
-            ]
-
-            resolved_duration = duration_seconds
-            if resolved_duration is None:
-                if assistant_message_started_at is not None:
-                    message_duration_start = assistant_message_started_at
-                else:
-                    message_duration_start = run_started_at
-                resolved_duration = max(
-                    0.0, time.perf_counter() - message_duration_start
-                )
-
-            assistant_message_persisted = False
-            try:
-                await self._insert_history(
-                    role="assistant",
-                    payload={
-                        "content": assistant_content,
-                        "duration": resolved_duration,
-                    },
-                    request_id=request_id,
-                )
-                assistant_message_persisted = True
-            except Exception as e:
-                print(f"[agent] Failed to persist assistant history: {e!s}")
-            finally:
-                assistant_blocks_by_index.clear()
-
-            return assistant_message_persisted
-
-        # todo(tim): consider replacing buffer system with simpler system
-        async def flush_buffered_tool_messages() -> None:
-            if len(buffered_tool_messages) == 0:
-                return
-
-            buffered_batch = list(buffered_tool_messages)
-            buffered_tool_messages.clear()
-            for buffered_msg in buffered_batch:
-                await self._persist_tool_blocks_from_sdk_message(
-                    msg=buffered_msg,
-                    request_id=request_id,
-                    tool_use_index=tool_use_index,
-                )
-
-        await self.send({
-            "type": "agent_stream_start",
-            "timestamp": int(time.time() * 1000),
-        })
-
         try:
-            query_session_id = self.claude_session_id
-            if query_session_id is None:
-                query_session_id = "default"
-
-            print(
-                "[agent] starting SDK query "
-                f"(request_id={request_id}, db_session_id={self.agent_session_id}, "
-                f"claude_session_id={query_session_id})"
-            )
-            try:
-                await asyncio.wait_for(
-                    self.client.query(prompt=prompt, session_id=query_session_id),
-                    timeout=10.0,
-                )
-            except TimeoutError:
-                final_query_error = "Timed out submitting prompt to Claude runtime"
-                await self.send({
-                    "type": "agent_error",
-                    "error": final_query_error,
-                    "fatal": False,
-                })
-                return
-            print(f"[agent] SDK query submitted (request_id={request_id})")
-            receive_iter = aiter(self.client.receive_response())
-            while True:
-                try:
-                    msg = await asyncio.wait_for(anext(receive_iter), timeout=90.0)
-                except StopAsyncIteration:
-                    break
-                except TimeoutError:
-                    await self.send({
-                        "type": "agent_error",
-                        "error": "Timed out waiting for model response from Claude runtime",
-                        "fatal": False,
-                    })
-                    final_query_error = (
-                        "Timed out waiting for model response from Claude runtime"
-                    )
-                    break
-
-                if isinstance(msg, StreamEvent):
-                    await self._capture_claude_session_id(msg.session_id)
-                    event = self._parse_stream_event(msg.event)
-                    if event is None:
-                        continue
-                    event_type = event.type
-                    if final_submit_response_reached:
-                        if event_type == "message_start":
-                            dropping_post_submit_stream_message = True
-                            assistant_blocks_by_index.clear()
-                            assistant_message_started_at = None
-                            stream_message_open = False
-                            self.open_stream_blocks.clear()
-                            continue
-                        if dropping_post_submit_stream_message:
-                            if event_type == "message_stop":
-                                dropping_post_submit_stream_message = False
-                                self.open_stream_blocks.clear()
-                            continue
-                    if event_type == "message_start":
-                        stream_message_open = True
-                        assistant_blocks_by_index.clear()
-                        assistant_message_started_at = time.perf_counter()
-                        usage_data = event.message.usage.model_dump()
-                    elif event_type == "message_delta":
-                        usage_data = event.usage.model_dump()
-                    await self._handle_stream_event(
-                        event, collected_assistant_blocks=assistant_blocks_by_index
-                    )
-                    if event_type == "message_stop":
-                        message_duration_seconds: float | None = None
-                        if assistant_message_started_at is not None:
-                            message_duration_seconds = max(
-                                0.0, time.perf_counter() - assistant_message_started_at
-                            )
-                        assistant_message_persisted = (
-                            await persist_current_assistant_message(
-                                duration_seconds=message_duration_seconds
-                            )
-                        )
-                        if assistant_message_persisted:
-                            persisted_assistant_message_this_turn = True
-                        assistant_message_started_at = None
-                        stream_message_open = False
-                        await flush_buffered_tool_messages()
-                elif isinstance(msg, ResultMessage):
-                    await self._capture_claude_session_id(msg.session_id)
-                    print(
-                        "[agent] SDK result message "
-                        f"subtype={msg.subtype} is_error={msg.is_error} result={msg.result!r}"
-                    )
-                    if msg.is_error:
-                        final_query_error = (
-                            msg.result
-                            if msg.result is not None
-                            else "Claude query failed"
-                        )
-                        if (
-                            isinstance(msg.result, str)
-                            and "prompt is too long" in msg.result.lower()
-                        ):
-                            stream_complete_error = {
-                                "message": (
-                                    "This conversation is too long for the agent to continue. "
-                                    "Clear history and try again."
-                                ),
-                                "should_contact_support": False,
-                                "should_clear_history": True,
-                            }
-                        elif assistant_error_type in {
-                            "authentication_failed",
-                            "billing_error",
-                            "invalid_request",
-                        }:
-                            stream_complete_error = {
-                                "message": "An unexpected error occurred. Please try again.",
-                                "should_contact_support": True,
-                                "should_clear_history": False,
-                            }
-                        elif assistant_error_type in {
-                            "rate_limit",
-                            "server_error",
-                            "unknown",
-                        }:
-                            stream_complete_error = {
-                                "message": (
-                                    "Our model provider is experiencing a temporary issue. "
-                                    "Please try again in a few minutes."
-                                ),
-                                "should_contact_support": False,
-                                "should_clear_history": False,
-                            }
-
-                        if stream_complete_error is not None:
-                            agent_error_message = str(stream_complete_error["message"])
-                        else:
-                            agent_error_message = final_query_error
-                        await self.send({
-                            "type": "agent_error",
-                            "error": agent_error_message,
-                            "fatal": False,
-                        })
-                    elif (
-                        len(assistant_blocks_by_index) == 0
-                        and not persisted_assistant_message_this_turn
-                        and isinstance(msg.result, str)
-                        and msg.result != ""
-                    ):
-                        assistant_blocks_by_index[0] = {
-                            "type": "text",
-                            "text": msg.result,
-                        }
-                        if assistant_message_started_at is None:
-                            assistant_message_started_at = run_started_at
-                    break
-                elif isinstance(msg, SystemMessage):
-                    if msg.subtype == "init":
-                        session_id = msg.data.get("session_id")
-                        await self._capture_claude_session_id(
-                            session_id if isinstance(session_id, str) else None
-                        )
-                    continue
-                elif isinstance(msg, (AssistantMessage, UserMessage)):
-                    if isinstance(msg, AssistantMessage) and msg.error is not None:
-                        assistant_error_type = msg.error
-                        print(f"[agent] assistant message error={msg.error}")
-                    if (
-                        not final_submit_response_reached
-                        and self.pause_until_user_query
-                        and self.current_status in {"done", "awaiting_user_response"}
-                    ):
-                        final_submit_response_reached = True
-                        print(
-                            "[agent] Final submit_response detected, interrupting SDK query and suppressing follow-up streamed assistant output"
-                        )
-                        try:
-                            await self.client.interrupt()
-                        except Exception as e:
-                            print(
-                                f"[agent] Failed to interrupt SDK query after final submit_response: {e!s}"
-                            )
-                    if stream_message_open or len(self.open_stream_blocks) > 0:
-                        buffered_tool_messages.append(msg)
-                        continue
-                    await self._persist_tool_blocks_from_sdk_message(
-                        msg=msg, request_id=request_id, tool_use_index=tool_use_index
-                    )
-                    continue
-                else:
-                    raise TypeError(f"Unexpected SDK message type: {type(msg)}")
-
-            print(f"[agent] finished SDK query (request_id={request_id})")
-        except Exception as e:
-            final_query_error = f"Agent SDK query failed: {e!s}"
-            await self.send({
-                "type": "agent_error",
-                "error": final_query_error,
-                "fatal": False,
-            })
+            await self.claude.disconnect()
+        except Exception:
+            traceback.print_exc()
         finally:
-            if assistant_message_started_at is not None:
-                pending_message_duration_start = assistant_message_started_at
-            else:
-                pending_message_duration_start = run_started_at
-            assistant_message_persisted = await persist_current_assistant_message(
-                duration_seconds=max(
-                    0.0, time.perf_counter() - pending_message_duration_start
-                )
-            )
-            if assistant_message_persisted:
-                persisted_assistant_message_this_turn = True
-            await flush_buffered_tool_messages()
-
-            if final_query_error is not None:
-                try:
-                    if stream_complete_error is not None:
-                        error_history_payload: ErrorHistoryPayload = {
-                            "message": stream_complete_error["message"],
-                            "should_contact_support": stream_complete_error[
-                                "should_contact_support"
-                            ],
-                            "should_clear_history": stream_complete_error[
-                                "should_clear_history"
-                            ],
-                            "raw_error": final_query_error,
-                        }
-                        if assistant_error_type is not None:
-                            error_history_payload["assistant_error_type"] = (
-                                assistant_error_type
-                            )
-                    else:
-                        error_history_payload = {
-                            "message": final_query_error,
-                            "should_contact_support": False,
-                        }
-                    await self._insert_history(
-                        event_type="error",
-                        role="system",
-                        payload=error_history_payload,
-                        request_id=request_id,
-                    )
-                except Exception as e:
-                    print(f"[agent] Failed to persist error history: {e!s}")
-
-            await self._close_open_stream_blocks()
-            if usage_data is not None:
-                await self._send_usage_update(usage_data)
-            stream_complete_payload = {"type": "agent_stream_complete"}
-            if stream_complete_error is not None:
-                stream_complete_payload["error"] = stream_complete_error
-            await self.send(stream_complete_payload)
-
-    async def _run_query_with_turn_prompt(
-        self, *, query: str, request_id: str | None
-    ) -> None:
-        assert self.client is not None
-
-        try:
-            turn_behavior_content, examples_content = self._load_behavior_context()
-            notebook_state = await self.refresh_cells_context()
-            self.latest_notebook_state = notebook_state
-            legacy_history_prompt_block = await self._build_legacy_history_prompt_block(
-                exclude_request_id=request_id
-            )
-
-            context_blocks = [
-                f"<turn_behavior>\n{turn_behavior_content}\n</turn_behavior>",
-                f"<examples>\n{examples_content}\n</examples>",
-            ]
-            if legacy_history_prompt_block is not None:
-                context_blocks.append(
-                    "<legacy_conversation_history>\n"
-                    f"{legacy_history_prompt_block}\n"
-                    "</legacy_conversation_history>"
-                )
-            context_blocks.append(
-                f"<current_notebook_state>\n{notebook_state}\n</current_notebook_state>"
-            )
-            if self.current_plan is not None:
-                plan_content = json.dumps(self.current_plan, indent=2)
-                context_blocks.append(
-                    f"<current_plan>\n{plan_content}\n</current_plan>"
-                )
-            context_blocks.append(f"<user_request>\n{query}\n</user_request>")
-            turn_prompt = "\n\n".join(context_blocks)
-
-            print(
-                "[agent] Turn prompt ready "
-                f"(behavior={self.behavior.value}, "
-                f"has_plan={self.current_plan is not None}, "
-                f"legacy_history={legacy_history_prompt_block is not None}, "
-                f"notebook_chars={len(self.latest_notebook_state or '')})"
-            )
-        except Exception as e:
-            await self.send({
-                "type": "agent_error",
-                "error": f"Failed to build turn prompt: {e!s}",
-                "fatal": False,
-            })
-            return
-
-        await self._run_query(prompt=turn_prompt, request_id=request_id)
+            self.claude = None
 
     async def handle_init(self, msg: dict[str, Any]) -> None:
+        # todo(rteqs): for old sessions that need to be migrated. we need to inject out session history from vacuole into the .jsonl history file
         try:
             new_session_id = int(msg.get("session_id"))
         except Exception:
@@ -1996,61 +878,37 @@ class AgentHarness:
             })
             return
 
-        raw_init_claude_session_id = msg.get("claude_session_id")
-        init_claude_session_id = self._normalize_claude_session_id(
-            raw_init_claude_session_id
-            if isinstance(raw_init_claude_session_id, str)
-            else None
-        )
-
         session_changed = new_session_id != self.agent_session_id
         if session_changed:
             print(f"[agent] Session initialized/changed: {new_session_id}")
             self.agent_session_id = new_session_id
 
-        if self.client is not None and not session_changed:
+        if self.claude is not None and not session_changed:
             print("[agent] SDK client already initialized; skipping re-init")
-            if len(self.pending_operations) > 0:
-                print(
-                    f"[agent] Failing {len(self.pending_operations)} pending operations for retry"
-                )
-                for future in self.pending_operations.values():
-                    if not future.done():
-                        future.set_result({
-                            "status": "error",
-                            "error": "Connection was reset during operation. Please retry.",
-                        })
-                self.pending_operations.clear()
             await self.send({"type": "agent_status", "status": "ready"})
-            if self.conversation_task is None or self.conversation_task.done():
-                self._start_conversation_loop()
             return
 
-        if self.client is not None and session_changed:
-            if (
-                self.current_query_task is not None
-                and not self.current_query_task.done()
-            ):
-                print("[agent] Interrupting running query due to session change")
-                await self.client.interrupt()
-                await self._wait_for_running_query_to_stop()
+        if self.claude is not None and session_changed:
+            print("[agent] Interrupting running query due to session change")
+            await self.claude.interrupt()
             await self._reset_for_new_session()
-            await self._disconnect_sdk_client()
+            await self.disconnect()
 
-        resume_session_id = init_claude_session_id
-        if resume_session_id is None:
+        resume_session_id = msg.get("claude_session_id")
+        if resume_session_id is None or resume_session_id == "":
             resume_session_id = await self._load_claude_session_id(
                 self.agent_session_id
             )
         self.claude_session_id = resume_session_id
 
-        if self.client is None:
+        if self.claude is None:
             try:
-                await self._connect_sdk_client(resume_session_id=resume_session_id)
+                await self.connect(resume_session_id=resume_session_id)
             except Exception as e:
                 print(f"[agent] Fatal: SDK client connection failed: {e!s}")
                 traceback.print_exc()
-                self.client = None
+
+                self.claude = None
                 await self.send({
                     "type": "agent_error",
                     "error": f"Agent failed to initialize: {e!s}",
@@ -2058,98 +916,418 @@ class AgentHarness:
                 })
                 return
 
-            if resume_session_id is None:
-                print("[agent] SDK initialized without resume session")
-            else:
-                print(
-                    f"[agent] SDK initialized with resume session {resume_session_id}"
-                )
-
         await self.send({"type": "agent_status", "status": "ready"})
         print(
             "[agent] Initialization complete "
             f"(db_session_id={self.agent_session_id}, "
             f"claude_session_id={resume_session_id})"
         )
-        self._start_conversation_loop()
 
-    async def handle_query(self, msg: dict[str, Any]) -> None:
-        query = msg.get("query", "")
-        request_id = msg.get("request_id")
-        contextual_node_data = msg.get("contextual_node_data")
-        template_version_id = msg.get("template_version_id")
-        selected_widgets = msg.get("selected_widgets")
-        behavior = msg.get("behavior")
+    async def _reset_for_new_session(self) -> None:
+        if len(self.pending_operations) > 0:
+            print(
+                f"[agent] Failing {len(self.pending_operations)} pending operation(s) for new session"
+            )
+            for op in self.pending_operations.values():
+                future = op.fut
+                if not future.done():
+                    future.set_result({
+                        "status": "error",
+                        "error": "Operation interrupted due to session change. Retry in the new session.",
+                    })
+            self.pending_operations.clear()
 
-        self.pause_until_user_query = False
+        self.pending_cells.clear()
+        self.pending_widgets.clear()
+        self.current_request_id = None
+        self.current_status = None
+        self.current_plan = None
 
-        if behavior is not None:
-            self.behavior = (
-                Behavior.step_by_step
-                if behavior == "step_by_step"
-                else Behavior.proactive
+        if skip_db_history:
+            self.in_memory_history.clear()
+
+        for file in (context_root / "agent_scratch").rglob("*"):
+            if file.name == ".gitkeep":
+                continue
+            file.unlink()
+
+        self.claude_session_id = None
+
+    async def _handle_stream_event(self, msg: StreamEvent) -> None:
+        # note: streaming is just a ui optimization. message delivery here is intentionally unreliable to simplify the backend.
+        # client implements logic to stitch streamed blocks and can choose to ignore them altogether.
+        # final state of message history is dictated by AssistantMessage and UserMessages
+
+        if self.claude_session_id != msg.session_id:
+            return
+
+        event = self._parse_stream_event(msg.event)
+
+        if event is None:
+            return
+
+        if event.type == "message_start":
+            await self.send({
+                "type": "agent_stream_start",
+                "timestamp": int(time.time() * 1000),
+            })
+            return
+
+        if event.type == "message_delta":
+            return
+
+        if event.type == "message_stop":
+            # todo(rteqs): send message to close stream on the browser
+            return
+
+        if event.type == "content_block_start":
+            block_index = event.index
+            block = event.content_block
+
+            payload = {
+                "type": "agent_stream_block_start",
+                "block_index": block_index,
+                "block_type": block.type,
+            }
+            if block.type == "tool_use":
+                payload |= {"block_id": block.id, "block_name": block.name}
+                payload["block_id"] = block.id
+                print(
+                    "[agent] tool_use block started "
+                    f"index={block_index} name={payload['block_name']} id={payload['block_id']}"
+                )
+
+            await self.send(payload)
+            return
+
+        if event.type == "content_block_delta":
+            block_index = event.index
+            delta = event.delta
+
+            if delta.type == "text_delta":
+                await self.send({
+                    "type": "agent_stream_delta",
+                    "block_index": block_index,
+                    "block_type": "text",
+                    "delta": delta.text,
+                })
+
+            elif delta.type == "thinking_delta":
+                await self.send({
+                    "type": "agent_stream_delta",
+                    "block_index": block_index,
+                    "block_type": "thinking",
+                    "delta": delta.thinking,
+                })
+
+            elif delta.type == "input_json_delta":
+                await self.send({
+                    "type": "agent_stream_delta",
+                    "block_index": block_index,
+                    "block_type": "tool_use",
+                    "delta": delta.partial_json,
+                })
+
+            return
+
+        if event.type == "content_block_stop":
+            await self.send({
+                "type": "agent_stream_block_stop",
+                "block_index": event.index,
+            })
+            return
+
+    # todo(rteqs): remove this once we move to "plan", "build"
+    def _load_behavior_context(self) -> tuple[str, str]:
+        behavior_file = (
+            "proactive.md" if self.behavior == "proactive" else "step_by_step.md"
+        )
+        turn_behavior_content = (
+            context_root / "turn_behavior" / behavior_file
+        ).read_text()
+        examples_content = (context_root / "examples" / behavior_file).read_text()
+        return turn_behavior_content, examples_content
+
+    async def create_prompt(self, query: AgentQuery) -> str:
+        # todo(rteqs): we should probably move notebook state to a tool or pull it in everytime the model needs it instead of just the prompt
+        self.latest_notebook_state = await self.refresh_cells_context()
+        turn_behavior_content, examples_content = self._load_behavior_context()
+
+        context_blocks = [
+            f"<turn_behavior>\n{turn_behavior_content}\n</turn_behavior>",
+            f"<examples>\n{examples_content}\n</examples>",
+            f"<current_notebook_state>\n{self.latest_notebook_state}\n</current_notebook_state>",
+        ]
+
+        if self.current_plan is not None:
+            plan_content = json.dumps(self.current_plan, indent=2)
+            context_blocks.append(f"<current_plan>\n{plan_content}\n</current_plan>")
+
+        context_blocks.append(f"<user_request>\n{query['query']}\n</user_request>")
+
+        contextual_node_data = query.get("contextual_node_data")
+        if contextual_node_data is not None:
+            context_blocks.append(
+                f"Here is the context of the selected nodes the user would like to use: <contextual_node_data>{json.dumps(contextual_node_data)}</contextual_node_data>"
             )
 
-        full_query = query
-        if contextual_node_data:
-            full_query = f"{query}\n\nHere is the context of the selected nodes the user would like to use: <ContextualNodeData>{json.dumps(contextual_node_data)}</ContextualNodeData>"
-        await self.pending_messages.put({
-            "type": "user_query",
-            "content": full_query,
-            "request_id": request_id,
-            "display_query": query,
-            "display_nodes": contextual_node_data,
-            "display_widgets": selected_widgets,
-            "template_version_id": template_version_id,
-        })
+        selected_widgets = query.get("selected_widgets")
+        if selected_widgets is not None:
+            context_blocks.append(
+                f"Here is the selected widgets the user would like t use: <widgets>{json.dumps(selected_widgets)}<widgets/>"
+            )
 
-        print(f"[agent] Message queued successfully (request_id={request_id})")
+        return "\n\n".join(context_blocks)
 
-    async def handle_cancel(self, msg: dict[str, Any]) -> None:
+    async def query(self, msg: AgentQuery) -> None:
+        assert self.claude is not None
+
+        await self.set_agent_status("thinking")
+
+        prompt = await self.create_prompt(msg)
+        request_id = msg.get("request_id")
+
+        print(
+            "[agent] starting SDK query "
+            f"(request_id={request_id}, db_session_id={self.agent_session_id}, "
+            f"claude_session_id={self.claude_session_id})"
+        )
+
+        if self.claude_session_id is None:
+            await self.claude.query(prompt=prompt)
+        else:
+            await self.claude.query(prompt=prompt, session_id=self.claude_session_id)
+
+        tool_name_by_tool_use_id: dict[str, str] = {}
+
+        error_type: AssistantMessageError | None = None
+        assistant_message_started_at: float | None = None
+        try:
+            async for res in self.claude.receive_response():
+                self.current_request_id = request_id
+                if (
+                    isinstance(res, SystemMessage)
+                    and res.subtype == "init"
+                    and self.claude_session_id is None
+                    # note(rteqs): this is always the first message for every query
+                ):
+                    self.claude_session_id = s_id = res.data.get("session_id")
+
+                    if s_id is not None:
+                        await self._persist_claude_session_id(s_id)
+
+                if isinstance(res, StreamEvent):
+                    event = self._parse_stream_event(res.event)
+                    if (
+                        event is not None
+                        and event.type == "message_start"
+                        and assistant_message_started_at is None
+                    ):
+                        assistant_message_started_at = time.perf_counter()
+                    await self._handle_stream_event(res)
+
+                elif isinstance(res, AssistantMessage):
+                    turn_duration: float | None = None
+                    if assistant_message_started_at is not None:
+                        turn_duration = max(
+                            0.0, time.perf_counter() - assistant_message_started_at
+                        )
+                    assistant_message_started_at = None
+
+                    if res.error is not None:
+                        error_type = res.error
+                        print(f"[agent] assistant message error={res.error}")
+
+                    for c in res.content:
+                        if isinstance(c, TextBlock):
+                            await self._insert_history(
+                                role="assistant",
+                                request_id=request_id,
+                                payload={
+                                    "content": [{"type": "text", "text": c.text}],
+                                    **(
+                                        {"duration": turn_duration}
+                                        if turn_duration is not None
+                                        else {}
+                                    ),
+                                },
+                            )
+
+                        elif isinstance(c, ThinkingBlock):
+                            await self._insert_history(
+                                role="assistant",
+                                request_id=request_id,
+                                payload={
+                                    "content": [
+                                        {"type": "thinking", "thinking": c.thinking}
+                                    ],
+                                    **(
+                                        {"duration": turn_duration}
+                                        if turn_duration is not None
+                                        else {}
+                                    ),
+                                },
+                            )
+
+                        elif isinstance(c, ToolUseBlock):
+                            tool_name_by_tool_use_id[c.id] = c.name
+                            if c.name == "AskUserQuestion":
+                                try:
+                                    tx_id = await self.create_atomic_operation(
+                                        "ask_user_question",
+                                        {"questions": c.input.get("questions", [])},
+                                    )
+                                    self.pending_question_tx_id = c.input["tx_id"] = (
+                                        tx_id
+                                    )
+                                    self.pending_question_event.set()
+                                except Exception:
+                                    ...
+
+                            await self._insert_history(
+                                role="assistant",
+                                request_id=request_id,
+                                payload={
+                                    "content": [
+                                        {
+                                            "type": "tool_use",
+                                            "id": c.id,
+                                            "name": c.name,
+                                            "input": c.input,
+                                        }
+                                    ],
+                                    **(
+                                        {"duration": turn_duration}
+                                        if turn_duration is not None
+                                        else {}
+                                    ),
+                                },
+                            )
+
+                elif isinstance(res, UserMessage):
+                    if isinstance(res.content, str):
+                        await self._insert_history(
+                            role="user",
+                            request_id=request_id,
+                            payload={"content": res.content},
+                        )
+                        continue
+
+                    for c in res.content:
+                        if isinstance(c, TextBlock):
+                            await self._insert_history(
+                                role="user",
+                                request_id=request_id,
+                                payload={"content": [{"type": "text", "text": c.text}]},
+                            )
+
+                        if isinstance(c, ToolResultBlock):
+                            tool_name = tool_name_by_tool_use_id.get(
+                                c.tool_use_id, "Unknown"
+                            )
+                            is_error = c.is_error if c.is_error is not None else False
+
+                            await self._insert_history(
+                                role="user",
+                                request_id=request_id,
+                                payload={
+                                    "content": [
+                                        {
+                                            "type": "tool_result",
+                                            "tool_use_id": c.tool_use_id,
+                                            "content": self._build_generic_tool_result_content(
+                                                tool_name=tool_name,
+                                                content=self._normalize_tool_result_content(
+                                                    c.content
+                                                ),
+                                                is_error=is_error,
+                                            ),
+                                        }
+                                    ]
+                                },
+                            )
+
+                elif isinstance(res, ResultMessage):
+                    if res.session_id != self.claude_session_id:
+                        continue
+
+                    usage = validate(res.usage, ResultMessageUsage)
+                    await self._send_usage_update(usage)
+
+                    if res.subtype == "success":
+                        break
+
+                    # todo(rteqs): the old error handling is erroneous. we know from the docs that res.result will be None if subtype != success.
+                    # subtype and assistant_error_type (from latest AssistantMessage) alone are too broad to pinpoint what the exact error is and
+                    # there doesn't seem to be a fixed schema for res.stop_reason. The below is just a best effort implementation.
+                    stop_reason = (
+                        res.stop_reason
+                        if res.stop_reason is not None
+                        else f"unknown error (subtype={res.subtype})"
+                    )
+                    error_history_payload: ErrorHistoryPayload = {
+                        "message": stop_reason,
+                        "raw_error": stop_reason,
+                        "assistant_error_type": error_type,
+                        "subtype": res.subtype,
+                        "should_clear_history": "prompt is too long" in stop_reason,
+                        "should_contact_support": res.subtype
+                        == "error_during_execution",
+                    }
+
+                    await self._insert_history(
+                        role="system",
+                        event_type="error",
+                        payload=error_history_payload,
+                        request_id=request_id,
+                    )
+                    break
+        except Exception as e:
+            print(f"[agent] query failed with unhandled error: {e!s}")
+            traceback.print_exc()
+            await self.send({
+                "type": "agent_error",
+                "error": f"Agent query failed: {e!s}",
+                "fatal": False,
+            })
+            try:
+                await self._insert_history(
+                    event_type="error",
+                    role="system",
+                    payload={
+                        "message": f"Agent query failed: {e!s}",
+                        "should_contact_support": True,
+                    },
+                    request_id=request_id,
+                )
+            except Exception:
+                print("[agent] Failed to persist error history")
+
+    async def interrupt(self, msg: dict[str, Any]) -> None:
+        # todo(rteqs): clean up
         request_id = msg.get("request_id", "unknown")
         print(f"[agent] Cancelling request {request_id}")
 
-        has_running_query = (
-            self.current_query_task is not None and not self.current_query_task.done()
-        )
-        if self.client is not None and has_running_query:
-            await self.client.interrupt()
-            completed_gracefully = await self._wait_for_running_query_to_stop()
-            if completed_gracefully:
-                print(f"[agent] Cancel completed for request {request_id}")
-            else:
-                print(
-                    f"[agent] Cancel forced task cancellation for request {request_id}"
-                )
+        if self.claude is not None:
+            await self.claude.interrupt()
         else:
             print(f"[agent] No active query to interrupt for request {request_id}")
 
-        if self.current_query_task is not None and self.current_query_task.done():
-            self.current_query_task = None
-
-        self.should_auto_continue = False
-        self.pending_auto_continue = False
-        self.pause_until_user_query = True
         self.current_request_id = None
-        self.expected_widgets.clear()
+        self.pending_widgets.clear()
         self.current_status = None
-        self.executing_cells.clear()
+        self.pending_cells.clear()
 
         if len(self.pending_operations) > 0:
             print(
                 f"[agent] Cancelling {len(self.pending_operations)} pending operations"
             )
-            for tx_id, future in list(self.pending_operations.items()):
+            for tx_id, op in list(self.pending_operations.items()):
+                future = op.fut
                 if not future.done():
                     future.cancel()
                     print(f"[agent]   Cancelled: {tx_id}")
             self.pending_operations.clear()
-
-        while not self.pending_messages.empty():
-            try:
-                self.pending_messages.get_nowait()
-            except asyncio.QueueEmpty:
-                break
 
         for file in (context_root / "agent_scratch").rglob("*"):
             if file.name == ".gitkeep":
@@ -2168,7 +1346,10 @@ class AgentHarness:
 
     async def get_full_prompt(self) -> dict:
         self.system_prompt = (context_root.parent / "system_prompt.md").read_text()
-        messages = await self._build_messages_from_db()
+
+        messages = []
+        if self.claude_session_id is not None:
+            messages = get_session_messages(self.claude_session_id)
 
         def build_tree(path: Path, prefix: str = "") -> list[str]:
             lines = []
@@ -2189,7 +1370,7 @@ class AgentHarness:
         return {
             "system_prompt": self.system_prompt,
             "messages": messages,
-            "model": "claude-opus-4-5",
+            "model": "claude-opus-4-6",
             "cells": self.latest_notebook_state
             if self.latest_notebook_state is not None
             else "Interact with agent to populate notebook state.",
@@ -2197,7 +1378,8 @@ class AgentHarness:
         }
 
     async def update_system_prompt(self, msg: dict[str, Any]) -> dict:
-        assert self.client is not None
+        assert self.claude is not None
+
         new_content = msg.get("content")
         if not isinstance(new_content, str):
             return {"status": "error", "error": "Invalid content"}
@@ -2205,13 +1387,14 @@ class AgentHarness:
         system_prompt_path = context_root.parent / "system_prompt.md"
         system_prompt_path.write_text(new_content)
         self.system_prompt = new_content
-        self.client.options.system_prompt = new_content
+        self.claude.options.system_prompt = SystemPromptPreset(
+            type="preset", preset="claude_code", append=self.system_prompt
+        )
 
         full_prompt = await self.get_full_prompt()
         return {"status": "success", **full_prompt}
 
-    async def accept(self) -> None:
-        msg = await self.conn.recv()
+    async def accept(self, msg: Any) -> None:
         msg_type = msg.get("type")
         msg_request_id = msg.get("request_id")
         print(
@@ -2223,13 +1406,20 @@ class AgentHarness:
             await self.handle_init(msg)
         elif msg_type == "agent_query":
             query = msg.get("query", "")
-            query_preview = query[:60] + "..." if len(query) > 60 else query
+            query_preview = query[:60] + "…" if len(query) > 60 else query
             request_id = msg.get("request_id", "unknown")
+
             print(
                 f"[agent] accept: dispatching to handle_query (query={query_preview}, request_id={request_id})"
             )
+            await self._insert_history(
+                role="user",
+                request_id=msg["request_id"],
+                payload={"content": msg["query"], "display_query": msg["query"]},
+                template_version_id=msg["template_version_id"],
+            )
             handle_start = time.time()
-            await self.handle_query(msg)
+            await self.query(msg)
             handle_elapsed = time.time() - handle_start
             print(
                 f"[agent] accept: handle_query completed in {handle_elapsed:.3f}s (request_id={request_id})"
@@ -2237,7 +1427,7 @@ class AgentHarness:
         elif msg_type == "agent_cancel":
             request_id = msg.get("request_id", "unknown")
             print(f"[agent] Cancel: {request_id}")
-            await self.handle_cancel(msg)
+            await self.interrupt(msg)
         elif msg_type == "agent_reset_kernel":
             print("[agent] Reset kernel globals request")
             result = await self.atomic_operation("reset_kernel_globals", {})
@@ -2248,6 +1438,9 @@ class AgentHarness:
                 f"[agent] {msg.get('action', 'unknown')} -> {msg.get('status', 'unknown')}"
             )
             await self.handle_action_response(msg)
+        elif msg_type == "answer":
+            print(f"[agent] {msg.get('answers')}")
+
         elif msg_type == "kernel_message":
             nested_msg = msg.get("message", {})
             nested_type = nested_msg.get("type")
@@ -2255,70 +1448,94 @@ class AgentHarness:
 
             if nested_type == "cell_result":
                 cell_id = nested_msg.get("cell_id")
-                has_exception = nested_msg.get("has_exception", False)
-                exception = nested_msg.get("exception")
-                display_name = nested_msg.get("display_name")
+                success = not nested_msg.get("has_exception", False)
+                cell_name = nested_msg.get("display_name")
 
                 logs = nested_msg.get("logs", None)
                 if logs is not None and len(logs) > 4096:
                     logs = logs[-4096:]
 
-                if cell_id is not None:
-                    self.executing_cells.discard(str(cell_id))
-                if self.pause_until_user_query:
-                    print(
-                        f"        Suppressing cell {cell_id} result while pause_until_user_query is True"
-                    )
-                    return
-                execution_statuses = {
-                    "executing",
-                    "awaiting_cell_execution",
-                    "thinking",
-                    "fixing",
-                }
-                if (
-                    self.current_status is not None
-                    and self.current_status not in execution_statuses
-                ):
-                    print(
-                        f"        Not adding cell {cell_id} result because {self.current_status}"
-                    )
+                if cell_id not in self.pending_cells:
+                    print(f"[agent] Ignoring cell_result for {cell_id} ")
                     return
 
-                if self.current_request_id is not None:
-                    await self.pending_messages.put({
+                if cell_id is not None:
+                    self.pending_cells.discard(str(cell_id))
+
+                if success:
+                    result_message = (
+                        f"✓ Cell {cell_name} ({cell_id}) executed successfully"
+                    )
+                    result_content = {
                         "type": "cell_result",
+                        "message": result_message,
                         "cell_id": cell_id,
-                        "success": not has_exception,
+                        "cell_name": cell_name,
+                        "success": success,
+                        "logs": logs,
+                    }
+                    print(f"[agent] Cell {cell_id} succeeded")
+                else:
+                    exception = nested_msg.get("exception", "Unknown error")
+                    result_message = f"✗ Cell {cell_name} ({cell_id}) execution failed"
+                    result_content = {
+                        "type": "cell_result",
+                        "message": result_message,
+                        "cell_id": cell_id,
+                        "cell_name": cell_name,
+                        "success": False,
                         "exception": exception,
                         "logs": logs,
-                        "display_name": display_name,
-                    })
-                else:
-                    print(
-                        f"        Cell {cell_id} completed but no active request - updating executing_cells only"
+                    }
+                    print(f"[agent] Cell {cell_id} failed")
+
+                await self._insert_history(payload={"content": result_content})
+                assert self.claude is not None
+
+                prompt_content = f"Cell execution update:\n\n {result_message}"
+                if not success:
+                    exception = result_content.get("exception")
+                    if exception:
+                        prompt_content = f"{prompt_content}\n\nException: {exception}"
+                if logs:
+                    prompt_content = f"{prompt_content}\n\nLogs:\n{logs}"
+
+                await self.query(
+                    AgentQuery(
+                        type="agent_query",
+                        query=prompt_content,
+                        behavior=self.behavior,
+                        template_version_id=None,
                     )
+                )
 
-            elif nested_type == "start_cell":
-                cell_id = nested_msg.get("cell_id")
-                if cell_id is not None and self.current_request_id is not None:
-                    self.executing_cells.add(str(cell_id))
-                    print(f"        Added cell {cell_id} to executing_cells")
             elif nested_type == "set_widget_value":
-                if self.current_status == "awaiting_user_widget_input":
-                    data = nested_msg.get("data", {})
-                    for key, value in data.items():
-                        if key in self.expected_widgets:
-                            self.expected_widgets[key] = value
-                            print(f"        Set widget {key}")
+                data = nested_msg.get("data", {})
+                for key, value in data.items():
+                    if key in self.pending_widgets:
+                        self.pending_widgets[key] = value
+                        print(f"        Set widget {key}")
 
-                    if all(v is not None for v in self.expected_widgets.values()):
-                        self.current_status = "thinking"
-                        await self.pending_messages.put({
-                            "type": "set_widget_value",
-                            "data": self.expected_widgets,
-                        })
-                        print("        Finished waiting for widget input")
+                if all(v is not None for v in self.pending_widgets.values()):
+                    await self.set_agent_status("thinking")
+
+                    widget_info = ", ".join(
+                        f"{k}={v}" for k, v in self.pending_widgets.items()
+                    )
+                    content = f"User provided input via widget(s): {widget_info}"
+
+                    await self._insert_history(
+                        payload={"content": content, "hidden": True}
+                    )
+                    await self.query(
+                        AgentQuery(
+                            type="agent_query",
+                            query=content,
+                            behavior=self.behavior,
+                            template_version_id=None,
+                        )
+                    )
+                    print("        Finished waiting for widget input")
             else:
                 print("        Ignored")
         elif msg_type == "get_full_prompt":
@@ -2372,17 +1589,20 @@ async def main() -> None:
 
         await harness.send({"type": "ready"})
 
-        while True:
-            try:
-                await harness.accept()
-            except Exception:
-                traceback.print_exc()
+        async with asyncio.TaskGroup() as tg:
+            while True:
+                try:
+                    msg = await harness.conn.recv()
+                    tg.create_task(harness.accept(msg))
+                except Exception:
+                    traceback.print_exc()
+                    continue
 
         print("Agent shutting down...")
     finally:
         if harness is not None:
             try:
-                await harness._disconnect_sdk_client()
+                await harness.disconnect()
             except Exception:
                 traceback.print_exc()
         socket_io_thread.shutdown.set()

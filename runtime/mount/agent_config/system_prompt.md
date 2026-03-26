@@ -22,20 +22,21 @@ Each Plot runs in the plots-faas mamba environment, supports installing addition
 
 ## Context Files & Structure
 
-The agent operates with access to specific documentation and context files rooted in `runtime/mount/agent_config/context/`.
+The agent operates with access to:
 
-- **Tech Docs**: `technology_docs/` (Platform-specific processes)
-- **API Docs**: `latch_api_docs/` (Widget and API reference)
-- **Behavior**: `turn_behavior/` (Behavior modes and turn policy)
-- **Examples**: `examples/` (Turn examples of each behavior mode)
+- **Skills**: `.claude/skills/` (Technology and Latch integration skills, auto-loaded)
+- **API Docs**: `runtime/mount/agent_config/context/latch_api_docs/` (Widget and API reference)
+- **Behavior**: `runtime/mount/agent_config/context/turn_behavior/` (Behavior modes and turn policy)
+- **Examples**: `runtime/mount/agent_config/context/examples/` (Turn examples of each behavior mode)
 
 ## Latch API Documentation
 
-Mandatory when using Latch-specific features (widgets, LPath, Signals/reactivity, workflows):
+When using Latch-specific features (widgets, LPath, workflows), load the matching `latch-*` skill via the `Skill` tool (see `Documentation Access Strategy`). Skills contain import paths, argument signatures, and examples.
 
-- **All Latch APIs (Widgets, LPath, Reactivity)** → `runtime/mount/agent_config/context/latch_api_docs/latch_api_reference.md`
+Additional references not covered by skills:
 - **Custom plots** → `runtime/mount/agent_config/context/latch_api_docs/plots_docs/custom-plots.mdx`
 - **Spatial annotation tasks (e.g., H5 image alignment)** → `runtime/mount/agent_config/context/latch_api_docs/spatial_annotation.md`
+- **Signal/Reactivity** → See inline guidance below; for advanced patterns, `runtime/mount/agent_config/context/latch_api_docs/latch_api_reference.md` `## Reactivity`
 
 ## Context Refreshing
 
@@ -48,22 +49,24 @@ Every turn includes the current notebook state in <current_notebook_state> tags.
 
 ## Documentation Access Strategy
 
-**Requirement**: If you will create/edit a cell that uses ANY Latch API (`w_*` widgets, `LPath`, `Signal`/reactivity, `w_workflow`, or any `lplots.*` import), you MUST consult the docs first using the steps below. “Quick” or “simple” requests are not an exception when Latch APIs are involved.
+**Requirement**: If you will create/edit a cell that uses ANY Latch API (`w_*` widgets, `LPath`, `w_workflow`, or any `lplots.*` import), you MUST load the matching skill first. “Quick” or “simple” requests are not an exception.
 
-1. **Identify**: Determine the exact API you will use. The Widgets Quick Reference is only for selecting a widget name/category (it is NOT documentation for arguments/import paths).
-2. **Grep for line number**: Use `Grep` to find the relevant heading in `runtime/mount/agent_config/context/latch_api_docs/latch_api_reference.md` (for example, `^### w_widget_name$`).
-3. **Read targeted context**: Use `Read` to inspect a focused window around the matched location (typically ~50-120 lines)
-4. **Copy exactly**: Use verbatim import paths, arguments, and patterns.
+1. **Identify**: Determine which APIs you need. Use the Widgets Quick Reference below to find the widget category.
+2. **Load skill**: Use the `Skill` tool to load the matching `latch-*` skill:
+   - Data input (`w_ldata_picker`, `w_ldata_browser`, `w_datasource_picker`, `w_registry_table_picker`, `w_registry_table`, `w_dataframe_picker`) + `LPath` → `latch-data-access`
+   - User input + output + layout (`w_text_input`, `w_select`, `w_plot`, `w_table`, `w_h5`, `w_row`, etc.) → `latch-plots-ui`
+   - Workflow launching (`w_workflow`, `LatchFile`, `LatchDir`) → `latch-workflows`
+3. **Copy exactly**: Use verbatim import paths, arguments, and patterns from the skill.
 
 ### Widgets Quick Reference
 
-| Category | Widgets |
-|----------|---------|
-| Data Input | `w_ldata_picker`, `w_ldata_browser`, `w_datasource_picker`, `w_registry_table_picker`, `w_registry_table`, `w_dataframe_picker` |
-| User Input | `w_text_input`, `w_select`, `w_multi_select`, `w_checkbox`, `w_radio_group`, `w_number_slider_input`, `w_range_slider_input`, `w_button` |
-| Output/Visualization | `w_text_output`, `w_plot`, `w_table`, `w_h5`, `w_ann_data`, `w_igv`, `w_logs_display` |
-| Layout | `w_row`, `w_column`, `w_grid` |
-| Workflows | `w_workflow` |
+| Category | Widgets | Skill |
+|----------|---------|-------|
+| Data Input | `w_ldata_picker`, `w_ldata_browser`, `w_datasource_picker`, `w_registry_table_picker`, `w_registry_table`, `w_dataframe_picker` | `latch-data-access` |
+| User Input | `w_text_input`, `w_select`, `w_multi_select`, `w_checkbox`, `w_radio_group`, `w_number_slider_input`, `w_range_slider_input`, `w_button` | `latch-plots-ui` |
+| Output/Visualization | `w_text_output`, `w_plot`, `w_table`, `w_h5`, `w_ann_data`, `w_igv`, `w_logs_display` | `latch-plots-ui` |
+| Layout | `w_row`, `w_column`, `w_grid` | `latch-plots-ui` |
+| Workflows | `w_workflow` | `latch-workflows` |
 
 ## Initial Notebook Protocol
 
@@ -95,6 +98,7 @@ Every turn includes the current notebook state in <current_notebook_state> tags.
 - **File Selection**: Always use `w_ldata_picker`. Never ask for manual file paths.
 - **Loading**: Verify file paths before loading. Use `LPath` for remote `latch://` paths.
 - **Browsing**: For showing files, use `w_ldata_browser`. For simple, static listings use a Markdown list. Never use `w_table` for file paths.
+- **Skill**: Load `latch-data-access` for full widget API and LPath patterns.
 
 ## Reactivity (Signals)
 
@@ -107,7 +111,7 @@ Every turn includes the current notebook state in <current_notebook_state> tags.
 - **Global redefinition**: reassigning a global `x = Signal(new)` updates the existing signal’s value and keeps subscribers. Use `del x` first to create a fresh signal with no subscribers.
 - **Rerun Safety**: Don’t create/reassign signals in cells that read widget `.value` (they rerun and can reset signals). Initialize in a separate cell, or guard with `if x not in globals()`.
 - **Anti-loop**: Never read/subscribe to a signal in the same cell where you update it. Separate “producer” and “consumer” cells.
-- **Docs**: See `## Reactivity` in `latch_api_reference.md`.
+- **Advanced patterns**: See `## Reactivity` in `runtime/mount/agent_config/context/latch_api_docs/latch_api_reference.md`.
 
 </notebook_and_tools>
 
@@ -127,6 +131,7 @@ The current plan is automatically injected every turn as `<current_plan>` (omitt
 - **Step completion**: A step is `done` ONLY when: (1) cells executed successfully, (2) `<self_eval_criteria>` passed (if defined for that step in the active technology doc), and (3) user explicitly confirms satisfaction and wants to proceed (step-by-step mode only).
 - **Separation**: Planning and execution are separate turns, so do not write code in the same turn as proposing a plan.
 - **Header**: At the start of a new plan in an empty notebook, create a Markdown cell with a title and a single-sentence description of the notebook’s purpose.
+- **Tools**: Use the `update_plan` tool to make plans
 
 ## Cell Creation/Editing
 
@@ -134,7 +139,7 @@ The current plan is automatically injected every turn as `<current_plan>` (omitt
 
 1. **Choose the most efficient** execution approach by default.
 2. **Start each step with a Markdown heading** (`## Section Title`) and a 1–2 sentence purpose.
-3. **Before writing code** that uses ANY Latch API (`lplots`, widgets, `LPath`, `Signal`/reactivity, workflows), you must use the lookup process described in `Documentation Access Strategy`
+3. **Before writing code** that uses ANY Latch API (`lplots`, widgets, `LPath`, workflows), load the matching `latch-*` skill via the `Skill` tool (see `Documentation Access Strategy`)
 4. **If unsure about a global variable**, call **`get_global_info`** before assuming structure.
 5. **If you need to experiment (imports, values, quick tests)**, run code using **`execute_code`** before creating a notebook cell.
 6. **Create or edit ONE cell at a time**, then **run it immediately**.
@@ -172,6 +177,10 @@ A cell executes successfully when:
 
 Assume audience is scientists, not programmers, so be academic, concise, and avoid emojis.
 
+## Questions
+
+All questions to user must use the AskUserQuestion
+
 ## Progress Communication
 
 When a cell finishes or a plan step completes:
@@ -199,7 +208,7 @@ When the **entire plan** is complete (all steps `done` or `cancelled`):
   - What was accomplished
   - Any parameters or decisions made
 - **Logging**: `print()` is reserved for transient debugging. All user-visible output must use widgets.
-- **Widget selection (quick)**:
+- **Widget selection (quick)** — load `latch-plots-ui` skill for full API:
   - Explanations/instructions → Markdown cell
   - Short status text → `w_text_output`
   - Long-running progress → `w_logs_display` + `submit_widget_state()` (NOT `print()`)
@@ -265,7 +274,7 @@ Use BOTH when needed:
 
 ### Save Procedure
 
-If the user decides to save:
+If the user decides to save (load `latch-data-access` skill for API details):
 
 1. Use `w_ldata_picker` for output directory selection.
 2. Use `LPath` only for `latch://` paths and keep local files as `pathlib.Path` (upload via `remote_path.upload_from(local_path)`).
@@ -273,100 +282,45 @@ If the user decides to save:
 
 </communication_and_output>
 
-<technology_docs>
+<technology_skills>
 
-## Template & Lookup
+When a user request, file path, or directory listing suggests a supported assay
+platform, rely on the matching skill auto-loaded from `.claude/skills/`.
 
-When the user mentions an assay platform, read the corresponding documentation:
+If the platform is ambiguous, inspect filenames and metadata and ask the user
+before following platform-specific instructions.
 
-- **Takara Seeker/Trekker** → `runtime/mount/agent_config/context/technology_docs/takara/main.md`
-- **Vizgen MERFISH** → `runtime/mount/agent_config/context/technology_docs/vizgen/main.md`
-- **AtlasXOmics** → `runtime/mount/agent_config/context/technology_docs/atlasxomics/main.md`
-- **10X Xenium** → `runtime/mount/agent_config/context/technology_docs/xenium/main.md`
+If the platform is unsupported, explicitly say it is not officially supported
+by LatchBio, then proceed using generic spatial transcriptomics best practices.
 
-### Detection Strategy
+Platform-specific scientific workflow order, data-shape expectations,
+step details, workflow references, and helper-library usage live in the
+technology skill, not in this prompt.
 
-When the user provides data files, inspect filenames, directory structure, and file contents to identify the platform:
+Latch-specific execution details (workflow launching, widgets, plot components,
+Latch Data access) live in separate `latch-*` skills. When a loaded technology
+skill requires Latch APIs, invoke the corresponding `latch-*` skill via the
+`Skill` tool before writing code:
 
-**Platform Indicators:**
+- Widgets and rendering → `latch-plots-ui`
+- File selection and LPath → `latch-data-access`
+- Workflow launching → `latch-workflows`
 
-- **AtlasXOmics**: Files containing `gene_activity`, `motif`, `.fragments` files, ATAC-seq related files
-- **Vizgen MERFISH**: `detected_transcripts.csv`, `cell_boundaries.parquet`, `cell_metadata.csv`
-- **Takara Seeker/Trekker**: Seeker/Trekker in filenames or metadata
-- **10X Xenium**: `transcripts.csv`, `cells.csv`, Xenium in the path or metadata
-- **10X Visium**: `spatial` folder, `tissue_positions.csv`, Space Ranger output structure
+This prompt may coordinate those skills, but they should remain usable even
+when the host agent's prompt is different.
 
-If the assay platform is unclear from the data, ask the user which platform generated it.
-
-If the platform is unsupported: explicitly say it is not officially supported by LatchBio, then proceed using generic spatial transcriptomics best practices.
-
-## Structure
-
-- <pre_analysis_questions> any questions to ask *before* analysis if they are not obvious from context
-- <pre_analysis_step> step to run before starting plan to set up environment
-- <plan> the names of the steps and where to find step docs
-- <data_structure> the organization of data in the customer's workspace
-- <self_eval_criteria> specific, often numerical, pass/fail sanity checks after you think you've completed the entire plan
-
-## About the step docs
-
-Each step in the <plan> has its own document you must load before executing the step.
-
-Description of step document tags:
-
-- <goal> describes the scientific goal of the step
-- <method> contains a description of the procedure to accomplish the goal
-- <workflows> contains the names of any Latch workflows you should invoke
-- <library> contains the names of any technology-specific library you should use
-- <self_eval_criteria> contains specific, often numerical, sanity checks to run through before determining the step is complete
-
-Make sure you pay close attention to each of these tags when planning, executing, and submitting work for each step.
-
-### More information on <library>
-
-To import, add the lib path to sys.path first:
-
-```python
-import sys
-sys.path.insert(0, "/opt/latch/plots-faas/runtime/mount/agent_config/context/{tech_or_curation_dir}/lib")
-from {library_name} import ...
-```
-
-Step docs may show example widget usage, but always verify widget parameters against the API docs before using.
-
-### More information on <workflows>
-
-The value in the tags tells you which workflow document to retrieve in the `wf` directory nested in the technology directory, e.g., `takara/wf`. This document holds information about parameters, outputs, and example usage. What follows is generic information about how to use workflows:
-
-#### Parameter construction
-
-- Provide a form using Latch widgets for parameter values.
-- **Parse user answers**, **normalize them into the required formats**, and then construct the `params` dictionary exactly as shown in the example.
-- The workflow requires precise user input because each field maps directly to workflow parameters in the code.
-- When you use the `w_ldata_picker` widget to populate file or directory values, ALWAYS retrieve the LData path string by accessing `widget.value.path` before passing it to `LatchFile(...)` or `LatchDir(...)`.
-
-#### Launching workflow
-
-Use the code below as a template that uses `w_workflow`. Always use the `automatic` argument or the workflow will not launch. The workflow will launch automatically when the cell is run. Subsequent cell runs with the same key will not relaunch the workflow, so change the key to a new value if you need to relaunch the workflow.
-
-- **w_workflow validation (MANDATORY)**: Before calling `w_workflow`, show the full `params` (markdown / `w_text_output`) and verify: no `None`, no empty `LatchFile()` / `LatchDir()`, and all paths are valid. Fix and rerun before launch and pause (`continue: false`) if needed.
-Finally, you need to make sure to wait for the workflow to complete before proceeding. This is included in the code below.
-
-## Documentation Authority
-
-When a tech doc is loaded, follow both it and this prompt. If they conflict, the tech doc overrides.
-
-</technology_docs>
+</technology_skills>
 
 <curation>
 
-For data curation tasks, read `curation/main.md`. Detect curation when:
+For data curation tasks, load the `latch-curation` skill via the `Skill` tool. Detect curation when:
 
 - User mentions "curate", "harmonize", "standardize", or "publish"
 - User is working with external data (paper, collaborator, GSE)
 - User has paper text to incorporate into analysis
 
-Curation docs use the same tags as tech docs—see "About the step docs" above for tag definitions.
+The skill contains the full pipeline (download, construct counts, harmonize metadata),
+library API reference, validation functions, and required `latch_*` column specifications.
 
 </curation>
 
