@@ -1063,7 +1063,19 @@ class AgentHarness:
             plan_content = json.dumps(self.current_plan, indent=2)
             context_blocks.append(f"<current_plan>\n{plan_content}\n</current_plan>")
 
-        context_blocks.append(f"<user_query>\n{query['query']}\n</user_query>")
+        context_blocks.append(f"<user_request>\n{query['query']}\n</user_request>")
+
+        contextual_node_data = query.get("contextual_node_data")
+        if contextual_node_data is not None:
+            context_blocks.append(
+                f"Here is the context of the selected nodes the user would like to use: <contextual_node_data>{json.dumps(contextual_node_data)}</contextual_node_data>"
+            )
+
+        selected_widgets = query.get("selected_widgets")
+        if selected_widgets is not None:
+            context_blocks.append(
+                f"Here is the selected widgets the user would like t use: <widgets>{json.dumps(selected_widgets)}<widgets/>"
+            )
 
         return "\n\n".join(context_blocks)
 
