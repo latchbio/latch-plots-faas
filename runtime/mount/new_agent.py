@@ -1426,7 +1426,6 @@ class AgentHarness:
             if nested_type == "cell_result":
                 cell_id = nested_msg.get("cell_id")
                 success = not nested_msg.get("has_exception", False)
-                exception = nested_msg.get("exception")
                 cell_name = nested_msg.get("display_name")
 
                 logs = nested_msg.get("logs", None)
@@ -1434,7 +1433,7 @@ class AgentHarness:
                     logs = logs[-4096:]
 
                 if cell_id not in self.pending_cells:
-                    print(f"[agent] Ignoring cell_result for {msg.get('cell_id')} ")
+                    print(f"[agent] Ignoring cell_result for {cell_id} ")
                     return
 
                 if cell_id is not None:
@@ -1469,7 +1468,7 @@ class AgentHarness:
                     }
                     print(f"[agent] Cell {cell_id} succeeded")
                 else:
-                    exception = msg.get("exception", "Unknown error")
+                    exception = nested_msg.get("exception", "Unknown error")
                     result_message = f"✗ Cell {cell_name} ({cell_id}) execution failed"
                     result_content = {
                         "type": "cell_result",
@@ -1515,14 +1514,12 @@ class AgentHarness:
                 if all(v is not None for v in self.pending_widgets.values()):
                     await self.set_agent_status("thinking")
 
-                    data = msg.get("data", {})
-                    widget_info = ", ".join(f"{k}={v}" for k, v in data.items())
+                    widget_info = ", ".join(f"{k}={v}" for k, v in self.pending_widgets.items())
                     content = f"User provided input via widget(s): {widget_info}"
 
                     await self._insert_history(
                         payload={"content": content, "hidden": True}
                     )
-                    print(f"[debug] {content=}")
                     await self.query(
                         AgentQuery(
                             type="agent_query",
