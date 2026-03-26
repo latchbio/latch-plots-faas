@@ -1397,7 +1397,9 @@ class AgentHarness:
                 if logs is not None and len(logs) > 4096:
                     logs = logs[-4096:]
 
-                is_pending = cell_id in self.pending_cells
+                if cell_id in self.pending_cells:
+                    print(f"[agent] Ignoring cell_result for {cell_id} ")
+                    return
 
                 if cell_id is not None:
                     self.pending_cells.discard(str(cell_id))
@@ -1445,11 +1447,6 @@ class AgentHarness:
                     print(f"[agent] Cell {cell_id} failed")
 
                 await self._insert_history(payload={"content": result_content})
-
-                if not is_pending:
-                    print(f"[agent] Ignoring cell_result for {cell_id} ")
-                    return
-
                 assert self.claude is not None
 
                 prompt_content = f"Cell execution update:\n\n {result_message}"
