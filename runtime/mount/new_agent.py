@@ -1397,7 +1397,7 @@ class AgentHarness:
                 if logs is not None and len(logs) > 4096:
                     logs = logs[-4096:]
 
-                if cell_id in self.pending_cells:
+                if cell_id not in self.pending_cells:
                     print(f"[agent] Ignoring cell_result for {cell_id} ")
                     return
 
