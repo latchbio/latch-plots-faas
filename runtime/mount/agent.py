@@ -247,7 +247,7 @@ class AgentHarness:
     current_status: str | None = None
     behavior: Behavior = "step_by_step"
     latest_notebook_state: str | None = None
-    _notebook_state_from_hook: bool = False
+    _last_sent_behavior: Behavior | None = None
     current_plan: dict | None = None
     in_memory_history: list[dict] = field(default_factory=list)
     mcp_server: McpSdkServerConfig = field(default_factory=lambda: agent_tools_mcp)
@@ -332,7 +332,6 @@ class AgentHarness:
         tool_name = input_data["tool_name"]
         notebook_state = await self.refresh_cells_context()
         self.latest_notebook_state = notebook_state
-        self._notebook_state_from_hook = True
 
         print(
             "[agent] PostToolUse attached notebook state context "
@@ -799,18 +798,7 @@ class AgentHarness:
         return None
 
     async def connect(self, *, resume_session_id: str | None) -> None:
-        turn_behavior_content, examples_content = self._load_behavior_context()
-        self.system_prompt = (
-            (context_root.parent / "system_prompt.md")
-            .read_text()
-            .replace(
-                "TURN_BEHAVIOR_PLACEHOLDER",
-                f"<turn_behavior>\n{turn_behavior_content}\n</turn_behavior>",
-            )
-            .replace(
-                "EXAMPLES_PLACEHOLDER", f"<examples>\n{examples_content}\n</examples>"
-            )
-        )
+        self.system_prompt = (context_root.parent / "system_prompt.md").read_text()
 
         nucleus_llm_url = f"{nucleus_url}/infer/plots-agent/anthropic"
         sdk_env = {
@@ -928,6 +916,7 @@ class AgentHarness:
         self.current_request_id = None
         self.current_status = None
         self.current_plan = None
+        self._last_sent_behavior = None
 
         if skip_db_history:
             self.in_memory_history.clear()
@@ -1035,12 +1024,21 @@ class AgentHarness:
         return turn_behavior_content, examples_content
 
     async def create_prompt(self, query: AgentQuery) -> str:
-        context_blocks = []
+        # todo(rteqs): we should probably move notebook state to a tool or pull it in everytime the model needs it instead of just the prompt
+        self.latest_notebook_state = await self.refresh_cells_context()
 
-        if not self._notebook_state_from_hook:
-            context_blocks.append(
-                f"<current_notebook_state>\n{self.latest_notebook_state}\n</current_notebook_state>"
-            )
+        context_blocks = []
+        if self._last_sent_behavior != self.behavior:
+            turn_behavior_content, examples_content = self._load_behavior_context()
+            context_blocks.extend([
+                f"<turn_behavior>\n{turn_behavior_content}\n</turn_behavior>",
+                f"<examples>\n{examples_content}\n</examples>",
+            ])
+            self._last_sent_behavior = self.behavior
+
+        context_blocks.append(
+            f"<current_notebook_state>\n{self.latest_notebook_state}\n</current_notebook_state>"
+        )
 
         if self.current_plan is not None:
             plan_content = json.dumps(self.current_plan, indent=2)
@@ -1088,9 +1086,9 @@ class AgentHarness:
 
         self._needs_reconnect = False
 
+        self.behavior = msg["behavior"]
         await self.set_agent_status("thinking")
 
-        self.latest_notebook_state = await self.refresh_cells_context()
         prompt = await self.create_prompt(msg)
         request_id = msg.get("request_id")
 
@@ -1393,7 +1391,7 @@ class AgentHarness:
 
         system_prompt_path = context_root.parent / "system_prompt.md"
         system_prompt_path.write_text(new_content)
-        self.system_prompt = new_content
+        self.system_prompt = (context_root.parent / "system_prompt.md").read_text()
         self.claude.options.system_prompt = SystemPromptPreset(
             type="preset", preset="claude_code", append=self.system_prompt
         )

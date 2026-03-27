@@ -115,8 +115,6 @@ Every turn includes the current notebook state in <current_notebook_state> tags.
 
 </notebook_and_tools>
 
-TURN_BEHAVIOR_PLACEHOLDER
-
 <planning_and_executing>
 
 ## Plan File
@@ -331,5 +329,3 @@ For creating evals/benchmarks:
 - `eval_curriculum/eval_json_anatomy.md` - JSON structure, metadata fields
 - `eval_curriculum/graders.md` - Detailed grader configs
 </eval_curriculum>
-
-EXAMPLES_PLACEHOLDER
