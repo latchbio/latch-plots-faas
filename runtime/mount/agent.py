@@ -192,6 +192,7 @@ class AgentQuery(TypedDict):
     template_version_id: str | None
     contextual_node_data: NotRequired[dict[str, Any]]  # todo(rteqs): type properly
     selected_widgets: NotRequired[list[dict[str, Any]]]  # todo(rteqs): type properly
+    hidden: NotRequired[bool]
 
 
 class CacheCreation(TypedDict):
@@ -1098,6 +1099,28 @@ class AgentHarness:
             f"claude_session_id={self.claude_session_id})"
         )
 
+        payload = {
+            "content": prompt,
+            "display_query": msg.get("query"),
+            **(
+                {"display_nodes": msg.get("contextual_node_data")}
+                if msg.get("contextual_node_data") is not None
+                else {}
+            ),
+            **(
+                {"display_widgets": msg.get("selected_widgets")}
+                if msg.get("selected_widgets") is not None
+                else {}
+            ),
+            "hidden": msg.get("hidden", False),
+        }
+        await self._insert_history(
+            role="user",
+            request_id=request_id,
+            payload=payload,
+            template_version_id=msg["template_version_id"],
+        )
+
         if self.claude_session_id is None:
             await self.claude.query(prompt=prompt)
         else:
@@ -1426,12 +1449,7 @@ class AgentHarness:
             print(
                 f"[agent] accept: dispatching to handle_query (query={query_preview}, request_id={request_id})"
             )
-            await self._insert_history(
-                role="user",
-                request_id=msg["request_id"],
-                payload={"content": msg["query"], "display_query": msg["query"]},
-                template_version_id=msg["template_version_id"],
-            )
+
             handle_start = time.time()
             await self.query(msg)
             handle_elapsed = time.time() - handle_start
@@ -1520,6 +1538,7 @@ class AgentHarness:
                         query=prompt_content,
                         behavior=self.behavior,
                         template_version_id=None,
+                        hidden=True,
                     )
                 )
 
@@ -1547,6 +1566,7 @@ class AgentHarness:
                             query=content,
                             behavior=self.behavior,
                             template_version_id=None,
+                            hidden=True,
                         )
                     )
                     print("        Finished waiting for widget input")
