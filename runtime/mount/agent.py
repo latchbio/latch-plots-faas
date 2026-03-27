@@ -242,6 +242,7 @@ class AgentHarness:
     conversation_task: asyncio.Task | None = None
     agent_session_id: int | None = None  # db_session_id
     claude_session_id: str | None = None
+    _needs_reconnect: bool = False
     latest_notebook_context: dict = field(default_factory=dict)
     current_status: str | None = None
     behavior: Behavior = "step_by_step"
@@ -857,23 +858,6 @@ class AgentHarness:
         except Exception as e:
             print(f"[agent] Failed to fetch MCP status: {e!s}")
 
-    def _is_sdk_alive(self) -> bool:
-        if self.claude is None:
-            return False
-        try:
-            transport = self.claude._transport
-            process = transport._process
-            return process.returncode is None
-        except AttributeError:
-            return False
-
-    async def _ensure_sdk_connected(self) -> None:
-        if self._is_sdk_alive():
-            return
-        print("[agent] SDK subprocess is dead, reconnecting...")
-        await self.disconnect()
-        await self.connect(resume_session_id=self.claude_session_id)
-
     async def disconnect(self) -> None:
         if self.claude is None:
             return
@@ -908,10 +892,8 @@ class AgentHarness:
             return
 
         if self.claude is not None and session_changed:
-            print("[agent] Interrupting running query due to session change")
-            await self.claude.interrupt()
-            await self._reset_for_new_session()
-            await self.disconnect()
+            print("[agent] Session changed, will reconnect on next query")
+            self._needs_reconnect = True
 
         resume_session_id = msg.get("claude_session_id")
         if resume_session_id is None or resume_session_id == "":
@@ -919,21 +901,6 @@ class AgentHarness:
                 self.agent_session_id
             )
         self.claude_session_id = resume_session_id
-
-        if self.claude is None:
-            try:
-                await self.connect(resume_session_id=resume_session_id)
-            except Exception as e:
-                print(f"[agent] Fatal: SDK client connection failed: {e!s}")
-                traceback.print_exc()
-
-                self.claude = None
-                await self.send({
-                    "type": "agent_error",
-                    "error": f"Agent failed to initialize: {e!s}",
-                    "fatal": True,
-                })
-                return
 
         await self.send({"type": "agent_status", "status": "ready"})
         print(
@@ -1096,8 +1063,30 @@ class AgentHarness:
         return "\n\n".join(context_blocks)
 
     async def query(self, msg: AgentQuery) -> None:
-        await self._ensure_sdk_connected()
-        assert self.claude is not None
+        if self.claude is not None and self._needs_reconnect:
+            print("[agent] Reconnecting SDK for new session")
+            try:
+                await self.claude.interrupt()
+            except Exception:
+                pass
+            await self._reset_for_new_session()
+            await self.disconnect()
+
+        if self.claude is None:
+            try:
+                await self.connect(resume_session_id=self.claude_session_id)
+            except Exception as e:
+                print(f"[agent] SDK connection failed: {e!s}")
+                traceback.print_exc()
+                self.claude = None
+                await self.send({
+                    "type": "agent_error",
+                    "error": f"Agent failed to initialize: {e!s}",
+                    "fatal": True,
+                })
+                return
+
+        self._needs_reconnect = False
 
         await self.set_agent_status("thinking")
 
@@ -1423,6 +1412,15 @@ class AgentHarness:
             print(f"[agent] Message: {msg_type}")
             await self.handle_init(msg)
         elif msg_type == "agent_query":
+            if self.agent_session_id is None:
+                print("[agent] Query received before init, ignoring")
+                await self.send({
+                    "type": "agent_error",
+                    "error": "Agent not initialized yet.",
+                    "fatal": False,
+                })
+                return
+
             query = msg.get("query", "")
             query_preview = query[:60] + "…" if len(query) > 60 else query
             request_id = msg.get("request_id", "unknown")
