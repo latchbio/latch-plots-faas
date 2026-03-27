@@ -797,9 +797,9 @@ class AgentHarness:
         print(f"[agent] Unknown stream event type={event_type}")
         return None
 
-    async def connect(self, *, resume_session_id: str | None) -> None:
+    def _render_system_prompt(self) -> str:
         turn_behavior_content, examples_content = self._load_behavior_context()
-        self.system_prompt = (
+        return (
             (context_root.parent / "system_prompt.md")
             .read_text()
             .replace(
@@ -810,6 +810,23 @@ class AgentHarness:
                 "EXAMPLES_PLACEHOLDER", f"<examples>\n{examples_content}\n</examples>"
             )
         )
+
+    def _sync_system_prompt(self) -> None:
+        self.system_prompt = self._render_system_prompt()
+        if self.claude is None:
+            return
+        self.claude.options.system_prompt = SystemPromptPreset(
+            type="preset", preset="claude_code", append=self.system_prompt
+        )
+
+    def _set_behavior(self, behavior: Behavior) -> None:
+        if behavior == self.behavior and self.system_prompt is not None:
+            return
+        self.behavior = behavior
+        self._sync_system_prompt()
+
+    async def connect(self, *, resume_session_id: str | None) -> None:
+        self._sync_system_prompt()
 
         nucleus_llm_url = f"{nucleus_url}/infer/plots-agent/anthropic"
         sdk_env = {
@@ -1099,8 +1116,10 @@ class AgentHarness:
         await self._ensure_sdk_connected()
         assert self.claude is not None
 
+        self._set_behavior(msg["behavior"])
         await self.set_agent_status("thinking")
 
+        self._notebook_state_from_hook = False
         self.latest_notebook_state = await self.refresh_cells_context()
         prompt = await self.create_prompt(msg)
         request_id = msg.get("request_id")
