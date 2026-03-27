@@ -857,6 +857,23 @@ class AgentHarness:
         except Exception as e:
             print(f"[agent] Failed to fetch MCP status: {e!s}")
 
+    def _is_sdk_alive(self) -> bool:
+        if self.claude is None:
+            return False
+        try:
+            transport = self.claude._transport
+            process = transport._process
+            return process.returncode is None
+        except AttributeError:
+            return False
+
+    async def _ensure_sdk_connected(self) -> None:
+        if self._is_sdk_alive():
+            return
+        print("[agent] SDK subprocess is dead, reconnecting...")
+        await self.disconnect()
+        await self.connect(resume_session_id=self.claude_session_id)
+
     async def disconnect(self) -> None:
         if self.claude is None:
             return
@@ -1079,6 +1096,7 @@ class AgentHarness:
         return "\n\n".join(context_blocks)
 
     async def query(self, msg: AgentQuery) -> None:
+        await self._ensure_sdk_connected()
         assert self.claude is not None
 
         await self.set_agent_status("thinking")
