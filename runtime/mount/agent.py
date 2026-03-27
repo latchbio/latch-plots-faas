@@ -246,7 +246,7 @@ class AgentHarness:
     current_status: str | None = None
     behavior: Behavior = "step_by_step"
     latest_notebook_state: str | None = None
-    _behavior_context_in_prompt: Behavior | None = None
+    _last_sent_behavior: Behavior | None = None
     current_plan: dict | None = None
     in_memory_history: list[dict] = field(default_factory=list)
     mcp_server: McpSdkServerConfig = field(default_factory=lambda: agent_tools_mcp)
@@ -949,7 +949,7 @@ class AgentHarness:
         self.current_request_id = None
         self.current_status = None
         self.current_plan = None
-        self._behavior_context_in_prompt = None
+        self._last_sent_behavior = None
 
         if skip_db_history:
             self.in_memory_history.clear()
@@ -1061,13 +1061,13 @@ class AgentHarness:
         self.latest_notebook_state = await self.refresh_cells_context()
 
         context_blocks = []
-        if self._behavior_context_in_prompt != self.behavior:
+        if self._last_sent_behavior != self.behavior:
             turn_behavior_content, examples_content = self._load_behavior_context()
             context_blocks.extend([
                 f"<turn_behavior>\n{turn_behavior_content}\n</turn_behavior>",
                 f"<examples>\n{examples_content}\n</examples>",
             ])
-            self._behavior_context_in_prompt = self.behavior
+            self._last_sent_behavior = self.behavior
 
         context_blocks.append(
             f"<current_notebook_state>\n{self.latest_notebook_state}\n</current_notebook_state>"
