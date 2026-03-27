@@ -1405,6 +1405,41 @@ class AgentHarness:
             "tree": tree_content,
         }
 
+    async def get_logs(self) -> dict:
+        logs: dict[str, Any] = {
+            "claude_sessions": {},
+            "current_session_id": self.claude_session_id,
+            "latest_session_id": None,
+            "agent": None,
+        }
+
+        claude_projects_dir = (
+            Path.home() / ".claude" / "projects" / "-opt-latch-plots-faas"
+        )
+
+        if claude_projects_dir.is_dir():
+            session_files = sorted(
+                claude_projects_dir.glob("*.jsonl"),
+                key=lambda p: p.stat().st_mtime,
+                reverse=True,
+            )
+            if session_files:
+                logs["latest_session_id"] = session_files[0].stem
+            for session_file in session_files:
+                session_id = session_file.stem
+                try:
+                    logs["claude_sessions"][session_id] = session_file.read_text()
+                except OSError:
+                    logs["claude_sessions"][session_id] = None
+
+        agent_log_path = Path("/var/log/agent.log")
+        try:
+            logs["agent"] = agent_log_path.read_text()
+        except FileNotFoundError:
+            logs["agent"] = None
+
+        return logs
+
     async def update_system_prompt(self, msg: dict[str, Any]) -> dict:
         assert self.claude is not None
 
@@ -1589,6 +1624,16 @@ class AgentHarness:
             result = await self.update_system_prompt(msg)
 
             await self.send({"type": "agent_action_response", "tx_id": tx_id, **result})
+        elif msg_type == "get_logs":
+            tx_id = msg.get("tx_id")
+            print(f"[agent] Get logs request (tx_id={tx_id})")
+            result = await self.get_logs()
+            await self.send({
+                "type": "agent_action_response",
+                "tx_id": tx_id,
+                "status": "success",
+                **result,
+            })
         elif msg_type == "seed_plan_from_history":
             print("[agent] seed_plan_from_history received")
             plan = msg.get("plan")
