@@ -121,6 +121,7 @@ async def create_cell(args: dict[str, Any]) -> dict[str, Any]:
         return ok({
             "tool_name": "create_cell",
             "summary": msg,
+            "code": code,
             "cell_id": cell_id,
             "tf_id": tf_id,
             "cell_name": title,
@@ -179,6 +180,7 @@ async def create_markdown_cell(args: dict[str, Any]) -> dict[str, Any]:
         return ok({
             "tool_name": "create_markdown_cell",
             "summary": msg,
+            "code": code,
             "cell_id": cell_id,
             "cell_name": title,
             "position": position,
@@ -222,6 +224,19 @@ async def edit_cell(args: dict[str, Any]) -> dict[str, Any]:
     h.pending_cells.add(cell_id)
 
     print(f"[tool] edit_cell id={cell_id}")
+    original_code = ""
+    context_result = await h.atomic_operation("get_context", {})
+    if context_result.get("status") == "success":
+        cells = context_result.get("context", {}).get("cells", [])
+        for cell in cells:
+            if cell.get("cell_id") == cell_id:
+                original_code = cell.get("source", "")
+                break
+    else:
+        print(
+            "[tool] edit_cell: failed to refresh notebook context: "
+            f"{context_result.get('error', 'Unknown error')}"
+        )
 
     params = {"cell_id": cell_id, "source": new_code, "auto_run": True}
     result = await h.atomic_operation("edit_cell", params)
@@ -232,6 +247,8 @@ async def edit_cell(args: dict[str, Any]) -> dict[str, Any]:
         return ok({
             "tool_name": "edit_cell",
             "summary": msg,
+            "code": new_code,
+            "original_code": original_code,
             "cell_id": cell_id,
             "cell_name": title,
             "message": action_summary,
@@ -622,6 +639,7 @@ async def execute_code(args: dict[str, Any]) -> dict[str, Any]:
         "tool_name": "execute_code",
         "success": True,
         "summary": "Code executed",
+        "code": code,
         "stdout": result.get("stdout"),
         "stderr": result.get("stderr"),
         "exception": result.get("exception"),
