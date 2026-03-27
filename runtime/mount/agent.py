@@ -796,11 +796,8 @@ class AgentHarness:
         print(f"[agent] Unknown stream event type={event_type}")
         return None
 
-    def _load_system_prompt(self) -> str:
-        return (context_root.parent / "system_prompt.md").read_text()
-
     async def connect(self, *, resume_session_id: str | None) -> None:
-        self.system_prompt = self._load_system_prompt()
+        self.system_prompt = (context_root.parent / "system_prompt.md").read_text()
 
         nucleus_llm_url = f"{nucleus_url}/infer/plots-agent/anthropic"
         sdk_env = {
@@ -1364,7 +1361,7 @@ class AgentHarness:
             print(f"[agent] Failed to persist cancellation history: {e!s}")
 
     async def get_full_prompt(self) -> dict:
-        self.system_prompt = self._load_system_prompt()
+        self.system_prompt = (context_root.parent / "system_prompt.md").read_text()
 
         messages = []
         if self.claude_session_id is not None:
@@ -1405,7 +1402,7 @@ class AgentHarness:
 
         system_prompt_path = context_root.parent / "system_prompt.md"
         system_prompt_path.write_text(new_content)
-        self.system_prompt = self._load_system_prompt()
+        self.system_prompt = (context_root.parent / "system_prompt.md").read_text()
         self.claude.options.system_prompt = SystemPromptPreset(
             type="preset", preset="claude_code", append=self.system_prompt
         )
