@@ -63,9 +63,45 @@ sdk_token = (latch_p / "token").read_text().strip() if (latch_p / "token").exist
 skills_dir = Path("/opt/latch/plots-faas/.claude/skills")
 skills_dir.mkdir(parents=True, exist_ok=True)
 
+skills_branch = None
+if sdk_token:
+    try:
+        gql_body = json.dumps({
+            "query": """
+                query GetNotebookMetadata($podId: BigInt!) {
+                    podInfo(id: $podId) {
+                        plotNotebook { metadata }
+                    }
+                }
+            """,
+            "variables": {"podId": pod_id},
+        }).encode()
+
+        req = urllib.request.Request(
+            f"https://vacuole.{domain}/graphql",
+            data=gql_body,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Latch-SDK-Token {sdk_token}",
+            },
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            metadata_str = (
+                json.loads(resp.read())
+                .get("data", {})
+                .get("podInfo", {})
+                .get("plotNotebook", {})
+                .get("metadata")
+            )
+        if metadata_str:
+            skills_branch = json.loads(metadata_str).get("skillsBranch")
+    except Exception as e:
+        print(f"failed to fetch notebook metadata: {e}", file=sys.stderr)
+
 latch_skills_dest = skills_dir / "latch-skills"
 if not latch_skills_dest.exists():
-    ret = os.system(f"git clone --depth 1 https://github.com/latchbio/latch-skills.git {latch_skills_dest}")
+    branch_flag = f"--branch {skills_branch}" if skills_branch else ""
+    ret = os.system(f"git clone --depth 1 {branch_flag} https://github.com/latchbio/latch-skills.git {latch_skills_dest}")
     if ret == 0:
         print(f"cloned public latch-skills -> {latch_skills_dest}")
     else:
