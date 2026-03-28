@@ -99,6 +99,13 @@ if sdk_token:
         print(f"failed to fetch notebook metadata: {e}", file=sys.stderr)
 
 latch_skills_dest = skills_dir / "latch-skills"
+if skills_branch and latch_skills_dest.exists():
+    import shutil
+    for link in skills_dir.iterdir():
+        if link.is_symlink() and str(latch_skills_dest) in str(link.readlink()):
+            link.unlink()
+    shutil.rmtree(latch_skills_dest)
+
 if not latch_skills_dest.exists():
     branch_flag = f"--branch {skills_branch}" if skills_branch else ""
     ret = os.system(f"git clone --depth 1 {branch_flag} https://github.com/latchbio/latch-skills.git {latch_skills_dest}")
