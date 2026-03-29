@@ -63,15 +63,61 @@ sdk_token = (latch_p / "token").read_text().strip() if (latch_p / "token").exist
 skills_dir = Path("/opt/latch/plots-faas/.claude/skills")
 skills_dir.mkdir(parents=True, exist_ok=True)
 
+skills_branch = "main"
+if sdk_token is not None:
+    try:
+        gql_body = json.dumps({
+            "query": """
+                query GetNotebookMetadata($podId: BigInt!) {
+                    podInfo(id: $podId) {
+                        plotNotebook { metadata }
+                    }
+                }
+            """,
+            "variables": {"podId": pod_id},
+        }).encode()
+
+        req = urllib.request.Request(
+            f"https://vacuole.{domain}/graphql",
+            data=gql_body,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Latch-SDK-Token {sdk_token}",
+            },
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            metadata_str = (
+                json.loads(resp.read())
+                .get("data", {})
+                .get("podInfo", {})
+                .get("plotNotebook", {})
+                .get("metadata")
+            )
+        if metadata_str is not None:
+            skills_branch = json.loads(metadata_str).get("skillsBranch", "main")
+    except Exception as e:
+        print(f"failed to fetch notebook metadata: {e}", file=sys.stderr)
+
+# todo: surface an error to the user if skills repo fails to pull or clone
 latch_skills_dest = skills_dir / "latch-skills"
-if not latch_skills_dest.exists():
-    ret = os.system(f"git clone --depth 1 https://github.com/latchbio/latch-skills.git {latch_skills_dest}")
+if latch_skills_dest.exists():
+    ret = os.system(f"git -C {latch_skills_dest} fetch --depth 1 origin {skills_branch} && git -C {latch_skills_dest} checkout FETCH_HEAD")
     if ret == 0:
-        print(f"cloned public latch-skills -> {latch_skills_dest}")
+        print(f"updated latch-skills to {skills_branch}")
+    else:
+        print(f"failed to update latch-skills to {skills_branch}", file=sys.stderr)
+else:
+    ret = os.system(f"git clone --depth 1 --branch {skills_branch} https://github.com/latchbio/latch-skills.git {latch_skills_dest}")
+    if ret == 0:
+        print(f"cloned public latch-skills ({skills_branch}) -> {latch_skills_dest}")
     else:
         print("failed to clone public latch-skills", file=sys.stderr)
 
 if latch_skills_dest.exists():
+    for link in skills_dir.iterdir():
+        if link.is_symlink() and str(latch_skills_dest) in str(link.readlink()):
+            link.unlink()
+
     for sub in sorted(latch_skills_dest.iterdir()):
         if sub.is_dir() and (sub / "SKILL.md").exists():
             link = skills_dir / sub.name
