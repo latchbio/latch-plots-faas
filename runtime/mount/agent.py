@@ -694,26 +694,6 @@ class AgentHarness:
         if fut and not fut.done():
             fut.set_result(msg)
 
-    async def send_context_usage(self, *, truncate: bool = True) -> None:
-        if self.claude is None:
-            return
-
-        try:
-            usage = await self.claude.get_context_usage()
-        except Exception as e:
-            print(f"[agent] Error getting context window usage {e}")
-            return
-
-        if truncate:
-            await self.send({
-                "type": "agent_context_usage",
-                "totalTokens": usage["totalTokens"],
-                "rawMaxTokens": usage["rawMaxTokens"],
-                "percentage": usage["percentage"],
-            })
-        else:
-            await self.send({"type": "agent_context_usage", **usage})
-
     async def _send_usage_update(
         self, usage: Usage | MessageDeltaUsage | ResultMessageUsage
     ) -> None:
@@ -1609,11 +1589,13 @@ class AgentHarness:
 
             try:
                 usage = await self.claude.get_context_usage()
+                usage.pop("gridRows")
+
                 await self.send({
                     "type": "agent_action_response",
                     "tx_id": tx_id,
                     "status": "success",
-                    **usage,
+                    "usage": usage,
                 })
             except Exception as e:
                 print(f"[agent] Error getting context usage: {e}")
