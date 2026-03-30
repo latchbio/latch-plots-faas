@@ -668,12 +668,21 @@ class AgentHarness:
         if fut and not fut.done():
             fut.set_result(msg)
 
-    async def send_context_usage(self) -> None:
+    async def send_context_usage(self, *, truncate: bool = False) -> None:
         if self.claude is None:
             return
 
         usage = await self.claude.get_context_usage()
-        await self.send({"type": "agent_usage_update", **usage})
+
+        if truncate:
+            await self.send({
+                "type": "agent_usage_update",
+                "totalToken": usage["totalTokens"],
+                "rawMaxTokens": usage["rawMaxTokens"],
+                "percentage": usage["percentage"],
+            })
+        else:
+            await self.send({"type": "agent_usage_update", **usage})
 
     async def set_agent_status(self, status: str) -> None:
         self.current_status = status
