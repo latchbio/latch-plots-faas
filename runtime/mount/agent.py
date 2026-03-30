@@ -1099,8 +1099,6 @@ class AgentHarness:
         assistant_message_started_at: float | None = None
         try:
             async for res in self.claude.receive_response():
-                await self.send_context_usage()
-
                 self.current_request_id = request_id
                 if (
                     isinstance(res, SystemMessage)
