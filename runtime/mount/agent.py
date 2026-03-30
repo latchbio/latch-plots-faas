@@ -672,7 +672,12 @@ class AgentHarness:
         if self.claude is None:
             return
 
-        usage = await self.claude.get_context_usage()
+        try:
+            usage = await self.claude.get_context_usage()
+        except Exception as e:
+            print(f"[agent] Error getting context window usage {e}")
+
+            return
 
         if truncate:
             await self.send({
