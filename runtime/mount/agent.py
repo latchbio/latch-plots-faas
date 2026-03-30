@@ -857,6 +857,8 @@ class AgentHarness:
         self.claude_session_id = resume_session_id
 
         await self.send({"type": "agent_status", "status": "ready"})
+        await self.send_context_usage()
+
         print(
             "[agent] Initialization complete "
             f"(db_session_id={self.agent_session_id}, "
