@@ -676,7 +676,6 @@ class AgentHarness:
             usage = await self.claude.get_context_usage()
         except Exception as e:
             print(f"[agent] Error getting context window usage {e}")
-
             return
 
         if truncate:
@@ -1100,6 +1099,8 @@ class AgentHarness:
         assistant_message_started_at: float | None = None
         try:
             async for res in self.claude.receive_response():
+                await self.send_context_usage()
+
                 self.current_request_id = request_id
                 if (
                     isinstance(res, SystemMessage)
@@ -1123,8 +1124,6 @@ class AgentHarness:
                     await self._handle_stream_event(res)
 
                 elif isinstance(res, AssistantMessage):
-                    await self.send_context_usage()
-
                     turn_duration: float | None = None
                     if assistant_message_started_at is not None:
                         turn_duration = max(
@@ -1203,7 +1202,6 @@ class AgentHarness:
                             )
 
                 elif isinstance(res, UserMessage):
-                    await self.send_context_usage()
                     if isinstance(res.content, str):
                         await self._insert_history(
                             role="user",
