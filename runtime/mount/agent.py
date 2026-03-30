@@ -13,12 +13,14 @@ from pathlib import Path
 from typing import Any, Literal, NotRequired, TypedDict
 
 from anthropic.types import (
+    MessageDeltaUsage,
     RawContentBlockDeltaEvent,
     RawContentBlockStartEvent,
     RawContentBlockStopEvent,
     RawMessageDeltaEvent,
     RawMessageStartEvent,
     RawMessageStopEvent,
+    Usage,
 )
 from claude_agent_sdk import (
     ClaudeAgentOptions,
@@ -172,6 +174,30 @@ class AgentQuery(TypedDict):
     contextual_node_data: NotRequired[dict[str, Any]]  # todo(rteqs): type properly
     selected_widgets: NotRequired[list[dict[str, Any]]]  # todo(rteqs): type properly
     hidden: NotRequired[bool]
+
+
+class CacheCreation(TypedDict):
+    ephemeral_1h_input_tokens: int
+    ephemeral_5m_input_tokens: int
+
+
+class ServerToolUsage(TypedDict):
+    web_search_requests: int
+    web_fetch_requests: int
+
+
+@dataclass(frozen=True)
+class ResultMessageUsage:
+    cache_creation: CacheCreation | None
+    cache_creation_input_tokens: int | None
+    cache_read_input_tokens: int | None
+    input_tokens: int
+    output_tokens: int
+    server_tool_use: ServerToolUsage | None
+    service_tier: Literal["standard", "priority", "batch"] | None
+    inference_geo: str
+    iterations: list
+    speed: str
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -688,6 +714,17 @@ class AgentHarness:
         else:
             await self.send({"type": "agent_context_usage", **usage})
 
+    async def _send_usage_update(
+        self, usage: Usage | MessageDeltaUsage | ResultMessageUsage
+    ) -> None:
+        await self.send({
+            "type": "agent_usage_update",
+            "input_tokens": usage.input_tokens if usage.input_tokens is not None else 0,
+            "cache_read_input_tokens": usage.cache_read_input_tokens,
+            "cache_creation_input_tokens": usage.cache_creation_input_tokens,
+            "context_limit": 1_000_000,
+        })
+
     async def set_agent_status(self, status: str) -> None:
         self.current_status = status
         await self.send({"type": "agent_status", "status": status})
@@ -857,7 +894,6 @@ class AgentHarness:
         self.claude_session_id = resume_session_id
 
         await self.send({"type": "agent_status", "status": "ready"})
-        await self.send_context_usage()
 
         print(
             "[agent] Initialization complete "
@@ -1248,7 +1284,8 @@ class AgentHarness:
                     if res.session_id != self.claude_session_id:
                         continue
 
-                    await self.send_context_usage(truncate=False)
+                    usage = validate(res.usage, ResultMessageUsage)
+                    await self._send_usage_update(usage)
 
                     if res.subtype == "success":
                         break
@@ -1557,6 +1594,35 @@ class AgentHarness:
             result = await self.update_system_prompt(msg)
 
             await self.send({"type": "agent_action_response", "tx_id": tx_id, **result})
+        elif msg_type == "get_context_usage":
+            tx_id = msg.get("tx_id")
+            print(f"[agent] Get context usage request (tx_id={tx_id})")
+
+            if self.claude is None:
+                await self.send({
+                    "type": "agent_action_response",
+                    "tx_id": tx_id,
+                    "status": "error",
+                    "error": "Agent not initialized",
+                })
+                return
+
+            try:
+                usage = await self.claude.get_context_usage()
+                await self.send({
+                    "type": "agent_action_response",
+                    "tx_id": tx_id,
+                    "status": "success",
+                    **usage,
+                })
+            except Exception as e:
+                print(f"[agent] Error getting context usage: {e}")
+                await self.send({
+                    "type": "agent_action_response",
+                    "tx_id": tx_id,
+                    "status": "error",
+                    "error": str(e),
+                })
         elif msg_type == "seed_plan_from_history":
             print("[agent] seed_plan_from_history received")
             plan = msg.get("plan")
