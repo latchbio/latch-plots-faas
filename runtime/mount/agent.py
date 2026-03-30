@@ -668,7 +668,7 @@ class AgentHarness:
         if fut and not fut.done():
             fut.set_result(msg)
 
-    async def send_context_usage(self, *, truncate: bool = False) -> None:
+    async def send_context_usage(self, *, truncate: bool = True) -> None:
         if self.claude is None:
             return
 
@@ -676,13 +676,13 @@ class AgentHarness:
 
         if truncate:
             await self.send({
-                "type": "agent_usage_update",
+                "type": "agent_context_usage",
                 "totalToken": usage["totalTokens"],
                 "rawMaxTokens": usage["rawMaxTokens"],
                 "percentage": usage["percentage"],
             })
         else:
-            await self.send({"type": "agent_usage_update", **usage})
+            await self.send({"type": "agent_context_usage", **usage})
 
     async def set_agent_status(self, status: str) -> None:
         self.current_status = status
@@ -1045,6 +1045,8 @@ class AgentHarness:
                 })
                 return
 
+        assert self.claude is not None
+
         self._needs_reconnect = False
 
         self.behavior = msg["behavior"]
@@ -1115,6 +1117,8 @@ class AgentHarness:
                     await self._handle_stream_event(res)
 
                 elif isinstance(res, AssistantMessage):
+                    await self.send_context_usage()
+
                     turn_duration: float | None = None
                     if assistant_message_started_at is not None:
                         turn_duration = max(
@@ -1193,6 +1197,7 @@ class AgentHarness:
                             )
 
                 elif isinstance(res, UserMessage):
+                    await self.send_context_usage()
                     if isinstance(res.content, str):
                         await self._insert_history(
                             role="user",
@@ -1239,7 +1244,7 @@ class AgentHarness:
                     if res.session_id != self.claude_session_id:
                         continue
 
-                    await self.send_context_usage()
+                    await self.send_context_usage(truncate=False)
 
                     if res.subtype == "success":
                         break
