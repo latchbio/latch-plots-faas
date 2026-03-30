@@ -13,14 +13,12 @@ from pathlib import Path
 from typing import Any, Literal, NotRequired, TypedDict
 
 from anthropic.types import (
-    MessageDeltaUsage,
     RawContentBlockDeltaEvent,
     RawContentBlockStartEvent,
     RawContentBlockStopEvent,
     RawMessageDeltaEvent,
     RawMessageStartEvent,
     RawMessageStopEvent,
-    Usage,
 )
 from claude_agent_sdk import (
     ClaudeAgentOptions,
@@ -146,25 +144,6 @@ class GenericToolResultPayload(TypedDict, total=False):
     error: str
 
 
-class AssistantTextBlock(TypedDict):
-    type: Literal["text"]
-    text: str
-
-
-class AssistantThinkingBlock(TypedDict):
-    type: Literal["thinking"]
-    thinking: str
-
-
-AssistantStreamBlock = AssistantTextBlock | AssistantThinkingBlock
-
-
-class StreamCompleteErrorPayload(TypedDict):
-    message: str
-    should_contact_support: bool
-    should_clear_history: bool
-
-
 class ErrorHistoryPayload(TypedDict, total=False):
     message: str
     should_contact_support: bool
@@ -193,30 +172,6 @@ class AgentQuery(TypedDict):
     contextual_node_data: NotRequired[dict[str, Any]]  # todo(rteqs): type properly
     selected_widgets: NotRequired[list[dict[str, Any]]]  # todo(rteqs): type properly
     hidden: NotRequired[bool]
-
-
-class CacheCreation(TypedDict):
-    ephemeral_1h_input_tokens: int
-    ephemeral_5m_input_tokens: int
-
-
-class ServerToolUsage(TypedDict):
-    web_search_requests: int
-    web_fetch_requests: int
-
-
-@dataclass(frozen=True)
-class ResultMessageUsage:
-    cache_creation: CacheCreation | None
-    cache_creation_input_tokens: int | None
-    cache_read_input_tokens: int | None
-    input_tokens: int
-    output_tokens: int
-    server_tool_use: ServerToolUsage | None
-    service_tier: Literal["standard", "priority", "batch"] | None
-    inference_geo: str
-    iterations: list
-    speed: str
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -713,16 +668,12 @@ class AgentHarness:
         if fut and not fut.done():
             fut.set_result(msg)
 
-    async def _send_usage_update(
-        self, usage: Usage | MessageDeltaUsage | ResultMessageUsage
-    ) -> None:
-        await self.send({
-            "type": "agent_usage_update",
-            "input_tokens": usage.input_tokens if usage.input_tokens is not None else 0,
-            "cache_read_input_tokens": usage.cache_read_input_tokens,
-            "cache_creation_input_tokens": usage.cache_creation_input_tokens,
-            "context_limit": 1_000_000,
-        })
+    async def send_context_usage(self) -> None:
+        if self.claude is None:
+            return
+
+        usage = await self.claude.get_context_usage()
+        await self.send({"type": "agent_usage_update", **usage})
 
     async def set_agent_status(self, status: str) -> None:
         self.current_status = status
@@ -1279,8 +1230,7 @@ class AgentHarness:
                     if res.session_id != self.claude_session_id:
                         continue
 
-                    usage = validate(res.usage, ResultMessageUsage)
-                    await self._send_usage_update(usage)
+                    await self.send_context_usage()
 
                     if res.subtype == "success":
                         break
@@ -1406,7 +1356,8 @@ class AgentHarness:
         }
 
     async def update_system_prompt(self, msg: dict[str, Any]) -> dict:
-        assert self.claude is not None
+        if self.claude is None:
+            return {"status": "error", "error": "Agent not initialized"}
 
         new_content = msg.get("content")
         if not isinstance(new_content, str):
@@ -1522,7 +1473,6 @@ class AgentHarness:
                     print(f"[agent] Cell {cell_id} failed")
 
                 await self._insert_history(payload={"content": result_content})
-                assert self.claude is not None
 
                 prompt_content = f"Cell execution update:\n\n {result_message}"
                 if not success:
