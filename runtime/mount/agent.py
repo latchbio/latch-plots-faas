@@ -933,6 +933,7 @@ class AgentHarness:
             return
 
         if event.type == "message_delta":
+            await self._send_usage_update(event.usage)
             return
 
         if event.type == "message_stop":
