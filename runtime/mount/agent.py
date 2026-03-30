@@ -677,7 +677,7 @@ class AgentHarness:
         if truncate:
             await self.send({
                 "type": "agent_context_usage",
-                "totalToken": usage["totalTokens"],
+                "totalTokens": usage["totalTokens"],
                 "rawMaxTokens": usage["rawMaxTokens"],
                 "percentage": usage["percentage"],
             })
