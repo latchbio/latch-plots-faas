@@ -85,6 +85,7 @@ SDK_BUILTIN_ALLOWED_TOOLS = [
     "WebFetch",
     "WebSearch",
     "AskUserQuestion",
+    "Agent",
 ]
 NOTEBOOK_MUTATION_TOOL_NAMES = (
     "create_cell",
