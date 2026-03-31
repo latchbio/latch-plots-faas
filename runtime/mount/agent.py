@@ -919,10 +919,12 @@ class AgentHarness:
         # client implements logic to stitch streamed blocks and can choose to ignore them altogether.
         # final state of message history is dictated by AssistantMessage and UserMessages
 
+        if msg.parent_tool_use_id is not None:
+            print(f"stream_event: {msg=}")
+
         if self.claude_session_id != msg.session_id:
             return
 
-        print(f"stream_event: {msg=}")
         event = self._parse_stream_event(msg.event)
 
         if event is None:
