@@ -154,6 +154,7 @@ class ErrorHistoryPayload(TypedDict, total=False):
     raw_error: str
     assistant_error_type: str | None
     subtype: str
+    parent_tool_use_id: str
 
 
 AnthropicStreamEvent = (
@@ -930,6 +931,11 @@ class AgentHarness:
             await self.send({
                 "type": "agent_stream_start",
                 "timestamp": int(time.time() * 1000),
+                **(
+                    {"parent_tool_use_id": msg.parent_tool_use_id}
+                    if msg.parent_tool_use_id is not None
+                    else {}
+                ),
             })
             return
 
@@ -971,6 +977,11 @@ class AgentHarness:
                     "block_index": block_index,
                     "block_type": "text",
                     "delta": delta.text,
+                    **(
+                        {"parent_tool_use_id": msg.parent_tool_use_id}
+                        if msg.parent_tool_use_id is not None
+                        else {}
+                    ),
                 })
 
             elif delta.type == "thinking_delta":
@@ -979,6 +990,11 @@ class AgentHarness:
                     "block_index": block_index,
                     "block_type": "thinking",
                     "delta": delta.thinking,
+                    **(
+                        {"parent_tool_use_id": msg.parent_tool_use_id}
+                        if msg.parent_tool_use_id is not None
+                        else {}
+                    ),
                 })
 
             elif delta.type == "input_json_delta":
@@ -987,6 +1003,11 @@ class AgentHarness:
                     "block_index": block_index,
                     "block_type": "tool_use",
                     "delta": delta.partial_json,
+                    **(
+                        {"parent_tool_use_id": msg.parent_tool_use_id}
+                        if msg.parent_tool_use_id is not None
+                        else {}
+                    ),
                 })
 
             return
@@ -995,6 +1016,11 @@ class AgentHarness:
             await self.send({
                 "type": "agent_stream_block_stop",
                 "block_index": event.index,
+                **(
+                    {"parent_tool_use_id": msg.parent_tool_use_id}
+                    if msg.parent_tool_use_id is not None
+                    else {}
+                ),
             })
             return
 
@@ -1165,6 +1191,11 @@ class AgentHarness:
                                         if turn_duration is not None
                                         else {}
                                     ),
+                                    **(
+                                        {"parent_tool_use_id": res.parent_tool_use_id}
+                                        if res.parent_tool_use_id is not None
+                                        else {}
+                                    ),
                                 },
                             )
 
@@ -1179,6 +1210,11 @@ class AgentHarness:
                                     **(
                                         {"duration": turn_duration}
                                         if turn_duration is not None
+                                        else {}
+                                    ),
+                                    **(
+                                        {"parent_tool_use_id": res.parent_tool_use_id}
+                                        if res.parent_tool_use_id is not None
                                         else {}
                                     ),
                                 },
@@ -1216,6 +1252,11 @@ class AgentHarness:
                                         if turn_duration is not None
                                         else {}
                                     ),
+                                    **(
+                                        {"parent_tool_use_id": res.parent_tool_use_id}
+                                        if res.parent_tool_use_id is not None
+                                        else {}
+                                    ),
                                 },
                             )
 
@@ -1224,7 +1265,14 @@ class AgentHarness:
                         await self._insert_history(
                             role="user",
                             request_id=request_id,
-                            payload={"content": res.content},
+                            payload={
+                                "content": res.content,
+                                **(
+                                    {"parent_tool_use_id": res.parent_tool_use_id}
+                                    if res.parent_tool_use_id is not None
+                                    else {}
+                                ),
+                            },
                         )
                         continue
 
@@ -1233,7 +1281,14 @@ class AgentHarness:
                             await self._insert_history(
                                 role="user",
                                 request_id=request_id,
-                                payload={"content": [{"type": "text", "text": c.text}]},
+                                payload={
+                                    "content": [{"type": "text", "text": c.text}],
+                                    **(
+                                        {"parent_tool_use_id": res.parent_tool_use_id}
+                                        if res.parent_tool_use_id is not None
+                                        else {}
+                                    ),
+                                },
                             )
 
                         if isinstance(c, ToolResultBlock):
@@ -1258,7 +1313,12 @@ class AgentHarness:
                                                 is_error=is_error,
                                             ),
                                         }
-                                    ]
+                                    ],
+                                    **(
+                                        {"parent_tool_use_id": res.parent_tool_use_id}
+                                        if res.parent_tool_use_id is not None
+                                        else {}
+                                    ),
                                 },
                             )
 
