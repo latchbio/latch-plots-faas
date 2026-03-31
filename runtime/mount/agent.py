@@ -146,25 +146,6 @@ class GenericToolResultPayload(TypedDict, total=False):
     error: str
 
 
-class AssistantTextBlock(TypedDict):
-    type: Literal["text"]
-    text: str
-
-
-class AssistantThinkingBlock(TypedDict):
-    type: Literal["thinking"]
-    thinking: str
-
-
-AssistantStreamBlock = AssistantTextBlock | AssistantThinkingBlock
-
-
-class StreamCompleteErrorPayload(TypedDict):
-    message: str
-    should_contact_support: bool
-    should_clear_history: bool
-
-
 class ErrorHistoryPayload(TypedDict, total=False):
     message: str
     should_contact_support: bool
@@ -814,6 +795,7 @@ class AgentHarness:
                 system_prompt=SystemPromptPreset(
                     type="preset", preset="claude_code", append=self.system_prompt
                 ),
+                betas=["context-1m-2025-08-07"],
                 include_partial_messages=True,
                 mcp_servers={MCP_SERVER_NAME: self.mcp_server},
                 allowed_tools=[*self.mcp_allowed_tools, *SDK_BUILTIN_ALLOWED_TOOLS],
@@ -892,6 +874,7 @@ class AgentHarness:
         self.claude_session_id = resume_session_id
 
         await self.send({"type": "agent_status", "status": "ready"})
+
         print(
             "[agent] Initialization complete "
             f"(db_session_id={self.agent_session_id}, "
@@ -950,6 +933,7 @@ class AgentHarness:
             return
 
         if event.type == "message_delta":
+            await self._send_usage_update(event.usage)
             return
 
         if event.type == "message_stop":
@@ -1084,6 +1068,8 @@ class AgentHarness:
                     "fatal": True,
                 })
                 return
+
+        assert self.claude is not None
 
         self._needs_reconnect = False
 
@@ -1406,7 +1392,8 @@ class AgentHarness:
         }
 
     async def update_system_prompt(self, msg: dict[str, Any]) -> dict:
-        assert self.claude is not None
+        if self.claude is None:
+            return {"status": "error", "error": "Agent not initialized"}
 
         new_content = msg.get("content")
         if not isinstance(new_content, str):
@@ -1522,7 +1509,6 @@ class AgentHarness:
                     print(f"[agent] Cell {cell_id} failed")
 
                 await self._insert_history(payload={"content": result_content})
-                assert self.claude is not None
 
                 prompt_content = f"Cell execution update:\n\n {result_message}"
                 if not success:
@@ -1589,6 +1575,37 @@ class AgentHarness:
             result = await self.update_system_prompt(msg)
 
             await self.send({"type": "agent_action_response", "tx_id": tx_id, **result})
+        elif msg_type == "get_context_usage":
+            tx_id = msg.get("tx_id")
+            print(f"[agent] Get context usage request (tx_id={tx_id})")
+
+            if self.claude is None:
+                await self.send({
+                    "type": "agent_action_response",
+                    "tx_id": tx_id,
+                    "status": "error",
+                    "error": "Agent not initialized",
+                })
+                return
+
+            try:
+                usage = await self.claude.get_context_usage()
+                usage.pop("gridRows")
+
+                await self.send({
+                    "type": "agent_action_response",
+                    "tx_id": tx_id,
+                    "status": "success",
+                    "usage": usage,
+                })
+            except Exception as e:
+                print(f"[agent] Error getting context usage: {e}")
+                await self.send({
+                    "type": "agent_action_response",
+                    "tx_id": tx_id,
+                    "status": "error",
+                    "error": str(e),
+                })
         elif msg_type == "seed_plan_from_history":
             print("[agent] seed_plan_from_history received")
             plan = msg.get("plan")
