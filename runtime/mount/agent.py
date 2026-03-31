@@ -922,6 +922,7 @@ class AgentHarness:
         if self.claude_session_id != msg.session_id:
             return
 
+        print(f"stream_event: {msg=}")
         event = self._parse_stream_event(msg.event)
 
         if event is None:
