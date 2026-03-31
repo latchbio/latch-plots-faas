@@ -919,10 +919,11 @@ class AgentHarness:
         # client implements logic to stitch streamed blocks and can choose to ignore them altogether.
         # final state of message history is dictated by AssistantMessage and UserMessages
 
-        if msg.parent_tool_use_id is not None:
-            print(f"stream_event: {msg=}")
-
         if self.claude_session_id != msg.session_id:
+            return
+
+        # note: claude-agent-sdk doesn't seem to stream events from subagents. this is here in case this changes in the future
+        if msg.parent_tool_use_id is not None:
             return
 
         event = self._parse_stream_event(msg.event)
@@ -980,11 +981,6 @@ class AgentHarness:
                     "block_index": block_index,
                     "block_type": "text",
                     "delta": delta.text,
-                    **(
-                        {"parent_tool_use_id": msg.parent_tool_use_id}
-                        if msg.parent_tool_use_id is not None
-                        else {}
-                    ),
                 })
 
             elif delta.type == "thinking_delta":
@@ -993,11 +989,6 @@ class AgentHarness:
                     "block_index": block_index,
                     "block_type": "thinking",
                     "delta": delta.thinking,
-                    **(
-                        {"parent_tool_use_id": msg.parent_tool_use_id}
-                        if msg.parent_tool_use_id is not None
-                        else {}
-                    ),
                 })
 
             elif delta.type == "input_json_delta":
@@ -1006,11 +997,6 @@ class AgentHarness:
                     "block_index": block_index,
                     "block_type": "tool_use",
                     "delta": delta.partial_json,
-                    **(
-                        {"parent_tool_use_id": msg.parent_tool_use_id}
-                        if msg.parent_tool_use_id is not None
-                        else {}
-                    ),
                 })
 
             return
@@ -1019,11 +1005,6 @@ class AgentHarness:
             await self.send({
                 "type": "agent_stream_block_stop",
                 "block_index": event.index,
-                **(
-                    {"parent_tool_use_id": msg.parent_tool_use_id}
-                    if msg.parent_tool_use_id is not None
-                    else {}
-                ),
             })
             return
 
