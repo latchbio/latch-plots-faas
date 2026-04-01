@@ -865,7 +865,7 @@ class AgentHarness:
         msg: AgentQuery = {
             "type": "agent_query",
             "query": display_query,
-            "behavior": self.behavior,
+            "behavior": "proactive", # Force rehydrated messages to be proactive such that CLI created notebooks can execute
             "template_version_id": template_version_id,
         }
 
