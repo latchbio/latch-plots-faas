@@ -919,9 +919,19 @@ async def start_agent_proc() -> None:
 async def start_headless_browser(
     notebook_id: str, local_storage: dict[str, str]
 ) -> None:
-    global headless_browser, headless_browser_notebook_id
+    global headless_browser, headless_browser_notebook_id, latest_local_storage
+
+    local_storage_changed = local_storage and local_storage != latest_local_storage
+    if local_storage_changed:
+        latest_local_storage = local_storage
+        print("[entrypoint] Local storage changed")
 
     if headless_browser is not None:
+        # If local storage is provided then its from a user session so we should refresh local storage
+        if local_storage_changed:
+            print("[entrypoint] Restarting headless browser")
+            await restart_headless_browser()
+            return
         return
 
     headless_browser_notebook_id = notebook_id

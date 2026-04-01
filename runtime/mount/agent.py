@@ -890,10 +890,12 @@ class AgentHarness:
         return msg
 
     async def _hydrate_latest_user_message(self) -> None:
+        # Gets latest entry
         latest_entry = await self._load_latest_history_entry()
         if latest_entry is None:
             return
 
+        # Will return None if the message isn't a user message
         hydrated_query = self._build_hydration_query(latest_entry)
         if hydrated_query is None:
             return
