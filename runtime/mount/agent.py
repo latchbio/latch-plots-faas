@@ -10,7 +10,7 @@ from collections.abc import Iterable
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Literal, NotRequired, TypedDict
+from typing import Any, Literal, NotRequired, TypedDict, cast
 
 from anthropic.types import (
     MessageDeltaUsage,
@@ -117,6 +117,32 @@ class AgentSessionQueryData(TypedDict):
 
 class AgentSessionQueryResp(TypedDict):
     data: AgentSessionQueryData
+
+
+class AgentHistoryQueryNode(TypedDict, total=False):
+    payload: dict[str, Any]
+    requestId: str | None
+    templateVersionId: str | None
+
+
+class AgentHistoryQueryConnection(TypedDict):
+    nodes: list[AgentHistoryQueryNode]
+
+
+class AgentHistoryQueryData(TypedDict):
+    agentHistories: AgentHistoryQueryConnection
+
+
+class AgentHistoryQueryResp(TypedDict):
+    data: AgentHistoryQueryData
+
+
+class StoredAgentHistoryEntry(TypedDict, total=False):
+    payload: dict[str, Any]
+    request_id: str | None
+    template_version_id: str | None
+    requestId: str | None
+    templateVersionId: str | None
 
 
 class TextToolResultBlock(TypedDict):
@@ -236,6 +262,8 @@ class AgentHarness:
     mcp_allowed_tools: list[str] = field(
         default_factory=lambda: list(MCP_ALLOWED_TOOL_NAMES)
     )
+
+    hydrating_last_msg: bool = False
 
     async def send(self, msg: dict[str, Any]) -> None:
         msg_type = msg.get("type", "unknown")
@@ -755,6 +783,133 @@ class AgentHarness:
             },
         )
 
+    async def _load_latest_history_entry(self) -> StoredAgentHistoryEntry | None:
+        if self.agent_session_id is None:
+            return None
+
+        if skip_db_history:
+            if len(self.in_memory_history) == 0:
+                return None
+            return cast(StoredAgentHistoryEntry, self.in_memory_history[-1])
+
+        try:
+            response = await gql_query(
+                auth=auth_token_sdk,
+                query="""
+                   query AgentHistoryLatest($sessionId: BigInt!) {
+                        agentHistories(
+                            filter: {
+                                sessionId: { equalTo: $sessionId }
+                                removed: { equalTo: false }
+                            }
+                            orderBy: [CREATED_AT_DESC]
+                            first: 1
+                        ) {
+                            nodes {
+                                payload
+                                requestId
+                                templateVersionId
+                            }
+                        }
+                    }
+                """,
+                variables={"sessionId": self.agent_session_id},
+            )
+            data = validate(response, AgentHistoryQueryResp)["data"]
+            nodes = data["agentHistories"]["nodes"]
+            if len(nodes) == 0:
+                return None
+            return cast(StoredAgentHistoryEntry, nodes[0])
+        except Exception as e:
+            print(f"[agent] Failed to load latest history entry: {e!s}")
+            return None
+
+    def _is_tool_result_only_message(self, content: object) -> bool:
+        if not isinstance(content, list) or len(content) == 0:
+            return False
+
+        return all(
+            isinstance(block, dict) and block.get("type") == "tool_result"
+            for block in content
+        )
+
+    def _build_hydration_query(
+        self, entry: StoredAgentHistoryEntry
+    ) -> AgentQuery | None:
+        payload = entry.get("payload")
+        if not isinstance(payload, dict):
+            return None
+
+        if payload.get("type") != "anthropic_message":
+            return None
+
+        if payload.get("role") != "user":
+            return None
+
+        if payload.get("hidden") is True:
+            return None
+
+        display_query = payload.get("display_query")
+        if not isinstance(display_query, str) or display_query == "":
+            return None
+
+        if self._is_tool_result_only_message(payload.get("content")):
+            return None
+
+        template_version_id = entry.get("templateVersionId")
+        if template_version_id is None:
+            template_version_id = entry.get("template_version_id")
+        if template_version_id is not None and not isinstance(template_version_id, str):
+            template_version_id = str(template_version_id)
+
+        msg: AgentQuery = {
+            "type": "agent_query",
+            "query": display_query,
+            "behavior": self.behavior,
+            "template_version_id": template_version_id,
+        }
+
+        request_id = entry.get("requestId")
+        if request_id is None:
+            request_id = entry.get("request_id")
+        if isinstance(request_id, str) and request_id != "":
+            msg["request_id"] = request_id
+
+        contextual_node_data = payload.get("display_nodes")
+        if contextual_node_data is not None:
+            msg["contextual_node_data"] = contextual_node_data
+
+        selected_widgets = payload.get("display_widgets")
+        if selected_widgets is not None:
+            msg["selected_widgets"] = selected_widgets
+
+        hidden = payload.get("hidden")
+        if isinstance(hidden, bool):
+            msg["hidden"] = hidden
+
+        return msg
+
+    async def _hydrate_latest_user_message(self) -> None:
+        latest_entry = await self._load_latest_history_entry()
+        if latest_entry is None:
+            return
+
+        hydrated_query = self._build_hydration_query(latest_entry)
+        if hydrated_query is None:
+            return
+
+        request_id = hydrated_query.get("request_id")
+        print(
+            "[agent] Replaying latest user message from history "
+            f"(request_id={request_id})"
+        )
+
+        self.hydrating_last_msg = True
+        try:
+            await self.accept(hydrated_query)
+        finally:
+            self.hydrating_last_msg = False
+
     def _parse_stream_event(
         self, raw_event: dict[str, Any]
     ) -> AnthropicStreamEvent | None:
@@ -874,6 +1029,7 @@ class AgentHarness:
         self.claude_session_id = resume_session_id
 
         await self.send({"type": "agent_status", "status": "ready"})
+        await self._hydrate_latest_user_message()
 
         print(
             "[agent] Initialization complete "
@@ -1100,12 +1256,14 @@ class AgentHarness:
             ),
             "hidden": msg.get("hidden", False),
         }
-        await self._insert_history(
-            role="user",
-            request_id=request_id,
-            payload=payload,
-            template_version_id=msg["template_version_id"],
-        )
+
+        if not self.hydrating_last_msg:
+            await self._insert_history(
+                role="user",
+                request_id=request_id,
+                payload=payload,
+                template_version_id=msg["template_version_id"],
+            )
 
         if self.claude_session_id is None:
             await self.claude.query(prompt=prompt)
