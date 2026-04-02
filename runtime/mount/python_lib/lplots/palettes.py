@@ -1,26 +1,47 @@
 from __future__ import annotations
 
-from typing import Any, TypeAlias
+from typing import Any, TypeAlias, TypedDict
 
 import orjson
+from latch_data_validation.data_validation import validate
 from utils import auth_token_sdk, gql_query, pod_id
 
 Palettes: TypeAlias = dict[str, list[dict[str, Any]]]
+
+
+class _PlotNotebook(TypedDict):
+    id: str
+    metadata: str | None
+
+
+class _PodInfo(TypedDict):
+    plotNotebook: _PlotNotebook | None
+
+
+class _PalettesData(TypedDict):
+    podInfo: _PodInfo
+
+
+class _PalettesResp(TypedDict):
+    data: _PalettesData
 
 
 def _default() -> Palettes:
     return {"categorical": [], "continuous": []}
 
 
-async def _fetch_notebook_id() -> str | None:
+async def get() -> Palettes:
     if pod_id is None:
-        return None
+        return _default()
 
     resp = await gql_query(
         query="""
-            query GetNotebookId($podId: BigInt!) {
+            query GetNotebookPalettes($podId: BigInt!) {
                 podInfo(id: $podId) {
-                    plotNotebook { id }
+                    plotNotebook {
+                        id
+                        metadata
+                    }
                 }
             }
         """,
@@ -28,37 +49,13 @@ async def _fetch_notebook_id() -> str | None:
         auth=auth_token_sdk,
     )
 
-    return (
-        resp.get("data", {})
-        .get("podInfo", {})
-        .get("plotNotebook", {})
-        .get("id")
-    )
+    data = validate(resp, _PalettesResp)["data"]
+    plot_notebook = data["podInfo"]["plotNotebook"]
 
-
-async def get() -> Palettes:
-    notebook_id = await _fetch_notebook_id()
-    if notebook_id is None:
+    if plot_notebook is None:
         return _default()
 
-    resp = await gql_query(
-        query="""
-            query GetNotebookPalettes($notebookId: BigInt!) {
-                plotNotebookInfo(id: $notebookId) {
-                    metadata
-                }
-            }
-        """,
-        variables={"notebookId": notebook_id},
-        auth=auth_token_sdk,
-    )
-
-    metadata_str = (
-        resp.get("data", {})
-        .get("plotNotebookInfo", {})
-        .get("metadata")
-    )
-
+    metadata_str = plot_notebook["metadata"]
     if metadata_str is None:
         return _default()
 
