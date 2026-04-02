@@ -9,30 +9,29 @@ from utils import auth_token_sdk, gql_query, pod_id
 Palettes: TypeAlias = dict[str, list[dict[str, Any]]]
 
 
-class _PlotNotebook(TypedDict):
+class PlotNotebook(TypedDict):
     id: str
     palettes: str | None
 
 
-class _PodInfo(TypedDict):
-    plotNotebook: _PlotNotebook | None
+class PodInfo(TypedDict):
+    plotNotebook: PlotNotebook | None
 
 
-class _PalettesData(TypedDict):
-    podInfo: _PodInfo
+class PalettesData(TypedDict):
+    podInfo: PodInfo
 
 
-class _PalettesResp(TypedDict):
-    data: _PalettesData
+class PalettesResp(TypedDict):
+    data: PalettesData
 
 
-def _default() -> Palettes:
-    return {"categorical": [], "continuous": []}
+default_palette = {"categorical": [], "continuous": []}
 
 
 async def get() -> Palettes:
     if pod_id is None:
-        return _default()
+        return default_palette
 
     resp = await gql_query(
         query="""
@@ -49,19 +48,19 @@ async def get() -> Palettes:
         auth=auth_token_sdk,
     )
 
-    data = validate(resp, _PalettesResp)["data"]
+    data = validate(resp, PalettesResp)["data"]
     plot_notebook = data["podInfo"]["plotNotebook"]
 
     if plot_notebook is None:
-        return _default()
+        return default_palette
 
     palettes_str = plot_notebook["palettes"]
     if palettes_str is None:
-        return _default()
+        return default_palette
 
-    metadata = orjson.loads(palettes_str) if isinstance(palettes_str, str) else palettes_str
+    metadata = orjson.loads(palettes_str)
 
-    palettes: Palettes = _default()
+    palettes: Palettes = default_palette
 
     for p in metadata.get("categoricalPalettes") or []:
         palettes["categorical"].append({
