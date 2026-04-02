@@ -1,22 +1,33 @@
 from __future__ import annotations
 
-import traceback
+import os
+from pathlib import Path
 from typing import Any, TypeAlias
 
 import orjson
 from utils import auth_token_sdk, gql_query_sync
 
-from . import _inject
-
 Palettes: TypeAlias = dict[str, list[dict[str, Any]]]
+
+_latch_p = Path(os.environ.get("LATCH_SANDBOX_ROOT", "/root/.latch"))
+_notebook_id_file = _latch_p / "notebook-id"
 
 
 def _default() -> Palettes:
     return {"categorical": [], "continuous": []}
 
 
+def _read_notebook_id() -> str | None:
+    try:
+        if _notebook_id_file.exists():
+            return _notebook_id_file.read_text().strip() or None
+    except Exception:
+        pass
+    return None
+
+
 def get() -> Palettes:
-    notebook_id = _inject.kernel.notebook_id
+    notebook_id = _read_notebook_id()
     if notebook_id is None:
         return _default()
 
