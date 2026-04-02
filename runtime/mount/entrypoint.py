@@ -916,6 +916,62 @@ async def start_agent_proc() -> None:
     )
 
 
+async def bootstrap_headless_browser_on_startup() -> None:
+    resp = await gql_query(
+        auth=auth_token_sdk,
+        query="""
+            query AgentBootstrapPodInfo($podId: BigInt!) {
+                podInfos(filter: { id: { equalTo: $podId } }, first: 1) {
+                    nodes {
+                        plotNotebookId
+                        accountId
+                    }
+                }
+            }
+        """,
+        variables={"podId": pod_id},
+    )
+
+    data = resp.get("data")
+    if not isinstance(data, dict):
+        raise TypeError("Missing bootstrap GraphQL data")
+
+    pod_infos = data.get("podInfos")
+    if not isinstance(pod_infos, dict):
+        raise TypeError("Missing podInfos in bootstrap GraphQL response")
+
+    nodes = pod_infos.get("nodes")
+    if not isinstance(nodes, list) or len(nodes) == 0:
+        raise RuntimeError("No pod found for headless browser bootstrap")
+
+    node = nodes[0]
+    if not isinstance(node, dict):
+        raise TypeError("Invalid pod bootstrap response shape")
+
+    notebook_id = node.get("plotNotebookId")
+    workspace_id = node.get("accountId")
+    if notebook_id is None or workspace_id is None:
+        raise RuntimeError("Missing notebook or workspace id for bootstrap")
+
+    local_storage = {
+        "plots.is_agent_controlled": "yes",
+        "viewAccountId": str(workspace_id),
+        "latch.authData": orjson.dumps({
+            "status": "done",
+            "auth0Data": {
+                "idToken": sdk_token.strip(),
+                "idTokenPayload": {
+                    "sub": "agent-session",
+                    "latch.bio/tos_ok": "true",
+                },
+            },
+        }).decode(),
+    }
+
+    print("[entrypoint] Starting headless browser during startup")
+    await start_headless_browser(str(notebook_id), local_storage=local_storage)
+
+
 async def start_headless_browser(
     notebook_id: str, local_storage: dict[str, str]
 ) -> None:
@@ -997,6 +1053,14 @@ async def startup() -> None:
 
     async_tasks.append(asyncio.create_task(k_proc.watchdog(cleanup=kernel_died)))
     async_tasks.append(asyncio.create_task(a_proc.watchdog()))
+    async_tasks.append(asyncio.create_task(_startup_headless_browser_task()))
+
+
+async def _startup_headless_browser_task() -> None:
+    try:
+        await bootstrap_headless_browser_on_startup()
+    except Exception as e:  # noqa: BLE001
+        print(f"[entrypoint] Failed to bootstrap headless browser: {e!s}")
 
 
 async def shutdown() -> None:
