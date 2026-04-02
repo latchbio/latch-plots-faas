@@ -833,6 +833,15 @@ class AgentHarness:
             print(f"[agent] Failed to load latest history entry: {e!s}")
             return None
 
+    def _is_tool_result_only_message(self, content: object) -> bool:
+        if not isinstance(content, list) or len(content) == 0:
+            return False
+
+        return all(
+            isinstance(block, dict) and block.get("type") == "tool_result"
+            for block in content
+        )
+
     def _build_retried_query(
         self, entry: StoredAgentHistoryEntry
     ) -> AgentQuery | None:
@@ -853,8 +862,7 @@ class AgentHarness:
         if not isinstance(display_query, str) or display_query == "":
             return None
 
-        content = payload.get("content")
-        if not isinstance(content, str) or content == "":
+        if self._is_tool_result_only_message(payload.get("content")):
             return None
 
         template_version_id = entry.get("templateVersionId")
