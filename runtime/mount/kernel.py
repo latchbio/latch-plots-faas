@@ -65,7 +65,14 @@ ad = auto_install.ad
 
 sys.path.append(str(Path(__file__).parent.absolute()))
 from subsample import downsample_df, initialize_duckdb
-from utils import KernelSnapshotStatus, PlotConfig, get_presigned_url, orjson_encoder, gql_query, auth_token_sdk
+from utils import (
+    KernelSnapshotStatus,
+    PlotConfig,
+    auth_token_sdk,
+    get_presigned_url,
+    gql_query,
+    orjson_encoder,
+)
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -674,15 +681,13 @@ class Kernel:
 
         signal.signal(signal.SIGINT, sigint_handler)
 
-    async def _fetch_and_set_notebook_palettes(self) -> None:
-        print(f"[palettes] fetching notebook palettes (notebook_id={self.notebook_id})")
-
+    async def _fetch_and_set_notebook_palettes(self, notebook_id: str | None = None) -> None:
         default_palettes: dict[str, list[dict[str, Any]]] = {
             "categorical": [],
             "continuous": [],
         }
 
-        if self.notebook_id is None:
+        if notebook_id is None:
             async with ctx.transaction:
                 self.k_globals["notebook_palettes"] = default_palettes
             return
@@ -696,7 +701,7 @@ class Kernel:
                         }
                     }
                 """,
-                variables={"notebookId": self.notebook_id},
+                variables={"notebookId": notebook_id},
                 auth=auth_token_sdk,
             )
 
@@ -1886,7 +1891,7 @@ class Kernel:
                         )
 
             self.notebook_id = msg.get("notebook_id") or self.notebook_id
-            await self._fetch_and_set_notebook_palettes()
+            await self._fetch_and_set_notebook_palettes(notebook_id=self.notebook_id)
 
             return
 
@@ -2094,8 +2099,7 @@ class Kernel:
             return
 
         if msg["type"] == "notebook_palettes_updated":
-            self.notebook_id = msg.get("notebook_id") or self.notebook_id
-            await self._fetch_and_set_notebook_palettes()
+            await self._fetch_and_set_notebook_palettes(notebook_id=self.notebook_id )
             return
 
         if msg["type"] == "h5":
