@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import defaultdict
 from typing import Any, TypeAlias, TypedDict
 
 import orjson
@@ -60,7 +61,7 @@ async def get() -> Palettes:
 
     metadata = orjson.loads(palettes_str)
 
-    palettes: Palettes = default_palette
+    palettes = defaultdict(list)
 
     for p in metadata.get("categoricalPalettes") or []:
         palettes["categorical"].append({
