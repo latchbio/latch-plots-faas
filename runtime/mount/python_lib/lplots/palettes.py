@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import traceback
-from typing import Any
+from typing import Any, TypeAlias
 
 import orjson
 
 from . import _inject
 
-type Palettes = dict[str, list[dict[str, Any]]]
+Palettes: TypeAlias = dict[str, list[dict[str, Any]]]
 
 
 def _default() -> Palettes:
