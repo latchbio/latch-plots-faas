@@ -69,15 +69,16 @@ async def agent(s: Span, ctx: Context) -> HandlerResult:
                 if isinstance(local_storage, dict) and len(local_storage) > 0:
                     connection_role = "user"
                     entrypoint_module.user_agent_ctx = ctx
-                    entrypoint_module.latest_local_storage = local_storage
 
                     notebook_id = msg.get("notebook_id")
                     if notebook_id is None:
                         raise ValueError("notebook_id required in init message")
 
+                    # This will be a noop if the browser is already running with the same local storage or if its an agent calling init
+                    # If this is called by a user session and the local storage has changed then the browser will be restarted
                     await start_headless_browser(
                         notebook_id,
-                        local_storage=entrypoint_module.latest_local_storage,
+                        local_storage=local_storage,
                     )
                 else:
                     connection_role = "action_handler"

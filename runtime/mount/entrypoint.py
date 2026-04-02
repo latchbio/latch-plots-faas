@@ -263,6 +263,27 @@ class TmpPlotsNotebookKernelSnapshotModeResp:
     data: TmpPlotsNotebookKernelSnapshotMode
 
 
+@dataclass(frozen=True)
+class AgentBootstrapPodInfoNode:
+    plotNotebookId: str | None
+    accountId: str | None
+
+
+@dataclass(frozen=True)
+class AgentBootstrapPodInfos:
+    nodes: list[AgentBootstrapPodInfoNode]
+
+
+@dataclass(frozen=True)
+class AgentBootstrapPodInfoData:
+    podInfos: AgentBootstrapPodInfos
+
+
+@dataclass(frozen=True)
+class AgentBootstrapPodInfoResp:
+    data: AgentBootstrapPodInfoData
+
+
 async def add_pod_event(*, auth: str, event_type: str) -> None:
     try:
         await gql_query(
@@ -916,13 +937,63 @@ async def start_agent_proc() -> None:
     )
 
 
+async def bootstrap_headless_browser_on_startup() -> None:
+    try:
+        resp = await gql_query(
+            auth=auth_token_sdk,
+            query="""
+                query AgentBootstrapPodInfo($podId: BigInt!) {
+                    podInfos(filter: { id: { equalTo: $podId } }, first: 1) {
+                        nodes {
+                            plotNotebookId
+                            accountId
+                        }
+                    }
+                }
+            """,
+            variables={"podId": pod_id},
+        )
+        data = validate(resp, AgentBootstrapPodInfoResp).data
+        nodes = data.podInfos.nodes
+        if len(nodes) == 0:
+            raise RuntimeError("No pod found for headless browser bootstrap")
+
+        node = nodes[0]
+        notebook_id = node.plotNotebookId
+        workspace_id = node.accountId
+        if notebook_id is None or workspace_id is None:
+            raise RuntimeError("Missing notebook or workspace id for bootstrap")
+
+        local_storage = {
+            "plots.is_agent_controlled": "yes",
+            "viewAccountId": str(workspace_id),
+            "latch.authData": orjson.dumps({
+                "status": "done",
+                "auth0Data": {
+                    "idToken": sdk_token.strip(),
+                    "idTokenPayload": {
+                        "sub": "agent-session",
+                        "latch.bio/tos_ok": "true",
+                    },
+                },
+            }).decode(),
+        }
+
+        print("[entrypoint] Starting headless browser during startup")
+        await start_headless_browser(str(notebook_id), local_storage=local_storage)
+    except Exception as e:  # noqa: BLE001
+        print(f"[entrypoint] Failed to bootstrap headless browser: {e!s}")
+
+
 async def start_headless_browser(
     notebook_id: str, local_storage: dict[str, str]
 ) -> None:
-    global headless_browser, headless_browser_notebook_id
+    global headless_browser, headless_browser_notebook_id, latest_local_storage
 
-    if headless_browser is not None:
-        return
+    local_storage_changed = local_storage and local_storage != latest_local_storage
+    if local_storage_changed:
+        latest_local_storage = local_storage
+        print("[entrypoint] Local storage changed")
 
     headless_browser_notebook_id = notebook_id
 
@@ -987,6 +1058,7 @@ async def startup() -> None:
 
     async_tasks.append(asyncio.create_task(k_proc.watchdog(cleanup=kernel_died)))
     async_tasks.append(asyncio.create_task(a_proc.watchdog()))
+    async_tasks.append(asyncio.create_task(bootstrap_headless_browser_on_startup()))
 
 
 async def shutdown() -> None:
