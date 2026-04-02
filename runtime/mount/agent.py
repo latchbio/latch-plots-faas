@@ -85,6 +85,7 @@ SDK_BUILTIN_ALLOWED_TOOLS = [
     "WebFetch",
     "WebSearch",
     "AskUserQuestion",
+    "Agent",
 ]
 NOTEBOOK_MUTATION_TOOL_NAMES = (
     "create_cell",
@@ -179,6 +180,7 @@ class ErrorHistoryPayload(TypedDict, total=False):
     raw_error: str
     assistant_error_type: str | None
     subtype: str
+    parent_tool_use_id: str
 
 
 AnthropicStreamEvent = (
@@ -1085,6 +1087,10 @@ class AgentHarness:
         if self.claude_session_id != msg.session_id:
             return
 
+        # note: claude-agent-sdk doesn't seem to stream events from subagents. this is here in case this changes in the future
+        if msg.parent_tool_use_id is not None:
+            return
+
         event = self._parse_stream_event(msg.event)
 
         if event is None:
@@ -1094,6 +1100,11 @@ class AgentHarness:
             await self.send({
                 "type": "agent_stream_start",
                 "timestamp": int(time.time() * 1000),
+                **(
+                    {"parent_tool_use_id": msg.parent_tool_use_id}
+                    if msg.parent_tool_use_id is not None
+                    else {}
+                ),
             })
             return
 
@@ -1331,6 +1342,11 @@ class AgentHarness:
                                         if turn_duration is not None
                                         else {}
                                     ),
+                                    **(
+                                        {"parent_tool_use_id": res.parent_tool_use_id}
+                                        if res.parent_tool_use_id is not None
+                                        else {}
+                                    ),
                                 },
                             )
 
@@ -1345,6 +1361,11 @@ class AgentHarness:
                                     **(
                                         {"duration": turn_duration}
                                         if turn_duration is not None
+                                        else {}
+                                    ),
+                                    **(
+                                        {"parent_tool_use_id": res.parent_tool_use_id}
+                                        if res.parent_tool_use_id is not None
                                         else {}
                                     ),
                                 },
@@ -1382,6 +1403,11 @@ class AgentHarness:
                                         if turn_duration is not None
                                         else {}
                                     ),
+                                    **(
+                                        {"parent_tool_use_id": res.parent_tool_use_id}
+                                        if res.parent_tool_use_id is not None
+                                        else {}
+                                    ),
                                 },
                             )
 
@@ -1390,7 +1416,14 @@ class AgentHarness:
                         await self._insert_history(
                             role="user",
                             request_id=request_id,
-                            payload={"content": res.content},
+                            payload={
+                                "content": res.content,
+                                **(
+                                    {"parent_tool_use_id": res.parent_tool_use_id}
+                                    if res.parent_tool_use_id is not None
+                                    else {}
+                                ),
+                            },
                         )
                         continue
 
@@ -1399,7 +1432,14 @@ class AgentHarness:
                             await self._insert_history(
                                 role="user",
                                 request_id=request_id,
-                                payload={"content": [{"type": "text", "text": c.text}]},
+                                payload={
+                                    "content": [{"type": "text", "text": c.text}],
+                                    **(
+                                        {"parent_tool_use_id": res.parent_tool_use_id}
+                                        if res.parent_tool_use_id is not None
+                                        else {}
+                                    ),
+                                },
                             )
 
                         if isinstance(c, ToolResultBlock):
@@ -1424,7 +1464,12 @@ class AgentHarness:
                                                 is_error=is_error,
                                             ),
                                         }
-                                    ]
+                                    ],
+                                    **(
+                                        {"parent_tool_use_id": res.parent_tool_use_id}
+                                        if res.parent_tool_use_id is not None
+                                        else {}
+                                    ),
                                 },
                             )
 
