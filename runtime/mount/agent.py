@@ -907,7 +907,7 @@ class AgentHarness:
 
         self.retrying_latest_query = True
         try:
-            await self.query(retried_query)
+            await self.accept(retried_query)
         finally:
             self.retrying_latest_query = False
 
