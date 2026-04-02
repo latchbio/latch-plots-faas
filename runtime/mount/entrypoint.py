@@ -882,6 +882,7 @@ async def start_kernel_proc() -> None:
         "plot_configs": k_state.plot_configs,
         "session_snapshot_mode": session_snapshot_mode,
         "kernel_pid": k_proc.proc.pid,
+        "notebook_id": notebook_id,
     })
 
 
