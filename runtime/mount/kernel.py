@@ -65,14 +65,7 @@ ad = auto_install.ad
 
 sys.path.append(str(Path(__file__).parent.absolute()))
 from subsample import downsample_df, initialize_duckdb
-from utils import (
-    KernelSnapshotStatus,
-    PlotConfig,
-    auth_token_sdk,
-    get_presigned_url,
-    gql_query,
-    orjson_encoder,
-)
+from utils import KernelSnapshotStatus, PlotConfig, get_presigned_url, orjson_encoder
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
