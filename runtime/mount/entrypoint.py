@@ -263,6 +263,27 @@ class TmpPlotsNotebookKernelSnapshotModeResp:
     data: TmpPlotsNotebookKernelSnapshotMode
 
 
+@dataclass(frozen=True)
+class AgentBootstrapPodInfoNode:
+    plotNotebookId: str | None
+    accountId: str | None
+
+
+@dataclass(frozen=True)
+class AgentBootstrapPodInfos:
+    nodes: list[AgentBootstrapPodInfoNode]
+
+
+@dataclass(frozen=True)
+class AgentBootstrapPodInfoData:
+    podInfos: AgentBootstrapPodInfos
+
+
+@dataclass(frozen=True)
+class AgentBootstrapPodInfoResp:
+    data: AgentBootstrapPodInfoData
+
+
 async def add_pod_event(*, auth: str, event_type: str) -> None:
     try:
         await gql_query(
@@ -917,59 +938,51 @@ async def start_agent_proc() -> None:
 
 
 async def bootstrap_headless_browser_on_startup() -> None:
-    resp = await gql_query(
-        auth=auth_token_sdk,
-        query="""
-            query AgentBootstrapPodInfo($podId: BigInt!) {
-                podInfos(filter: { id: { equalTo: $podId } }, first: 1) {
-                    nodes {
-                        plotNotebookId
-                        accountId
+    try:
+        resp = await gql_query(
+            auth=auth_token_sdk,
+            query="""
+                query AgentBootstrapPodInfo($podId: BigInt!) {
+                    podInfos(filter: { id: { equalTo: $podId } }, first: 1) {
+                        nodes {
+                            plotNotebookId
+                            accountId
+                        }
                     }
                 }
-            }
-        """,
-        variables={"podId": pod_id},
-    )
+            """,
+            variables={"podId": pod_id},
+        )
+        data = validate(resp, AgentBootstrapPodInfoResp).data
+        nodes = data.podInfos.nodes
+        if len(nodes) == 0:
+            raise RuntimeError("No pod found for headless browser bootstrap")
 
-    data = resp.get("data")
-    if not isinstance(data, dict):
-        raise TypeError("Missing bootstrap GraphQL data")
+        node = nodes[0]
+        notebook_id = node.plotNotebookId
+        workspace_id = node.accountId
+        if notebook_id is None or workspace_id is None:
+            raise RuntimeError("Missing notebook or workspace id for bootstrap")
 
-    pod_infos = data.get("podInfos")
-    if not isinstance(pod_infos, dict):
-        raise TypeError("Missing podInfos in bootstrap GraphQL response")
-
-    nodes = pod_infos.get("nodes")
-    if not isinstance(nodes, list) or len(nodes) == 0:
-        raise RuntimeError("No pod found for headless browser bootstrap")
-
-    node = nodes[0]
-    if not isinstance(node, dict):
-        raise TypeError("Invalid pod bootstrap response shape")
-
-    notebook_id = node.get("plotNotebookId")
-    workspace_id = node.get("accountId")
-    if notebook_id is None or workspace_id is None:
-        raise RuntimeError("Missing notebook or workspace id for bootstrap")
-
-    local_storage = {
-        "plots.is_agent_controlled": "yes",
-        "viewAccountId": str(workspace_id),
-        "latch.authData": orjson.dumps({
-            "status": "done",
-            "auth0Data": {
-                "idToken": sdk_token.strip(),
-                "idTokenPayload": {
-                    "sub": "agent-session",
-                    "latch.bio/tos_ok": "true",
+        local_storage = {
+            "plots.is_agent_controlled": "yes",
+            "viewAccountId": str(workspace_id),
+            "latch.authData": orjson.dumps({
+                "status": "done",
+                "auth0Data": {
+                    "idToken": sdk_token.strip(),
+                    "idTokenPayload": {
+                        "sub": "agent-session",
+                        "latch.bio/tos_ok": "true",
+                    },
                 },
-            },
-        }).decode(),
-    }
+            }).decode(),
+        }
 
-    print("[entrypoint] Starting headless browser during startup")
-    await start_headless_browser(str(notebook_id), local_storage=local_storage)
+        print("[entrypoint] Starting headless browser during startup")
+        await start_headless_browser(str(notebook_id), local_storage=local_storage)
+    except Exception as e:  # noqa: BLE001
+        print(f"[entrypoint] Failed to bootstrap headless browser: {e!s}")
 
 
 async def start_headless_browser(
@@ -977,7 +990,7 @@ async def start_headless_browser(
 ) -> None:
     global headless_browser, headless_browser_notebook_id, latest_local_storage
 
-    local_storage_changed = local_storage and local_storage != latest_local_storage
+    local_storage_changed = len(local_storage) > 0 and local_storage != latest_local_storage
     if local_storage_changed:
         latest_local_storage = local_storage
         print("[entrypoint] Local storage changed")
@@ -990,7 +1003,7 @@ async def start_headless_browser(
             print("[entrypoint] Restarting headless browser")
             await restart_headless_browser()
             return
-        
+
         print("[entrypoint] Skipping headless browser restart because local storage did not change")
         return
 
@@ -1000,7 +1013,7 @@ async def start_headless_browser(
         notebook_url = f"https://console.latch.bio/plots/{notebook_id}"
 
         headless_browser = HeadlessBrowser()
-        await headless_browser.start(notebook_url, local_storage=latest_local_storage)
+        await headless_browser.start(notebook_url, local_storage=local_storage)
 
         try:
             await asyncio.wait_for(action_handler_ready_ev.wait(), timeout=30)
@@ -1057,14 +1070,7 @@ async def startup() -> None:
 
     async_tasks.append(asyncio.create_task(k_proc.watchdog(cleanup=kernel_died)))
     async_tasks.append(asyncio.create_task(a_proc.watchdog()))
-    async_tasks.append(asyncio.create_task(_startup_headless_browser_task()))
-
-
-async def _startup_headless_browser_task() -> None:
-    try:
-        await bootstrap_headless_browser_on_startup()
-    except Exception as e:  # noqa: BLE001
-        print(f"[entrypoint] Failed to bootstrap headless browser: {e!s}")
+    async_tasks.append(asyncio.create_task(bootstrap_headless_browser_on_startup()))
 
 
 async def shutdown() -> None:
