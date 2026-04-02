@@ -988,6 +988,8 @@ async def start_headless_browser(
             print("[entrypoint] Restarting headless browser")
             await restart_headless_browser()
             return
+        
+        print("[entrypoint] Skipping headless browser restart because local storage did not change")
         return
 
     headless_browser_notebook_id = notebook_id
@@ -996,7 +998,7 @@ async def start_headless_browser(
         notebook_url = f"https://console.latch.bio/plots/{notebook_id}"
 
         headless_browser = HeadlessBrowser()
-        await headless_browser.start(notebook_url, local_storage=local_storage)
+        await headless_browser.start(notebook_url, local_storage=latest_local_storage)
 
         try:
             await asyncio.wait_for(action_handler_ready_ev.wait(), timeout=30)
