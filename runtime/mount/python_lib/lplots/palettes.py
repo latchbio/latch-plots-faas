@@ -66,6 +66,6 @@ async def _fetch(notebook_id: str | None) -> Palettes:
         return _default()
 
 
-def get() -> Palettes:
+async def get() -> Palettes:
     notebook_id = _inject.kernel.notebook_id
-    return asyncio.get_event_loop().run_until_complete(_fetch(notebook_id))
+    return await _fetch(notebook_id)
