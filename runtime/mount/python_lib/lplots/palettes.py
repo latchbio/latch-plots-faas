@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import asyncio
 import traceback
 from typing import Any, TypeAlias
 
 import orjson
+from utils import auth_token_sdk, gql_query_sync
 
 from . import _inject
 
@@ -15,14 +15,14 @@ def _default() -> Palettes:
     return {"categorical": [], "continuous": []}
 
 
-async def _fetch(notebook_id: str | None) -> Palettes:
+def get() -> Palettes:
+    notebook_id = _inject.kernel.notebook_id
     if notebook_id is None:
         return _default()
 
-    from utils import auth_token_sdk, gql_query
 
     try:
-        resp = await gql_query(
+        resp = gql_query_sync(
             query="""
                 query GetNotebookPalettes($notebookId: BigInt!) {
                     plotNotebookInfo(id: $notebookId) {
@@ -64,8 +64,3 @@ async def _fetch(notebook_id: str | None) -> Palettes:
     except Exception:
         traceback.print_exc()
         return _default()
-
-
-async def get() -> Palettes:
-    notebook_id = _inject.kernel.notebook_id
-    return await _fetch(notebook_id)

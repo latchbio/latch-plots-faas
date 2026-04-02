@@ -173,6 +173,61 @@ async def gql_query(
     raise AssertionError("unreachable")
 
 
+def gql_query_sync(
+    query: str, variables: dict[str, Any], auth: str, *, max_retries: int = 5
+) -> Any:
+    import json
+    import time
+    import urllib.error
+    import urllib.request
+
+    url = f"https://vacuole.{config.domain}/graphql"
+    headers = {
+        "Content-Type": "application/json",
+        "User-Agent": "LatchPlotsFaas/0.2.0",
+        "Authorization": auth,
+    }
+    body = json.dumps({"query": query, "variables": variables}).encode()
+
+    for attempt in range(max_retries + 1):
+        try:
+            req = urllib.request.Request(url, data=body, headers=headers)
+            with urllib.request.urlopen(req) as resp:
+                res = json.loads(resp.read())
+                if "errors" in res:
+                    raise RuntimeError(f"graphql error: {res}")
+                return res
+
+        except (urllib.error.URLError, OSError) as e:
+            status = None
+            if isinstance(e, urllib.error.HTTPError):
+                status = e.code
+
+            should_retry = (
+                status in retryable_status_codes if status is not None
+                else True
+            )
+
+            if should_retry and attempt < max_retries:
+                delay = _retry_delay(attempt)
+
+                if isinstance(e, urllib.error.HTTPError):
+                    retry_after = e.headers.get("Retry-After")
+                    if retry_after is not None:
+                        with contextlib.suppress(ValueError):
+                            delay = max(delay, float(retry_after))
+
+                print(
+                    f"[gql_query_sync] {type(e).__name__} on attempt"
+                    f" {attempt + 1}/{max_retries + 1}, retrying in {delay:.1f}s: {e}"
+                )
+                time.sleep(delay)
+                continue
+            raise
+
+    raise AssertionError("unreachable")
+
+
 def plot_to_webp_string(
     fig: Figure | SubFigure, *, quality: int = 80, lossless: bool = False
 ) -> str:
