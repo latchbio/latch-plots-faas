@@ -655,7 +655,6 @@ class Kernel:
     restored_globals: dict[str, object] = field(default_factory=dict)
 
     notebook_id: str | None = None
-
     def __post_init__(self) -> None:
         self.k_globals = TracedDict(self.duckdb)
         self.k_globals["exit"] = cell_exit
@@ -680,69 +679,6 @@ class Kernel:
             )
 
         signal.signal(signal.SIGINT, sigint_handler)
-
-    async def _fetch_and_set_notebook_palettes(self, notebook_id: str | None = None) -> None:
-        default_palettes: dict[str, list[dict[str, Any]]] = {
-            "categorical": [],
-            "continuous": [],
-        }
-
-        if notebook_id is None:
-            async with ctx.transaction:
-                self.k_globals["notebook_palettes"] = default_palettes
-            return
-
-        try:
-            resp = await gql_query(
-                query="""
-                    query GetNotebookPalettes($notebookId: BigInt!) {
-                        plotNotebookInfo(id: $notebookId) {
-                            metadata
-                        }
-                    }
-                """,
-                variables={"notebookId": notebook_id},
-                auth=auth_token_sdk,
-            )
-
-            metadata_str = (
-                resp.get("data", {})
-                .get("plotNotebookInfo", {})
-                .get("metadata")
-            )
-
-            if metadata_str is None:
-                async with ctx.transaction:
-                    self.k_globals["notebook_palettes"] = default_palettes
-                return
-
-            metadata = orjson.loads(metadata_str) if isinstance(metadata_str, str) else metadata_str
-
-            palettes: dict[str, list[dict[str, Any]]] = {
-                "categorical": [],
-                "continuous": [],
-            }
-
-            for p in metadata.get("categoricalPalettes") or []:
-                palettes["categorical"].append({
-                    "display_name": p.get("displayName", ""),
-                    "colors": p.get("colors", []),
-                })
-
-            for p in metadata.get("continuousPalettes") or []:
-                palettes["continuous"].append({
-                    "display_name": p.get("displayName", ""),
-                    "colors": p.get("colors", []),
-                })
-
-            async with ctx.transaction:
-                self.k_globals["notebook_palettes"] = palettes
-
-        except Exception:
-            traceback.print_exc()
-            if "notebook_palettes" not in self.k_globals:
-                async with ctx.transaction:
-                    self.k_globals["notebook_palettes"] = default_palettes
 
     def debug_state(self) -> dict[str, object]:
         return {
@@ -1891,7 +1827,6 @@ class Kernel:
                         )
 
             self.notebook_id = msg.get("notebook_id") or self.notebook_id
-            await self._fetch_and_set_notebook_palettes(notebook_id=self.notebook_id)
 
             return
 
@@ -1917,7 +1852,6 @@ class Kernel:
         if msg["type"] == "reset_kernel_globals":
             builtins = self.k_globals.get("__builtins__")
             exit_fn = self.k_globals.get("exit")
-            palettes = self.k_globals.get("notebook_palettes")
 
             dict.clear(self.k_globals)
 
@@ -1925,8 +1859,6 @@ class Kernel:
                 self.k_globals["__builtins__"] = builtins
             if exit_fn is not None:
                 self.k_globals["exit"] = exit_fn
-            if palettes is not None:
-                self.k_globals["notebook_palettes"] = palettes
 
             self.k_globals.clear()
 
@@ -2096,10 +2028,6 @@ class Kernel:
                 "status": "success",
                 "info": self._get_single_global_info(self.k_globals[key]),
             })
-            return
-
-        if msg["type"] == "notebook_palettes_updated":
-            await self._fetch_and_set_notebook_palettes(notebook_id=self.notebook_id )
             return
 
         if msg["type"] == "h5":
