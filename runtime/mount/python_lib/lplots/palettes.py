@@ -20,47 +20,41 @@ def get() -> Palettes:
     if notebook_id is None:
         return _default()
 
-
-    try:
-        resp = gql_query_sync(
-            query="""
-                query GetNotebookPalettes($notebookId: BigInt!) {
-                    plotNotebookInfo(id: $notebookId) {
-                        metadata
-                    }
+    resp = gql_query_sync(
+        query="""
+            query GetNotebookPalettes($notebookId: BigInt!) {
+                plotNotebookInfo(id: $notebookId) {
+                    metadata
                 }
-            """,
-            variables={"notebookId": notebook_id},
-            auth=auth_token_sdk,
-        )
+            }
+        """,
+        variables={"notebookId": notebook_id},
+        auth=auth_token_sdk,
+    )
 
-        metadata_str = (
-            resp.get("data", {})
-            .get("plotNotebookInfo", {})
-            .get("metadata")
-        )
+    metadata_str = (
+        resp.get("data", {})
+        .get("plotNotebookInfo", {})
+        .get("metadata")
+    )
 
-        if metadata_str is None:
-            return _default()
-
-        metadata = orjson.loads(metadata_str) if isinstance(metadata_str, str) else metadata_str
-
-        palettes: Palettes = _default()
-
-        for p in metadata.get("categoricalPalettes") or []:
-            palettes["categorical"].append({
-                "display_name": p.get("displayName", ""),
-                "colors": p.get("colors", []),
-            })
-
-        for p in metadata.get("continuousPalettes") or []:
-            palettes["continuous"].append({
-                "display_name": p.get("displayName", ""),
-                "colors": p.get("colors", []),
-            })
-
-        return palettes
-
-    except Exception:
-        traceback.print_exc()
+    if metadata_str is None:
         return _default()
+
+    metadata = orjson.loads(metadata_str) if isinstance(metadata_str, str) else metadata_str
+
+    palettes: Palettes = _default()
+
+    for p in metadata.get("categoricalPalettes") or []:
+        palettes["categorical"].append({
+            "display_name": p.get("displayName", ""),
+            "colors": p.get("colors", []),
+        })
+
+    for p in metadata.get("continuousPalettes") or []:
+        palettes["continuous"].append({
+            "display_name": p.get("displayName", ""),
+            "colors": p.get("colors", []),
+        })
+
+    return palettes
