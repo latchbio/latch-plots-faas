@@ -1,37 +1,47 @@
 from __future__ import annotations
 
-import os
-from pathlib import Path
 from typing import Any, TypeAlias
 
 import orjson
-from utils import auth_token_sdk, gql_query_sync
+from utils import auth_token_sdk, gql_query, pod_id
 
 Palettes: TypeAlias = dict[str, list[dict[str, Any]]]
-
-_latch_p = Path(os.environ.get("LATCH_SANDBOX_ROOT", "/root/.latch"))
-_notebook_id_file = _latch_p / "notebook-id"
 
 
 def _default() -> Palettes:
     return {"categorical": [], "continuous": []}
 
 
-def _read_notebook_id() -> str | None:
-    try:
-        if _notebook_id_file.exists():
-            return _notebook_id_file.read_text().strip() or None
-    except Exception:
-        pass
-    return None
+async def _fetch_notebook_id() -> str | None:
+    if pod_id is None:
+        return None
+
+    resp = await gql_query(
+        query="""
+            query GetNotebookId($podId: BigInt!) {
+                podInfo(id: $podId) {
+                    plotNotebook { id }
+                }
+            }
+        """,
+        variables={"podId": pod_id},
+        auth=auth_token_sdk,
+    )
+
+    return (
+        resp.get("data", {})
+        .get("podInfo", {})
+        .get("plotNotebook", {})
+        .get("id")
+    )
 
 
-def get() -> Palettes:
-    notebook_id = _read_notebook_id()
+async def get() -> Palettes:
+    notebook_id = await _fetch_notebook_id()
     if notebook_id is None:
         return _default()
 
-    resp = gql_query_sync(
+    resp = await gql_query(
         query="""
             query GetNotebookPalettes($notebookId: BigInt!) {
                 plotNotebookInfo(id: $notebookId) {

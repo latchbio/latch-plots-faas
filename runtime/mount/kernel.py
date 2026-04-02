@@ -654,7 +654,6 @@ class Kernel:
     restored_signals: dict[str, Signal[object]] = field(default_factory=dict)
     restored_globals: dict[str, object] = field(default_factory=dict)
 
-    notebook_id: str | None = None
     def __post_init__(self) -> None:
         self.k_globals = TracedDict(self.duckdb)
         self.k_globals["exit"] = cell_exit
@@ -1825,8 +1824,6 @@ class Kernel:
                         self.k_globals[key] = filter_and_sort(
                             df=df, pagination_settings=pagination_settings
                         )
-
-            self.notebook_id = msg.get("notebook_id") or self.notebook_id
 
             return
 
