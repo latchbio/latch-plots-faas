@@ -249,6 +249,9 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
 
                 continue
 
+            if msg["type"] == "notebook_palettes_updated":
+                msg["notebook_id"] = plots_ctx_manager.notebook_id
+
             if k_proc.msg_io is None:
                 await ctx.send_message(
                     orjson.dumps({

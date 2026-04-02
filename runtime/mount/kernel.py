@@ -65,7 +65,7 @@ ad = auto_install.ad
 
 sys.path.append(str(Path(__file__).parent.absolute()))
 from subsample import downsample_df, initialize_duckdb
-from utils import KernelSnapshotStatus, PlotConfig, get_presigned_url, orjson_encoder
+from utils import KernelSnapshotStatus, PlotConfig, get_presigned_url, orjson_encoder, gql_query, auth_token_sdk
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -647,6 +647,8 @@ class Kernel:
     restored_signals: dict[str, Signal[object]] = field(default_factory=dict)
     restored_globals: dict[str, object] = field(default_factory=dict)
 
+    notebook_id: str | None = None
+
     def __post_init__(self) -> None:
         self.k_globals = TracedDict(self.duckdb)
         self.k_globals["exit"] = cell_exit
@@ -671,6 +673,65 @@ class Kernel:
             )
 
         signal.signal(signal.SIGINT, sigint_handler)
+
+    async def _fetch_and_set_notebook_palettes(self) -> None:
+        default_palettes: dict[str, list[dict[str, Any]]] = {
+            "categorical": [],
+            "continuous": [],
+        }
+
+        if self.notebook_id is None:
+            self.k_globals["notebook_palettes"] = default_palettes
+            return
+
+        try:
+            resp = await gql_query(
+                query="""
+                    query GetNotebookPalettes($notebookId: BigInt!) {
+                        plotNotebookInfo(id: $notebookId) {
+                            metadata
+                        }
+                    }
+                """,
+                variables={"notebookId": self.notebook_id},
+                auth=auth_token_sdk,
+            )
+
+            metadata_str = (
+                resp.get("data", {})
+                .get("plotNotebookInfo", {})
+                .get("metadata")
+            )
+
+            if metadata_str is None:
+                self.k_globals["notebook_palettes"] = default_palettes
+                return
+
+            metadata = orjson.loads(metadata_str) if isinstance(metadata_str, str) else metadata_str
+
+            palettes: dict[str, list[dict[str, Any]]] = {
+                "categorical": [],
+                "continuous": [],
+            }
+
+            for p in metadata.get("categoricalPalettes") or []:
+                palettes["categorical"].append({
+                    "display_name": p.get("displayName", ""),
+                    "colors": p.get("colors", []),
+                })
+
+            for p in metadata.get("continuousPalettes") or []:
+                palettes["continuous"].append({
+                    "display_name": p.get("displayName", ""),
+                    "colors": p.get("colors", []),
+                })
+
+            self.k_globals["notebook_palettes"] = palettes
+
+        except Exception:
+            traceback.print_exc()
+            if "notebook_palettes" not in self.k_globals:
+                self.k_globals["notebook_palettes"] = default_palettes
 
     def debug_state(self) -> dict[str, object]:
         return {
@@ -1818,6 +1879,9 @@ class Kernel:
                             df=df, pagination_settings=pagination_settings
                         )
 
+            self.notebook_id = msg.get("notebook_id") or self.notebook_id
+            await self._fetch_and_set_notebook_palettes()
+
             return
 
         if msg["type"] == "debug_state":
@@ -1842,6 +1906,7 @@ class Kernel:
         if msg["type"] == "reset_kernel_globals":
             builtins = self.k_globals.get("__builtins__")
             exit_fn = self.k_globals.get("exit")
+            palettes = self.k_globals.get("notebook_palettes")
 
             dict.clear(self.k_globals)
 
@@ -1849,6 +1914,8 @@ class Kernel:
                 self.k_globals["__builtins__"] = builtins
             if exit_fn is not None:
                 self.k_globals["exit"] = exit_fn
+            if palettes is not None:
+                self.k_globals["notebook_palettes"] = palettes
 
             self.k_globals.clear()
 
@@ -2018,6 +2085,11 @@ class Kernel:
                 "status": "success",
                 "info": self._get_single_global_info(self.k_globals[key]),
             })
+            return
+
+        if msg["type"] == "notebook_palettes_updated":
+            self.notebook_id = msg.get("notebook_id") or self.notebook_id
+            await self._fetch_and_set_notebook_palettes()
             return
 
         if msg["type"] == "h5":
