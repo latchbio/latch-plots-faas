@@ -11,7 +11,7 @@ Palettes: TypeAlias = dict[str, list[dict[str, Any]]]
 
 class _PlotNotebook(TypedDict):
     id: str
-    metadata: str | None
+    palettes: str | None
 
 
 class _PodInfo(TypedDict):
@@ -40,7 +40,7 @@ async def get() -> Palettes:
                 podInfo(id: $podId) {
                     plotNotebook {
                         id
-                        metadata
+                        palettes
                     }
                 }
             }
@@ -55,11 +55,11 @@ async def get() -> Palettes:
     if plot_notebook is None:
         return _default()
 
-    metadata_str = plot_notebook["metadata"]
-    if metadata_str is None:
+    palettes_str = plot_notebook["palettes"]
+    if palettes_str is None:
         return _default()
 
-    metadata = orjson.loads(metadata_str) if isinstance(metadata_str, str) else metadata_str
+    metadata = orjson.loads(palettes_str) if isinstance(palettes_str, str) else palettes_str
 
     palettes: Palettes = _default()
 
