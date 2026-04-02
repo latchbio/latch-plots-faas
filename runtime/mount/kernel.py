@@ -675,16 +675,20 @@ class Kernel:
         signal.signal(signal.SIGINT, sigint_handler)
 
     async def _fetch_and_set_notebook_palettes(self) -> None:
+        print(f"[palettes] fetching notebook palettes (notebook_id={self.notebook_id})")
+
         default_palettes: dict[str, list[dict[str, Any]]] = {
             "categorical": [],
             "continuous": [],
         }
 
         if self.notebook_id is None:
+            print("[palettes] no notebook_id, using defaults")
             self.k_globals["notebook_palettes"] = default_palettes
             return
 
         try:
+            print(f"[palettes] querying plotNotebookInfo for id={self.notebook_id}")
             resp = await gql_query(
                 query="""
                     query GetNotebookPalettes($notebookId: BigInt!) {
@@ -696,18 +700,22 @@ class Kernel:
                 variables={"notebookId": self.notebook_id},
                 auth=auth_token_sdk,
             )
+            print(f"[palettes] gql response keys: {list(resp.keys()) if resp else None}")
 
             metadata_str = (
                 resp.get("data", {})
                 .get("plotNotebookInfo", {})
                 .get("metadata")
             )
+            print(f"[palettes] metadata_str type={type(metadata_str).__name__}, value={metadata_str!r:.200s}" if metadata_str is not None else "[palettes] metadata_str is None")
 
             if metadata_str is None:
+                print("[palettes] no metadata found, using defaults")
                 self.k_globals["notebook_palettes"] = default_palettes
                 return
 
             metadata = orjson.loads(metadata_str) if isinstance(metadata_str, str) else metadata_str
+            print(f"[palettes] parsed metadata keys: {list(metadata.keys()) if isinstance(metadata, dict) else type(metadata).__name__}")
 
             palettes: dict[str, list[dict[str, Any]]] = {
                 "categorical": [],
@@ -726,11 +734,14 @@ class Kernel:
                     "colors": p.get("colors", []),
                 })
 
+            print(f"[palettes] result: {len(palettes['categorical'])} categorical, {len(palettes['continuous'])} continuous")
             self.k_globals["notebook_palettes"] = palettes
 
         except Exception:
+            print("[palettes] exception fetching palettes")
             traceback.print_exc()
             if "notebook_palettes" not in self.k_globals:
+                print("[palettes] setting defaults after error")
                 self.k_globals["notebook_palettes"] = default_palettes
 
     def debug_state(self) -> dict[str, object]:
