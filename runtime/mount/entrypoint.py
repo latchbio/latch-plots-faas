@@ -995,18 +995,6 @@ async def start_headless_browser(
         latest_local_storage = local_storage
         print("[entrypoint] Local storage changed")
 
-    if headless_browser is not None:
-        # We bootstrap the headless browser on startup so we need to restart it if the local storage has changed
-        # If local storage is provided then its from a user session so we should refresh local storage
-        # The onlything that might change is the auth token might be the real sdk token instead of the workspace token on the pod
-        if local_storage_changed:
-            print("[entrypoint] Restarting headless browser")
-            await restart_headless_browser()
-            return
-
-        print("[entrypoint] Skipping headless browser restart because local storage did not change")
-        return
-
     headless_browser_notebook_id = notebook_id
 
     try:
