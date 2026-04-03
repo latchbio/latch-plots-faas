@@ -964,6 +964,49 @@ if fname and fname.endswith(".csv"):
 
 ---
 
+## Palettes
+
+**Import:** `from lplots.palettes import get`
+
+**When to use:** Access the notebook's user-defined color palettes (configured in the Plots UI) for use in custom visualizations.
+
+**Usage:**
+```python
+palettes = await get()
+```
+
+**Return type:** `dict` with two keys:
+- `"categorical"` — `list[dict]`, each with:
+  - `"display_name"` (str): User-assigned palette name
+  - `"colors"` (list[str]): List of color strings
+- `"continuous"` — `list[dict]`, same structure as above
+
+If no palettes are configured, returns `{"categorical": [], "continuous": []}`.
+
+**Example:**
+```python
+from lplots.palettes import get
+import plotly.express as px
+
+palettes = await get()
+
+# Use the first categorical palette if available
+cat_palettes = palettes["categorical"]
+if cat_palettes:
+    colors = cat_palettes[0]["colors"]
+    fig = px.scatter(df, x="x", y="y", color="category", color_discrete_sequence=colors)
+else:
+    fig = px.scatter(df, x="x", y="y", color="category")
+
+# Use the first continuous palette if available
+cont_palettes = palettes["continuous"]
+if cont_palettes:
+    colors = cont_palettes[0]["colors"]
+    fig = px.scatter(df, x="x", y="y", color="value", color_continuous_scale=colors)
+```
+
+---
+
 ## Reactivity
 
 ### Signal
