@@ -2281,7 +2281,6 @@ async def main() -> None:
         while not shutdown_requested:
             try:
                 msg = await k.conn.recv()
-                loop.run_in_executor(k.executor, asyncio.run, k.accept(msg))
                 k.executor.submit(asyncio.run, k.accept(msg))
 
             except Exception:
