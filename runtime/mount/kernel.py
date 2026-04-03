@@ -8,6 +8,7 @@ if __name__ == "__main__":
 import ast
 import asyncio
 import ctypes
+import inspect
 import io
 import math
 import os
@@ -259,15 +260,14 @@ class TracedDict(dict[str, Signal[object] | object]):
             return self.getitem_signal(__key).sample()
 
     def getitem_signal(self, __key: str) -> Signal[object]:
-        with self._item_rlock(__key):
-            return super().__getitem__(__key)
+        return super().__getitem__(__key)
 
     def get_signal(self, __key: str) -> Signal[object] | None:
         with self._item_rlock(__key):
-            if super().__contains__(__key):
+            if not super().__contains__(__key):
                 return None
 
-            return self.getitem_signal(__key)
+        return self.getitem_signal(__key)
 
     def _direct_set(self, __key: str, __value: object) -> None:
         with self._item_wlock(__key):
@@ -304,7 +304,7 @@ class TracedDict(dict[str, Signal[object] | object]):
             return super().__setitem__(__key, Signal(__value))
 
     def __delitem__(self, __key: str) -> None:
-        with self._item_wlock(__key), self._metadata_lock:
+        with self._item_wlock(__key):
             self.touched.add(__key)
             self.removed.add(__key)
             if __key in self.item_write_counter:
@@ -354,15 +354,15 @@ class TracedDict(dict[str, Signal[object] | object]):
 
     # todo(rteqs): figure out how to type dict_items
     def items(self):
-        with self._dict_lock.write_lock():
+        with self._dict_lock.read_lock():
             return super().items()
 
     def __iter__(self) -> Iterator[str]:
-        with self._dict_lock.write_lock():
+        with self._dict_lock.read_lock():
             return iter(super().keys())
 
     def __len__(self) -> int:
-        with self._dict_lock.write_lock():
+        with self._dict_lock.read_lock():
             return super().__len__()
 
     def __contains__(self, __key: object) -> bool:
@@ -1349,7 +1349,7 @@ class Kernel:
                         self.k_globals,
                     )
 
-                    if asyncio.iscoroutine(result_value):
+                    if inspect.iscoroutinefunction(result_value):
                         result_value = await result_value
         except Exception as e:
             exception_msg = traceback.format_exc()
@@ -1425,7 +1425,7 @@ class Kernel:
                                 ),
                                 self.k_globals,
                             )
-                            if asyncio.iscoroutine(res):
+                            if inspect.iscoroutinefunction(res):
                                 res = await res
                         except ExitException:
                             ...
@@ -2023,7 +2023,11 @@ class Kernel:
             return
 
         if msg["type"] == "run_cell":
-            await self.exec(cell_id=msg["cell_id"], code=msg["code"], parallel=msg.get("parallel", False))
+            await self.exec(
+                cell_id=msg["cell_id"],
+                code=msg["code"],
+                parallel=msg.get("parallel", False),
+            )
             return
 
         if msg["type"] == "dispose_cell":
@@ -2277,6 +2281,7 @@ async def main() -> None:
         while not shutdown_requested:
             try:
                 msg = await k.conn.recv()
+                loop.run_in_executor(k.executor, asyncio.run, k.accept(msg))
                 k.executor.submit(asyncio.run, k.accept(msg))
 
             except Exception:
