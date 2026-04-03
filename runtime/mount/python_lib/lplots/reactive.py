@@ -1,6 +1,7 @@
 import asyncio
 import inspect
 import sys
+import threading
 import uuid
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
@@ -207,16 +208,52 @@ class Node:
             f.write(f"{self.parent.id} -> {self.id};\n")
 
 
+# todo(rteqs): create one RCtx per thread
 @dataclass
 class RCtx:
-    cur_comp: Node | None = None
+    thread_local: threading.local = field(default_factory=threading.local)
 
-    updated_signals: dict[str, "Signal"] = field(default_factory=dict)
-    signals_updated_from_code: dict[str, "Signal"] = field(default_factory=dict)
-    stale_nodes: dict[str, Node] = field(default_factory=dict)
-    prev_updated_signals: dict[str, "Signal"] = field(default_factory=dict)
+    @property
+    def cur_comp(self) -> Node | None:
+        if not hasattr(self.thread_local, "cur_comp"):
+            self.thread_local.cur_comp = None
 
-    in_tx: bool = False
+        return self.thread_local.cur_comp
+
+    @property
+    def in_tx(self) -> bool:
+        if not hasattr(self.thread_local, "in_tx"):
+            self.thread_local.in_tx = False
+
+        return self.thread_local.in_tx
+
+    @property
+    def updated_signals(self) -> dict[str, "Signal"]:
+        if not hasattr(self.thread_local, "updated_signals"):
+            self.thread_local.updated_signals = {}
+
+        return self.thread_local.updated_signals
+
+    @property
+    def signals_updated_from_code(self) -> dict[str, "Signal"]:
+        if not hasattr(self.thread_local, "signals_updated_from_code"):
+            self.thread_local.signals_updated_from_code = {}
+
+        return self.thread_local.signals_updated_from_code
+
+    @property
+    def stale_nodes(self) -> dict[str, Node]:
+        if not hasattr(self.thread_local, "stale_nodes"):
+            self.thread_local.stale_nodes = {}
+
+        return self.thread_local.stale_nodes
+
+    @property
+    def prev_updated_signals(self) -> dict[str, "Signal"]:
+        if not hasattr(self.thread_local, "prev_updated_signals"):
+            self.thread_local.prev_updated_signals = {}
+
+        return self.thread_local.prev_updated_signals
 
     async def run(
         self,
@@ -237,7 +274,7 @@ class RCtx:
             await _inject.kernel.set_active_cell(_cell_id)
 
         async with self.transaction:
-            self.cur_comp = Node(
+            self.thread_local.cur_comp = Node(
                 f=f, parent=self.cur_comp, cell_id=_cell_id, _id=None, code=code
             )
 
@@ -246,14 +283,14 @@ class RCtx:
                     return await f()
                 return f()
             finally:
-                self.cur_comp = self.cur_comp.parent
+                self.thread_local.cur_comp = self.thread_local.cur_comp.parent
 
     async def _tick(self) -> None:
         tick_updated_signals = {
             **self.signals_updated_from_code,
             **self.updated_signals,
         }
-        self.signals_updated_from_code = {}
+        self.thread_local.signals_updated_from_code = {}
 
         try:
             stack_depth = 1
@@ -275,8 +312,8 @@ class RCtx:
             for s in self.updated_signals.values():
                 s._apply_updates()
 
-            self.prev_updated_signals = self.updated_signals
-            self.updated_signals = {}
+            self.thread_local.prev_updated_signals = self.updated_signals
+            self.thread_local.updated_signals = {}
 
             to_dispose: dict[str, tuple[Node, Node | None]] = {}
             for n in self.stale_nodes.values():
@@ -288,15 +325,20 @@ class RCtx:
 
                 to_dispose[fsa.id] = (fsa, fsa.parent)
 
-            self.stale_nodes = {}
+            self.thread_local.stale_nodes = {}
 
-            run_queue: list[str] = []
+            run_queue = _inject.kernel.run_queue
+            run_queue_lock = _inject.kernel.run_queue_lock
+
+            to_queue = []
             for n, _p in to_dispose.values():
                 if n.cell_id is not None and n.cell_id not in run_queue:
-                    run_queue.append(n.cell_id)
+                    to_queue.append(n.cell_id)
 
-            if len(run_queue) > 0:
-                await _inject.kernel.send_run_queue(run_queue)
+            if len(to_queue) > 0:
+                with run_queue_lock:
+                    run_queue.extend(to_queue)
+                    await _inject.kernel.send_run_queue(run_queue)
 
             for n, _p in to_dispose.values():
                 n.dispose()
@@ -304,42 +346,52 @@ class RCtx:
             if len(to_dispose) > 0:
                 async with self.transaction:
                     for n, p in to_dispose.values():
-                        self.cur_comp = p
+                        self.thread_local.cur_comp = p
 
                         try:
-                            if n.cell_id is not None and n.cell_id in run_queue:
-                                run_queue.remove(n.cell_id)
-                                await _inject.kernel.send_run_queue(run_queue)
+                            with _inject.kernel.cell_locks[n.cell_id]:
+                                if n.cell_id is not None:
+                                    await _inject.kernel.run_queue_remove(n.cell_id)
 
-                            if n._is_stub:
-                                n._is_stub = False
-                                assert n.cell_id is not None
-                                # reconstruct the function with globals
-                                await _inject.kernel.exec(
-                                    cell_id=n.cell_id, code=n.code, _from_stub=True
-                                )
-                            else:
-                                task = asyncio.create_task(
-                                    self.run(n.f, n.code, _cell_id=n.cell_id)
-                                )
-                                _inject.kernel.active_cell_task = task
-                                try:
-                                    await task
-                                except asyncio.CancelledError:
-                                    if n.cell_id is not None:
-                                        _inject.kernel.cell_status[n.cell_id] = "error"
-                                        await _inject.kernel.send_cell_result(n.cell_id)
-                                finally:
-                                    _inject.kernel.active_cell_task = None
+                                if n._is_stub:
+                                    n._is_stub = False
+                                    assert n.cell_id is not None
+                                    # reconstruct the function with globals
+                                    await _inject.kernel.exec(
+                                        cell_id=n.cell_id,
+                                        code=n.code,
+                                        _from_stub=True,
+                                        parallel=False,
+                                    )
+                                else:
+                                    task = asyncio.create_task(
+                                        self.run(n.f, n.code, _cell_id=n.cell_id)
+                                    )
+                                    _inject.kernel.running_cells[n.cell_id] = (
+                                        task,
+                                        threading.get_ident(),
+                                    )
+                                    try:
+                                        await task
+                                    except asyncio.CancelledError:
+                                        if n.cell_id is not None:
+                                            _inject.kernel.cell_status[n.cell_id] = (
+                                                "error"
+                                            )
+                                            await _inject.kernel.send_cell_result(
+                                                n.cell_id
+                                            )
+                                    finally:
+                                        _inject.kernel.running_cells.pop(n.cell_id)
 
                         except Exception:
                             print_exc()
                         finally:
-                            self.cur_comp = None
+                            self.thread_local.cur_comp = None
 
         finally:
             await _inject.kernel.on_tick_finished(tick_updated_signals)
-            self.prev_updated_signals = {}
+            self.thread_local.prev_updated_signals = {}
             for sig in live_signals.values():
                 sig._ui_update = False
 
@@ -351,10 +403,10 @@ class RCtx:
             return
 
         try:
-            self.in_tx = True
+            self.thread_local.in_tx = True
             yield
         finally:
-            self.in_tx = False
+            self.thread_local.in_tx = False
             await self._tick()
 
 
@@ -454,16 +506,13 @@ class Signal(Generic[T]):
         return sig
 
     @overload
-    def __call__(self, /) -> T:
-        ...
+    def __call__(self, /) -> T: ...
 
     @overload
-    def __call__(self, /, upd: T, *, _ui_update: bool = False) -> None:
-        ...
+    def __call__(self, /, upd: T, *, _ui_update: bool = False) -> None: ...
 
     @overload
-    def __call__(self, /, upd: Updater[T], *, _ui_update: bool = False) -> None:
-        ...
+    def __call__(self, /, upd: Updater[T], *, _ui_update: bool = False) -> None: ...
 
     def __call__(
         self, /, upd: T | Updater[T] | Nothing = Nothing.x, *, _ui_update: bool = False
