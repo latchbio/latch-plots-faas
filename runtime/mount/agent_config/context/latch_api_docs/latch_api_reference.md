@@ -749,7 +749,7 @@ w = w_workflow(
 
 # 4. REQUIRED: Set continue=False to wait and read printed output
 
-# 5. Retrieve workflow outputs 
+# 5. Retrieve workflow outputs
 execution = w.value
 
 if execution is not None:
@@ -968,11 +968,13 @@ if fname and fname.endswith(".csv"):
 
 **Import:** `from lplots.palettes import get`
 
-**When to use:** Access the notebook's user-defined color palettes (configured in the Plots UI) for use in custom visualizations.
+**When to use:** Access the notebook's user-defined color palettes (configured in the Plots UI) for use in custom visualizations. The palettes are currently created and updated via the H5 viewer so the user might reference the H5 viewer when asking to use them.
 
 **Usage:**
 ```python
-palettes = await get()
+from lplots import palettes
+
+color_palettes = await palettes.get()
 ```
 
 **Return type:** `dict` with two keys:
@@ -985,13 +987,13 @@ If no palettes are configured, returns `{"categorical": [], "continuous": []}`.
 
 **Example:**
 ```python
-from lplots.palettes import get
+from lplots import palettes
 import plotly.express as px
 
-palettes = await get()
+color_palettes = await palettes.get()
 
 # Use the first categorical palette if available
-cat_palettes = palettes["categorical"]
+cat_palettes = color_palettes["categorical"]
 if cat_palettes:
     colors = cat_palettes[0]["colors"]
     fig = px.scatter(df, x="x", y="y", color="category", color_discrete_sequence=colors)
@@ -999,7 +1001,7 @@ else:
     fig = px.scatter(df, x="x", y="y", color="category")
 
 # Use the first continuous palette if available
-cont_palettes = palettes["continuous"]
+cont_palettes = color_palettes["continuous"]
 if cont_palettes:
     colors = cont_palettes[0]["colors"]
     fig = px.scatter(df, x="x", y="y", color="value", color_continuous_scale=colors)
