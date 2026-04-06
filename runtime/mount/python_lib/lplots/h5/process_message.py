@@ -21,6 +21,7 @@ ad = auto_install.ad
 async def handle_h5_widget_message(
     msg: dict[str, Any], send: Callable[[object], Awaitable[None]]
 ) -> dict[str, Any] | None:
+    print("[DEBUG]: handling h5 widget message")
     if msg["type"] != "h5" or "key" not in msg or "state" not in msg:
         return {
             "type": "h5",

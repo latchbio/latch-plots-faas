@@ -814,7 +814,6 @@ async def start_kernel_proc() -> None:
     print("Starting kernel subprocess")
     k_proc.proc = await asyncio.create_subprocess_exec(
         sys.executable,
-        "-Xgil=0",
         (dir_p / "kernel.py"),
         str(sock_k_fd),
         pass_fds=[sock_k_fd],
