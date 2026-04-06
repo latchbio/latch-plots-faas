@@ -9,7 +9,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from io import TextIOWrapper
 from pathlib import Path
-from typing import IO, TypedDict, TypeVar
+from typing import TypedDict, TypeVar
 
 import orjson
 from latch_asgi.context.websocket import Context
@@ -814,6 +814,7 @@ async def start_kernel_proc() -> None:
     print("Starting kernel subprocess")
     k_proc.proc = await asyncio.create_subprocess_exec(
         sys.executable,
+        "-Xgil=0",
         (dir_p / "kernel.py"),
         str(sock_k_fd),
         pass_fds=[sock_k_fd],
@@ -975,7 +976,7 @@ async def bootstrap_headless_browser_on_startup() -> None:
 
         print("[entrypoint] Starting headless browser during startup")
         await start_headless_browser(str(notebook_id), local_storage=local_storage)
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         print(f"[entrypoint] Failed to bootstrap headless browser: {e!s}")
 
 
