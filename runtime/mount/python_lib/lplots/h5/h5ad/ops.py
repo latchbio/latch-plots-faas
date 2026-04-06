@@ -390,7 +390,7 @@ def get_var_index(
     var_index = np.asarray(adata.var_names)
 
     name_key = None
-    for key in adata.var_keys():
+    for key in adata.var:
         if any(key.lower() in x for x in ["gene_symbols", "gene_names", "gene_ids"]):
             name_key = key
             break
