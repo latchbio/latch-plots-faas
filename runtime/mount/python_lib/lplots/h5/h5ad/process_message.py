@@ -131,7 +131,7 @@ async def process_h5ad_request(
 
             var_index, var_names = get_var_index(obj_id, adata)
 
-            global alignment_is_running
+            print("[DEBUG] making response")
 
             return make_response(
                 data={
