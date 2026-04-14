@@ -991,6 +991,10 @@ async def start_headless_browser(
     global headless_browser, headless_browser_notebook_id, latest_local_storage
 
     local_storage_changed = local_storage and local_storage != latest_local_storage
+
+    if not local_storage_changed and headless_browser is not None:
+        return
+
     if local_storage_changed:
         latest_local_storage = local_storage
         print("[entrypoint] Local storage changed")
