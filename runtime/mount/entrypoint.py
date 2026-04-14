@@ -995,6 +995,12 @@ async def start_headless_browser(
         latest_local_storage = local_storage
         print("[entrypoint] Local storage changed")
 
+    if headless_browser is not None:
+        print("[entrypoint] Stopping existing headless browser before starting new one")
+        with contextlib.suppress(Exception):
+            await headless_browser.stop()
+        headless_browser = None
+
     headless_browser_notebook_id = notebook_id
 
     try:
