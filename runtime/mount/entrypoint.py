@@ -9,7 +9,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from io import TextIOWrapper
 from pathlib import Path
-from typing import IO, TypedDict, TypeVar
+from typing import TypedDict, TypeVar
 
 import orjson
 from latch_asgi.context.websocket import Context
@@ -33,8 +33,6 @@ dir_p = Path(__file__).parent
 T = TypeVar("T")
 
 ready_ev = asyncio.Event()
-
-active_cell: str | None = None
 
 
 class CellOutputs(TypedDict):
@@ -312,7 +310,7 @@ async def add_pod_event(*, auth: str, event_type: str) -> None:
 
 
 async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
-    global active_cell, latest_reactivity_summary
+    global latest_reactivity_summary
 
     print("Starting kernel message listener")
     while True:
@@ -334,10 +332,6 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                 cell_id = msg["cell_id"]
 
                 if cell_id is not None:
-                    # note: active_cell is set to None when on_tick_finished is called to tell console to mark all cells as ran.
-                    # active_cell is not overwritten here becuase kernel_stdio messages require an active_cell field,
-                    # if active_cell is None in kernel_stdio, console will display an error
-                    active_cell = cell_id
                     cell_sequencers[cell_id] = msg["run_sequencer"]
                     cell_status[cell_id] = "running"
 
@@ -981,7 +975,7 @@ async def bootstrap_headless_browser_on_startup() -> None:
 
         print("[entrypoint] Starting headless browser during startup")
         await start_headless_browser(str(notebook_id), local_storage=local_storage)
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         print(f"[entrypoint] Failed to bootstrap headless browser: {e!s}")
 
 

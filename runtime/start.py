@@ -43,6 +43,7 @@ env_vars = {
     "CONDA_DEFAULT_ENV": "plots-faas",
     "CONDA_PREFIX": "/opt/mamba/envs/plots-faas",
     "PATH": "/opt/mamba/envs/plots-faas/bin:" + os.environ["PATH"],
+    "PYTHON_GIL": "0",
 }
 
 os.system(
@@ -50,7 +51,7 @@ os.system(
 )
 
 os.system(
-    "git -C /opt/latch/plots-faas pull origin main || git -C /opt/latch/plots-faas forgejo-mirror main"
+    "git -C /opt/latch/plots-faas pull origin rteqs/free-threading || git -C /opt/latch/plots-faas forgejo-mirror rteqs/free-threading"
 )
 os.system("git -C /opt/latch/plots-faas submodule update --init --remote")
 os.system("git -C /opt/latch/plots-faas rev-parse HEAD > /opt/latch/plots_faas_version")

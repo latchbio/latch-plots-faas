@@ -31,6 +31,7 @@ async def process_h5ad_request(
     obj_id: str,
     send: Callable[[object], Awaitable[None]],
 ) -> dict[str, Any] | None:
+    print("[DEBUG]: processing h5ad request")
     global alignment_is_running
 
     op = msg.get("op")
@@ -78,8 +79,9 @@ async def process_h5ad_request(
 
     match op:
         case "init_data":
+            print("[DEBUG]: doing init_data")
             init_obsm_key = msg.get("obsm_key")
-            possible_obsm_keys = adata.obsm_keys()
+            possible_obsm_keys = list(adata.obsm.keys())
             if init_obsm_key is None:
                 for key in possible_obsm_keys:
                     if "umap" in key.lower() or "spatial" in key.lower():
@@ -91,7 +93,7 @@ async def process_h5ad_request(
             ) and len(possible_obsm_keys) > 0:
                 init_obsm_key = possible_obsm_keys[0]
 
-            possible_obs_keys = adata.obs_keys()
+            possible_obs_keys = adata.obs.columns.tolist()
 
             init_obs_key = msg.get("obs_key")
             assert isinstance(init_obs_key, str | None)
@@ -129,7 +131,7 @@ async def process_h5ad_request(
 
             var_index, var_names = get_var_index(obj_id, adata)
 
-            global alignment_is_running
+            print("[DEBUG] making response")
 
             return make_response(
                 data={

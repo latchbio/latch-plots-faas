@@ -21,6 +21,7 @@ ad = auto_install.ad
 async def handle_h5_widget_message(
     msg: dict[str, Any], send: Callable[[object], Awaitable[None]]
 ) -> dict[str, Any] | None:
+    print("[DEBUG]: handling h5 widget message")
     if msg["type"] != "h5" or "key" not in msg or "state" not in msg:
         return {
             "type": "h5",
@@ -36,6 +37,9 @@ async def handle_h5_widget_message(
 
     if data_type == "h5ad":
         obj_id = widget_state["obj_id"]
+        print(
+            f"[DEBUG]: process h5ad {obj_id=}, {obj_id not in _inject.kernel.ann_data_objects=} {widget_session_key=}"
+        )
         if obj_id is None or obj_id not in _inject.kernel.ann_data_objects:
             return {
                 "type": "h5",
@@ -103,7 +107,7 @@ async def handle_h5_widget_message(
 
             local_duckdb_file_path = Path(
                 f"/tmp/{data_type}_{sanitized_widget_session_key}.duckdb"
-            )  # noqa: S108
+            )
             duckdb_file_path.download(local_duckdb_file_path, cache=True)
 
             _inject.kernel.duckdb.execute(

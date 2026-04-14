@@ -6,6 +6,7 @@ __pycache__
 .pdm-python
 /.envrc
 /.venv
+/wheels
 
 sandbox
 .claude/skills/
