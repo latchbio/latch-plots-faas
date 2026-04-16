@@ -225,6 +225,7 @@ class Context:
         df = self.adata.obsm[obsm_key]
 
         idx = self.index
+        print("export_png", idx)
         if viewport is not None:
             viewport_mask = (viewport["x"][0] < df[:, 0]) & (
                 df[:, 0] < viewport["x"][1]
@@ -234,6 +235,7 @@ class Context:
             )
             idx = np.where(self.index_entry.mask & viewport_mask)[0]
 
+        print("export_png final idx", idx)
         df = df[idx]
 
         data[0]["x"] = df[:, 0]
@@ -505,10 +507,7 @@ def mutate_obs_by_value(
         )
 
 
-def save_h5ad_to_latch(
-    adata: ad.AnnData,
-    latch_path: str | LPath,
-) -> LPath:
+def save_h5ad_to_latch(adata: ad.AnnData, latch_path: str | LPath) -> LPath:
 
     if isinstance(latch_path, str):
         dest_lpath = LPath(latch_path)
