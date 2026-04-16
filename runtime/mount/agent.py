@@ -961,7 +961,7 @@ class AgentHarness:
             "OTEL_TRACES_EXPORTER": "otlp",
             "OTEL_EXPORTER_OTLP_PROTOCOL": "grpc",
             "OTEL_SERVICE_NAME": "plots-agent",
-            "OTEL_EXPORTER_OTLP_ENDPOINT": os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
+            "OTEL_EXPORTER_OTLP_ENDPOINT": os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT"),
             "OTEL_RESOURCE_ATTRIBUTES": ",".join(
                 f"{k}={v}"
                 for k, v in {
