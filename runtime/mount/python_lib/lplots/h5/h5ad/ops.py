@@ -127,6 +127,7 @@ class Context:
         else:
             res = np.asarray(data[self.index, :2], dtype=np.float32)
 
+        print("GET_OBSM", self.index.shape)
         return ObsmData(data=res, index=np.asarray(self.adata.obs_names[self.index]))
 
     def get_obs(self, key: str, *, max_cells: int) -> ObsData | None:
@@ -225,7 +226,7 @@ class Context:
         df = self.adata.obsm[obsm_key]
 
         idx = self.index
-        print("export_png", idx)
+        print("EXPORT_PNG1", idx.shape)
         if viewport is not None:
             viewport_mask = (viewport["x"][0] < df[:, 0]) & (
                 df[:, 0] < viewport["x"][1]
@@ -235,7 +236,7 @@ class Context:
             )
             idx = np.where(self.index_entry.mask & viewport_mask)[0]
 
-        print("export_png final idx", idx)
+        print("EXPORT_PNG2", idx.shape)
         df = df[idx]
 
         data[0]["x"] = df[:, 0]
