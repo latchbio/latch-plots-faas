@@ -954,6 +954,23 @@ class AgentHarness:
             # todo(rteqs): sdk_token here is latch_sdk_token. refactor this so it doesn't confuse
             "ANTHROPIC_API_KEY": sdk_token,
             "ANTHROPIC_CUSTOM_HEADERS": f"Pod-Id: {pod_id!s}",
+            "CLAUDE_CODE_ENABLE_TELEMETRY": "1",
+            "CLAUDE_CODE_ENHANCED_TELEMETRY_BETA": "1",
+            "OTEL_METRICS_EXPORTER": "otlp",
+            "OTEL_LOGS_EXPORTER": "otlp",
+            "OTEL_TRACES_EXPORTER": "otlp",
+            "OTEL_EXPORTER_OTLP_PROTOCOL": "grpc",
+            "OTEL_SERVICE_NAME": "plots-agent",
+            "OTEL_EXPORTER_OTLP_ENDPOINT": os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
+            "OTEL_RESOURCE_ATTRIBUTES": ",".join(
+                f"{k}={v}"
+                for k, v in {
+                    "service.version": os.environ.get("DD_VERSION", ""),
+                    "deployment.environment": os.environ.get("DD_ENV", ""),
+                    "pod.id": str(pod_id),
+                }.items()
+                if v
+            ),
         }
 
         self.claude = ClaudeSDKClient(
@@ -1285,10 +1302,22 @@ class AgentHarness:
                 template_version_id=msg["template_version_id"],
             )
 
-        if self.claude_session_id is None:
-            await self.claude.query(prompt=prompt)
-        else:
-            await self.claude.query(prompt=prompt, session_id=self.claude_session_id)
+        # Wrap query in a span so SDK 0.1.60 propagates W3C traceparent to the CLI,
+        # connecting our traces with claude_code.* spans emitted by the CLI.
+        with app_tracer.start_as_current_span(
+            "agent.claude.query",
+            attributes={
+                "agent.session_id": str(self.agent_session_id),
+                "agent.claude_session_id": str(self.claude_session_id or ""),
+                "agent.request_id": str(request_id or ""),
+            },
+        ):
+            if self.claude_session_id is None:
+                await self.claude.query(prompt=prompt)
+            else:
+                await self.claude.query(
+                    prompt=prompt, session_id=self.claude_session_id
+                )
 
         tool_name_by_tool_use_id: dict[str, str] = {}
 
