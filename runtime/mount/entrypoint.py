@@ -908,6 +908,7 @@ async def start_kernel_proc() -> None:
 
 async def start_agent_proc() -> None:
     # todo(maximsmol): unify with start_kernel_proc
+    return
 
     sock_agent_fd = await a_proc.create_msg_io()
     assert a_proc.msg_io is not None

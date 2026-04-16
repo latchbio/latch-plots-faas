@@ -78,8 +78,6 @@ async def process_h5ad_request(
 
     match op:
         case "init_data":
-            print(traceback.format_stack())
-
             init_obsm_key = msg.get("obsm_key")
             possible_obsm_keys = adata.obsm_keys()
             if init_obsm_key is None:
