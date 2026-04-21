@@ -8,6 +8,7 @@ if __name__ == "__main__":
 import ast
 import asyncio
 import ctypes
+import faulthandler
 import inspect
 import io
 import math
@@ -2250,6 +2251,7 @@ def sigterm_handler(signum: int, frame: FrameType | None) -> None:
 
 
 async def main() -> None:
+
     global loop
     loop = asyncio.get_running_loop()
 
@@ -2276,6 +2278,8 @@ async def main() -> None:
 
         stderr_writer = SocketWriter(conn=k.conn, kernel=k, name="stderr")
         sys.stderr = text_socket_writer(stderr_writer)
+
+        faulthandler.enable(file=sys.stderr, all_threads=True, c_stack=True)
 
         await k.send({"type": "ready"})
 
