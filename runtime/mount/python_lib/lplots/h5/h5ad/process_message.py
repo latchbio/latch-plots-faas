@@ -31,7 +31,6 @@ async def process_h5ad_request(
     obj_id: str,
     send: Callable[[object], Awaitable[None]],
 ) -> dict[str, Any] | None:
-    print("[DEBUG]: processing h5ad request")
     global alignment_is_running
 
     op = msg.get("op")
@@ -79,7 +78,6 @@ async def process_h5ad_request(
 
     match op:
         case "init_data":
-            print("[DEBUG]: doing init_data")
             init_obsm_key = msg.get("obsm_key")
             possible_obsm_keys = list(adata.obsm.keys())
             if init_obsm_key is None:
@@ -130,8 +128,6 @@ async def process_h5ad_request(
                 gene_column = ctx.get_obs_vector(init_var_key)
 
             var_index, var_names = get_var_index(obj_id, adata)
-
-            print("[DEBUG] making response")
 
             return make_response(
                 data={
