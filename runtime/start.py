@@ -51,7 +51,7 @@ os.system(
 )
 
 os.system(
-    "git -C /opt/latch/plots-faas pull origin rteqs/free-threading || git -C /opt/latch/plots-faas forgejo-mirror rteqs/free-threading"
+    "git -C /opt/latch/plots-faas pull origin main || git -C /opt/latch/plots-faas forgejo-mirror main"
 )
 os.system("git -C /opt/latch/plots-faas submodule update --init --remote")
 os.system("git -C /opt/latch/plots-faas rev-parse HEAD > /opt/latch/plots_faas_version")
@@ -60,7 +60,9 @@ os.chdir("/opt/latch/plots-faas")
 
 os.system("/opt/mamba/envs/plots-faas/bin/pip install --upgrade latch")
 
-sdk_token = (latch_p / "token").read_text().strip() if (latch_p / "token").exists() else ""
+sdk_token = (
+    (latch_p / "token").read_text().strip() if (latch_p / "token").exists() else ""
+)
 skills_dir = Path("/opt/latch/plots-faas/.claude/skills")
 skills_dir.mkdir(parents=True, exist_ok=True)
 
@@ -88,7 +90,8 @@ if sdk_token is not None:
         )
         with urllib.request.urlopen(req, timeout=10) as resp:
             metadata_str = (
-                json.loads(resp.read())
+                json
+                .loads(resp.read())
                 .get("data", {})
                 .get("podInfo", {})
                 .get("plotNotebook", {})
@@ -102,13 +105,17 @@ if sdk_token is not None:
 # todo: surface an error to the user if skills repo fails to pull or clone
 latch_skills_dest = skills_dir / "latch-skills"
 if latch_skills_dest.exists():
-    ret = os.system(f"git -C {latch_skills_dest} fetch --depth 1 origin {skills_branch} && git -C {latch_skills_dest} checkout FETCH_HEAD")
+    ret = os.system(
+        f"git -C {latch_skills_dest} fetch --depth 1 origin {skills_branch} && git -C {latch_skills_dest} checkout FETCH_HEAD"
+    )
     if ret == 0:
         print(f"updated latch-skills to {skills_branch}")
     else:
         print(f"failed to update latch-skills to {skills_branch}", file=sys.stderr)
 else:
-    ret = os.system(f"git clone --depth 1 --branch {skills_branch} https://github.com/latchbio/latch-skills.git {latch_skills_dest}")
+    ret = os.system(
+        f"git clone --depth 1 --branch {skills_branch} https://github.com/latchbio/latch-skills.git {latch_skills_dest}"
+    )
     if ret == 0:
         print(f"cloned public latch-skills ({skills_branch}) -> {latch_skills_dest}")
     else:
@@ -135,7 +142,7 @@ if sdk_token:
                         id
                     }
                 }
-            """,
+            """
         }).encode()
 
         req = urllib.request.Request(
@@ -148,7 +155,8 @@ if sdk_token:
         )
         with urllib.request.urlopen(req, timeout=10) as resp:
             account_id = (
-                json.loads(resp.read())
+                json
+                .loads(resp.read())
                 .get("data", {})
                 .get("accountInfoCurrent", {})
                 .get("id")
@@ -176,9 +184,7 @@ if sdk_token:
         )
         with urllib.request.urlopen(req, timeout=10) as resp:
             skill_data = (
-                json.loads(resp.read())
-                .get("data", {})
-                .get("agentSkillReposForAccount")
+                json.loads(resp.read()).get("data", {}).get("agentSkillReposForAccount")
             )
 
         if skill_data is not None:
@@ -201,7 +207,10 @@ if sdk_token:
                     repo_name = parts[-1] if parts else repo["displayName"]
 
                     if repo_name in seen_dirs:
-                        print(f"skill repo conflict: {repo_name} already cloned, skipping {repo_url}", file=sys.stderr)
+                        print(
+                            f"skill repo conflict: {repo_name} already cloned, skipping {repo_url}",
+                            file=sys.stderr,
+                        )
                         continue
                     seen_dirs.add(repo_name)
 
@@ -211,7 +220,10 @@ if sdk_token:
                         if ret == 0:
                             print(f"cloned skill repo: {repo_url} -> {dest}")
                         else:
-                            print(f"failed to clone skill repo: {repo_url}", file=sys.stderr)
+                            print(
+                                f"failed to clone skill repo: {repo_url}",
+                                file=sys.stderr,
+                            )
                             continue
 
                     if not (dest / "SKILL.md").exists():
@@ -219,12 +231,17 @@ if sdk_token:
                             if sub.is_dir() and (sub / "SKILL.md").exists():
                                 link = skills_dir / sub.name
                                 if sub.name in seen_dirs:
-                                    print(f"skill repo conflict: {sub.name} already exists, skipping {sub}", file=sys.stderr)
+                                    print(
+                                        f"skill repo conflict: {sub.name} already exists, skipping {sub}",
+                                        file=sys.stderr,
+                                    )
                                     continue
                                 seen_dirs.add(sub.name)
                                 if not link.exists():
                                     link.symlink_to(sub)
-                                    print(f"linked monorepo skill: {sub.name} -> {link}")
+                                    print(
+                                        f"linked monorepo skill: {sub.name} -> {link}"
+                                    )
     except Exception as e:
         print(f"failed to fetch skill repos: {e}", file=sys.stderr)
 
