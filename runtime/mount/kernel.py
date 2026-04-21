@@ -1349,7 +1349,7 @@ class Kernel:
                         self.k_globals,
                     )
 
-                    if inspect.iscoroutinefunction(result_value):
+                    if inspect.iscoroutine(result_value):
                         result_value = await result_value
         except Exception as e:
             exception_msg = traceback.format_exc()
@@ -1425,7 +1425,7 @@ class Kernel:
                                 ),
                                 self.k_globals,
                             )
-                            if inspect.iscoroutinefunction(res):
+                            if inspect.iscoroutine(res):
                                 res = await res
                         except ExitException:
                             ...
