@@ -7,17 +7,23 @@ if __name__ == "__main__":
 
 import ast
 import asyncio
+import ctypes
+import inspect
 import io
 import math
+import os
 import pprint
 import re
 import signal
 import socket
 import sys
+import threading
 import traceback
 from base64 import b64decode
 from collections import defaultdict
-from contextlib import redirect_stderr, redirect_stdout
+from collections.abc import Generator, Iterator
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager, nullcontext, redirect_stderr, redirect_stdout
 from copy import copy, deepcopy
 from dataclasses import asdict, dataclass, field, fields
 from io import TextIOWrapper
@@ -155,82 +161,182 @@ class PaginationSettings:
     selections: DataframeSelections | None = None
 
 
+class RWLock:
+    def __init__(self) -> None:
+        self.cond = threading.Condition(threading.Lock())
+        self.readers: int = 0
+        self.writers_waiting: int = 0
+        self.writing: bool = False
+
+    def _acquire_read(self) -> None:
+        with self.cond:
+            while self.writing or self.writers_waiting > 0:
+                self.cond.wait()
+            self.readers += 1
+
+    def _release_read(self) -> None:
+        with self.cond:
+            assert self.readers > 0
+            self.readers -= 1
+            if self.readers == 0:
+                self.cond.notify_all()
+
+    def _acquire_write(self) -> None:
+        with self.cond:
+            self.writers_waiting += 1
+            while self.readers > 0 or self.writing:
+                self.cond.wait()
+            self.writers_waiting -= 1
+            self.writing = True
+
+    def _release_write(self) -> None:
+        with self.cond:
+            assert self.writing
+            self.writing = False
+            self.cond.notify_all()
+
+    @contextmanager
+    def read_lock(self) -> Generator[None, None, None]:
+        self._acquire_read()
+        try:
+            yield
+        finally:
+            self._release_read()
+
+    @contextmanager
+    def write_lock(self) -> Generator[None, None, None]:
+        self._acquire_write()
+        try:
+            yield
+        finally:
+            self._release_write()
+
+
+# todo(rteqs): we really want to release the locks at the end of the transaction. this would require us to do some lock upgrading mechanism and also
+# deadlock detection/prevention algorithm. alternatively, we just let it race and make sure the user knows that we don't provide such guarantees.
 class TracedDict(dict[str, Signal[object] | object]):
-    touched: set[str]
-    removed: set[str]
+    thread_local: threading.local
 
-    dataframes: Signal[set[str]]
+    _dataframes: Signal[set[str]]
 
-    item_write_counter: defaultdict[str, int]
-    duckdb: DuckDBPyConnection
+    _dict_lock: RWLock
+    _key_locks: defaultdict[str, RWLock]
+    _key_locks_mutex: threading.Lock
+    _metadata_lock: threading.Lock
 
-    def __init__(self, duckdb: DuckDBPyConnection) -> None:
-        self.touched = set()
-        self.removed = set()
+    def __init__(self) -> None:
+        self._dict_lock = RWLock()
+        self._key_locks = defaultdict(lambda: RWLock())
+        self._key_locks_mutex = threading.Lock()
+        self._metadata_lock = threading.Lock()
 
-        self.dataframes = Signal(set())
-        self.item_write_counter = defaultdict(int)
-        self.duckdb = duckdb
+        self.thread_local = threading.local()
+        self.thread_local.touched = set()
+        self.thread_local.removed = set()
+
+        self._dataframes = Signal(set())
+
+    @contextmanager
+    def _item_rlock(self, __key: str) -> Generator[None, None, None]:
+        with self._key_locks_mutex:
+            key_lock = self._key_locks[__key]
+
+        with self._dict_lock.read_lock(), key_lock.read_lock():
+            yield
+
+    @contextmanager
+    def _item_wlock(self, __key: str) -> Generator[None, None, None]:
+        with self._key_locks_mutex:
+            key_lock = self._key_locks[__key]
+
+        with self._dict_lock.read_lock(), key_lock.write_lock(), self._metadata_lock:
+            yield
 
     def __getitem__(self, __key: str) -> object:
-        if __key == "__builtins__":
-            return super().__getitem__("__builtins__")
+        with self._item_rlock(__key):
+            if __key == "__builtins__":
+                return super().__getitem__("__builtins__")
 
-        return self.getitem_signal(__key).sample()
+            return self.getitem_signal(__key).sample()
 
     def getitem_signal(self, __key: str) -> Signal[object]:
         return super().__getitem__(__key)
 
     def get_signal(self, __key: str) -> Signal[object] | None:
-        if __key not in self:
-            return None
+        with self._item_rlock(__key):
+            if not super().__contains__(__key):
+                return None
 
         return self.getitem_signal(__key)
 
     def _direct_set(self, __key: str, __value: object) -> None:
-        return super().__setitem__(__key, __value)
-
-    def __setitem__(self, __key: str, __value: object) -> None:
-        self.touched.add(__key)
-        self.item_write_counter[__key] += 1
-
-        if __key == "__builtins__":
+        with self._item_wlock(__key):
             return super().__setitem__(__key, __value)
 
-        dfs = self.dataframes.sample()
-        if hasattr(__value, "iloc") and __key not in dfs:
-            dfs.add(__key)
-            self.dataframes(dfs)
+    def __setitem__(self, __key: str, __value: object) -> None:
+        with self._item_wlock(__key):
+            self.touched.add(__key)
+            self.item_write_counter[__key] += 1
 
-        if __key in self:
-            sig = super().__getitem__(__key)
+            if __key == "__builtins__":
+                return super().__setitem__(__key, __value)
 
-            old = sig.sample()
-            if isinstance(__value, Signal) and isinstance(old, Signal):
-                # allow simply setting `sig = Signal(val)`
-                # without having to check `if "sig" in globals()`
-                # to define a signal without losing its subscribers on re-runs
-                old(__value.sample())
+            dfs = self._dataframes.sample()
+            if hasattr(__value, "iloc") and __key not in dfs:
+                dfs.add(__key)
+                self._dataframes(dfs)
+
+            if super().__contains__(__key):
+                sig = super().__getitem__(__key)
+
+                old = sig.sample()
+                if isinstance(__value, Signal) and isinstance(old, Signal):
+                    # allow simply setting `sig = Signal(val)`
+                    # without having to check `if "sig" in globals()`
+                    # to define a signal without losing its subscribers on re-runs
+                    old(__value.sample())
+                    return None
+
+                sig(__value)
+                sig._apply_updates()
                 return None
 
-            sig(__value)
-            sig._apply_updates()
-            return None
-
-        return super().__setitem__(__key, Signal(__value))
+            return super().__setitem__(__key, Signal(__value))
 
     def __delitem__(self, __key: str) -> None:
-        self.touched.add(__key)
-        self.removed.add(__key)
-        if __key in self.item_write_counter:
-            del self.item_write_counter[__key]
+        with self._item_wlock(__key):
+            self.touched.add(__key)
+            self.removed.add(__key)
+            if __key in self.item_write_counter:
+                del self.item_write_counter[__key]
 
-        dfs = self.dataframes.sample()
-        if __key in dfs:
-            dfs.remove(__key)
-            self.dataframes(dfs)
+            dfs = self._dataframes.sample()
+            if __key in dfs:
+                dfs.remove(__key)
+                self._dataframes(dfs)
 
-        return super().__delitem__(__key)
+            return super().__delitem__(__key)
+
+    @property
+    def touched(self) -> set[str]:
+        if not hasattr(self.thread_local, "touched"):
+            self.thread_local.touched = set()
+
+        return self.thread_local.touched
+
+    @property
+    def removed(self) -> set[str]:
+        if not hasattr(self.thread_local, "removed"):
+            self.thread_local.removed = set()
+
+        return self.thread_local.removed
+
+    @property
+    def item_write_counter(self) -> defaultdict[str, int]:
+        if not hasattr(self.thread_local, "item_write_counter"):
+            self.thread_local.item_write_counter = defaultdict(int)
+
+        return self.thread_local.item_write_counter
 
     def clear(self) -> None:
         self.touched.clear()
@@ -241,8 +347,35 @@ class TracedDict(dict[str, Signal[object] | object]):
     def available(self) -> set[str]:
         return self.touched - self.removed
 
+    @property
+    def dataframes(self) -> Signal[set[str]]:
+        with self._metadata_lock:
+            return self._dataframes
+
+    # todo(rteqs): figure out how to type dict_items
+    def items(self):
+        with self._dict_lock.read_lock():
+            return super().items()
+
+    def __iter__(self) -> Iterator[str]:
+        with self._dict_lock.read_lock():
+            return iter(super().keys())
+
+    def __len__(self) -> int:
+        with self._dict_lock.read_lock():
+            return super().__len__()
+
+    def __contains__(self, __key: object) -> bool:
+        with self._dict_lock.read_lock():
+            return super().__contains__(__key)
+
+    # todo(rteqs): do we need to override all methods?
+
 
 class ExitException(Exception): ...
+
+
+class StopCellError(Exception): ...
 
 
 KeyType = Literal["key", "ldata_node_id", "registry_table_id", "url"]
@@ -290,7 +423,7 @@ def filter_dataframe(
     if col == "index":
         col_vals = df.index
     elif is_multi_index_col(col) and isinstance(df.index, MultiIndex):
-        level = int(col.split("_")[-1])
+        level = int(col.rsplit("_", maxsplit=-1)[-1])
         col_vals = df.index.get_level_values(level)
     elif col in df.index.names:
         col_vals = df.index.get_level_values(col)
@@ -477,6 +610,7 @@ class CategorizedCellOutputs:
 def _split_violin_groups(
     trace: dict[str, Any],
 ) -> tuple[list[dict[str, Any]] | None, bool]:
+
     orientation = trace.get("orientation", "v")
     data_axis = "y" if orientation == "v" else "x"
     index_axis = "x" if orientation == "v" else "y"
@@ -603,18 +737,29 @@ snapshot_chunk_bytes = 64 * 2**10
 snapshot_progress_interval_bytes = 10 * (2**20)
 
 
+class RunningCell(TypedDict):
+    task: asyncio.Task[Any]
+    thread_id: int
+
+
 @dataclass(kw_only=True)
 class Kernel:
     conn: SocketIoThread
 
     cell_seq: int = 0
+    cell_seq_lock: threading.Lock = field(default_factory=threading.Lock)
+
     cell_rnodes: dict[str, Node] = field(default_factory=dict)
     k_globals: TracedDict = field(init=False)
     cell_status: dict[str, str] = field(default_factory=dict)
+
+    cell_locks: defaultdict[str, threading.Lock] = field(
+        default_factory=lambda: defaultdict(threading.Lock)
+    )
+
     snapshot_status: KernelSnapshotStatus = "done"
 
-    active_cell: str | None = None
-    active_cell_task: asyncio.Task[Any] | None = None
+    running_cells: dict[str, RunningCell] = field(default_factory=dict)
 
     widget_signals: dict[str, Signal[Any]] = field(default_factory=dict)
     nodes_with_widgets: dict[str, Node] = field(default_factory=dict)
@@ -647,34 +792,36 @@ class Kernel:
     restored_signals: dict[str, Signal[object]] = field(default_factory=dict)
     restored_globals: dict[str, object] = field(default_factory=dict)
 
+    executor: ThreadPoolExecutor = field(
+        default_factory=lambda: ThreadPoolExecutor(max_workers=os.cpu_count())
+    )
+
+    run_queue: list[str] = field(default_factory=list)
+    run_queue_lock: threading.Lock = field(default_factory=threading.Lock)
+    exec_lock: threading.Lock = field(default_factory=threading.Lock)
+
+    # { active_cell: str | None }
+    thread_local: threading.local = field(default_factory=threading.local)
+
     def __post_init__(self) -> None:
-        self.k_globals = TracedDict(self.duckdb)
+        self.k_globals = TracedDict()
         self.k_globals["exit"] = cell_exit
         self.k_globals.clear()
+        self.thread_local.active_cell = None
         pio.templates["graphpad_inspired_theme"] = graphpad_inspired_theme()
 
-        def sigint_handler(signum: int, frame: FrameType | None) -> None:
-            if signum != signal.SIGINT:
-                return
+    def next_cell_seq(self) -> int:
+        with self.cell_seq_lock:
+            self.cell_seq += 1
+            return self.cell_seq
 
-            if self.active_cell_task is not None and not self.active_cell_task.done():
-                self.active_cell_task.cancel()
-
-                if asyncio.current_task() == self.active_cell_task:
-                    raise KeyboardInterrupt
-
-                return
-
-            print(
-                f"[kernel] SIGINT received but not interrupting: active_cell={self.active_cell}, status={self.cell_status.get(self.active_cell) if self.active_cell is not None else 'N/A'}",
-                file=sys.stderr,
-            )
-
-        signal.signal(signal.SIGINT, sigint_handler)
+    def get_cell_seq(self) -> int:
+        with self.cell_seq_lock:
+            return self.cell_seq
 
     def debug_state(self) -> dict[str, object]:
         return {
-            "cell_seq": self.cell_seq,
+            "cell_seq": self.get_cell_seq(),
             "cell_rnodes": {k: v.debug_state() for k, v in self.cell_rnodes.items()},
             "k_globals": {
                 "touched": list(self.k_globals.touched),
@@ -682,7 +829,7 @@ class Kernel:
                 "dataframes": list(self.k_globals.dataframes.sample()),
             },
             "cell_status": self.cell_status,
-            "active_cell": self.active_cell,
+            "running_cells": list(self.running_cells.keys()),
             "widget_signals": {
                 k: v.serialize(short_val=True) for k, v in self.widget_signals.items()
             },
@@ -717,6 +864,7 @@ class Kernel:
         }
 
     # note(maximsmol): called by the reactive context
+    # todo(rteqs): we need to handle the case where there is multiple active cells
     async def set_active_cell(self, cell_id: str | None) -> None:
         # todo(maximsmol): I still believe this is correct
         # but we need to deal with the frontend clearing logs in weird ways
@@ -734,13 +882,12 @@ class Kernel:
         sys.stderr.flush()
 
         if cell_id is not None:
-            self.active_cell = cell_id
+            self.thread_local.active_cell = cell_id
 
-        self.cell_seq += 1
         await self.send({
             "type": "start_cell",
             "cell_id": cell_id,
-            "run_sequencer": self.cell_seq,
+            "run_sequencer": self.next_cell_seq(),
         })
 
     async def send_global_updates(self) -> None:
@@ -794,8 +941,21 @@ class Kernel:
     async def send_run_queue(self, queue: list[str]) -> None:
         await self.send({"type": "run_queue", "queue": queue})
 
+    async def run_queue_append(self, cell_id: str) -> None:
+        with self.run_queue_lock:
+            self.run_queue.append(cell_id)
+            await self.send_run_queue(self.run_queue)
+
+    async def run_queue_remove(self, cell_id: str) -> None:
+        with self.run_queue_lock:
+            if cell_id not in self.run_queue:
+                return
+
+            self.run_queue.remove(cell_id)
+            await self.send_run_queue(self.run_queue)
+
     async def on_tick_finished(
-        self, updated_signals: dict[int, Signal[object]], clear_status: bool = True
+        self, updated_signals: dict[int, Signal[object]]
     ) -> None:
         # todo(maximsmol): this can be optimizied
         # 1. we can just update nodes that actually re-ran last tick instead of everything
@@ -851,8 +1011,6 @@ class Kernel:
                 "updated_widgets": list(updated_widgets),
             })
 
-        if clear_status:
-            await self.set_active_cell(None)
         self.cells_with_pending_widget_updates.clear()
 
         await self.send_run_queue([])
@@ -974,6 +1132,7 @@ class Kernel:
         await self.update_kernel_snapshot_status("save_kernel_snapshot", "done")
 
     async def load_kernel_snapshot(self) -> None:
+
         snapshot_f = snapshot_dir / snapshot_f_name
         if not snapshot_f.exists():
             await self.update_kernel_snapshot_status("load_kernel_snapshot", "done")
@@ -1134,7 +1293,7 @@ class Kernel:
             s._apply_updates()
 
         self.conn.call_fut(
-            self.on_tick_finished(ctx.signals_updated_from_code, clear_status=False)
+            self.on_tick_finished(ctx.signals_updated_from_code)
         ).result()
 
     def on_dispose(self, node: Node) -> None:
@@ -1190,7 +1349,7 @@ class Kernel:
                         self.k_globals,
                     )
 
-                    if asyncio.iscoroutine(result_value):
+                    if inspect.iscoroutine(result_value):
                         result_value = await result_value
         except Exception as e:
             exception_msg = traceback.format_exc()
@@ -1205,88 +1364,122 @@ class Kernel:
             "error": error_msg,
         }
 
-    async def exec(self, *, cell_id: str, code: str, _from_stub: bool = False) -> None:
+    async def exec(
+        self,
+        *,
+        cell_id: str,
+        code: str,
+        _from_stub: bool = False,
+        parallel: bool = False,
+    ) -> None:
+        if not parallel:
+            await self.run_queue_append(cell_id)
+
         filename = f"<cell {cell_id}>"
 
-        try:
-            if not _from_stub:
-                assert ctx.cur_comp is None
-                assert not ctx.in_tx
-
-            self.cell_status[cell_id] = "running"
-
-            comp = self.cell_rnodes.get(cell_id)
-            if comp is not None and not _from_stub:
-                comp.dispose()
-                del self.cell_rnodes[cell_id]
-
-            # https://stackoverflow.com/questions/33908794/get-value-of-last-expression-in-exec-call
-            parsed = compile(
-                source=code,
-                filename=filename,
-                mode="exec",
-                flags=ast.PyCF_ONLY_AST | ast.PyCF_ALLOW_TOP_LEVEL_AWAIT,
-            )
-
-            stmts = list(ast.iter_child_nodes(parsed))
-            if len(stmts) == 0:
-                self.cell_status[cell_id] = "ok"
-                self.k_globals.clear()
-                await self.send_cell_result(cell_id)
-                return
-
-            async def x() -> None:
-                # fixme(maximsmol): a cell should also be considered running if a
-                # child reactive node is running
-                #
-                # the only complication is to tell when it has *finished*
-                # running so we can set the status & send results + flush logs
+        with self.cell_locks[cell_id]:
+            try:
                 self.cell_status[cell_id] = "running"
 
-                try:
-                    assert ctx.cur_comp is not None
+                comp = self.cell_rnodes.get(cell_id)
+                if comp is not None and not _from_stub:
+                    comp.dispose()
+                    del self.cell_rnodes[cell_id]
 
-                    self.cell_rnodes[cell_id] = ctx.cur_comp
+                # https://stackoverflow.com/questions/33908794/get-value-of-last-expression-in-exec-call
+                parsed = compile(
+                    source=code,
+                    filename=filename,
+                    mode="exec",
+                    flags=ast.PyCF_ONLY_AST | ast.PyCF_ALLOW_TOP_LEVEL_AWAIT,
+                )
+
+                stmts = list(ast.iter_child_nodes(parsed))
+                if len(stmts) == 0:
+                    self.cell_status[cell_id] = "ok"
                     self.k_globals.clear()
+                    await self.send_cell_result(cell_id)
+                    return
+
+                async def x() -> None:
+                    # fixme(maximsmol): a cell should also be considered running if a
+                    # child reactive node is running
+                    #
+                    # the only complication is to tell when it has *finished*
+                    # running so we can set the status & send results + flush logs
+                    self.cell_status[cell_id] = "running"
 
                     try:
-                        res = eval(  # noqa: S307
-                            compile(
-                                parsed,
-                                filename=filename,
-                                mode="exec",
-                                flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT,
-                            ),
-                            self.k_globals,
-                        )
-                        if asyncio.iscoroutine(res):
-                            res = await res
-                    except ExitException:
-                        ...
+                        assert ctx.cur_comp is not None
 
-                    self.cell_status[cell_id] = "ok"
-                    await self.send_cell_result(cell_id)
+                        self.cell_rnodes[cell_id] = ctx.cur_comp
+                        self.k_globals.clear()
 
-                except (KeyboardInterrupt, Exception):
-                    self.cell_status[cell_id] = "error"
-                    await self.send_cell_result(cell_id)
+                        try:
+                            res = eval(  # noqa: S307
+                                compile(
+                                    parsed,
+                                    filename=filename,
+                                    mode="exec",
+                                    flags=ast.PyCF_ALLOW_TOP_LEVEL_AWAIT,
+                                ),
+                                self.k_globals,
+                            )
+                            if inspect.iscoroutine(res):
+                                res = await res
+                        except ExitException:
+                            ...
 
-                finally:
-                    sys.stdout.flush()
-                    sys.stderr.flush()
+                        self.cell_status[cell_id] = "ok"
+                        # print("[kernel] eval ok. sending cell result")
+                        await self.send_cell_result(cell_id)
 
-            x.__name__ = filename
+                    except (KeyboardInterrupt, Exception, StopCellError):
+                        # print("[kernel] eval error. sending cell result")
+                        self.cell_status[cell_id] = "error"
+                        await self.send_cell_result(cell_id)
 
-            self.active_cell_task = asyncio.create_task(
-                ctx.run(x, _cell_id=cell_id, code=code)
-            )
-            await self.active_cell_task
+                    finally:
+                        sys.stdout.flush()
+                        sys.stderr.flush()
 
-        except (KeyboardInterrupt, asyncio.CancelledError, Exception):
-            self.cell_status[cell_id] = "error"
-            await self.send_cell_result(cell_id)
-        finally:
-            self.active_cell_task = None
+                x.__name__ = filename
+
+                with self.exec_lock if not parallel else nullcontext():
+                    if not parallel:
+                        await self.run_queue_remove(cell_id)
+
+                    task = asyncio.create_task(ctx.run(x, _cell_id=cell_id, code=code))
+                    self.running_cells[cell_id] = RunningCell(
+                        task=task, thread_id=threading.get_ident()
+                    )
+                    await task
+
+            except (
+                KeyboardInterrupt,
+                asyncio.CancelledError,
+                Exception,
+                StopCellError,
+            ):
+                self.cell_status[cell_id] = "error"
+                await self.send_cell_result(cell_id)
+            finally:
+                self.running_cells.pop(cell_id)
+
+    async def stop_cell(self, cell_id: str) -> None:
+        if self.cell_status[cell_id] != "running" or cell_id not in self.running_cells:
+            return
+
+        running_cell = self.running_cells[cell_id]
+        task = running_cell["task"]
+        thread_id = running_cell["thread_id"]
+        task.cancel()
+
+        # todo(rteqs): dangerous stuff. this interrupts the thread in the middle of a frame.
+        # we can potentially run into deadlocks if we leak resources. Figure out a way to do this gracefully
+        ctypes.pythonapi.PyThreadState_SetAsyncExc(
+            ctypes.c_ulong(thread_id), ctypes.py_object(StopCellError)
+        )
 
     async def send_cell_result(self, cell_id: str) -> None:
         await self.send_global_updates()
@@ -1694,6 +1887,15 @@ class Kernel:
 
         return cell_reactivity
 
+    async def send_reactivity_summary(self, agent_tx_id: str | None = None) -> None:
+        cell_reactivity = self.get_reactivity_summary()
+
+        msg = {"type": "reactivity_summary", "cell_reactivity": cell_reactivity}
+        if agent_tx_id is not None:
+            msg["agent_tx_id"] = agent_tx_id
+
+        await self.send(msg)
+
     async def upload_ldata(
         self,
         *,
@@ -1730,11 +1932,7 @@ class Kernel:
         # todo(rteqs): stream directly to LData without temp file
         LPath(urljoins(dst, local_path.name)).upload_from(local_path)
 
-    async def accept(self) -> None:
-        # print("[kernel] accept")
-        msg = await self.conn.recv()
-        # print("[kernel] <", msg)
-
+    async def accept(self, msg: dict) -> None:
         if msg["type"] == "init":
             self.cell_output_selections = msg["cell_output_selections"]
             self.plot_data_selections = msg["plot_data_selections"]
@@ -1825,18 +2023,29 @@ class Kernel:
             return
 
         if msg["type"] == "run_cell":
-            await self.exec(cell_id=msg["cell_id"], code=msg["code"])
+            await self.exec(
+                cell_id=msg["cell_id"],
+                code=msg["code"],
+                parallel=msg.get("parallel", False),
+            )
             return
 
         if msg["type"] == "dispose_cell":
             cell_id = msg["cell_id"]
 
-            node = self.cell_rnodes.get(cell_id)
-            if node is not None:
-                node.dispose()
-                del self.cell_rnodes[cell_id]
-                del self.cell_status[cell_id]
+            await self.stop_cell(cell_id)
 
+            node = self.cell_rnodes.get(cell_id)
+            with self.cell_locks[cell_id]:
+                if node is not None:
+                    node.dispose()
+                    del self.cell_rnodes[cell_id]
+                    del self.cell_status[cell_id]
+
+            return
+
+        if msg["type"] == "stop_cell":
+            await self.stop_cell(msg["cell_id"])
             return
 
         if msg["type"] == "reset_kernel_globals":
@@ -2040,6 +2249,7 @@ def sigterm_handler(signum: int, frame: FrameType | None) -> None:
 
 
 async def main() -> None:
+
     global loop
     loop = asyncio.get_running_loop()
 
@@ -2071,7 +2281,9 @@ async def main() -> None:
 
         while not shutdown_requested:
             try:
-                await k.accept()
+                msg = await k.conn.recv()
+                k.executor.submit(asyncio.run, k.accept(msg))
+
             except Exception:
                 traceback.print_exc()
                 continue

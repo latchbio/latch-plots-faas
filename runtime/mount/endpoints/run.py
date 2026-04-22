@@ -1,6 +1,5 @@
 import re
 import secrets
-import signal
 from contextlib import suppress
 from dataclasses import dataclass
 
@@ -204,24 +203,9 @@ async def run(s: Span, ctx: Context) -> HandlerResult:
                 cell_id = msg["cell_id"]
                 assert isinstance(cell_id, str)
 
-                if (
-                    cell_status.get(cell_id) == "running"
-                    and k_proc.proc is not None
-                    and k_proc.proc.returncode is None
-                ):
-                    k_proc.proc.send_signal(signal=signal.SIGINT)
-
                 _ = cell_status.pop(cell_id, None)
                 _ = cell_last_run_outputs.pop(cell_id, None)
                 _ = cell_sequencers.pop(cell_id, None)
-
-            if (
-                msg["type"] == "stop_cell"
-                and k_proc.proc is not None
-                and k_proc.proc.returncode is None
-            ):
-                k_proc.proc.send_signal(signal=signal.SIGINT)
-                continue
 
             if msg["type"] == "override_session_owner":
                 await plots_ctx_manager.override_session_owner(msg["user_key"])

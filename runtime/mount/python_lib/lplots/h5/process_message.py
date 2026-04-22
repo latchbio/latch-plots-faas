@@ -103,7 +103,7 @@ async def handle_h5_widget_message(
 
             local_duckdb_file_path = Path(
                 f"/tmp/{data_type}_{sanitized_widget_session_key}.duckdb"
-            )  # noqa: S108
+            )
             duckdb_file_path.download(local_duckdb_file_path, cache=True)
 
             _inject.kernel.duckdb.execute(
