@@ -43,7 +43,7 @@ env_vars = {
     "CONDA_DEFAULT_ENV": "plots-faas",
     "CONDA_PREFIX": "/opt/mamba/envs/plots-faas",
     "PATH": "/opt/mamba/envs/plots-faas/bin:" + os.environ["PATH"],
-    # "PYTHON_GIL": "0",
+    "PYTHON_GIL": "1",
 }
 
 os.system(
