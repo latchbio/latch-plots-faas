@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import threading
 from concurrent.futures import Future
 from dataclasses import dataclass, field
@@ -19,10 +20,18 @@ if TYPE_CHECKING:
 # console to show errors. Actual fix is addressing root cause in each
 # dependency but this might break code for customers.
 warning_msgs = [
-        "/opt/mamba/envs/plots-faas/lib/python3.11/site-packages/dask/dataframe/__init__.py:31: FutureWarning:",
-        "/opt/mamba/envs/plots-faas/lib/python3.11/site-packages/numba/core/decorators.py:246: RuntimeWarning:",
-        "/opt/mamba/envs/plots-faas/lib/python3.11/site-packages/anndata/utils.py:429: FutureWarning:",
-        ]
+    "/opt/mamba/envs/plots-faas/lib/python3.11/site-packages/dask/dataframe/__init__.py:31: FutureWarning:",
+    "/opt/mamba/envs/plots-faas/lib/python3.11/site-packages/numba/core/decorators.py:246: RuntimeWarning:",
+    "/opt/mamba/envs/plots-faas/lib/python3.11/site-packages/anndata/utils.py:429: FutureWarning:",
+]
+
+
+kaleido_loggers = ("kaleido", "choreographer", "logistro", "browser_proc")
+
+
+for name in list(logging.Logger.manager.loggerDict) + list(kaleido_loggers):
+    if name.startswith(kaleido_loggers):
+        logging.getLogger(name).setLevel(logging.WARNING)
 
 
 flush_interval = 0.25
@@ -53,12 +62,14 @@ class SocketWriter(RawIOBase):
         async with asyncio.TaskGroup() as tg:
             for cell_id, group in groupby(items, key=itemgetter(1)):
                 combined_data = "".join(data for data, _ in group)
-                tg.create_task(self.conn.send({
-                    "type": "kernel_stdio",
-                    "active_cell": cell_id,
-                    "stream": self.name,
-                    "data": combined_data,
-                }))
+                tg.create_task(
+                    self.conn.send({
+                        "type": "kernel_stdio",
+                        "active_cell": cell_id,
+                        "stream": self.name,
+                        "data": combined_data,
+                    })
+                )
 
     @override
     def fileno(self) -> int:
@@ -89,8 +100,13 @@ class SocketWriter(RawIOBase):
                 self._flush_loop(), self.conn.loop
             )
 
+        thread_local = self.kernel.thread_local
+        active_cell = (
+            thread_local.active_cell if hasattr(thread_local, "active_cell") else None
+        )
+
         with self._buffer_lock:
-            self._buffer.append((data, self.kernel.thread_local.active_cell))
+            self._buffer.append((data, active_cell))
 
         return len(b)
 
