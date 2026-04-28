@@ -25,8 +25,14 @@ warning_msgs = [
     "/opt/mamba/envs/plots-faas/lib/python3.11/site-packages/anndata/utils.py:429: FutureWarning:",
 ]
 
-logging.getLogger("kaleido").setLevel(logging.WARNING)
-logging.getLogger("choreographer").setLevel(logging.WARNING)
+
+kaleido_loggers = ("kaleido", "choreographer", "logistro", "browser_proc")
+
+
+for name in list(logging.Logger.manager.loggerDict) + list(kaleido_loggers):
+    if name.startswith(kaleido_loggers):
+        logging.getLogger(name).setLevel(logging.WARNING)
+
 
 flush_interval = 0.25
 
