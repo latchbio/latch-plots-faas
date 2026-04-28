@@ -793,7 +793,7 @@ class Kernel:
     restored_globals: dict[str, object] = field(default_factory=dict)
 
     executor: ThreadPoolExecutor = field(
-        default_factory=lambda: ThreadPoolExecutor(max_workers=2)
+        default_factory=lambda: ThreadPoolExecutor(max_workers=os.cpu_count())
     )
 
     run_queue: list[str] = field(default_factory=list)
@@ -2307,19 +2307,5 @@ if __name__ == "__main__":
         libc = CDLL("libc.so.6")
         PR_SET_NAME = 15  # https://github.com/torvalds/linux/blob/2df0c02dab829dd89360d98a8a1abaa026ef5798/include/uapi/linux/prctl.h#L56
         libc.prctl(PR_SET_NAME, b"kernel")
-
-    # debug: surface exceptions from background threads (e.g. kaleido/choreographer)
-    import traceback
-
-    def _thread_excepthook(args: threading.ExceptHookArgs) -> None:
-        traceback.print_exception(
-            args.exc_type, args.exc_value, args.exc_traceback, file=sys.stderr
-        )
-
-    threading.excepthook = _thread_excepthook
-
-    import logging
-
-    logging.basicConfig(level=logging.DEBUG, force=True)
 
     asyncio.run(main())

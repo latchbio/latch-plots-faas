@@ -89,8 +89,13 @@ class SocketWriter(RawIOBase):
                 self._flush_loop(), self.conn.loop
             )
 
+        thread_local = self.kernel.thread_local
+        active_cell = (
+            thread_local.active_cell if hasattr(thread_local, "active_cell") else None
+        )
+
         with self._buffer_lock:
-            self._buffer.append((data, self.kernel.thread_local.active_cell))
+            self._buffer.append((data, active_cell))
 
         return len(b)
 
