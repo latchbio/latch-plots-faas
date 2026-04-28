@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import threading
 from concurrent.futures import Future
 from dataclasses import dataclass, field
@@ -19,11 +20,13 @@ if TYPE_CHECKING:
 # console to show errors. Actual fix is addressing root cause in each
 # dependency but this might break code for customers.
 warning_msgs = [
-        "/opt/mamba/envs/plots-faas/lib/python3.11/site-packages/dask/dataframe/__init__.py:31: FutureWarning:",
-        "/opt/mamba/envs/plots-faas/lib/python3.11/site-packages/numba/core/decorators.py:246: RuntimeWarning:",
-        "/opt/mamba/envs/plots-faas/lib/python3.11/site-packages/anndata/utils.py:429: FutureWarning:",
-        ]
+    "/opt/mamba/envs/plots-faas/lib/python3.11/site-packages/dask/dataframe/__init__.py:31: FutureWarning:",
+    "/opt/mamba/envs/plots-faas/lib/python3.11/site-packages/numba/core/decorators.py:246: RuntimeWarning:",
+    "/opt/mamba/envs/plots-faas/lib/python3.11/site-packages/anndata/utils.py:429: FutureWarning:",
+]
 
+logging.getLogger("kaleido").setLevel(logging.WARNING)
+logging.getLogger("choreographer").setLevel(logging.WARNING)
 
 flush_interval = 0.25
 
@@ -53,12 +56,14 @@ class SocketWriter(RawIOBase):
         async with asyncio.TaskGroup() as tg:
             for cell_id, group in groupby(items, key=itemgetter(1)):
                 combined_data = "".join(data for data, _ in group)
-                tg.create_task(self.conn.send({
-                    "type": "kernel_stdio",
-                    "active_cell": cell_id,
-                    "stream": self.name,
-                    "data": combined_data,
-                }))
+                tg.create_task(
+                    self.conn.send({
+                        "type": "kernel_stdio",
+                        "active_cell": cell_id,
+                        "stream": self.name,
+                        "data": combined_data,
+                    })
+                )
 
     @override
     def fileno(self) -> int:

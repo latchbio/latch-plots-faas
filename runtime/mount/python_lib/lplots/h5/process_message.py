@@ -30,9 +30,6 @@ async def handle_h5_widget_message(
         }
 
     widget_session_key: str = msg["key"]
-    _inject.kernel.thread_local.active_cell = widget_session_key.split("/", maxsplit=1)[
-        0
-    ]
 
     data_type: Literal["h5ad", "transcripts", "boundaries"] | Any = msg.get(
         "data_type", "h5ad"
