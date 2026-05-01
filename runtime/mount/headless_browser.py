@@ -18,7 +18,7 @@ class HeadlessBrowser:
         notebook_url: str,
         local_storage: Mapping[str, str],
         *,
-        timeout_ms: int = 30000,
+        timeout_ms: int = 300000,
     ) -> None:
         print(
             f"[HeadlessBrowser] start() called pid={os.getpid()} from:\n"
