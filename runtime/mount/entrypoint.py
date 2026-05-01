@@ -932,6 +932,7 @@ async def start_agent_proc() -> None:
 
 
 async def bootstrap_headless_browser_on_startup() -> None:
+    await ready_ev.wait()
     try:
         resp = await gql_query(
             auth=auth_token_sdk,
