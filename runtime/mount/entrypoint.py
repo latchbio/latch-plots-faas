@@ -1028,7 +1028,11 @@ async def start_headless_browser(
             headless_browser = None
 
 
+restarts = 0
 async def restart_headless_browser() -> None:
+    global restarts
+    restarts += 1
+    print(f"num restarts {restarts}")
     global headless_browser
 
     notebook_id = headless_browser_notebook_id
