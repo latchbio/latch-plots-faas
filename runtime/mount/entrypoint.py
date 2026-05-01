@@ -986,8 +986,12 @@ async def start_headless_browser(
     notebook_id: str, local_storage: dict[str, str]
 ) -> None:
     global restarts
+    if restarts >= 3:
+        return
+
     restarts += 1
     print(f"num restarts {restarts}")
+
     global \
         headless_browser, \
         headless_browser, \
