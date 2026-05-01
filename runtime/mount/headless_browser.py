@@ -1,4 +1,6 @@
 import json
+import os
+import traceback
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -18,9 +20,31 @@ class HeadlessBrowser:
         *,
         timeout_ms: int = 30000,
     ) -> None:
+        print(
+            f"[HeadlessBrowser] start() called pid={os.getpid()} from:\n"
+            + "".join(traceback.format_stack(limit=8)),
+            flush=True,
+        )
         self.playwright = await async_playwright().start()
         self.browser = await self.playwright.chromium.launch(headless=True)
+        print(f"[HeadlessBrowser] launched browser pid={os.getpid()} connected={self.browser.is_connected()}", flush=True)
+        self.browser.on(
+            "disconnected",
+            lambda _b: print(f"[HeadlessBrowser] BROWSER DISCONNECTED pid={os.getpid()}", flush=True),
+        )
         self.page = await self.browser.new_page(viewport={"width": 1280, "height": 800})
+        self.page.on(
+            "crash",
+            lambda p: print(f"[HeadlessBrowser] PAGE CRASH url={p.url}", flush=True),
+        )
+        self.page.on(
+            "pageerror",
+            lambda e: print(f"[HeadlessBrowser] PAGE ERROR {e}", flush=True),
+        )
+        self.page.on(
+            "close",
+            lambda _p: print(f"[HeadlessBrowser] PAGE CLOSED pid={os.getpid()}", flush=True),
+        )
 
         storage = dict(local_storage)
         serialized = json.dumps(storage)
@@ -51,6 +75,11 @@ class HeadlessBrowser:
         await self.page.screenshot(path=str(p), full_page=True)
 
     async def stop(self) -> None:
+        print(
+            f"[HeadlessBrowser] stop() called pid={os.getpid()} from:\n"
+            + "".join(traceback.format_stack(limit=8)),
+            flush=True,
+        )
         if self.browser is not None:
             await self.browser.close()
             self.browser = None
