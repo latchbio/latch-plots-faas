@@ -979,10 +979,20 @@ async def bootstrap_headless_browser_on_startup() -> None:
         print(f"[entrypoint] Failed to bootstrap headless browser: {e!s}")
 
 
+restarts = 0
+
+
 async def start_headless_browser(
     notebook_id: str, local_storage: dict[str, str]
 ) -> None:
-    global headless_browser, headless_browser_notebook_id, latest_local_storage
+    global restarts
+    restarts += 1
+    print(f"num restarts {restarts}")
+    global \
+        headless_browser, \
+        headless_browser, \
+        headless_browser_notebook_id, \
+        latest_local_storage
 
     local_storage_changed = local_storage and local_storage != latest_local_storage
 
@@ -1028,7 +1038,6 @@ async def start_headless_browser(
             headless_browser = None
 
 
-restarts = 0
 async def restart_headless_browser() -> None:
     global restarts
     restarts += 1
