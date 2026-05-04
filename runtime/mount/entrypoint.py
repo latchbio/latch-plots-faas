@@ -1142,7 +1142,7 @@ async def poll_skills_branch() -> None:
                 """,
                 variables={"accountId": account_id},
             )
-            skill_data = resp.get("data", {}).get("agentskillReposForAccount")
+            skill_data = resp.get("data", {}).get("agentSkillReposForAccount")
 
             if skill_data is not None:
                 pat = skill_data.get("pat")
