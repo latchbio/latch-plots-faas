@@ -1,4 +1,6 @@
 import asyncio
+import time
+import traceback
 from typing import Literal
 
 import orjson
@@ -57,10 +59,30 @@ async def agent(s: Span, ctx: Context) -> HandlerResult:
         return "Agent not available"
 
     connection_idx += 1
+    my_idx = connection_idx
+    started_at = time.monotonic()
+    msg_count = 0
+    last_msg_type: str | None = None
+    print(f"[agent ep #{my_idx}] LOOP START", flush=True)
 
     try:
         while True:
-            msg = await receive_json(ctx.receive)
+            try:
+                msg = await receive_json(ctx.receive)
+            except BaseException as e:
+                elapsed = time.monotonic() - started_at
+                print(
+                    f"[agent ep #{my_idx}] receive_json RAISED "
+                    f"role={connection_role} elapsed={elapsed:.1f}s "
+                    f"msgs={msg_count} last_type={last_msg_type} "
+                    f"exc={type(e).__name__}: {e}",
+                    flush=True,
+                )
+                traceback.print_exc()
+                raise
+
+            msg_count += 1
+            last_msg_type = msg.get("type")
 
             msg_type = msg.get("type")
             if msg_type == "init":
@@ -90,8 +112,26 @@ async def agent(s: Span, ctx: Context) -> HandlerResult:
                 if tx_id is not None:
                     mark_action_handled(tx_id)
 
-            await conn_a.send(msg)
+            try:
+                await conn_a.send(msg)
+            except BaseException as e:
+                elapsed = time.monotonic() - started_at
+                print(
+                    f"[agent ep #{my_idx}] conn_a.send RAISED "
+                    f"role={connection_role} elapsed={elapsed:.1f}s "
+                    f"msgs={msg_count} last_type={last_msg_type} "
+                    f"exc={type(e).__name__}: {e}",
+                    flush=True,
+                )
+                traceback.print_exc()
+                raise
     finally:
+        elapsed = time.monotonic() - started_at
+        print(
+            f"[agent ep #{my_idx}] FINALLY role={connection_role} "
+            f"elapsed={elapsed:.1f}s msgs={msg_count} last_type={last_msg_type}",
+            flush=True,
+        )
         if connection_role == "user":
             entrypoint_module.user_agent_ctx = None
             # note(aidan): not sure if this is preferable to the agent figuring it out
