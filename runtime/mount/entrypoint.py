@@ -1,5 +1,6 @@
 import asyncio
 import contextlib
+import json
 import os
 import socket
 import sys
@@ -1050,6 +1051,164 @@ async def restart_headless_browser() -> None:
     await start_headless_browser(notebook_id, local_storage)
 
 
+async def poll_skills_branch() -> None:
+    skills_dir = Path("/opt/latch/plots-faas/.claude/skills")
+    skills_dir.mkdir(parents=True, exist_ok=True)
+
+    skills_branch = "main"
+    if sdk_token is not None:
+        try:
+            resp = await gql_query(
+                auth=sdk_token,
+                query="""
+                    query GetNotebookMetadata($podId: BigInt!) {
+                        podInfo(id: $podId) {
+                            plotNotebook { metadata }
+                        }
+                    }
+                """,
+                variables={"podId": pod_id},
+            )
+            metadata_str = (
+                resp
+                .get("data", {})
+                .get("podInfo", {})
+                .get("plotNotebook", {})
+                .get("metadata")
+            )
+            if metadata_str is not None:
+                skills_branch = json.loads(metadata_str).get("skillsBranch", "main")
+        except Exception as e:
+            print(f"failed to fetch notebook metadata: {e}", file=sys.stderr)
+
+    # todo: surface an error to the user if skills repo fails to pull or clone
+    latch_skills_dest = skills_dir / "latch-skills"
+    if latch_skills_dest.exists():
+        ret = os.system(
+            f"git -C {latch_skills_dest} fetch --depth 1 origin {skills_branch} && git -C {latch_skills_dest} checkout FETCH_HEAD"
+        )
+        if ret == 0:
+            print(f"updated latch-skills to {skills_branch}")
+        else:
+            print(f"failed to update latch-skills to {skills_branch}", file=sys.stderr)
+    else:
+        ret = os.system(
+            f"git clone --depth 1 --branch {skills_branch} https://github.com/latchbio/latch-skills.git {latch_skills_dest}"
+        )
+        if ret == 0:
+            print(
+                f"cloned public latch-skills ({skills_branch}) -> {latch_skills_dest}"
+            )
+        else:
+            print("failed to clone public latch-skills", file=sys.stderr)
+
+    if latch_skills_dest.exists():
+        for link in skills_dir.iterdir():
+            if link.is_symlink() and str(latch_skills_dest) in str(link.readlink()):
+                link.unlink()
+
+        for sub in sorted(latch_skills_dest.iterdir()):
+            if sub.is_dir() and (sub / "SKILL.md").exists():
+                link = skills_dir / sub.name
+                if not link.exists():
+                    link.symlink_to(sub)
+                    print(f"linked latch skill: {sub.name} -> {link}")
+
+    if sdk_token is not None:
+        try:
+            # todo(rteqs): combine into one query
+            resp = await gql_query(
+                auth=sdk_token,
+                query="""
+                    query AgentSkillRepos {
+                        accountInfoCurrent {
+                            id
+                        }
+                    }
+                """,
+                variables={},
+            )
+            account_id = resp.get("data", {}).get("accountInfoCurrent", {}).get("id")
+
+            if account_id is None:
+                raise RuntimeError("could not resolve account")
+
+            resp = await gql_query(
+                auth=sdk_token,
+                query="""
+                    query AgentSkillReposForAccount($accountId: BigInt!) {
+                        agentSkillReposForAccount(argAccountId: $accountId)
+                    }
+                """,
+                variables={"accountId": account_id},
+            )
+            skill_data = resp.get("data", {}).get("agentskillReposForAccount")
+
+            if skill_data is not None:
+                pat = skill_data.get("pat")
+                repos = skill_data.get("repos", [])
+
+                if pat and repos:
+                    username = pat["username"]
+                    token = pat["token"]
+                    skills_dir.mkdir(parents=True, exist_ok=True)
+
+                    seen_dirs: set[str] = set()
+                    for repo in repos:
+                        repo_url: str = repo["repoUrl"]
+                        authed_url = repo_url.replace(
+                            "https://", f"https://{username}:{token}@"
+                        )
+
+                        parts = repo_url.rstrip("/").removesuffix(".git").split("/")
+                        repo_name = parts[-1] if parts else repo["displayName"]
+
+                        if repo_name in seen_dirs:
+                            print(
+                                f"skill repo conflict: {repo_name} already cloned, skipping {repo_url}",
+                                file=sys.stderr,
+                            )
+                            continue
+                        seen_dirs.add(repo_name)
+
+                        dest = skills_dir / repo_name
+                        if not dest.exists():
+                            ret = os.system(f"git clone --depth 1 {authed_url} {dest}")
+                            if ret == 0:
+                                print(f"cloned skill repo: {repo_url} -> {dest}")
+                            else:
+                                print(
+                                    f"failed to clone skill repo: {repo_url}",
+                                    file=sys.stderr,
+                                )
+                                continue
+
+                        if not (dest / "SKILL.md").exists():
+                            for sub in sorted(dest.iterdir()):
+                                if sub.is_dir() and (sub / "SKILL.md").exists():
+                                    link = skills_dir / sub.name
+                                    if sub.name in seen_dirs:
+                                        print(
+                                            f"skill repo conflict: {sub.name} already exists, skipping {sub}",
+                                            file=sys.stderr,
+                                        )
+                                        continue
+                                    seen_dirs.add(sub.name)
+                                    if not link.exists():
+                                        link.symlink_to(sub)
+                                        print(
+                                            f"linked monorepo skill: {sub.name} -> {link}"
+                                        )
+        except Exception as e:
+            print(f"failed to fetch skill repos: {e}", file=sys.stderr)
+
+
+async def start_poll_skills_branch() -> None:
+    while True:
+        await poll_skills_branch()
+        await asyncio.sleep(60)
+
+
 async def startup() -> None:
     await start_kernel_proc()
 
@@ -1060,6 +1219,7 @@ async def startup() -> None:
 
             cell_status[k] = "ran"
 
+    async_tasks.append(asyncio.create_task(start_poll_skills_branch()))
     async_tasks.append(asyncio.create_task(k_proc.watchdog(cleanup=kernel_died)))
     async_tasks.append(asyncio.create_task(a_proc.watchdog()))
     async_tasks.append(asyncio.create_task(bootstrap_headless_browser_on_startup()))
