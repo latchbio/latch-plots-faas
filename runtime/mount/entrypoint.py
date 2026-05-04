@@ -1076,6 +1076,8 @@ async def poll_skills_branch() -> None:
                 .get("plotNotebook", {})
                 .get("metadata")
             )
+            print(f"[DEBUG]: {resp=}")
+            print(f"[DEBUG]: {metadata_str=}")
             if metadata_str is not None:
                 skills_branch = json.loads(metadata_str).get("skillsBranch", "main")
         except Exception as e:
