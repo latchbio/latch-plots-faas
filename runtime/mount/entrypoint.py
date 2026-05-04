@@ -933,6 +933,7 @@ async def start_agent_proc() -> None:
 
 
 async def bootstrap_headless_browser_on_startup() -> None:
+    await ready_ev.wait()
     try:
         resp = await gql_query(
             auth=auth_token_sdk,
@@ -980,15 +981,27 @@ async def bootstrap_headless_browser_on_startup() -> None:
         print(f"[entrypoint] Failed to bootstrap headless browser: {e!s}")
 
 
+restarts = 0
+
+
 async def start_headless_browser(
     notebook_id: str, local_storage: dict[str, str]
 ) -> None:
-    global headless_browser, headless_browser_notebook_id, latest_local_storage
+    global \
+        headless_browser, \
+        headless_browser_notebook_id, \
+        latest_local_storage, \
+        restarts
 
     local_storage_changed = local_storage and local_storage != latest_local_storage
 
     if not local_storage_changed and headless_browser is not None:
         return
+
+    if restarts >= 3:
+        return
+
+    restarts += 1
 
     if local_storage_changed:
         latest_local_storage = local_storage
@@ -1030,7 +1043,12 @@ async def start_headless_browser(
 
 
 async def restart_headless_browser() -> None:
-    global headless_browser
+    global headless_browser, restarts
+
+    if restarts >= 3:
+        return
+
+    restarts += 1
 
     notebook_id = headless_browser_notebook_id
     local_storage = latest_local_storage
