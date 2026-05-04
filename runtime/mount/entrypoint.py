@@ -1083,6 +1083,7 @@ async def poll_skills_branch() -> None:
 
     # todo: surface an error to the user if skills repo fails to pull or clone
     latch_skills_dest = skills_dir / "latch-skills"
+    print(f"[DEBUG]: {skills_branch=}")
     if latch_skills_dest.exists():
         ret = os.system(
             f"git -C {latch_skills_dest} fetch --depth 1 origin {skills_branch} && git -C {latch_skills_dest} checkout FETCH_HEAD"
