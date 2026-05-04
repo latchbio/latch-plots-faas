@@ -1056,32 +1056,31 @@ async def poll_skills_branch() -> None:
     skills_dir.mkdir(parents=True, exist_ok=True)
 
     skills_branch = "main"
-    if sdk_token is not None:
-        try:
-            resp = await gql_query(
-                auth=sdk_token,
-                query="""
-                    query GetNotebookMetadata($podId: BigInt!) {
-                        podInfo(id: $podId) {
-                            plotNotebook { metadata }
-                        }
+    try:
+        resp = await gql_query(
+            auth=auth_token_sdk,
+            query="""
+                query GetNotebookMetadata($podId: BigInt!) {
+                    podInfo(id: $podId) {
+                        plotNotebook { metadata }
                     }
-                """,
-                variables={"podId": pod_id},
-            )
-            metadata_str = (
-                resp
-                .get("data", {})
-                .get("podInfo", {})
-                .get("plotNotebook", {})
-                .get("metadata")
-            )
-            print(f"[DEBUG]: {resp=}")
-            print(f"[DEBUG]: {metadata_str=}")
-            if metadata_str is not None:
-                skills_branch = json.loads(metadata_str).get("skillsBranch", "main")
-        except Exception as e:
-            print(f"failed to fetch notebook metadata: {e}", file=sys.stderr)
+                }
+            """,
+            variables={"podId": pod_id},
+        )
+        metadata_str = (
+            resp
+            .get("data", {})
+            .get("podInfo", {})
+            .get("plotNotebook", {})
+            .get("metadata")
+        )
+        print(f"[DEBUG]: {resp=}")
+        print(f"[DEBUG]: {metadata_str=}")
+        if metadata_str is not None:
+            skills_branch = json.loads(metadata_str).get("skillsBranch", "main")
+    except Exception as e:
+        print(f"failed to fetch notebook metadata: {e}", file=sys.stderr)
 
     # todo: surface an error to the user if skills repo fails to pull or clone
     latch_skills_dest = skills_dir / "latch-skills"
@@ -1117,93 +1116,92 @@ async def poll_skills_branch() -> None:
                     link.symlink_to(sub)
                     print(f"linked latch skill: {sub.name} -> {link}")
 
-    if sdk_token is not None:
-        try:
-            # todo(rteqs): combine into one query
-            resp = await gql_query(
-                auth=sdk_token,
-                query="""
-                    query AgentSkillRepos {
-                        accountInfoCurrent {
-                            id
-                        }
+    try:
+        # todo(rteqs): combine into one query
+        resp = await gql_query(
+            auth=auth_token_sdk,
+            query="""
+                query AgentSkillRepos {
+                    accountInfoCurrent {
+                        id
                     }
-                """,
-                variables={},
-            )
-            account_id = resp.get("data", {}).get("accountInfoCurrent", {}).get("id")
+                }
+            """,
+            variables={},
+        )
+        account_id = resp.get("data", {}).get("accountInfoCurrent", {}).get("id")
 
-            if account_id is None:
-                raise RuntimeError("could not resolve account")
+        if account_id is None:
+            raise RuntimeError("could not resolve account")
 
-            resp = await gql_query(
-                auth=sdk_token,
-                query="""
-                    query AgentSkillReposForAccount($accountId: BigInt!) {
-                        agentSkillReposForAccount(argAccountId: $accountId)
-                    }
-                """,
-                variables={"accountId": account_id},
-            )
-            skill_data = resp.get("data", {}).get("agentSkillReposForAccount")
+        resp = await gql_query(
+            auth=auth_token_sdk,
+            query="""
+                query AgentSkillReposForAccount($accountId: BigInt!) {
+                    agentSkillReposForAccount(argAccountId: $accountId)
+                }
+            """,
+            variables={"accountId": account_id},
+        )
+        skill_data = resp.get("data", {}).get("agentSkillReposForAccount")
 
-            if skill_data is not None:
-                pat = skill_data.get("pat")
-                repos = skill_data.get("repos", [])
+        if skill_data is not None:
+            pat = skill_data.get("pat")
+            repos = skill_data.get("repos", [])
 
-                if pat and repos:
-                    username = pat["username"]
-                    token = pat["token"]
-                    skills_dir.mkdir(parents=True, exist_ok=True)
+            if pat and repos:
+                username = pat["username"]
+                token = pat["token"]
+                skills_dir.mkdir(parents=True, exist_ok=True)
 
-                    seen_dirs: set[str] = set()
-                    for repo in repos:
-                        repo_url: str = repo["repoUrl"]
-                        authed_url = repo_url.replace(
-                            "https://", f"https://{username}:{token}@"
+                seen_dirs: set[str] = set()
+                for repo in repos:
+                    repo_url: str = repo["repoUrl"]
+                    authed_url = repo_url.replace(
+                        "https://", f"https://{username}:{token}@"
+                    )
+
+                    parts = repo_url.rstrip("/").removesuffix(".git").split("/")
+                    repo_name = parts[-1] if parts else repo["displayName"]
+
+                    if repo_name in seen_dirs:
+                        print(
+                            f"skill repo conflict: {repo_name} already cloned, skipping {repo_url}",
+                            file=sys.stderr,
                         )
+                        continue
+                    seen_dirs.add(repo_name)
 
-                        parts = repo_url.rstrip("/").removesuffix(".git").split("/")
-                        repo_name = parts[-1] if parts else repo["displayName"]
-
-                        if repo_name in seen_dirs:
+                    dest = skills_dir / repo_name
+                    if not dest.exists():
+                        ret = os.system(f"git clone --depth 1 {authed_url} {dest}")
+                        if ret == 0:
+                            print(f"cloned skill repo: {repo_url} -> {dest}")
+                        else:
                             print(
-                                f"skill repo conflict: {repo_name} already cloned, skipping {repo_url}",
+                                f"failed to clone skill repo: {repo_url}",
                                 file=sys.stderr,
                             )
                             continue
-                        seen_dirs.add(repo_name)
 
-                        dest = skills_dir / repo_name
-                        if not dest.exists():
-                            ret = os.system(f"git clone --depth 1 {authed_url} {dest}")
-                            if ret == 0:
-                                print(f"cloned skill repo: {repo_url} -> {dest}")
-                            else:
-                                print(
-                                    f"failed to clone skill repo: {repo_url}",
-                                    file=sys.stderr,
-                                )
-                                continue
-
-                        if not (dest / "SKILL.md").exists():
-                            for sub in sorted(dest.iterdir()):
-                                if sub.is_dir() and (sub / "SKILL.md").exists():
-                                    link = skills_dir / sub.name
-                                    if sub.name in seen_dirs:
-                                        print(
-                                            f"skill repo conflict: {sub.name} already exists, skipping {sub}",
-                                            file=sys.stderr,
-                                        )
-                                        continue
-                                    seen_dirs.add(sub.name)
-                                    if not link.exists():
-                                        link.symlink_to(sub)
-                                        print(
-                                            f"linked monorepo skill: {sub.name} -> {link}"
-                                        )
-        except Exception as e:
-            print(f"failed to fetch skill repos: {e}", file=sys.stderr)
+                    if not (dest / "SKILL.md").exists():
+                        for sub in sorted(dest.iterdir()):
+                            if sub.is_dir() and (sub / "SKILL.md").exists():
+                                link = skills_dir / sub.name
+                                if sub.name in seen_dirs:
+                                    print(
+                                        f"skill repo conflict: {sub.name} already exists, skipping {sub}",
+                                        file=sys.stderr,
+                                    )
+                                    continue
+                                seen_dirs.add(sub.name)
+                                if not link.exists():
+                                    link.symlink_to(sub)
+                                    print(
+                                        f"linked monorepo skill: {sub.name} -> {link}"
+                                    )
+    except Exception as e:
+        print(f"failed to fetch skill repos: {e}", file=sys.stderr)
 
 
 async def start_poll_skills_branch() -> None:
