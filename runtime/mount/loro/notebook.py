@@ -1,12 +1,11 @@
 import asyncio
 import base64
 import contextlib
-import os
 import random
 import traceback
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 from aiohttp import (
     ClientConnectionError,
@@ -19,12 +18,12 @@ from yarl import URL
 
 from loro import LoroDoc
 
-latch_p = Path(os.environ.get("LATCH_SANDBOX_ROOT", "/root/.latch"))
+latch_p = Path("../../../scratch-local")
 sdk_token_path = latch_p / "token"
 if sdk_token_path.exists():
-    sdk_token = sdk_token_path.read_text()
+    sdk_token = sdk_token_path.read_text().strip()
 else:
-    sdk_token = ""
+    raise Exception("SDK Token not found")
 auth_token_sdk = f"Latch-SDK-Token {sdk_token}"
 
 sess: ClientSession | None = None
@@ -104,6 +103,7 @@ async def gql_query(
 
 @dataclass
 class NotebookCrdtUpdates:
+    id: int
     data: str
 
 
@@ -122,9 +122,14 @@ class GetNotebookCrdtUpdatesRes:
     data: GetNotebookCrdtUpdatesData
 
 
+class CrdtUpdates(NamedTuple):
+    updates: list[bytes]
+    latest_update_id: int | None
+
+
 async def get_notebook_crdt_updates(
-    notebook_id: str, latest_update_id: str | None
-) -> list[bytes]:
+    notebook_id: int, latest_update_id: int | None
+) -> CrdtUpdates:
     try:
         gql_res = await gql_query(
             query="""
@@ -140,6 +145,7 @@ async def get_notebook_crdt_updates(
                         }
                     ) {
                         nodes {
+                            id
                             data
                         }
                     }
@@ -148,24 +154,24 @@ async def get_notebook_crdt_updates(
             variables={"notebookId": notebook_id, "latestUpdateId": latest_update_id},
             auth=auth_token_sdk,
         )
-        updates = validate(gql_res, GetNotebookCrdtUpdatesRes)
+        res = validate(gql_res, GetNotebookCrdtUpdatesRes)
+        nodes = res.data.plotNotebookCrdtUpdates.nodes
 
-        return [
-            base64.b64decode(upd.data)
-            for upd in updates.data.plotNotebookCrdtUpdates.nodes
-        ]
+        return CrdtUpdates(
+            updates=[base64.b64decode(upd.data) for upd in nodes],
+            latest_update_id=nodes[-1].id if len(nodes) > 0 else None,
+        )
 
     except Exception:
         # todo(rteqs): proper error handling
         traceback.print_exc()
-
-    return []
+        raise
 
 
 @dataclass
 class NotebookCheckpointInfo:
     data: str
-    latestUpdateId: str
+    latestUpdateId: int
 
 
 @dataclass
@@ -189,7 +195,7 @@ class GetPlotNotebookCheckpointRes:
     data: GetPlotNotebookCheckpointData
 
 
-async def get_notebook_doc(notebook_id: str) -> LoroDoc:
+async def get_notebook_doc(notebook_id: int) -> LoroDoc:
     try:
         gql_res = await gql_query(
             query="""
@@ -220,7 +226,7 @@ async def get_notebook_doc(notebook_id: str) -> LoroDoc:
         import_bytes: list[bytes] = []
 
         cp_nodes = res.data.plotNotebookCheckpointInfos.nodes
-        latest_update_id: str | None = None
+        latest_update_id: int | None = None
         if len(cp_nodes) == 0:
             snapshot = res.data.plotNotebookInfo.data
             if snapshot is not None:
@@ -233,7 +239,7 @@ async def get_notebook_doc(notebook_id: str) -> LoroDoc:
         crdt_updates = await get_notebook_crdt_updates(
             notebook_id=notebook_id, latest_update_id=latest_update_id
         )
-        import_bytes.extend(crdt_updates)
+        import_bytes.extend(crdt_updates.updates)
 
         notebook_doc = LoroDoc()
         notebook_doc.import_batch(bytes=import_bytes)
@@ -247,7 +253,7 @@ async def get_notebook_doc(notebook_id: str) -> LoroDoc:
 
 
 async def main() -> None:
-    notebook_id = "52793"
+    notebook_id = 52793
     notebook_doc = await get_notebook_doc(notebook_id=notebook_id)
 
     cells = notebook_doc.get_movable_list("cells")
