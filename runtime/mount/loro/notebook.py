@@ -150,7 +150,10 @@ async def get_notebook_crdt_updates(
         )
         updates = validate(gql_res, GetNotebookCrdtUpdatesRes)
 
-        return [base64.b64decode(upd.data) for upd in updates.data.plotNotebookCrdtUpdates.nodes]
+        return [
+            base64.b64decode(upd.data)
+            for upd in updates.data.plotNotebookCrdtUpdates.nodes
+        ]
 
     except Exception:
         # todo(rteqs): proper error handling
@@ -244,7 +247,9 @@ async def main() -> None:
     doc = LoroDoc()
     doc.import_batch(batch)
 
-    print(doc)
+    print(doc.get_by_str_path("cells"))
+    if sess is not None:
+        await sess.close()
 
 
 asyncio.run(main())
