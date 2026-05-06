@@ -149,7 +149,7 @@ async def get_notebook_crdt_updates(
         )
         updates = validate(gql_res, GetNotebookCrdtUpdatesRes)
 
-        return [upd.data for upd in updates.plotNotebookCrdtUpdates.nodes]
+        return [upd.data for upd in updates.data.plotNotebookCrdtUpdates.nodes]
 
     except Exception:
         # todo(rteqs): proper error handling
@@ -213,12 +213,12 @@ async def get_latest_checkpoint(notebook_id: str) -> tuple[bytes | None, str | N
             auth=auth_token_sdk,
         )
         cp = validate(gql_res, GetPlotNotebookCheckpointRes)
-        nodes = cp.plotNotebookCheckpointInfos.nodes
+        nodes = cp.data.plotNotebookCheckpointInfos.nodes
 
         if len(nodes) == 0:
-            return (cp.plotNotebookInfo.data, None)
+            return (cp.data.plotNotebookInfo.data, None)
 
-        n = cp.plotNotebookCheckpointInfos.nodes[0]
+        n = nodes[0]
         return (n.data, n.latestUpdateId)
 
     except Exception:
@@ -241,3 +241,6 @@ async def main() -> None:
     doc.import_batch(batch)
 
     print(doc)
+
+
+asyncio.run(main())
