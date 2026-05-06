@@ -17,7 +17,7 @@ from aiohttp import (
 from latch_data_validation.data_validation import validate
 from yarl import URL
 
-from loro import LoroDoc, ValueOrContainer
+from loro import LoroDoc
 
 latch_p = Path(os.environ.get("LATCH_SANDBOX_ROOT", "/root/.latch"))
 sdk_token_path = latch_p / "token"
@@ -189,15 +189,11 @@ class GetPlotNotebookCheckpointRes:
     data: GetPlotNotebookCheckpointData
 
 
-# todo(rteqs): return type cringe
-async def get_latest_checkpoint(notebook_id: str) -> tuple[bytes | None, str | None]:
+async def get_notebook_doc(notebook_id: str) -> LoroDoc:
     try:
         gql_res = await gql_query(
             query="""
                 query GetPlotNotebookCheckpoint($notebookId: BigInt!) {
-                    plotNotebookInfo(id: $notebookId) {
-                        data
-                    }
                     plotNotebookCheckpointInfos(
                         filter: {
                             notebookId: { equalTo: $notebookId }
@@ -216,17 +212,30 @@ async def get_latest_checkpoint(notebook_id: str) -> tuple[bytes | None, str | N
             variables={"notebookId": notebook_id},
             auth=auth_token_sdk,
         )
-        cp = validate(gql_res, GetPlotNotebookCheckpointRes)
-        nodes = cp.data.plotNotebookCheckpointInfos.nodes
+        res = validate(gql_res, GetPlotNotebookCheckpointRes)
 
-        if len(nodes) == 0:
-            if cp.data.plotNotebookInfo.data is None:
-                return (None, None)
+        import_bytes: list[bytes] = []
 
-            return (base64.b64decode(cp.data.plotNotebookInfo.data), None)
+        cp_nodes = res.data.plotNotebookCheckpointInfos.nodes
+        latest_update_id: str | None = None
+        if len(cp_nodes) == 0:
+            snapshot = res.data.plotNotebookInfo.data
+            if snapshot is not None:
+                import_bytes.append(base64.b64decode(snapshot))
+        else:
+            cp = cp_nodes[0]
+            import_bytes.append(base64.b64decode(cp.data))
+            latest_update_id = cp.latestUpdateId
 
-        n = nodes[0]
-        return (base64.b64decode(n.data), n.latestUpdateId)
+        crdt_updates = await get_notebook_crdt_updates(
+            notebook_id=notebook_id, latest_update_id=latest_update_id
+        )
+        import_bytes.extend(crdt_updates)
+
+        notebook_doc = LoroDoc()
+        notebook_doc.import_batch(bytes=import_bytes)
+
+        return notebook_doc
 
     except Exception:
         # todo(rteqs): proper error handling
@@ -236,18 +245,9 @@ async def get_latest_checkpoint(notebook_id: str) -> tuple[bytes | None, str | N
 
 async def main() -> None:
     notebook_id = "52793"
-    cp = await get_latest_checkpoint(notebook_id=notebook_id)
+    notebook_doc = await get_notebook_doc(notebook_id=notebook_id)
 
-    crdt_updates = await get_notebook_crdt_updates(
-        notebook_id=notebook_id, latest_update_id=cp[1]
-    )
-
-    batch = ([] if cp[0] is None else [cp[0]]) + crdt_updates  # todo(rteqs): cleanup
-
-    doc = LoroDoc()
-    doc.import_batch(batch)
-
-    cells = doc.get_map("cells")
+    cells = notebook_doc.get_movable_list("cells")
     print(cells.get_deep_value())
 
     if sess is not None:
