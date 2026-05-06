@@ -17,7 +17,7 @@ from aiohttp import (
 from latch_data_validation.data_validation import validate
 from yarl import URL
 
-from loro import LoroDoc
+from loro import LoroDoc, ValueOrContainer
 
 latch_p = Path(os.environ.get("LATCH_SANDBOX_ROOT", "/root/.latch"))
 sdk_token_path = latch_p / "token"
@@ -247,7 +247,9 @@ async def main() -> None:
     doc = LoroDoc()
     doc.import_batch(batch)
 
-    print(doc.get_by_str_path("cells").get_value())
+    cells = doc.get_map("cells")
+    print(cells.get_deep_value())
+
     if sess is not None:
         await sess.close()
 
