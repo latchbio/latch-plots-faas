@@ -112,8 +112,13 @@ class GetNotebookCrdtUpdateNodes:
 
 
 @dataclass
-class GetNotebookCrdtUpdatesRes:
+class GetNotebookCrdtUpdatesData:
     plotNotebookCrdtUpdates: GetNotebookCrdtUpdateNodes
+
+
+@dataclass
+class GetNotebookCrdtUpdatesRes:
+    data: GetNotebookCrdtUpdatesData
 
 
 async def get_notebook_crdt_updates(
@@ -170,9 +175,14 @@ class PlotNotebookInfo:
 
 
 @dataclass
-class GetPlotNotebookCheckpointRes:
+class GetPlotNotebookCheckpointData:
     plotNotebookInfo: PlotNotebookInfo
     plotNotebookCheckpointInfos: GetPlotNotebookCheckpointNodes
+
+
+@dataclass
+class GetPlotNotebookCheckpointRes:
+    data: GetPlotNotebookCheckpointData
 
 
 # todo(rteqs): return type cringe
