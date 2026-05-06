@@ -247,7 +247,7 @@ async def main() -> None:
     doc = LoroDoc()
     doc.import_batch(batch)
 
-    print(doc.get_by_str_path("cells"))
+    print(doc.get_by_str_path("cells").get_value())
     if sess is not None:
         await sess.close()
 
