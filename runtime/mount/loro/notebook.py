@@ -194,6 +194,9 @@ async def get_notebook_doc(notebook_id: str) -> LoroDoc:
         gql_res = await gql_query(
             query="""
                 query GetPlotNotebookCheckpoint($notebookId: BigInt!) {
+                    plotNotebookInfo(id: $notebookId) {
+                        data
+                    }
                     plotNotebookCheckpointInfos(
                         filter: {
                             notebookId: { equalTo: $notebookId }
