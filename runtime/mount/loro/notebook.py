@@ -5,7 +5,7 @@ import random
 import traceback
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, NamedTuple
+from typing import Any
 
 from aiohttp import (
     ClientConnectionError,
@@ -16,7 +16,7 @@ from aiohttp import (
 from latch_data_validation.data_validation import validate
 from yarl import URL
 
-from loro import LoroDoc
+from loro import LoroDoc, LoroMovableList
 
 latch_p = Path("../../../scratch-local")
 sdk_token_path = latch_p / "token"
@@ -101,28 +101,29 @@ async def gql_query(
     raise AssertionError("unreachable")
 
 
-@dataclass
+@dataclass(frozen=True)
 class NotebookCrdtUpdates:
     id: int
     data: str
 
 
-@dataclass
+@dataclass(frozen=True)
 class GetNotebookCrdtUpdateNodes:
     nodes: list[NotebookCrdtUpdates]
 
 
-@dataclass
+@dataclass(frozen=True)
 class GetNotebookCrdtUpdatesData:
     plotNotebookCrdtUpdates: GetNotebookCrdtUpdateNodes
 
 
-@dataclass
+@dataclass(frozen=True)
 class GetNotebookCrdtUpdatesRes:
     data: GetNotebookCrdtUpdatesData
 
 
-class CrdtUpdates(NamedTuple):
+@dataclass(frozen=True, kw_only=True)
+class CrdtUpdates:
     updates: list[bytes]
     latest_update_id: int | None
 
@@ -159,7 +160,7 @@ async def get_notebook_crdt_updates(
 
         return CrdtUpdates(
             updates=[base64.b64decode(upd.data) for upd in nodes],
-            latest_update_id=nodes[-1].id if len(nodes) > 0 else None,
+            latest_update_id=nodes[-1].id if len(nodes) > 0 else latest_update_id,
         )
 
     except Exception:
@@ -168,34 +169,40 @@ async def get_notebook_crdt_updates(
         raise
 
 
-@dataclass
+@dataclass(frozen=True)
 class NotebookCheckpointInfo:
     data: str
     latestUpdateId: int
 
 
-@dataclass
+@dataclass(frozen=True)
 class GetPlotNotebookCheckpointNodes:
     nodes: list[NotebookCheckpointInfo]
 
 
-@dataclass
+@dataclass(frozen=True)
 class PlotNotebookInfo:
     data: str | None
 
 
-@dataclass
+@dataclass(frozen=True)
 class GetPlotNotebookCheckpointData:
     plotNotebookInfo: PlotNotebookInfo
     plotNotebookCheckpointInfos: GetPlotNotebookCheckpointNodes
 
 
-@dataclass
+@dataclass(frozen=True)
 class GetPlotNotebookCheckpointRes:
     data: GetPlotNotebookCheckpointData
 
 
-async def get_notebook_doc(notebook_id: int) -> LoroDoc:
+@dataclass(frozen=True, kw_only=True)
+class NotebookCrdt:
+    loro_doc: LoroDoc
+    latest_update_id: int | None
+
+
+async def get_notebook_doc(notebook_id: int) -> NotebookCrdt:
     try:
         gql_res = await gql_query(
             query="""
@@ -241,10 +248,12 @@ async def get_notebook_doc(notebook_id: int) -> LoroDoc:
         )
         import_bytes.extend(crdt_updates.updates)
 
-        notebook_doc = LoroDoc()
-        notebook_doc.import_batch(bytes=import_bytes)
+        doc = LoroDoc()
+        doc.import_batch(bytes=import_bytes)
 
-        return notebook_doc
+        return NotebookCrdt(
+            loro_doc=doc, latest_update_id=crdt_updates.latest_update_id
+        )
 
     except Exception:
         # todo(rteqs): proper error handling
@@ -252,12 +261,38 @@ async def get_notebook_doc(notebook_id: int) -> LoroDoc:
         raise
 
 
-async def main() -> None:
-    notebook_id = 52793
-    notebook_doc = await get_notebook_doc(notebook_id=notebook_id)
+class Notebook:
+    def __init__(
+        self, notebook_id: int, loro_doc: LoroDoc, latest_update_id: int | None
+    ) -> None:
+        self.notebook_id = notebook_id
+        self.loro_doc = loro_doc
+        self.latest_update_id = latest_update_id
 
-    cells = notebook_doc.get_movable_list("cells")
-    print(cells.get_deep_value())
+    @classmethod
+    async def create(cls, notebook_id: int) -> "Notebook":
+        res = await get_notebook_doc(notebook_id)
+        return cls(
+            notebook_id=notebook_id,
+            loro_doc=res.loro_doc,
+            latest_update_id=res.latest_update_id,
+        )
+
+    async def fetch_updates(self) -> None:
+        res = await get_notebook_crdt_updates(
+            notebook_id=self.notebook_id, latest_update_id=self.latest_update_id
+        )
+
+        self.latest_update_id = res.latest_update_id
+        self.loro_doc.import_batch(res.updates)
+
+    @property
+    def cells(self) -> LoroMovableList:
+        return self.loro_doc.get_movable_list("cells")
+
+
+async def main() -> None:
+    notebook = await Notebook.create(52793)
 
     if sess is not None:
         await sess.close()
