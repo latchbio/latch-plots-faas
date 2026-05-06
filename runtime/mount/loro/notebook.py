@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import contextlib
 import os
 import random
@@ -103,7 +104,7 @@ async def gql_query(
 
 @dataclass
 class NotebookCrdtUpdates:
-    data: bytes
+    data: str
 
 
 @dataclass
@@ -149,7 +150,7 @@ async def get_notebook_crdt_updates(
         )
         updates = validate(gql_res, GetNotebookCrdtUpdatesRes)
 
-        return [upd.data for upd in updates.data.plotNotebookCrdtUpdates.nodes]
+        return [base64.b64decode(upd.data) for upd in updates.data.plotNotebookCrdtUpdates.nodes]
 
     except Exception:
         # todo(rteqs): proper error handling
@@ -160,7 +161,7 @@ async def get_notebook_crdt_updates(
 
 @dataclass
 class NotebookCheckpointInfo:
-    data: bytes
+    data: str
     latestUpdateId: str
 
 
@@ -171,7 +172,7 @@ class GetPlotNotebookCheckpointNodes:
 
 @dataclass
 class PlotNotebookInfo:
-    data: bytes | None
+    data: str | None
 
 
 @dataclass
@@ -216,10 +217,13 @@ async def get_latest_checkpoint(notebook_id: str) -> tuple[bytes | None, str | N
         nodes = cp.data.plotNotebookCheckpointInfos.nodes
 
         if len(nodes) == 0:
-            return (cp.data.plotNotebookInfo.data, None)
+            if cp.data.plotNotebookInfo.data is None:
+                return (None, None)
+
+            return (base64.b64decode(cp.data.plotNotebookInfo.data), None)
 
         n = nodes[0]
-        return (n.data, n.latestUpdateId)
+        return (base64.b64decode(n.data), n.latestUpdateId)
 
     except Exception:
         # todo(rteqs): proper error handling
