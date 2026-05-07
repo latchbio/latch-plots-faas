@@ -2,6 +2,7 @@ import asyncio
 import base64
 import contextlib
 import random
+import re
 import traceback
 from dataclasses import dataclass
 from pathlib import Path
@@ -16,7 +17,17 @@ from aiohttp import (
 from latch_data_validation.data_validation import validate
 from yarl import URL
 
-from loro import ContainerID, ExportMode, LoroDoc, LoroMap, LoroMovableList, LoroText
+from loro import (
+    ContainerID,
+    ContainerType,
+    ExportMode,
+    LoroDoc,
+    LoroMap,
+    LoroMovableList,
+    LoroText,
+)
+
+# todo(rteqs): a bunch of the loro stuff we did here could be upstreamed
 
 latch_p = Path("../../../scratch-local")
 sdk_token_path = latch_p / "token"
@@ -277,6 +288,69 @@ def loro_ts_container_id(c: ContainerID) -> str:
     raise
 
 
+root_container_id_re = re.compile(
+    r"""
+       ^cid:               # prefix
+       root-               # root marker
+       (?P<name>.+)        # root name (any chars)
+       :(?P<type>\w+)$     # container type
+       """,
+    re.VERBOSE,
+)
+
+normal_container_id_re = re.compile(
+    r"""
+       ^cid:               # prefix
+       (?P<counter>\d+)    # counter
+       @(?P<peer>\d+)      # peer id
+       :(?P<type>\w+)$     # container type
+       """,
+    re.VERBOSE,
+)
+
+container_type_map = {
+    "Text": ContainerType.Text(),
+    "Map": ContainerType.Map(),
+    "List": ContainerType.List(),
+    "MovableList": ContainerType.MovableList(),
+    "Tree": ContainerType.Tree(),
+    "Counter": ContainerType.Counter(),
+}
+
+
+def parse_ts_container_id(s: str) -> ContainerID:
+    root_match = root_container_id_re.match(s)
+    if root_match is not None:
+        return ContainerID.Root(
+            name=root_match.group("name"),
+            container_type=container_type_map[root_match.group("type")],
+        )
+
+    normal_match = normal_container_id_re.match(s)
+    if normal_match is not None:
+        return ContainerID.Normal(
+            peer=int(normal_match.group("peer")),
+            counter=int(normal_match.group("counter")),
+            container_type=container_type_map[normal_match.group("type")],
+        )
+
+    raise
+    # if s.contains
+
+
+# class ContainerID:
+#     class Root(ContainerID):
+#         def __init__(self, name: str, container_type: ContainerType): ...
+#         name: str
+#         container_type: ContainerType
+
+#     class Normal(ContainerID):
+#         def __init__(self, peer: int, counter: int, container_type: ContainerType): ...
+#         peer: int
+#         counter: int
+#         container_type: ContainerType
+
+
 class Notebook:
     def __init__(
         self,
@@ -424,10 +498,82 @@ class Notebook:
 
         await self.export_updates()
 
+    async def rename_tab(self, cell_id: str, new_name: str) -> None:
+        cell = self.loro_doc.get_container(id=parse_ts_container_id(cell_id))
+        if cell is None:
+            raise
+
+        assert isinstance(cell, LoroMap)
+        assert cell.get("cellType") == "tabMarker"
+
+        source = cell.get("source")
+        if source is None:
+            raise
+
+        assert isinstance(source, LoroText)
+        source.update(new_name)
+
+        await self.export_updates()
+
+    async def edit_cell(self, cell_id: str, new_code: str) -> None:
+        cell = self.loro_doc.get_container(id=parse_ts_container_id(cell_id))
+        if cell is None:
+            raise
+
+        assert isinstance(cell, LoroMap)
+        assert cell.get("cellType") == "code"
+
+        source = cell.get("source")
+        if source is None:
+            raise
+
+        assert isinstance(source, LoroText)
+        source.update(new_code)
+
+        await self.export_updates()
+
+    async def delete_cell(self, cell_id: str) -> None:
+        pos = -1
+        for i, cid in enumerate(self.cells.to_vec()):
+            if loro_ts_container_id(cid) == cell_id:
+                pos = i
+                break
+
+        self.cells.delete(pos, 1)
+
+        await self.export_updates()
+
+        # todo(rteqs): gql query to remove
+
+    async def delete_all_cells(self) -> None:
+        self.cells.clear()
+        await self.export_updates()
+
+        # todo(rteqs): gql query to remove all tf, value viewer and plot cell in notebook
+
 
 async def main() -> None:
     notebook = await Notebook.create(52793)
-    print(notebook.owner_id)
+    # print(notebook.owner_id)
+    # print(
+    #     notebook.loro_doc.get_container(
+    #         id=parse_ts_container_id("cid:0@18108464718435593442:Map")
+    #     ).get_deep_value()
+    # )
+    pos = 0
+    for pos, cid in enumerate(notebook.cells.to_vec()):
+        if loro_ts_container_id(cid) == "cid:0@18108464718435593442:Map":
+            print("found")
+            break
+    print(pos)
+
+    # cells = notebook.cells
+    # for i in range(len(cells)):
+    #     print(cells.get(i).id)
+    # if c is None:
+    #     continue
+    # if c.is_container(c):
+    #     print(c.container.id)
 
     # pos = len(notebook.cells)
     # print(notebook.loro_doc.get_deep_value())
