@@ -125,11 +125,11 @@ class GetNotebookCrdtUpdatesRes:
 @dataclass(frozen=True, kw_only=True)
 class CrdtUpdates:
     updates: list[bytes]
-    latest_update_id: int | None
+    latest_update_id: str | None
 
 
 async def get_notebook_crdt_updates(
-    notebook_id: int, latest_update_id: int | None
+    notebook_id: int, latest_update_id: str | None
 ) -> CrdtUpdates:
     try:
         gql_res = await gql_query(
@@ -160,7 +160,7 @@ async def get_notebook_crdt_updates(
 
         return CrdtUpdates(
             updates=[base64.b64decode(upd.data) for upd in nodes],
-            latest_update_id=int(nodes[-1].id) if len(nodes) > 0 else latest_update_id,
+            latest_update_id=nodes[-1].id if len(nodes) > 0 else latest_update_id,
         )
 
     except Exception:
@@ -199,7 +199,7 @@ class GetPlotNotebookCheckpointRes:
 @dataclass(frozen=True, kw_only=True)
 class NotebookCrdt:
     loro_doc: LoroDoc
-    latest_update_id: int | None
+    latest_update_id: str | None
 
 
 async def get_notebook_doc(notebook_id: int) -> NotebookCrdt:
@@ -230,26 +230,23 @@ async def get_notebook_doc(notebook_id: int) -> NotebookCrdt:
         )
         res = validate(gql_res, GetPlotNotebookCheckpointRes)
 
-        import_bytes: list[bytes] = []
-
         cp_nodes = res.data.plotNotebookCheckpointInfos.nodes
-        latest_update_id: int | None = None
+        latest_update_id: str | None = None
+        doc = LoroDoc()
+
         if len(cp_nodes) == 0:
             snapshot = res.data.plotNotebookInfo.data
             if snapshot is not None:
-                import_bytes.append(base64.b64decode(snapshot))
+                doc.import_(base64.b64decode(snapshot))
         else:
             cp = cp_nodes[0]
-            import_bytes.append(base64.b64decode(cp.data))
-            latest_update_id = int(cp.latestUpdateId)
+            doc.import_(base64.b64decode(cp.data))
+            latest_update_id = cp.latestUpdateId
 
         crdt_updates = await get_notebook_crdt_updates(
             notebook_id=notebook_id, latest_update_id=latest_update_id
         )
-        import_bytes.extend(crdt_updates.updates)
-
-        doc = LoroDoc()
-        doc.import_batch(bytes=import_bytes)
+        doc.import_batch(crdt_updates.updates)
 
         return NotebookCrdt(
             loro_doc=doc, latest_update_id=crdt_updates.latest_update_id
@@ -263,7 +260,7 @@ async def get_notebook_doc(notebook_id: int) -> NotebookCrdt:
 
 class Notebook:
     def __init__(
-        self, notebook_id: int, loro_doc: LoroDoc, latest_update_id: int | None
+        self, notebook_id: int, loro_doc: LoroDoc, latest_update_id: str | None
     ) -> None:
         self.notebook_id = notebook_id
         self.loro_doc = loro_doc
@@ -406,7 +403,7 @@ async def main() -> None:
     notebook = await Notebook.create(52793)
     pos = len(notebook.cells)
     await create_code_cell(
-        notebook=notebook, pos=pos, code="print(100)", display_name="Untitled Transform"
+        notebook=notebook, pos=pos, code="print(100)", display_name="Test"
     )
 
     if sess is not None:
