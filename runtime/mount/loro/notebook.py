@@ -182,6 +182,7 @@ class GetPlotNotebookCheckpointNodes:
 
 @dataclass(frozen=True)
 class PlotNotebookInfo:
+    ownerId: str
     data: str | None
 
 
@@ -200,6 +201,7 @@ class GetPlotNotebookCheckpointRes:
 class NotebookCrdt:
     loro_doc: LoroDoc
     latest_update_id: str | None
+    owner_id: str
 
 
 async def get_notebook_doc(notebook_id: int) -> NotebookCrdt:
@@ -208,6 +210,7 @@ async def get_notebook_doc(notebook_id: int) -> NotebookCrdt:
             query="""
                 query GetPlotNotebookCheckpoint($notebookId: BigInt!) {
                     plotNotebookInfo(id: $notebookId) {
+                        ownerId
                         data
                     }
                     plotNotebookCheckpointInfos(
@@ -249,7 +252,9 @@ async def get_notebook_doc(notebook_id: int) -> NotebookCrdt:
         doc.import_batch(crdt_updates.updates)
 
         return NotebookCrdt(
-            loro_doc=doc, latest_update_id=crdt_updates.latest_update_id
+            loro_doc=doc,
+            latest_update_id=crdt_updates.latest_update_id,
+            owner_id=res.data.plotNotebookInfo.ownerId,
         )
 
     except Exception:
@@ -274,12 +279,17 @@ def loro_ts_container_id(c: ContainerID) -> str:
 
 class Notebook:
     def __init__(
-        self, notebook_id: int, loro_doc: LoroDoc, latest_update_id: str | None
+        self,
+        notebook_id: int,
+        loro_doc: LoroDoc,
+        latest_update_id: str | None,
+        owner_id: str,
     ) -> None:
         self.notebook_id = notebook_id
         self.loro_doc = loro_doc
         self.latest_update_id = latest_update_id
         self.last_persisted_version = self.loro_doc.oplog_vv
+        self.owner_id = owner_id
 
     @classmethod
     async def create(cls, notebook_id: int) -> "Notebook":
@@ -288,6 +298,7 @@ class Notebook:
             notebook_id=notebook_id,
             loro_doc=res.loro_doc,
             latest_update_id=res.latest_update_id,
+            owner_id=res.owner_id,
         )
 
     async def fetch_updates(self) -> None:
@@ -345,7 +356,7 @@ class Notebook:
         cell.insert("cellType", "code")
         cell.insert("language", "python")
 
-        source: LoroText = cell.insert_container("source", LoroText())
+        source: LoroText = cell.insert_container("source", LoroText())  # type: ignore
         if code is not None:
             source.insert(0, code)
 
@@ -376,8 +387,7 @@ class Notebook:
                     }
                 """,
                 variables={
-                    # todo(rteqs): replace with account id from accountInfoCurrent query
-                    "ownerId": 22657,
+                    "ownerId": self.owner_id,
                     "displayName": display_name,
                     "loroCellId": loro_ts_container_id(cell.id),
                     "parentNotebookId": self.notebook_id,
@@ -397,23 +407,21 @@ class Notebook:
 
         cell.insert("cellType", "markdown")
 
-        source: LoroText = cell.insert_container("source", LoroText())
+        source: LoroText = cell.insert_container("source", LoroText())  # type: ignore
         if content is not None:
             source.insert(0, content)
 
         await self.export_updates()
 
 
-# todo(rteqs): implement
-async def get_account_info(): ...
-
-
 async def main() -> None:
     notebook = await Notebook.create(52793)
-    pos = len(notebook.cells)
-    print(notebook.loro_doc.get_deep_value())
+    print(notebook.owner_id)
+
+    # pos = len(notebook.cells)
+    # print(notebook.loro_doc.get_deep_value())
     # await notebook.create_code_cell(pos=pos, code="print(100)", display_name="Test")
-    await notebook.create_markdown_cell(pos=pos, content="# Markdown Example")
+    # await notebook.create_markdown_cell(pos=pos, content="# Markdown Example")
 
     if sess is not None:
         await sess.close()
