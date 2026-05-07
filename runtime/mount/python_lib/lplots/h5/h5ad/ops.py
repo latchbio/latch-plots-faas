@@ -241,10 +241,10 @@ class Context:
 
         if color_by is not None:
             if color_by[0] == "obs" and color_by[1] in self.adata.obs:
-                full_xs = self.adata.obs[color_by[1]]
+                xs = self.adata.obs[color_by[1]]
 
-                if pd.api.types.is_numeric_dtype(full_xs.dtype):
-                    data[0].setdefault("marker", {})["color"] = full_xs.iloc[idx]
+                if pd.api.types.is_numeric_dtype(xs.dtype):
+                    data[0].setdefault("marker", {})["color"] = xs.iloc[idx]
                 else:
                     color_scheme_type = "categorical"
                     override = color_palettes["obs_type_overrides"].get(color_by[1])
@@ -253,18 +253,17 @@ class Context:
 
                     palette = color_palettes[color_scheme_type]
 
-                    full_obs_array = np.asarray(full_xs)
-                    full_value_counts = pd.Series(full_obs_array).value_counts(
-                        dropna=False
+                    unique_categories, counts = np.unique(
+                        np.asarray(xs), return_counts=True
                     )
-                    categories_in_palette_order = (
-                        full_value_counts.index.to_numpy()
-                    )
+                    categories_in_palette_order = unique_categories[
+                        np.argsort(-counts)
+                    ]
                     category_to_palette_idx: dict[Any, int] = {}
                     for i, category in enumerate(categories_in_palette_order):
                         category_to_palette_idx[category] = i % len(palette)
 
-                    visible_xs = full_xs.iloc[idx]
+                    visible_xs = xs.iloc[idx]
                     default_color = color_palettes["default_color"]
                     # todo(maximsmol): there might be a better way of doing this
                     # using just numpy arrays
