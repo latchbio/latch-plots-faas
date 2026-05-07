@@ -242,7 +242,6 @@ class Context:
         if color_by is not None:
             if color_by[0] == "obs" and color_by[1] in self.adata.obs:
                 xs = self.adata.obs[color_by[1]]
-                print(xs)
 
                 if pd.api.types.is_numeric_dtype(xs.dtype):
                     data[0].setdefault("marker", {})["color"] = xs.iloc[idx]
