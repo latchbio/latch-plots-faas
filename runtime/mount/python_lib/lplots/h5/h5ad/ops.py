@@ -241,10 +241,10 @@ class Context:
 
         if color_by is not None:
             if color_by[0] == "obs" and color_by[1] in self.adata.obs:
-                xs = self.adata.obs[color_by[1]].iloc[idx]
+                full_xs = self.adata.obs[color_by[1]]
 
-                if pd.api.types.is_numeric_dtype(xs.dtype):
-                    data[0].setdefault("marker", {})["color"] = xs
+                if pd.api.types.is_numeric_dtype(full_xs.dtype):
+                    data[0].setdefault("marker", {})["color"] = full_xs.iloc[idx]
                 else:
                     color_scheme_type = "categorical"
                     override = color_palettes["obs_type_overrides"].get(color_by[1])
@@ -253,15 +253,28 @@ class Context:
 
                     palette = color_palettes[color_scheme_type]
 
-                    color_idx_map: dict[str, int] = {}
-                    values, counts = np.unique(xs, return_counts=True)
-                    for i, x in enumerate(values[np.argsort(-counts)]):
-                        color_idx_map[x] = i % len(palette)
+                    all_category_values = full_xs.dropna().to_numpy()
+                    unique_categories, category_counts = np.unique(
+                        all_category_values, return_counts=True
+                    )
+                    descending_count_order = np.argsort(
+                        -category_counts, kind="stable"
+                    )
+                    category_to_palette_idx: dict[Any, int] = {}
+                    for i, category in enumerate(
+                        unique_categories[descending_count_order]
+                    ):
+                        category_to_palette_idx[category] = i % len(palette)
 
+                    visible_xs = full_xs.iloc[idx]
+                    default_color = color_palettes["default_color"]
                     # todo(maximsmol): there might be a better way of doing this
                     # using just numpy arrays
                     data[0].setdefault("marker", {})["color"] = [
-                        palette[color_idx_map[x]] for x in xs
+                        palette[category_to_palette_idx[x]]
+                        if x in category_to_palette_idx
+                        else default_color
+                        for x in visible_xs
                     ]
             elif color_by[0] == "var":
                 xs = self.get_vars_color_values(color_by[1], index=idx)
