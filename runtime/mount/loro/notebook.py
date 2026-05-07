@@ -258,6 +258,20 @@ async def get_notebook_doc(notebook_id: int) -> NotebookCrdt:
         raise
 
 
+def loro_ts_container_id(c: ContainerID) -> str:
+    if isinstance(c, str):
+        return c
+
+    if isinstance(c, c.Root):
+        return f"cid:root-{c.name}:{c.container_type}"
+
+    if isinstance(c, c.Normal):
+        return f"cid:{c.counter}@{c.peer}:{c.container_type}"
+
+    # todo(rteqs): proper exception
+    raise
+
+
 class Notebook:
     def __init__(
         self, notebook_id: int, loro_doc: LoroDoc, latest_update_id: str | None
@@ -323,76 +337,71 @@ class Notebook:
     def cells(self) -> LoroMovableList:
         return self.loro_doc.get_movable_list("cells")
 
+    async def create_code_cell(
+        self, pos: int, code: str | None, display_name: str
+    ) -> None:
+        cell: LoroMap = self.cells.insert_container(pos, LoroMap())  # type: ignore
 
-def loro_ts_container_id(c: ContainerID) -> str:
-    if isinstance(c, str):
-        return c
+        cell.insert("cellType", "code")
+        cell.insert("language", "python")
 
-    if isinstance(c, c.Root):
-        return f"cid:root-{c.name}:{c.container_type}"
+        source: LoroText = cell.insert_container("source", LoroText())
+        if code is not None:
+            source.insert(0, code)
 
-    if isinstance(c, c.Normal):
-        return f"cid:{c.counter}@{c.peer}:{c.container_type}"
-
-    # todo(rteqs): proper exception
-    raise
-
-
-async def create_code_cell(
-    notebook: Notebook, pos: int, code: str | None, display_name: str
-) -> None:
-    cell: LoroMap = notebook.cells.insert_container(pos, LoroMap())  # type: ignore
-
-    cell.insert("cellType", "code")
-    cell.insert("language", "python")
-
-    source = LoroText()
-    if code is not None:
-        source.insert(0, code)
-    cell.insert_container("source", source)
-
-    try:
-        await gql_query(
-            query="""
-                mutation PlotsCreateTransform(
-                    $ownerId: BigInt!
-                    $displayName: String!
-                    $parentNotebookId: BigInt!
-                    $loroCellId: String!
-                ) {
-                    createPlotTransformInfo(
-                        input: {
-                            plotTransformInfo: {
-                                ownerId: $ownerId
-                                displayName: $displayName
-                                parentNotebookId: $parentNotebookId
-                                loroCellId: $loroCellId
+        try:
+            await gql_query(
+                query="""
+                    mutation PlotsCreateTransform(
+                        $ownerId: BigInt!
+                        $displayName: String!
+                        $parentNotebookId: BigInt!
+                        $loroCellId: String!
+                    ) {
+                        createPlotTransformInfo(
+                            input: {
+                                plotTransformInfo: {
+                                    ownerId: $ownerId
+                                    displayName: $displayName
+                                    parentNotebookId: $parentNotebookId
+                                    loroCellId: $loroCellId
+                                }
+                            }
+                        ) {
+                            clientMutationId
+                            plotTransformInfo {
+                                id
                             }
                         }
-                    ) {
-                        clientMutationId
-                        plotTransformInfo {
-                            id
-                        }
                     }
-                }
-            """,
-            variables={
-                # todo(rteqs): replace with account id from accountInfoCurrent query
-                "ownerId": 22657,
-                "displayName": display_name,
-                "loroCellId": loro_ts_container_id(cell.id),
-                "parentNotebookId": notebook.notebook_id,
-            },
-            auth=auth_token_sdk,
-        )
+                """,
+                variables={
+                    # todo(rteqs): replace with account id from accountInfoCurrent query
+                    "ownerId": 22657,
+                    "displayName": display_name,
+                    "loroCellId": loro_ts_container_id(cell.id),
+                    "parentNotebookId": self.notebook_id,
+                },
+                auth=auth_token_sdk,
+            )
 
-    except Exception:
-        # todo(rteqs): proper error handling
-        traceback.print_exc()
-        raise
+        except Exception:
+            # todo(rteqs): proper error handling
+            traceback.print_exc()
+            raise
 
-    await notebook.export_updates()
+        await self.export_updates()
+
+    async def create_markdown_cell(self, pos: int, content: str | None) -> None:
+        cell: LoroMap = self.cells.insert_container(pos, LoroMap())  # type: ignore
+
+        cell.insert("cellType", "markdown")
+
+        source: LoroText = cell.insert_container("source", LoroText())
+        if content is not None:
+            source.insert(0, content)
+
+        await self.export_updates()
 
 
 # todo(rteqs): implement
@@ -402,9 +411,9 @@ async def get_account_info(): ...
 async def main() -> None:
     notebook = await Notebook.create(52793)
     pos = len(notebook.cells)
-    await create_code_cell(
-        notebook=notebook, pos=pos, code="print(100)", display_name="Test"
-    )
+    print(notebook.loro_doc.get_deep_value())
+    # await notebook.create_code_cell(pos=pos, code="print(100)", display_name="Test")
+    await notebook.create_markdown_cell(pos=pos, content="# Markdown Example")
 
     if sess is not None:
         await sess.close()
