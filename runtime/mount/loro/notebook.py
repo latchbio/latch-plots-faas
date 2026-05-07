@@ -413,6 +413,17 @@ class Notebook:
 
         await self.export_updates()
 
+    async def create_tab_marker_cell(self, pos: int, name: str) -> None:
+        cell: LoroMap = self.cells.insert_container(pos, LoroMap())  # type: ignore
+
+        cell.insert("cellType", "tabMarker")
+
+        source: LoroText = cell.insert_container("displayName", LoroText())  # type: ignore
+        if name is not None:
+            source.insert(0, name)
+
+        await self.export_updates()
+
 
 async def main() -> None:
     notebook = await Notebook.create(52793)
