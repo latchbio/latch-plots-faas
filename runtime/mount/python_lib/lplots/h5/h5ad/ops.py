@@ -253,25 +253,15 @@ class Context:
 
                     palette = color_palettes[color_scheme_type]
 
-                    unique_categories, counts = np.unique(
-                        np.asarray(xs), return_counts=True
-                    )
-                    categories_in_palette_order = unique_categories[
-                        np.argsort(-counts)
-                    ]
-                    category_to_palette_idx: dict[Any, int] = {}
-                    for i, category in enumerate(categories_in_palette_order):
-                        category_to_palette_idx[category] = i % len(palette)
+                    color_idx_map: dict[str, int] = {}
+                    values, counts = np.unique(xs, return_counts=True)
+                    for i, x in enumerate(values[np.argsort(-counts)]):
+                        color_idx_map[x] = i % len(palette)
 
-                    visible_xs = xs.iloc[idx]
-                    default_color = color_palettes["default_color"]
                     # todo(maximsmol): there might be a better way of doing this
                     # using just numpy arrays
                     data[0].setdefault("marker", {})["color"] = [
-                        palette[category_to_palette_idx[x]]
-                        if x in category_to_palette_idx
-                        else default_color
-                        for x in visible_xs
+                      palette[color_idx_map[x]] for x in xs.iloc[idx]
                     ]
             elif color_by[0] == "var":
                 xs = self.get_vars_color_values(color_by[1], index=idx)
