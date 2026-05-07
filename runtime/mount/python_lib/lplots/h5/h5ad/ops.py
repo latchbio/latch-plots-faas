@@ -253,17 +253,15 @@ class Context:
 
                     palette = color_palettes[color_scheme_type]
 
-                    all_category_values = full_xs.dropna().to_numpy()
-                    unique_categories, category_counts = np.unique(
-                        all_category_values, return_counts=True
+                    full_obs_array = np.asarray(full_xs)
+                    full_value_counts = pd.Series(full_obs_array).value_counts(
+                        dropna=False
                     )
-                    descending_count_order = np.argsort(
-                        -category_counts, kind="stable"
+                    categories_in_palette_order = (
+                        full_value_counts.index.to_numpy()
                     )
                     category_to_palette_idx: dict[Any, int] = {}
-                    for i, category in enumerate(
-                        unique_categories[descending_count_order]
-                    ):
+                    for i, category in enumerate(categories_in_palette_order):
                         category_to_palette_idx[category] = i % len(palette)
 
                     visible_xs = full_xs.iloc[idx]
