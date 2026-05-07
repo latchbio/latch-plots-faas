@@ -261,7 +261,7 @@ class Context:
                     # todo(maximsmol): there might be a better way of doing this
                     # using just numpy arrays
                     data[0].setdefault("marker", {})["color"] = [
-                      palette[color_idx_map[x]] for x in xs.iloc[idx]
+                      palette[color_idx_map[x]] for x in xs.iloc[idx].astype(str)
                     ]
             elif color_by[0] == "var":
                 xs = self.get_vars_color_values(color_by[1], index=idx)
