@@ -16,7 +16,7 @@ from aiohttp import (
 from latch_data_validation.data_validation import validate
 from yarl import URL
 
-from loro import LoroDoc, LoroMovableList
+from loro import ContainerID, ExportMode, LoroDoc, LoroMap, LoroMovableList, LoroText
 
 latch_p = Path("../../../scratch-local")
 sdk_token_path = latch_p / "token"
@@ -103,7 +103,7 @@ async def gql_query(
 
 @dataclass(frozen=True)
 class NotebookCrdtUpdates:
-    id: int
+    id: str
     data: str
 
 
@@ -160,7 +160,7 @@ async def get_notebook_crdt_updates(
 
         return CrdtUpdates(
             updates=[base64.b64decode(upd.data) for upd in nodes],
-            latest_update_id=nodes[-1].id if len(nodes) > 0 else latest_update_id,
+            latest_update_id=int(nodes[-1].id) if len(nodes) > 0 else latest_update_id,
         )
 
     except Exception:
@@ -172,7 +172,7 @@ async def get_notebook_crdt_updates(
 @dataclass(frozen=True)
 class NotebookCheckpointInfo:
     data: str
-    latestUpdateId: int
+    latestUpdateId: str
 
 
 @dataclass(frozen=True)
@@ -241,7 +241,7 @@ async def get_notebook_doc(notebook_id: int) -> NotebookCrdt:
         else:
             cp = cp_nodes[0]
             import_bytes.append(base64.b64decode(cp.data))
-            latest_update_id = cp.latestUpdateId
+            latest_update_id = int(cp.latestUpdateId)
 
         crdt_updates = await get_notebook_crdt_updates(
             notebook_id=notebook_id, latest_update_id=latest_update_id
@@ -268,6 +268,7 @@ class Notebook:
         self.notebook_id = notebook_id
         self.loro_doc = loro_doc
         self.latest_update_id = latest_update_id
+        self.last_persisted_version = self.loro_doc.oplog_vv
 
     @classmethod
     async def create(cls, notebook_id: int) -> "Notebook":
@@ -286,13 +287,127 @@ class Notebook:
         self.latest_update_id = res.latest_update_id
         self.loro_doc.import_batch(res.updates)
 
+    async def export_updates(self) -> None:
+        upd = self.loro_doc.export(mode=ExportMode.Updates(self.last_persisted_version))
+        self.last_persisted_version = self.loro_doc.oplog_vv
+        try:
+            await gql_query(
+                query="""
+                    mutation CreatePlotNotebookCrdtUpdate(
+                        $notebookId: BigInt!
+                        $data: Base64EncodedBinary!
+                    ) {
+                        createPlotNotebookCrdtUpdate(
+                            input: {
+                                plotNotebookCrdtUpdate: {
+                                    notebookId: $notebookId
+                                    data: $data
+                                    loroVersion: "1.0"
+                                }
+                            }
+                        ) {
+                            clientMutationId
+                        }
+                    }
+                """,
+                variables={
+                    "notebookId": self.notebook_id,
+                    "data": base64.b64encode(upd).decode(),
+                },
+                auth=auth_token_sdk,
+            )
+
+        except Exception:
+            # todo(rteqs): proper error handling
+            traceback.print_exc()
+            raise
+
     @property
     def cells(self) -> LoroMovableList:
         return self.loro_doc.get_movable_list("cells")
 
 
+def loro_ts_container_id(c: ContainerID) -> str:
+    if isinstance(c, str):
+        return c
+
+    if isinstance(c, c.Root):
+        return f"cid:root-{c.name}:{c.container_type}"
+
+    if isinstance(c, c.Normal):
+        return f"cid:{c.counter}@{c.peer}:{c.container_type}"
+
+    # todo(rteqs): proper exception
+    raise
+
+
+async def create_code_cell(
+    notebook: Notebook, pos: int, code: str | None, display_name: str
+) -> None:
+    cell: LoroMap = notebook.cells.insert_container(pos, LoroMap())  # type: ignore
+
+    cell.insert("cellType", "code")
+    cell.insert("language", "python")
+
+    source = LoroText()
+    if code is not None:
+        source.insert(0, code)
+    cell.insert_container("source", source)
+
+    try:
+        await gql_query(
+            query="""
+                mutation PlotsCreateTransform(
+                    $ownerId: BigInt!
+                    $displayName: String!
+                    $parentNotebookId: BigInt!
+                    $loroCellId: String!
+                ) {
+                    createPlotTransformInfo(
+                        input: {
+                            plotTransformInfo: {
+                                ownerId: $ownerId
+                                displayName: $displayName
+                                parentNotebookId: $parentNotebookId
+                                loroCellId: $loroCellId
+                            }
+                        }
+                    ) {
+                        clientMutationId
+                        plotTransformInfo {
+                            id
+                        }
+                    }
+                }
+            """,
+            variables={
+                # todo(rteqs): replace with account id from accountInfoCurrent query
+                "ownerId": 22657,
+                "displayName": display_name,
+                "loroCellId": loro_ts_container_id(cell.id),
+                "parentNotebookId": notebook.notebook_id,
+            },
+            auth=auth_token_sdk,
+        )
+
+    except Exception:
+        # todo(rteqs): proper error handling
+        traceback.print_exc()
+        raise
+
+    await notebook.export_updates()
+
+
+# todo(rteqs): implement
+async def get_account_info(): ...
+
+
 async def main() -> None:
     notebook = await Notebook.create(52793)
+    pos = len(notebook.cells)
+    await create_code_cell(
+        notebook=notebook, pos=pos, code="print(100)", display_name="Untitled Transform"
+    )
 
     if sess is not None:
         await sess.close()
