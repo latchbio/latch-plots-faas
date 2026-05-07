@@ -53,18 +53,26 @@ async def process_h5ad_request(
     ) -> dict[str, Any]: ...
     @overload
     def make_response(
-        *, error: str, op_override: str | None = None
+        *,
+        error: str,
+        error_detail: str | None = None,
+        op_override: str | None = None,
     ) -> dict[str, Any]: ...
     def make_response(
         *,
         data: Any | None = None,
         error: str | None = None,
+        error_detail: str | None = None,
         op_override: str | None = None,
     ) -> dict[str, Any]:
         if op_override is None:
             op_override = op
 
-        value = {"data": data} if data is not None else {"error": error}
+        value: dict[str, Any] = (
+            {"data": data} if data is not None else {"error": error}
+        )
+        if error is not None and error_detail is not None:
+            value["error_detail"] = error_detail
         return {
             "type": "h5",
             "op": op_override,
@@ -522,28 +530,36 @@ async def process_h5ad_request(
 
                 return make_response(error=f"`{k}` key missing from message")
 
-            color_by = msg["color_by"]
+            try:
+                color_by = msg["color_by"]
 
-            img = ctx.export_png(
-                obsm_key=msg["obsm_key"],
-                data=msg["data"],
-                layout=msg["layout"],
-                color_palettes=msg["color_palettes"],
-                color_by=(
-                    ("obs", color_by["key"])
-                    if color_by["type"] == "obs"
-                    else ("var", color_by["keys"])
+                img = ctx.export_png(
+                    obsm_key=msg["obsm_key"],
+                    data=msg["data"],
+                    layout=msg["layout"],
+                    color_palettes=msg["color_palettes"],
+                    color_by=(
+                        ("obs", color_by["key"])
+                        if color_by["type"] == "obs"
+                        else ("var", color_by["keys"])
+                    )
+                    if color_by is not None
+                    else None,
+                    scale=msg["scale"],
+                    width=msg["width"],
+                    height=msg["height"],
+                    viewport=msg["viewport"],
                 )
-                if color_by is not None
-                else None,
-                scale=msg["scale"],
-                width=msg["width"],
-                height=msg["height"],
-                viewport=msg["viewport"],
-            )
-            return make_response(
-                data={"image": f"data:image/png;base64,{quote_plus(b64encode(img))}"}
-            )
+                return make_response(
+                    data={
+                        "image": f"data:image/png;base64,{quote_plus(b64encode(img))}"
+                    }
+                )
+            except Exception as e:
+                return make_response(
+                    error=f"Failed to export PNG: {type(e).__name__}: {e}",
+                    error_detail=traceback.format_exc(),
+                )
 
         case "save_to_latch":
             try:

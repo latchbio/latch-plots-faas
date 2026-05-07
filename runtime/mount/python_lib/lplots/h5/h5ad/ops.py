@@ -241,10 +241,10 @@ class Context:
 
         if color_by is not None:
             if color_by[0] == "obs" and color_by[1] in self.adata.obs:
-                xs = self.adata.obs[color_by[1]].iloc[idx]
+                xs = self.adata.obs[color_by[1]]
 
                 if pd.api.types.is_numeric_dtype(xs.dtype):
-                    data[0].setdefault("marker", {})["color"] = xs
+                    data[0].setdefault("marker", {})["color"] = xs.iloc[idx]
                 else:
                     color_scheme_type = "categorical"
                     override = color_palettes["obs_type_overrides"].get(color_by[1])
@@ -254,14 +254,14 @@ class Context:
                     palette = color_palettes[color_scheme_type]
 
                     color_idx_map: dict[str, int] = {}
-                    values, counts = np.unique(xs, return_counts=True)
+                    values, counts = np.unique(xs.astype(str), return_counts=True)
                     for i, x in enumerate(values[np.argsort(-counts)]):
                         color_idx_map[x] = i % len(palette)
 
                     # todo(maximsmol): there might be a better way of doing this
                     # using just numpy arrays
                     data[0].setdefault("marker", {})["color"] = [
-                        palette[color_idx_map[x]] for x in xs
+                      palette[color_idx_map[x]] for x in xs.iloc[idx].astype(str)
                     ]
             elif color_by[0] == "var":
                 xs = self.get_vars_color_values(color_by[1], index=idx)
