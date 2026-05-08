@@ -45,18 +45,26 @@ env_vars = {
 }
 
 os.system(
-    "git -C /opt/latch/plots-faas remote add forgejo-mirror https://git.latch.bio/LatchBio/latch-plots-faas.git"
+    "git -C /opt/latch/plots-faas remote add forgejo-mirror https://git.latch.bio/LatchBio/latch-plots-faas.git 2>/dev/null"
 )
 
 os.system(
-    "git -C /opt/latch/plots-faas pull origin main || git -C /opt/latch/plots-faas forgejo-mirror main"
+    "git -C /opt/latch/plots-faas fetch --no-tags --depth 1 origin main "
+    "&& git -C /opt/latch/plots-faas reset --hard origin/main "
+    "|| (git -C /opt/latch/plots-faas fetch --no-tags --depth 1 forgejo-mirror main "
+    "&& git -C /opt/latch/plots-faas reset --hard forgejo-mirror/main)"
 )
-os.system("git -C /opt/latch/plots-faas submodule update --init --remote")
+
+os.system(
+    "git -C /opt/latch/plots-faas submodule update --init --depth 1 --single-branch"
+)
 os.system("git -C /opt/latch/plots-faas rev-parse HEAD > /opt/latch/plots_faas_version")
 
 os.chdir("/opt/latch/plots-faas")
 
-os.system("/opt/mamba/envs/plots-faas/bin/pip install --upgrade latch")
+os.system(
+    "/opt/mamba/envs/plots-faas/bin/pip install --upgrade --upgrade-strategy only-if-needed latch"
+)
 
 os.execle(
     "/usr/bin/nice",
