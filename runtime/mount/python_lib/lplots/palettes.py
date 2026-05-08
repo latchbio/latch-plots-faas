@@ -35,7 +35,7 @@ async def get() -> Palettes:
     if pod_id is None:
         return default_palette
 
-    resp = gql_query(
+    resp = await gql_query(
         query="""
             query GetNotebookPalettes($podId: BigInt!) {
                 podInfo(id: $podId) {

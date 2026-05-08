@@ -1983,7 +1983,7 @@ class Kernel:
                     df: DataFrame | None = None
                     if key_type == "ldata_node_id":
                         path_str = f"latch://{data_id}.node"
-                        presigned_url = get_presigned_url(path_str)
+                        presigned_url = await get_presigned_url(path_str)
 
                         if data_id not in self.ldata_dataframes:
                             self.ldata_dataframes[data_id] = pd.read_csv(

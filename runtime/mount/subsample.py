@@ -351,7 +351,7 @@ async def downsample_ldata(
     )
 
     if not is_latest:
-        url = get_presigned_url(f"latch://{ldata_node_id}.node")
+        url = await get_presigned_url(f"latch://{ldata_node_id}.node")
         conn.read_csv(url).to_table(f"ldata_{ldata_node_id}")
         conn.execute(
             """
