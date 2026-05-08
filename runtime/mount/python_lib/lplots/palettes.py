@@ -30,11 +30,11 @@ class PalettesResp(TypedDict):
 default_palette = {"categorical": [], "continuous": []}
 
 
-async def get() -> Palettes:
+def get() -> Palettes:
     if pod_id is None:
         return default_palette
 
-    resp = await gql_query(
+    resp = gql_query(
         query="""
             query GetNotebookPalettes($podId: BigInt!) {
                 podInfo(id: $podId) {

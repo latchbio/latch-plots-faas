@@ -71,7 +71,7 @@ ad = auto_install.ad
 
 sys.path.append(str(Path(__file__).parent.absolute()))
 from subsample import downsample_df, initialize_duckdb
-from utils import KernelSnapshotStatus, PlotConfig, get_presigned_url, orjson_encoder
+from utils import KernelSnapshotStatus, PlotConfig, get_presigned_url, get_presigned_url_sync, orjson_encoder
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -1982,7 +1982,7 @@ class Kernel:
                     df: DataFrame | None = None
                     if key_type == "ldata_node_id":
                         path_str = f"latch://{data_id}.node"
-                        presigned_url = await get_presigned_url(path_str)
+                        presigned_url = get_presigned_url_sync(path_str)
 
                         if data_id not in self.ldata_dataframes:
                             self.ldata_dataframes[data_id] = pd.read_csv(

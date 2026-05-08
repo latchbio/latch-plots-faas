@@ -12,7 +12,7 @@ from pandas import DataFrame
 
 # todo(rteqs): get rid of this
 sys.path.append(str(Path(__file__).parent.absolute()))
-from utils import PlotConfig, auth_token_sdk, get_presigned_url, gql_query
+from utils import PlotConfig, auth_token_sdk, get_presigned_url, get_presigned_url_sync, gql_query
 
 
 def initialize_duckdb() -> DuckDBPyConnection:
@@ -346,7 +346,7 @@ async def downsample_ldata(
     )
 
     if not is_latest:
-        url = await get_presigned_url(f"latch://{ldata_node_id}.node")
+        url = get_presigned_url_sync(f"latch://{ldata_node_id}.node")
         conn.read_csv(url).to_table(f"ldata_{ldata_node_id}")
         conn.execute(
             """

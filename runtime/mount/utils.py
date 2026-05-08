@@ -5,10 +5,12 @@ import io
 import os
 import random
 import sys
+import time
 from enum import Enum
 from pathlib import Path
 from typing import Any, Literal, NotRequired, TypedDict
 
+import requests
 from aiohttp import ClientSession
 from aiohttp.client_exceptions import (
     ClientConnectionError,
@@ -20,6 +22,8 @@ from latch.types.file import LatchFile
 from lplots.utils.nothing import _Nothing
 from matplotlib.figure import Figure, SubFigure
 from molviewspec.builder import State
+from requests.exceptions import ConnectionError as RequestsConnectionError
+from requests.exceptions import HTTPError, RequestException
 from typing_extensions import _AnnotatedAlias
 from yarl import URL
 
@@ -126,7 +130,99 @@ def _retry_delay(attempt: int) -> float:
 def _should_retry(exc: Exception) -> bool:
     if isinstance(exc, ClientResponseError):
         return exc.status in retryable_status_codes
-    return isinstance(exc, (ServerDisconnectedError, ClientConnectionError, OSError))
+    if isinstance(exc, HTTPError):
+        resp = exc.response
+        if resp is None:
+            return False
+        return resp.status_code in retryable_status_codes
+    return isinstance(
+        exc,
+        (
+            ServerDisconnectedError,
+            ClientConnectionError,
+            RequestsConnectionError,
+            OSError,
+        ),
+    )
+
+
+sync_sess: requests.Session | None = None
+
+
+def get_global_http_sess_sync() -> requests.Session:
+    global sync_sess
+    if sync_sess is None:
+        sync_sess = requests.Session()
+    return sync_sess
+
+
+def get_presigned_url_sync(path: str) -> str:
+    endpoint = "ldata/get-signed-url"
+
+    headers = {"Authorization": auth_token_sdk}
+    json_data = {"path": path}
+
+    sess = get_global_http_sess_sync()
+
+    response = sess.post(
+        str(URL(nucleus_url) / endpoint), headers=headers, json=json_data
+    )
+    res = response.json()
+
+    if response.status_code != 200:
+        err = res["error"]
+        msg = f"failed to fetch presigned url(s) for path {path}"
+        if response.status_code == 400:
+            raise ValueError(f"{msg}: download request invalid: {err}")
+        if response.status_code == 401:
+            raise RuntimeError(f"authorization token invalid: {err}")
+        raise RuntimeError(f"{msg} with code {response.status_code}: {err}")
+
+    return res["data"]["url"]
+
+
+def gql_query_sync(
+    query: str, variables: dict[str, Any], auth: str, *, max_retries: int = 5
+) -> Any:
+    sess = get_global_http_sess_sync()
+    url = str(URL(f"https://vacuole.{config.domain}") / "graphql")
+    headers = {
+        "Content-Type": "application/json",
+        "User-Agent": "LatchPlotsFaas/0.2.0",
+        "Authorization": auth,
+    }
+
+    for attempt in range(max_retries + 1):
+        try:
+            resp = sess.post(
+                url, headers=headers, json={"query": query, "variables": variables}
+            )
+            resp.raise_for_status()
+
+            res = resp.json()
+            if "errors" in res:
+                raise RuntimeError(f"graphql error: {res}")
+            return res
+
+        except (HTTPError, RequestsConnectionError, RequestException, OSError) as e:
+            if _should_retry(e) and attempt < max_retries:
+                delay = _retry_delay(attempt)
+
+                if isinstance(e, HTTPError) and e.response is not None:
+                    retry_after = e.response.headers.get("Retry-After")
+                    if retry_after is not None:
+                        with contextlib.suppress(ValueError):
+                            delay = max(delay, float(retry_after))
+
+                print(
+                    f"[gql_query_sync] {type(e).__name__} on attempt"
+                    f" {attempt + 1}/{max_retries + 1}, retrying in {delay:.1f}s: {e}"
+                )
+                time.sleep(delay)
+                continue
+            raise
+
+    raise AssertionError("unreachable")
 
 
 async def gql_query(
