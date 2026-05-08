@@ -5,8 +5,7 @@ from typing import Any, TypeAlias, TypedDict
 
 import orjson
 from latch_data_validation.data_validation import validate
-from runtime.mount.utils import gql_query_sync
-from utils import auth_token_sdk, gql_query, pod_id
+from utils import auth_token_sdk, gql_query_sync, pod_id
 
 Palettes: TypeAlias = dict[str, list[dict[str, Any]]]
 
