@@ -263,59 +263,59 @@ class TracedDict(dict[str, Signal[object] | object]):
         return super().__getitem__(__key)
 
     def get_signal(self, __key: str) -> Signal[object] | None:
-        with self._item_rlock(__key):
-            if not super().__contains__(__key):
-                return None
+        # with self._item_rlock(__key):
+        if not super().__contains__(__key):
+            return None
 
         return self.getitem_signal(__key)
 
     def _direct_set(self, __key: str, __value: object) -> None:
-        with self._item_wlock(__key):
-            return super().__setitem__(__key, __value)
+        # with self._item_wlock(__key):
+        return super().__setitem__(__key, __value)
 
     def __setitem__(self, __key: str, __value: object) -> None:
-        with self._item_wlock(__key):
-            self.touched.add(__key)
-            self.item_write_counter[__key] += 1
+        # with self._item_wlock(__key):
+        self.touched.add(__key)
+        self.item_write_counter[__key] += 1
 
-            if __key == "__builtins__":
-                return super().__setitem__(__key, __value)
+        if __key == "__builtins__":
+            return super().__setitem__(__key, __value)
 
-            dfs = self._dataframes.sample()
-            if hasattr(__value, "iloc") and __key not in dfs:
-                dfs.add(__key)
-                self._dataframes(dfs)
+        dfs = self._dataframes.sample()
+        if hasattr(__value, "iloc") and __key not in dfs:
+            dfs.add(__key)
+            self._dataframes(dfs)
 
-            if super().__contains__(__key):
-                sig = super().__getitem__(__key)
+        if super().__contains__(__key):
+            sig = super().__getitem__(__key)
 
-                old = sig.sample()
-                if isinstance(__value, Signal) and isinstance(old, Signal):
-                    # allow simply setting `sig = Signal(val)`
-                    # without having to check `if "sig" in globals()`
-                    # to define a signal without losing its subscribers on re-runs
-                    old(__value.sample())
-                    return None
-
-                sig(__value)
-                sig._apply_updates()
+            old = sig.sample()
+            if isinstance(__value, Signal) and isinstance(old, Signal):
+                # allow simply setting `sig = Signal(val)`
+                # without having to check `if "sig" in globals()`
+                # to define a signal without losing its subscribers on re-runs
+                old(__value.sample())
                 return None
 
-            return super().__setitem__(__key, Signal(__value))
+            sig(__value)
+            sig._apply_updates()
+            return None
+
+        return super().__setitem__(__key, Signal(__value))
 
     def __delitem__(self, __key: str) -> None:
-        with self._item_wlock(__key):
-            self.touched.add(__key)
-            self.removed.add(__key)
-            if __key in self.item_write_counter:
-                del self.item_write_counter[__key]
+        # with self._item_wlock(__key):
+        self.touched.add(__key)
+        self.removed.add(__key)
+        if __key in self.item_write_counter:
+            del self.item_write_counter[__key]
 
-            dfs = self._dataframes.sample()
-            if __key in dfs:
-                dfs.remove(__key)
-                self._dataframes(dfs)
+        dfs = self._dataframes.sample()
+        if __key in dfs:
+            dfs.remove(__key)
+            self._dataframes(dfs)
 
-            return super().__delitem__(__key)
+        return super().__delitem__(__key)
 
     @property
     def touched(self) -> set[str]:
@@ -353,21 +353,21 @@ class TracedDict(dict[str, Signal[object] | object]):
             return self._dataframes
 
     # todo(rteqs): figure out how to type dict_items
-    def items(self):
-        with self._dict_lock.read_lock():
-            return super().items()
+    # def items(self):
+    #     with self._dict_lock.read_lock():
+    #         return super().items()
 
-    def __iter__(self) -> Iterator[str]:
-        with self._dict_lock.read_lock():
-            return iter(super().keys())
+    # def __iter__(self) -> Iterator[str]:
+    #     with self._dict_lock.read_lock():
+    #         return iter(super().keys())
 
-    def __len__(self) -> int:
-        with self._dict_lock.read_lock():
-            return super().__len__()
+    # def __len__(self) -> int:
+    #     with self._dict_lock.read_lock():
+    #         return super().__len__()
 
-    def __contains__(self, __key: object) -> bool:
-        with self._dict_lock.read_lock():
-            return super().__contains__(__key)
+    # def __contains__(self, __key: object) -> bool:
+    #     with self._dict_lock.read_lock():
+    #         return super().__contains__(__key)
 
     # todo(rteqs): do we need to override all methods?
 
@@ -2282,7 +2282,7 @@ async def main() -> None:
         while not shutdown_requested:
             try:
                 msg = await k.conn.recv()
-                k.executor.submit(asyncio.run, k.accept(msg))
+                await k.accept(msg)
 
             except Exception:
                 traceback.print_exc()
