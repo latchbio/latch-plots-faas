@@ -64,6 +64,7 @@ os.system("git -C /opt/latch/plots-faas rev-parse HEAD > /opt/latch/plots_faas_v
 
 os.chdir("/opt/latch/plots-faas")
 
+print(f"{datetime.datetime.now()} pip installing")
 os.system(
     "/opt/mamba/envs/plots-faas/bin/pip install --upgrade --upgrade-strategy only-if-needed latch"
 )
