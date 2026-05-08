@@ -45,10 +45,15 @@ env_vars = {
     "PYTHON_GIL": "1",
 }
 
-print(f"{datetime.datetime.now()} script start")
+def ts(label):
+    print(f"{datetime.datetime.now()} {label}", flush=True)
+
+
+ts("script start")
 os.system(
     "git -C /opt/latch/plots-faas remote add forgejo-mirror https://git.latch.bio/LatchBio/latch-plots-faas.git 2>/dev/null"
 )
+ts("remote add done")
 
 os.system(
     "git -C /opt/latch/plots-faas fetch --no-tags --depth 1 origin rteqs/start_script_optimization "
@@ -56,15 +61,17 @@ os.system(
     "|| (git -C /opt/latch/plots-faas fetch --no-tags --depth 1 forgejo-mirror main "
     "&& git -C /opt/latch/plots-faas reset --hard forgejo-mirror/main)"
 )
+ts("fetch+reset done")
 
 os.system(
     "git -C /opt/latch/plots-faas submodule update --init --depth 1 --single-branch"
 )
+ts("submodule update done")
+
 os.system("git -C /opt/latch/plots-faas rev-parse HEAD > /opt/latch/plots_faas_version")
+ts("rev-parse done")
 
-os.chdir("/opt/latch/plots-faas")
-
-print(f"{datetime.datetime.now()} pip installing")
+ts("pip installing")
 os.system(
     "/opt/mamba/envs/plots-faas/bin/pip install --upgrade --upgrade-strategy only-if-needed latch"
 )
