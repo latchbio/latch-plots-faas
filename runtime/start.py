@@ -1,5 +1,6 @@
 #!/opt/mamba/envs/latch-system/bin/python
 
+import datetime
 import os
 import re
 import sys
@@ -44,6 +45,7 @@ env_vars = {
     "PYTHON_GIL": "1",
 }
 
+print(f"{datetime.datetime.now()} script start")
 os.system(
     "git -C /opt/latch/plots-faas remote add forgejo-mirror https://git.latch.bio/LatchBio/latch-plots-faas.git 2>/dev/null"
 )
@@ -65,7 +67,6 @@ os.chdir("/opt/latch/plots-faas")
 os.system(
     "/opt/mamba/envs/plots-faas/bin/pip install --upgrade --upgrade-strategy only-if-needed latch"
 )
-print("starting main...")
 
 os.execle(
     "/usr/bin/nice",
