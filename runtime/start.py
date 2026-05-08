@@ -65,6 +65,7 @@ os.chdir("/opt/latch/plots-faas")
 os.system(
     "/opt/mamba/envs/plots-faas/bin/pip install --upgrade --upgrade-strategy only-if-needed latch"
 )
+print("starting main...")
 
 os.execle(
     "/usr/bin/nice",
