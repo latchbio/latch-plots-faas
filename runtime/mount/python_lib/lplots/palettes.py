@@ -5,6 +5,7 @@ from typing import Any, TypeAlias, TypedDict
 
 import orjson
 from latch_data_validation.data_validation import validate
+from runtime.mount.utils import gql_query_sync
 from utils import auth_token_sdk, gql_query, pod_id
 
 Palettes: TypeAlias = dict[str, list[dict[str, Any]]]
@@ -34,7 +35,7 @@ def get() -> Palettes:
     if pod_id is None:
         return default_palette
 
-    resp = gql_query(
+    resp = gql_query_sync(
         query="""
             query GetNotebookPalettes($podId: BigInt!) {
                 podInfo(id: $podId) {
