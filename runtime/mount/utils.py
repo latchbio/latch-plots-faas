@@ -21,8 +21,6 @@ from latch.types.file import LatchFile
 from lplots.utils.nothing import _Nothing
 from matplotlib.figure import Figure, SubFigure
 from molviewspec.builder import State
-from requests.exceptions import ConnectionError as RequestsConnectionError
-from requests.exceptions import HTTPError
 from typing_extensions import _AnnotatedAlias
 from yarl import URL
 
@@ -130,20 +128,7 @@ def _retry_delay(attempt: int) -> float:
 def _should_retry(exc: Exception) -> bool:
     if isinstance(exc, ClientResponseError):
         return exc.status in retryable_status_codes
-    if isinstance(exc, HTTPError):
-        resp = exc.response
-        if resp is None:
-            return False
-        return resp.status_code in retryable_status_codes
-    return isinstance(
-        exc,
-        (
-            ServerDisconnectedError,
-            ClientConnectionError,
-            RequestsConnectionError,
-            OSError,
-        ),
-    )
+    return isinstance(exc, (ServerDisconnectedError, ClientConnectionError, OSError))
 
 
 async def gql_query(
