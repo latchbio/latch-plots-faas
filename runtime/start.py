@@ -49,8 +49,8 @@ os.system(
 )
 
 os.system(
-    "git -C /opt/latch/plots-faas fetch --no-tags --depth 1 origin main "
-    "&& git -C /opt/latch/plots-faas reset --hard origin/main "
+    "git -C /opt/latch/plots-faas fetch --no-tags --depth 1 origin rteqs/start_script_optimization "
+    "&& git -C /opt/latch/plots-faas reset --hard origin/rteqs/start_script_optimization "
     "|| (git -C /opt/latch/plots-faas fetch --no-tags --depth 1 forgejo-mirror main "
     "&& git -C /opt/latch/plots-faas reset --hard forgejo-mirror/main)"
 )
