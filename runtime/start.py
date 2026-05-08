@@ -78,6 +78,8 @@ os.system(
 
 print(f"{datetime.datetime.now()} starting runtime")
 
+os.chdir("/opt/latch/plots-faas")
+
 os.execle(
     "/usr/bin/nice",
     "-n",
