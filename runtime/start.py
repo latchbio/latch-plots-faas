@@ -68,6 +68,8 @@ os.system(
     "/opt/mamba/envs/plots-faas/bin/pip install --upgrade --upgrade-strategy only-if-needed latch"
 )
 
+print(f"{datetime.datetime.now()} starting runtime")
+
 os.execle(
     "/usr/bin/nice",
     "-n",
