@@ -46,18 +46,15 @@ env_vars = {
 }
 
 subprocess.Popen(
-    "git -C /opt/latch/plots-faas submodule update --init --depth 1 --single-branch",
-    shell=True,
+    "git -C /opt/latch/plots-faas submodule update --init --depth 1 --single-branch"
 )
 
 subprocess.Popen(
-    "git -C /opt/latch/plots-faas rev-parse HEAD > /opt/latch/plots_faas_version",
-    shell=True,
+    "git -C /opt/latch/plots-faas rev-parse HEAD > /opt/latch/plots_faas_version"
 )
 
 subprocess.Popen(
-    "/opt/mamba/envs/plots-faas/bin/pip install --upgrade --upgrade-strategy only-if-needed latch",
-    shell=True,
+    "/opt/mamba/envs/plots-faas/bin/pip install --upgrade --upgrade-strategy only-if-needed latch"
 )
 
 os.chdir("/opt/latch/plots-faas")
