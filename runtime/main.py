@@ -12,8 +12,7 @@ from latch_asgi.server import LatchASGIServer
 
 from .config import config
 from .mount.endpoints import http_routes, websocket_routes
-from .mount.entrypoint import add_pod_event, shutdown, startup
-from .mount.utils import auth_token_sdk
+from .mount.entrypoint import shutdown, startup
 
 cfg = HypercornConfig()
 cfg.bind = ["[::]:5000"]
@@ -31,7 +30,6 @@ latch_server = LatchASGIServer(
 app = latch_server.raw_app
 
 if __name__ == "__main__":
-
     if sys.platform == "linux":
         from ctypes import CDLL
 
@@ -56,5 +54,4 @@ if __name__ == "__main__":
 
     loop.add_signal_handler(signal.SIGTERM, shutdown_signal)
     loop.add_signal_handler(signal.SIGINT, shutdown_signal)
-    loop.run_until_complete(add_pod_event(auth=auth_token_sdk, event_type="main_start"))
     loop.run_until_complete(serve(app, cfg, shutdown_trigger=await_shutdown))
