@@ -78,14 +78,10 @@ class PlotConfig(TypedDict):
     width_px: NotRequired[float]
 
 
-sessions: dict[asyncio.AbstractEventLoop, ClientSession] = {}
-
-
 def get_global_http_sess() -> ClientSession:
-    loop = asyncio.get_running_loop()
+    global sess
 
-    sess = sessions.get(loop)
-    if sess is None or sess.closed:
+    if sess is None:
         sess = ClientSession()
 
     return sess
