@@ -29,7 +29,7 @@ from dataclasses import asdict, dataclass, field, fields
 from io import TextIOWrapper
 from pathlib import Path
 from traceback import format_exc
-from types import FrameType
+from types import CoroutineType, FrameType
 from typing import TYPE_CHECKING, Any, Literal, TypedDict, TypeVar
 
 import numpy as np
@@ -66,12 +66,13 @@ from plotly_utils.precalc_box import precalc_box
 from plotly_utils.precalc_violin import precalc_violin
 from socketio_thread import SocketIoThread
 from stdio_over_socket import SocketWriter, text_socket_writer
+from utils import sessions
 
 ad = auto_install.ad
 
 sys.path.append(str(Path(__file__).parent.absolute()))
 from subsample import downsample_df, initialize_duckdb
-from utils import KernelSnapshotStatus, PlotConfig, get_presigned_url, get_presigned_url_sync, orjson_encoder
+from utils import KernelSnapshotStatus, PlotConfig, get_presigned_url, orjson_encoder
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
@@ -1982,7 +1983,7 @@ class Kernel:
                     df: DataFrame | None = None
                     if key_type == "ldata_node_id":
                         path_str = f"latch://{data_id}.node"
-                        presigned_url = get_presigned_url_sync(path_str)
+                        presigned_url = get_presigned_url(path_str)
 
                         if data_id not in self.ldata_dataframes:
                             self.ldata_dataframes[data_id] = pd.read_csv(
@@ -2279,10 +2280,18 @@ async def main() -> None:
 
         await k.send({"type": "ready"})
 
+        async def thread_work(coro: CoroutineType) -> None:
+            try:
+                await coro
+            finally:
+                sess = sessions.pop(asyncio.get_running_loop(), None)
+                if sess is not None and not sess.closed:
+                    await sess.close()
+
         while not shutdown_requested:
             try:
                 msg = await k.conn.recv()
-                k.executor.submit(asyncio.run, k.accept(msg))
+                k.executor.submit(asyncio.run, thread_work(k.accept(msg)))
 
             except Exception:
                 traceback.print_exc()
