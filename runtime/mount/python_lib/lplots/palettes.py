@@ -31,7 +31,6 @@ default_palette = {"categorical": [], "continuous": []}
 
 
 async def get() -> Palettes:
-    # todo(rteqs): remove async. after announcement
     if pod_id is None:
         return default_palette
 
