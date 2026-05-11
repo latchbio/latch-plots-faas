@@ -356,11 +356,19 @@ class TracedDict(dict[str, Signal[object] | object]):
     # todo(rteqs): figure out how to type dict_items
     def items(self):
         with self._dict_lock.read_lock():
-            return super().items()
+            return list(super().items())
+
+    def keys(self):
+        with self._dict_lock.read_lock():
+            return list(super().keys())
+
+    def values(self):
+        with self._dict_lock.read_lock():
+            return list(super().values())
 
     def __iter__(self) -> Iterator[str]:
         with self._dict_lock.read_lock():
-            return iter(super().keys())
+            return iter(list(super().keys()))
 
     def __len__(self) -> int:
         with self._dict_lock.read_lock():
