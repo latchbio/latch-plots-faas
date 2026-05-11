@@ -94,7 +94,8 @@ async def get_staleness_info(
     while retries < max_retries:
         try:
             duckdb_gen = (
-                conn.table("plots_faas_catalog")
+                conn
+                .table("plots_faas_catalog")
                 .filter(Col("name") == Const(table_name))
                 .project(
                     (Col("in_memory_data_generation") == Const(cur_gen))
@@ -135,7 +136,8 @@ def downsample(
 
     if facet is not None:
         res = (
-            conn.table(table_name)
+            conn
+            .table(table_name)
             .aggregate(f"approx_count_distinct({facet})")
             .fetchone()
         )
@@ -272,7 +274,8 @@ def downsample(
 
         min_max = trace_data.aggregate(agg_expr).set_alias("min_max")
         trace_data = (
-            trace_data.join(min_max, "1 = 1")
+            trace_data
+            .join(min_max, "1 = 1")
             .filter(
                 f"""
                     (
@@ -318,7 +321,8 @@ def downsample(
         # todo(rteqs): slow to join with very large number of points, but if you have that many groups on the x-axis, you probably aren't using error bars
         if error_bar == "sem":
             sem = (
-                conn.table(table_name)
+                conn
+                .table(table_name)
                 .aggregate(f"{x}, stddev({y} / sqrt(count({y}))) as sem")
                 .set_alias(f"sem_{i}")
             )
@@ -326,7 +330,8 @@ def downsample(
 
         elif error_bar == "stddev":
             stddev = (
-                conn.table(table_name)
+                conn
+                .table(table_name)
                 .aggregate(f"{x}, stddev({y}) as stddev")
                 .set_alias(f"stddev_{i}")
             )

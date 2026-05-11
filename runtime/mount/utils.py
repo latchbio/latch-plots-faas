@@ -5,6 +5,7 @@ import io
 import os
 import random
 import sys
+from collections import defaultdict
 from enum import Enum
 from pathlib import Path
 from typing import Any, Literal, NotRequired, TypedDict
@@ -47,7 +48,6 @@ pod_id: int | None = None
 if pod_id_path.exists():
     pod_id = int(pod_id_path.read_text())
 
-sess: ClientSession | None = None
 
 KernelSnapshotStatus = Literal["done", "progress", "start", "error"]
 
@@ -74,10 +74,17 @@ class PlotConfig(TypedDict):
     width_px: NotRequired[float]
 
 
+sessions: defaultdict[asyncio.AbstractEventLoop, ClientSession] = defaultdict(
+    lambda: ClientSession()
+)
+
+
 def get_global_http_sess() -> ClientSession:
-    global sess
-    if sess is None:
-        sess = ClientSession()
+    loop = asyncio.get_running_loop()
+    sess = sessions[loop]
+
+    if sess.closed:
+        sess = sessions[loop] = ClientSession()
 
     return sess
 
