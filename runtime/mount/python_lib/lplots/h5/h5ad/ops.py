@@ -243,6 +243,31 @@ class Context:
             if color_by[0] == "obs" and color_by[1] in self.adata.obs:
                 xs = self.adata.obs[color_by[1]]
 
+                print(f"[export_png] color_by=obs key={color_by[1]!r}")
+                print(
+                    f"[export_png]   dtype={xs.dtype!r} "
+                    f"is_numeric={pd.api.types.is_numeric_dtype(xs.dtype)} "
+                    f"is_categorical={isinstance(xs.dtype, pd.CategoricalDtype)}"
+                )
+                if isinstance(xs.dtype, pd.CategoricalDtype):
+                    print(
+                        f"[export_png]   category_dtype={xs.cat.categories.dtype!r} "
+                        f"n_categories={len(xs.cat.categories)} "
+                        f"sample_categories={list(xs.cat.categories[:5])!r}"
+                    )
+                total_nans = int(pd.isna(xs).sum())
+                subset_nans = int(pd.isna(xs.iloc[idx]).sum())
+                print(
+                    f"[export_png]   nans total={total_nans}/{len(xs)} "
+                    f"subset={subset_nans}/{len(idx)}"
+                )
+                non_na = xs.dropna()
+                if len(non_na) > 0:
+                    print(
+                        f"[export_png]   non_na sample={list(non_na.unique()[:5])!r} "
+                        f"n_unique={non_na.nunique()}"
+                    )
+
                 if pd.api.types.is_numeric_dtype(xs.dtype):
                     data[0].setdefault("marker", {})["color"] = xs.iloc[idx]
                 else:
