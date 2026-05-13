@@ -1,6 +1,7 @@
 import asyncio
 import base64
 import contextlib
+import json
 import random
 import re
 import traceback
@@ -179,6 +180,21 @@ async def get_notebook_crdt_updates(
 
 
 @dataclass(frozen=True)
+class PlotNotebookMetadataInfo:
+    metadata: str | None
+
+
+@dataclass(frozen=True)
+class GetPlotNotebookMetadataData:
+    plotNotebookInfo: PlotNotebookMetadataInfo | None
+
+
+@dataclass(frozen=True)
+class GetPlotNotebookMetadataRes:
+    data: GetPlotNotebookMetadataData
+
+
+@dataclass(frozen=True)
 class CreatedPlotTransformInfo:
     id: str
 
@@ -353,20 +369,6 @@ def parse_ts_container_id(s: str) -> ContainerID:
         )
 
     raise
-    # if s.contains
-
-
-# class ContainerID:
-#     class Root(ContainerID):
-#         def __init__(self, name: str, container_type: ContainerType): ...
-#         name: str
-#         container_type: ContainerType
-
-#     class Normal(ContainerID):
-#         def __init__(self, peer: int, counter: int, container_type: ContainerType): ...
-#         peer: int
-#         counter: int
-#         container_type: ContainerType
 
 
 class Notebook:
@@ -509,11 +511,11 @@ class Notebook:
         if content is not None:
             source.insert(0, content)
 
-        cell_id = loro_ts_container_id(cell.id)
         await self.export_updates()
-        return cell_id
 
-    async def create_tab_marker_cell(self, pos: int, name: str) -> None:
+        return loro_ts_container_id(cell.id)
+
+    async def create_tab_marker_cell(self, pos: int, name: str) -> str:
         await self.fetch_updates()
         cell: LoroMap = self.cells.insert_container(pos, LoroMap())  # type: ignore
 
@@ -525,8 +527,48 @@ class Notebook:
 
         await self.export_updates()
 
+        return loro_ts_container_id(cell.id)
+
     async def rename_tab(self, cell_id: str, new_name: str) -> None:
         await self.fetch_updates()
+
+        if cell_id == "DEFAULT":
+            gql_res = await gql_query(
+                query="""
+                    query GetPlotNotebookMetadata($notebookId: BigInt!) {
+                        plotNotebookInfo(id: $notebookId) {
+                            metadata
+                        }
+                    }
+                """,
+                variables={"notebookId": self.notebook_id},
+                auth=auth_token_sdk,
+            )
+            res = validate(gql_res, GetPlotNotebookMetadataRes)
+
+            info = res.data.plotNotebookInfo
+            raw = info.metadata if info is not None else None
+            meta: dict[str, Any] = json.loads(raw) if raw else {}
+            meta["defaultTabName"] = new_name
+
+            await gql_query(
+                query="""
+                    mutation PlotNotebookUpdateMetadata(
+                        $id: BigInt!
+                        $metadata: String!
+                    ) {
+                        updatePlotNotebookInfo(
+                            input: { id: $id, patch: { metadata: $metadata } }
+                        ) {
+                            clientMutationId
+                        }
+                    }
+                """,
+                variables={"id": self.notebook_id, "metadata": json.dumps(meta)},
+                auth=auth_token_sdk,
+            )
+            return
+
         cell = self.loro_doc.get_container(id=parse_ts_container_id(cell_id))
         if cell is None:
             raise
@@ -622,7 +664,7 @@ class Notebook:
             auth=auth_token_sdk,
         )
 
-    async def restore_checkpoint(self, template_version_id: str):
+    async def restore_checkpoint(self, template_version_id: str) -> None:
         await gql_query(
             query="""
                 mutation PlotsRestoreNotebookToVersion($plotTemplateVersionId: BigInt!) {

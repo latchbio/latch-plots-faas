@@ -514,7 +514,6 @@ async def rename_notebook(args: dict[str, Any]) -> dict[str, Any]:
     },
 )
 async def create_tab(args: dict[str, Any]) -> dict[str, Any]:
-    h = harness()
     position = args["position"]
     display_name = args["display_name"]
     if position < 0:
@@ -525,26 +524,25 @@ async def create_tab(args: dict[str, Any]) -> dict[str, Any]:
         })
 
     print(f'[tool] create_tab pos={position} name="{display_name}"')
-    result = await h.atomic_operation(
-        "create_tab", {"position": position, "display_name": display_name}
-    )
-    if result.get("status") == "success":
-        tab_id = result.get("tab_id", "unknown")
-        msg = f"Created tab at position {position} (ID: {tab_id}, Name: {display_name})"
-        print(f"[tool] create_tab -> {msg}")
+    try:
+        notebook = await get_notebook()
+        tab_id = await notebook.create_tab_marker_cell(pos=position, name=display_name)
+    except Exception as e:
         return ok({
             "tool_name": "create_tab",
-            "summary": msg,
-            "tab_id": tab_id,
-            "display_name": display_name,
-            "position": position,
-            "success": True,
+            "summary": f"Failed to create tab: {e!s}",
+            "success": False,
         })
 
+    msg = f"Created tab at position {position} (ID: {tab_id}, Name: {display_name})"
+    print(f"[tool] create_tab -> {msg}")
     return ok({
         "tool_name": "create_tab",
-        "summary": f"Failed to create tab: {result.get('error', 'Unknown error')}",
-        "success": False,
+        "summary": msg,
+        "tab_id": tab_id,
+        "display_name": display_name,
+        "position": position,
+        "success": True,
     })
 
 
@@ -567,30 +565,29 @@ async def create_tab(args: dict[str, Any]) -> dict[str, Any]:
     },
 )
 async def rename_tab(args: dict[str, Any]) -> dict[str, Any]:
-    h = harness()
     tab_id = args["tab_id"]
     new_name = args["new_name"]
 
     print(f'[tool] rename_tab tab_id={tab_id} new_name="{new_name}"')
-    result = await h.atomic_operation(
-        "rename_tab", {"tab_id": tab_id, "new_name": new_name}
-    )
-    if result.get("status") == "success":
-        target = "Tab 1" if tab_id == "DEFAULT" else f"tab {tab_id}"
-        msg = f"Renamed {target} to '{new_name}'"
-        print(f"[tool] rename_tab -> {msg}")
+    try:
+        notebook = await get_notebook()
+        await notebook.rename_tab(cell_id=tab_id, new_name=new_name)
+    except Exception as e:
         return ok({
             "tool_name": "rename_tab",
-            "summary": msg,
-            "tab_id": tab_id,
-            "new_name": new_name,
-            "success": True,
+            "summary": f"Failed to rename tab: {e!s}",
+            "success": False,
         })
 
+    target = "Tab 1" if tab_id == "DEFAULT" else f"tab {tab_id}"
+    msg = f"Renamed {target} to '{new_name}'"
+    print(f"[tool] rename_tab -> {msg}")
     return ok({
         "tool_name": "rename_tab",
-        "summary": f"Failed to rename tab: {result.get('error', 'Unknown error')}",
-        "success": False,
+        "summary": msg,
+        "tab_id": tab_id,
+        "new_name": new_name,
+        "success": True,
     })
 
 
