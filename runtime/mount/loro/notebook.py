@@ -1,22 +1,13 @@
-import asyncio
 import base64
 import contextlib
 import json
-import random
 import re
 import traceback
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from aiohttp import (
-    ClientConnectionError,
-    ClientResponseError,
-    ClientSession,
-    ServerDisconnectedError,
-)
 from latch_data_validation.data_validation import validate
-from yarl import URL
 
 from loro import (
     ContainerID,
@@ -27,88 +18,7 @@ from loro import (
     LoroMovableList,
     LoroText,
 )
-
-latch_p = Path("../../../scratch-local")
-sdk_token_path = latch_p / "token"
-if sdk_token_path.exists():
-    sdk_token = sdk_token_path.read_text().strip()
-else:
-    raise Exception("SDK Token not found")
-auth_token_sdk = f"Latch-SDK-Token {sdk_token}"
-
-sess: ClientSession | None = None
-
-
-def get_global_http_sess() -> ClientSession:
-    global sess
-    if sess is None:
-        sess = ClientSession()
-
-    return sess
-
-
-def _retry_delay(attempt: int) -> float:
-    delay = min(0.5 * (2**attempt), 30.0)
-    jitter = delay * 0.5 * random.random()
-    return delay + jitter
-
-
-retryable_status_codes = frozenset({429, 500, 502, 503, 504})
-
-
-def _should_retry(exc: Exception) -> bool:
-    if isinstance(exc, ClientResponseError):
-        return exc.status in retryable_status_codes
-    return isinstance(exc, (ServerDisconnectedError, ClientConnectionError, OSError))
-
-
-async def gql_query(
-    query: str, variables: dict[str, Any], auth: str, *, max_retries: int = 5
-) -> Any:
-    sess = get_global_http_sess()
-    url = URL("https://vacuole.latch.bio") / "graphql"
-    headers = {
-        "Content-Type": "application/json",
-        "User-Agent": "LatchPlotsFaas/0.2.0",
-        "Authorization": auth,
-    }
-
-    for attempt in range(max_retries + 1):
-        try:
-            async with sess.post(
-                url, headers=headers, json={"query": query, "variables": variables}
-            ) as resp:
-                resp.raise_for_status()
-
-                res = await resp.json()
-                if "errors" in res:
-                    raise RuntimeError(f"graphql error: {res}")
-                return res
-
-        except (
-            ServerDisconnectedError,
-            ClientConnectionError,
-            ClientResponseError,
-            OSError,
-        ) as e:
-            if _should_retry(e) and attempt < max_retries:
-                delay = _retry_delay(attempt)
-
-                if isinstance(e, ClientResponseError) and e.headers is not None:
-                    retry_after = e.headers.get("Retry-After")
-                    if retry_after is not None:
-                        with contextlib.suppress(ValueError):
-                            delay = max(delay, float(retry_after))
-
-                print(
-                    f"[gql_query] {type(e).__name__} on attempt"
-                    f" {attempt + 1}/{max_retries + 1}, retrying in {delay:.1f}s: {e}"
-                )
-                await asyncio.sleep(delay)
-                continue
-            raise
-
-    raise AssertionError("unreachable")
+from runtime.mount.utils import auth_token_sdk, gql_query
 
 
 @dataclass(frozen=True)
@@ -702,38 +612,3 @@ async def get_notebook() -> Notebook:
         notebook = await Notebook.create(notebook_id=notebook_id)
 
     return notebook
-
-
-async def main() -> None:
-    notebook = await Notebook.create("52793")
-    # print(notebook.owner_id)
-    # print(
-    #     notebook.loro_doc.get_container(
-    #         id=parse_ts_container_id("cid:0@18108464718435593442:Map")
-    #     ).get_deep_value()
-    # )
-    pos = 0
-    for pos, cid in enumerate(notebook.cells.to_vec()):
-        if loro_ts_container_id(cid) == "cid:0@18108464718435593442:Map":
-            print("found")
-            break
-    print(pos)
-
-    # cells = notebook.cells
-    # for i in range(len(cells)):
-    #     print(cells.get(i).id)
-    # if c is None:
-    #     continue
-    # if c.is_container(c):
-    #     print(c.container.id)
-
-    # pos = len(notebook.cells)
-    # print(notebook.loro_doc.get_deep_value())
-    # await notebook.create_code_cell(pos=pos, code="print(100)", display_name="Test")
-    # await notebook.create_markdown_cell(pos=pos, content="# Markdown Example")
-
-    if sess is not None:
-        await sess.close()
-
-
-asyncio.run(main())
