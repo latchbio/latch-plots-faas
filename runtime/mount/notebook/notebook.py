@@ -17,7 +17,7 @@ from loro import (
     LoroMovableList,
     LoroText,
 )
-from utils import auth_token_sdk, gql_query
+from utils import auth_token_sdk, gql_query, pod_id
 
 
 @dataclass(frozen=True)
@@ -86,6 +86,47 @@ async def get_notebook_crdt_updates(
         # todo(rteqs): proper error handling
         traceback.print_exc()
         raise
+
+
+@dataclass(frozen=True)
+class GetNotebookIdPodInfoNode:
+    plotNotebookId: str | None
+
+
+@dataclass(frozen=True)
+class GetNotebookIdPodInfos:
+    nodes: list[GetNotebookIdPodInfoNode]
+
+
+@dataclass(frozen=True)
+class GetNotebookIdData:
+    podInfos: GetNotebookIdPodInfos
+
+
+@dataclass(frozen=True)
+class GetNotebookIdRes:
+    data: GetNotebookIdData
+
+
+async def get_notebook_id_from_pod(pod_id: int) -> str:
+    gql_res = await gql_query(
+        query="""
+            query GetNotebookId($podId: BigInt!) {
+                podInfos(filter: { id: { equalTo: $podId } }, first: 1) {
+                    nodes {
+                        plotNotebookId
+                    }
+                }
+            }
+        """,
+        variables={"podId": pod_id},
+        auth=auth_token_sdk,
+    )
+    res = validate(gql_res, GetNotebookIdRes)
+    nodes = res.data.podInfos.nodes
+    if len(nodes) == 0 or nodes[0].plotNotebookId is None:
+        raise RuntimeError(f"No plotNotebookId found for pod {pod_id}")
+    return nodes[0].plotNotebookId
 
 
 @dataclass(frozen=True)
@@ -603,9 +644,12 @@ notebook: Notebook | None = None
 
 
 async def get_notebook() -> Notebook:
-    global notebook
+    global notebook, notebook_id
 
-    assert notebook_id is not None
+    if notebook_id is None:
+        if pod_id is None:
+            raise RuntimeError("Cannot resolve notebook_id: pod_id is not set")
+        notebook_id = await get_notebook_id_from_pod(pod_id)
 
     if notebook is None:
         notebook = await Notebook.create(notebook_id=notebook_id)
