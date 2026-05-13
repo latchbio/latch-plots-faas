@@ -540,16 +540,56 @@ class Notebook:
                 break
 
         self.cells.delete(pos, 1)
-
         await self.export_updates()
 
-        # todo(rteqs): gql query to remove
+        await gql_query(
+            query="""
+                mutation DeleteCell($loroCellId: String!) {
+                    plotsTransformDeleteByLoroCellId(input: { loroCellId: $loroCellId }) {
+                        clientMutationId
+                    }
+                    plotsDeleteByLoroCellId(input: { loroCellId: $loroCellId }) {
+                        clientMutationId
+                    }
+                    plotCellValueViewerDeleteByLoroCellId(input: { loroCellId: $loroCellId }) {
+                        clientMutationId
+                    }
+                }
+            """,
+            variables={"loroCellId": cell_id},
+            auth=auth_token_sdk,
+        )
 
     async def delete_all_cells(self) -> None:
         self.cells.clear()
         await self.export_updates()
 
-        # todo(rteqs): gql query to remove all tf, value viewer and plot cell in notebook
+        await gql_query(
+            query="""
+                mutation DeleteAllCells($notebookId: BigInt!) {
+                    deleteAllCells(input: { argNotebookId: $notebookId }) {
+                        clientMutationId
+                    }
+                }
+            """,
+            variables={"notebookId": self.notebook_id},
+            auth=auth_token_sdk,
+        )
+
+    async def restore_checkpoint(self, template_version_id: str):
+        await gql_query(
+            query="""
+                mutation PlotsRestoreNotebookToVersion($plotTemplateVersionId: BigInt!) {
+                    plotsRestoreNotebookToVersion(
+                        input: { argPlotTemplateVersionId: $plotTemplateVersionId }
+                    ) {
+                        clientMutationId
+                    }
+                }
+            """,
+            variables={"plotTemplateVersionId": template_version_id},
+            auth=auth_token_sdk,
+        )
 
 
 async def main() -> None:
