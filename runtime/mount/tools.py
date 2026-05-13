@@ -28,6 +28,7 @@ class RedeemPackageResult:
 
 @dataclass(frozen=True)
 class RedeemPackagePayload:
+    clientMutationId: str | None
     result: RedeemPackageResult | None
 
 

@@ -151,6 +151,7 @@ class CreatedPlotTransformInfo:
 
 @dataclass(frozen=True)
 class CreatePlotTransformInfoPayload:
+    clientMutationId: str | None
     plotTransformInfo: CreatedPlotTransformInfo
 
 
