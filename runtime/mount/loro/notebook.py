@@ -607,8 +607,21 @@ class Notebook:
             auth=auth_token_sdk,
         )
 
-    async def restore_checkpoint(self, template_version_id: str):
-        await self.fetch_updates()
+    async def rename_notebook(self, name: str) -> None:
+        await gql_query(
+            query="""
+                mutation PlotsRenameNotebook($id: BigInt!, $displayName: String!) {
+                    updatePlotNotebookInfo(
+                        input: { id: $id, patch: { displayName: $displayName } }
+                    ) {
+                        clientMutationId
+                    }
+                }
+            """,
+            variables={"id": self.notebook_id, "displayName": name},
+            auth=auth_token_sdk,
+        )
+
     async def restore_checkpoint(self, template_version_id: str):
         await gql_query(
             query="""
