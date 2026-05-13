@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import traceback
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -14,7 +15,7 @@ from claude_agent_sdk import (
 from latch_data_validation.data_validation import validate
 from loro import LoroMap
 from lplots import _inject
-from notebook.notebook import get_notebook, parse_ts_container_id
+from notebook import get_notebook, parse_ts_container_id
 from utils import auth_token_sdk, gql_query
 
 
@@ -443,6 +444,7 @@ async def delete_all_cells(args: dict[str, Any]) -> dict[str, Any]:  # noqa: ARG
         deleted_count = len(notebook.cells)
         await notebook.delete_all_cells()
     except Exception as e:
+        traceback.print_exc()
         return ok({
             "tool_name": "delete_all_cells",
             "summary": f"Failed to delete cells: {e!s}",
@@ -481,6 +483,7 @@ async def rename_notebook(args: dict[str, Any]) -> dict[str, Any]:
         notebook = await get_notebook()
         await notebook.rename_notebook(name=name)
     except Exception as e:
+        traceback.print_exc()
         return ok({
             "tool_name": "rename_notebook",
             "summary": f"Failed to rename notebook: {e!s}",
