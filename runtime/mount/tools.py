@@ -15,7 +15,7 @@ from latch_data_validation.data_validation import validate
 from loro import LoroMap
 from lplots import _inject
 
-from runtime.mount.loro.notebook import get_notebook, parse_ts_container_id
+from runtime.mount.notebook.notebook import get_notebook, parse_ts_container_id
 from runtime.mount.utils import auth_token_sdk, gql_query
 
 

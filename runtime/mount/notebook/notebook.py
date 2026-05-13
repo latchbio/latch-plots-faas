@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Any
 
 from latch_data_validation.data_validation import validate
-
 from loro import (
     ContainerID,
     ContainerType,
@@ -18,6 +17,7 @@ from loro import (
     LoroMovableList,
     LoroText,
 )
+
 from runtime.mount.utils import auth_token_sdk, gql_query
 
 
