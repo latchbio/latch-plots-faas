@@ -17,8 +17,7 @@ from loro import (
     LoroMovableList,
     LoroText,
 )
-
-from runtime.mount.utils import auth_token_sdk, gql_query
+from utils import auth_token_sdk, gql_query
 
 
 @dataclass(frozen=True)
