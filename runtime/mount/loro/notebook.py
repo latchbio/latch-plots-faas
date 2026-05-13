@@ -179,6 +179,26 @@ async def get_notebook_crdt_updates(
 
 
 @dataclass(frozen=True)
+class CreatedPlotTransformInfo:
+    id: str
+
+
+@dataclass(frozen=True)
+class CreatePlotTransformInfoPayload:
+    plotTransformInfo: CreatedPlotTransformInfo
+
+
+@dataclass(frozen=True)
+class CreatePlotTransformInfoData:
+    createPlotTransformInfo: CreatePlotTransformInfoPayload
+
+
+@dataclass(frozen=True)
+class CreatePlotTransformInfoRes:
+    data: CreatePlotTransformInfoData
+
+
+@dataclass(frozen=True)
 class NotebookCheckpointInfo:
     data: str
     latestUpdateId: str
@@ -422,7 +442,7 @@ class Notebook:
 
     async def create_code_cell(
         self, pos: int, code: str | None, display_name: str
-    ) -> None:
+    ) -> tuple[str, str]:
         await self.fetch_updates()
         cell: LoroMap = self.cells.insert_container(pos, LoroMap())  # type: ignore
 
@@ -433,8 +453,9 @@ class Notebook:
         if code is not None:
             source.insert(0, code)
 
+        cell_id = loro_ts_container_id(cell.id)
         try:
-            await gql_query(
+            gql_res = await gql_query(
                 query="""
                     mutation PlotsCreateTransform(
                         $ownerId: BigInt!
@@ -462,11 +483,13 @@ class Notebook:
                 variables={
                     "ownerId": self.owner_id,
                     "displayName": display_name,
-                    "loroCellId": loro_ts_container_id(cell.id),
+                    "loroCellId": cell_id,
                     "parentNotebookId": self.notebook_id,
                 },
                 auth=auth_token_sdk,
             )
+            res = validate(gql_res, CreatePlotTransformInfoRes)
+            tf_id = res.data.createPlotTransformInfo.plotTransformInfo.id
 
         except Exception:
             # todo(rteqs): proper error handling
@@ -474,8 +497,9 @@ class Notebook:
             raise
 
         await self.export_updates()
+        return cell_id, tf_id
 
-    async def create_markdown_cell(self, pos: int, content: str | None) -> None:
+    async def create_markdown_cell(self, pos: int, content: str | None) -> str:
         await self.fetch_updates()
         cell: LoroMap = self.cells.insert_container(pos, LoroMap())  # type: ignore
 
@@ -485,7 +509,9 @@ class Notebook:
         if content is not None:
             source.insert(0, content)
 
+        cell_id = loro_ts_container_id(cell.id)
         await self.export_updates()
+        return cell_id
 
     async def create_tab_marker_cell(self, pos: int, name: str) -> None:
         await self.fetch_updates()
@@ -583,6 +609,7 @@ class Notebook:
 
     async def restore_checkpoint(self, template_version_id: str):
         await self.fetch_updates()
+    async def restore_checkpoint(self, template_version_id: str):
         await gql_query(
             query="""
                 mutation PlotsRestoreNotebookToVersion($plotTemplateVersionId: BigInt!) {
@@ -596,6 +623,7 @@ class Notebook:
             variables={"plotTemplateVersionId": template_version_id},
             auth=auth_token_sdk,
         )
+        await self.fetch_updates()
 
 
 # todo(rteqs): remove duplication with entrypoint.py

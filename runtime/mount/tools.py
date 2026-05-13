@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from claude_agent_sdk import (
@@ -10,10 +11,34 @@ from claude_agent_sdk import (
     create_sdk_mcp_server,
     tool,
 )
+from latch_data_validation.data_validation import validate
+from loro import LoroMap
 from lplots import _inject
 
-from runtime.mount.loro.notebook import get_notebook
+from runtime.mount.loro.notebook import get_notebook, parse_ts_container_id
 from runtime.mount.utils import auth_token_sdk, gql_query
+
+
+@dataclass(frozen=True)
+class RedeemPackageResult:
+    resPackageId: str
+    resPackageVersionId: str
+    resRedeemedInAccountId: str
+
+
+@dataclass(frozen=True)
+class RedeemPackagePayload:
+    result: RedeemPackageResult | None
+
+
+@dataclass(frozen=True)
+class RedeemPackageData:
+    redeemPackage: RedeemPackagePayload | None
+
+
+@dataclass(frozen=True)
+class RedeemPackageRes:
+    data: RedeemPackageData
 
 if TYPE_CHECKING:
     from agent import AgentHarness
@@ -102,40 +127,37 @@ async def create_cell(args: dict[str, Any]) -> dict[str, Any]:
         })
 
     print(f'[tool] create_cell pos={position} title="{title}"')
-    params = {
-        "position": position,
-        "cell_type": "code",
-        "source": code,
-        "title": title,
-        "auto_run": True,
-    }
-    result = await h.atomic_operation("create_cell", params)
-
-    if result.get("status") == "success":
-        cell_id = result.get("cell_id", "unknown")
-
-        # todo(rteqs): we can run into a case where create cell finishes before we get here.
-        # fix this by having fronten return cell_id first then running the cell
-        h.pending_cells.add(cell_id)
-
-        tf_id = result.get("tf_id", "unknown")
-        msg = f"Created cell at position {position} (cell_id: {cell_id}, tf_id: {tf_id}, title: {title})"
-        print(f"[tool] create_cell -> {msg}")
+    try:
+        notebook = await get_notebook()
+        cell_id, tf_id = await notebook.create_code_cell(
+            pos=position, code=code, display_name=title
+        )
+    except Exception as e:
         return ok({
             "tool_name": "create_cell",
-            "summary": msg,
-            "code": code,
-            "cell_id": cell_id,
-            "tf_id": tf_id,
-            "cell_name": title,
-            "position": position,
-            "message": action_summary,
-            "success": True,
+            "summary": f"Failed to create cell: {e!s}",
+            "success": False,
         })
+
+    h.pending_cells.add(cell_id)
+    await h.send({
+        "type": "agent_action",
+        "action": "run_cell",
+        "params": {"cell_id": cell_id},
+    })
+
+    msg = f"Created cell at position {position} (cell_id: {cell_id}, tf_id: {tf_id}, title: {title})"
+    print(f"[tool] create_cell -> {msg}")
     return ok({
         "tool_name": "create_cell",
-        "summary": f"Failed to create cell: {result.get('error', 'Unknown error')}",
-        "success": False,
+        "summary": msg,
+        "code": code,
+        "cell_id": cell_id,
+        "tf_id": tf_id,
+        "cell_name": title,
+        "position": position,
+        "message": action_summary,
+        "success": True,
     })
 
 
@@ -163,7 +185,6 @@ async def create_cell(args: dict[str, Any]) -> dict[str, Any]:
     },
 )
 async def create_markdown_cell(args: dict[str, Any]) -> dict[str, Any]:
-    h = harness()
     position = args["position"]
     code = args["code"]
     title = args["title"]
@@ -173,27 +194,27 @@ async def create_markdown_cell(args: dict[str, Any]) -> dict[str, Any]:
         return ok({"summary": "Error: Position must be non-negative", "success": False})
 
     print(f"[tool] create_markdown_cell pos={position}")
-    params = {"position": position, "cell_type": "markdown", "source": code}
-    result = await h.atomic_operation("create_markdown_cell", params)
-
-    if result.get("status") == "success":
-        cell_id = result.get("cell_id", "unknown")
-        msg = f"Created markdown cell at position {position} (ID: {cell_id})"
-        print(f"[tool] create_markdown_cell -> {msg}")
+    try:
+        notebook = await get_notebook()
+        cell_id = await notebook.create_markdown_cell(pos=position, content=code)
+    except Exception as e:
         return ok({
             "tool_name": "create_markdown_cell",
-            "summary": msg,
-            "code": code,
-            "cell_id": cell_id,
-            "cell_name": title,
-            "position": position,
-            "message": action_summary,
-            "success": True,
+            "message": f"Failed to create cell: {e!s}",
+            "success": False,
         })
+
+    msg = f"Created markdown cell at position {position} (ID: {cell_id})"
+    print(f"[tool] create_markdown_cell -> {msg}")
     return ok({
         "tool_name": "create_markdown_cell",
-        "message": f"Failed to create cell: {result.get('error', 'Unknown error')}",
-        "success": False,
+        "summary": msg,
+        "code": code,
+        "cell_id": cell_id,
+        "cell_name": title,
+        "position": position,
+        "message": action_summary,
+        "success": True,
     })
 
 
@@ -227,40 +248,40 @@ async def edit_cell(args: dict[str, Any]) -> dict[str, Any]:
     h.pending_cells.add(cell_id)
 
     print(f"[tool] edit_cell id={cell_id}")
-    original_code = ""
-    context_result = await h.atomic_operation("get_context", {})
-    if context_result.get("status") == "success":
-        cells = context_result.get("context", {}).get("cells", [])
-        for cell in cells:
-            if cell.get("cell_id") == cell_id:
-                original_code = cell.get("source", "")
-                break
-    else:
-        print(
-            "[tool] edit_cell: failed to refresh notebook context: "
-            f"{context_result.get('error', 'Unknown error')}"
-        )
+    try:
+        notebook = await get_notebook()
+        original_code = ""
+        container = notebook.loro_doc.get_container(id=parse_ts_container_id(cell_id))
+        if isinstance(container, LoroMap):
+            deep = container.get_deep_value()
+            if isinstance(deep, dict):
+                original_code = str(deep.get("source", "") or "")
 
-    params = {"cell_id": cell_id, "source": new_code, "auto_run": True}
-    result = await h.atomic_operation("edit_cell", params)
-
-    if result.get("status") == "success":
-        msg = f"Cell {cell_id} edited successfully"
-        print(f"[tool] edit_cell -> {msg}")
+        await notebook.edit_cell(cell_id=cell_id, new_code=new_code)
+    except Exception as e:
         return ok({
             "tool_name": "edit_cell",
-            "summary": msg,
-            "code": new_code,
-            "original_code": original_code,
-            "cell_id": cell_id,
-            "cell_name": title,
-            "message": action_summary,
-            "success": True,
+            "summary": f"Failed to edit cell: {e!s}",
+            "success": False,
         })
+
+    await h.send({
+        "type": "agent_action",
+        "action": "run_cell",
+        "params": {"cell_id": cell_id},
+    })
+
+    msg = f"Cell {cell_id} edited successfully"
+    print(f"[tool] edit_cell -> {msg}")
     return ok({
         "tool_name": "edit_cell",
-        "summary": f"Failed to edit cell: {result.get('error', 'Unknown error')}",
-        "success": False,
+        "summary": msg,
+        "code": new_code,
+        "original_code": original_code,
+        "cell_id": cell_id,
+        "cell_name": title,
+        "message": action_summary,
+        "success": True,
     })
 
 
@@ -407,25 +428,16 @@ async def stop_cell(args: dict[str, Any]) -> dict[str, Any]:
     {"type": "object", "properties": {}},
 )
 async def delete_all_cells(args: dict[str, Any]) -> dict[str, Any]:  # noqa: ARG001
-    h = harness()
-
-    context_result = await h.atomic_operation("get_context", {})
-    if context_result.get("status") != "success":
-        error_msg = context_result.get("error", "Unknown error")
+    try:
+        notebook = await get_notebook()
+        deleted_count = len(notebook.cells)
+        await notebook.delete_all_cells()
+    except Exception as e:
         return ok({
             "tool_name": "delete_all_cells",
-            "summary": f"Failed to delete cells: {error_msg}",
+            "summary": f"Failed to delete cells: {e!s}",
             "success": False,
         })
-
-    cells = context_result.get("context", {}).get("cells", [])
-    deleted_count = 0
-    for cell in reversed(cells):
-        cell_id = cell.get("cell_id")
-        if cell_id:
-            result = await h.atomic_operation("delete_cell", {"cell_id": cell_id})
-            if result.get("status") == "success":
-                deleted_count += 1
 
     return ok({
         "tool_name": "delete_all_cells",
@@ -453,22 +465,23 @@ async def delete_all_cells(args: dict[str, Any]) -> dict[str, Any]:  # noqa: ARG
     },
 )
 async def rename_notebook(args: dict[str, Any]) -> dict[str, Any]:
-    h = harness()
     name = args["name"]
     print(f"[tool] rename_notebook name={name}")
-    result = await h.atomic_operation("rename_notebook", {"name": name})
-    if result.get("status") == "success":
+    try:
+        notebook = await get_notebook()
+        await notebook.rename_notebook(name=name)
+    except Exception as e:
         return ok({
             "tool_name": "rename_notebook",
-            "success": True,
-            "summary": f"Notebook renamed to '{name}'",
-            "name": name,
+            "summary": f"Failed to rename notebook: {e!s}",
+            "success": False,
         })
 
     return ok({
         "tool_name": "rename_notebook",
-        "summary": f"Failed to rename notebook: {result.get('error', 'Unknown error')}",
-        "success": False,
+        "success": True,
+        "summary": f"Notebook renamed to '{name}'",
+        "name": name,
     })
 
 
@@ -590,24 +603,30 @@ async def rename_tab(args: dict[str, Any]) -> dict[str, Any]:
     },
 )
 async def restore_checkpoint(args: dict[str, Any]) -> dict[str, Any]:
-    h = harness()
     template_version_id = args.get("template_version_id")
     print(f"[tool] restore_checkpoint template_version_id={template_version_id}")
-    result = await h.atomic_operation(
-        "restore_checkpoint", {"template_version_id": template_version_id}
-    )
-    if result.get("status") == "success":
+    if template_version_id is None:
         return ok({
             "tool_name": "restore_checkpoint",
-            "success": True,
-            "summary": f"Restored checkpoint to template version {template_version_id}",
-            "template_version_id": template_version_id,
+            "summary": "Failed to restore checkpoint: template_version_id is required",
+            "success": False,
+        })
+
+    try:
+        notebook = await get_notebook()
+        await notebook.restore_checkpoint(template_version_id=template_version_id)
+    except Exception as e:
+        return ok({
+            "tool_name": "restore_checkpoint",
+            "summary": f"Failed to restore checkpoint: {e!s}",
+            "success": False,
         })
 
     return ok({
         "tool_name": "restore_checkpoint",
-        "summary": f"Failed to restore checkpoint: {result.get('error', 'Unknown error')}",
-        "success": False,
+        "success": True,
+        "summary": f"Restored checkpoint to template version {template_version_id}",
+        "template_version_id": template_version_id,
     })
 
 
@@ -1616,47 +1635,9 @@ async def h5_manage_obs(args: dict[str, Any]) -> dict[str, Any]:
     },
 )
 async def redeem_package(args: dict[str, Any]) -> dict[str, Any]:
-    h = harness()
     package_code = args.get("package_code")
     package_version_id = args.get("package_version_id")
     redemption_reason = args.get("redemption_reason")
-
-    notebook = await get_notebook()
-
-    # todo(rteqs): refactor to use this
-    await gql_query(
-        query="""
-            mutation RedeemPackage(
-                $argTargetAccountId: BigInt
-                $argPackageCode: String!
-                $argPackageVersionId: BigInt!
-                $argAllowSharing: Boolean
-            ) {
-                redeemPackage(
-                    input: {
-                    argTargetAccountId: $argTargetAccountId
-                    argPackageCode: $argPackageCode
-                    argPackageVersionId: $argPackageVersionId
-                    argAllowSharing: $argAllowSharing
-                    }
-                ) {
-                    clientMutationId
-                    result {
-                        resPackageId
-                        resPackageVersionId
-                        resRedeemedInAccountId
-                    }
-                }
-            }
-        """,
-        variables={
-            "argTargetAccountId": notebook.owner_id,
-            "argPackageCode": package_code,
-            "argPackageVersionid": package_version_id,
-            "argAllowSharing": True,
-        },
-        auth=auth_token_sdk,
-    )
 
     if package_code is None or package_version_id is None or redemption_reason is None:
         return ok({
@@ -1671,27 +1652,56 @@ async def redeem_package(args: dict[str, Any]) -> dict[str, Any]:
     package_code = str(package_code)
     package_version_id = str(package_version_id)
     print("[tool] redeem_package")
-    result = await h.atomic_operation(
-        "redeem_package",
-        {
-            "package_code": str(package_code),
-            "package_version_id": str(package_version_id),
-        },
-    )
-    if result.get("status") == "success":
+    try:
+        notebook = await get_notebook()
+        gql_res = await gql_query(
+            query="""
+                mutation RedeemPackage(
+                    $argTargetAccountId: BigInt
+                    $argPackageCode: String!
+                    $argPackageVersionId: BigInt!
+                    $argAllowSharing: Boolean
+                ) {
+                    redeemPackage(
+                        input: {
+                            argTargetAccountId: $argTargetAccountId
+                            argPackageCode: $argPackageCode
+                            argPackageVersionId: $argPackageVersionId
+                            argAllowSharing: $argAllowSharing
+                        }
+                    ) {
+                        clientMutationId
+                        result {
+                            resPackageId
+                            resPackageVersionId
+                            resRedeemedInAccountId
+                        }
+                    }
+                }
+            """,
+            variables={
+                "argTargetAccountId": notebook.owner_id,
+                "argPackageCode": package_code,
+                "argPackageVersionId": package_version_id,
+                "argAllowSharing": True,
+            },
+            auth=auth_token_sdk,
+        )
+        validate(gql_res, RedeemPackageRes)
+    except Exception as e:
         return ok({
             "tool_name": "redeem_package",
-            "success": True,
-            "summary": f"Redeemed package {package_code} (version {package_version_id})",
-            "package_code": package_code,
-            "package_version_id": package_version_id,
-            "redemption_reason": redemption_reason,
+            "success": False,
+            "summary": f"Failed to redeem package: {e!s}",
         })
 
     return ok({
         "tool_name": "redeem_package",
-        "success": False,
-        "summary": f"Failed to redeem package: {result.get('error', 'Unknown error')}",
+        "success": True,
+        "summary": f"Redeemed package {package_code} (version {package_version_id})",
+        "package_code": package_code,
+        "package_version_id": package_version_id,
+        "redemption_reason": redemption_reason,
     })
 
 
