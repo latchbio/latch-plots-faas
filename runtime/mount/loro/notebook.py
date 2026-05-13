@@ -27,8 +27,6 @@ from loro import (
     LoroText,
 )
 
-# todo(rteqs): a bunch of the loro stuff we did here could be upstreamed
-
 latch_p = Path("../../../scratch-local")
 sdk_token_path = latch_p / "token"
 if sdk_token_path.exists():
@@ -140,7 +138,7 @@ class CrdtUpdates:
 
 
 async def get_notebook_crdt_updates(
-    notebook_id: int, latest_update_id: str | None
+    notebook_id: str, latest_update_id: str | None
 ) -> CrdtUpdates:
     try:
         gql_res = await gql_query(
@@ -215,7 +213,7 @@ class NotebookCrdt:
     owner_id: str
 
 
-async def get_notebook_doc(notebook_id: int) -> NotebookCrdt:
+async def get_notebook_doc(notebook_id: str) -> NotebookCrdt:
     try:
         gql_res = await gql_query(
             query="""
@@ -354,7 +352,7 @@ def parse_ts_container_id(s: str) -> ContainerID:
 class Notebook:
     def __init__(
         self,
-        notebook_id: int,
+        notebook_id: str,
         loro_doc: LoroDoc,
         latest_update_id: str | None,
         owner_id: str,
@@ -366,7 +364,7 @@ class Notebook:
         self.owner_id = owner_id
 
     @classmethod
-    async def create(cls, notebook_id: int) -> "Notebook":
+    async def create(cls, notebook_id: str) -> "Notebook":
         res = await get_notebook_doc(notebook_id)
         return cls(
             notebook_id=notebook_id,
@@ -425,6 +423,7 @@ class Notebook:
     async def create_code_cell(
         self, pos: int, code: str | None, display_name: str
     ) -> None:
+        await self.fetch_updates()
         cell: LoroMap = self.cells.insert_container(pos, LoroMap())  # type: ignore
 
         cell.insert("cellType", "code")
@@ -477,6 +476,7 @@ class Notebook:
         await self.export_updates()
 
     async def create_markdown_cell(self, pos: int, content: str | None) -> None:
+        await self.fetch_updates()
         cell: LoroMap = self.cells.insert_container(pos, LoroMap())  # type: ignore
 
         cell.insert("cellType", "markdown")
@@ -488,6 +488,7 @@ class Notebook:
         await self.export_updates()
 
     async def create_tab_marker_cell(self, pos: int, name: str) -> None:
+        await self.fetch_updates()
         cell: LoroMap = self.cells.insert_container(pos, LoroMap())  # type: ignore
 
         cell.insert("cellType", "tabMarker")
@@ -499,6 +500,7 @@ class Notebook:
         await self.export_updates()
 
     async def rename_tab(self, cell_id: str, new_name: str) -> None:
+        await self.fetch_updates()
         cell = self.loro_doc.get_container(id=parse_ts_container_id(cell_id))
         if cell is None:
             raise
@@ -516,6 +518,7 @@ class Notebook:
         await self.export_updates()
 
     async def edit_cell(self, cell_id: str, new_code: str) -> None:
+        await self.fetch_updates()
         cell = self.loro_doc.get_container(id=parse_ts_container_id(cell_id))
         if cell is None:
             raise
@@ -533,6 +536,7 @@ class Notebook:
         await self.export_updates()
 
     async def delete_cell(self, cell_id: str) -> None:
+        await self.fetch_updates()
         pos = -1
         for i, cid in enumerate(self.cells.to_vec()):
             if loro_ts_container_id(cid) == cell_id:
@@ -561,6 +565,7 @@ class Notebook:
         )
 
     async def delete_all_cells(self) -> None:
+        await self.fetch_updates()
         self.cells.clear()
         await self.export_updates()
 
@@ -577,6 +582,7 @@ class Notebook:
         )
 
     async def restore_checkpoint(self, template_version_id: str):
+        await self.fetch_updates()
         await gql_query(
             query="""
                 mutation PlotsRestoreNotebookToVersion($plotTemplateVersionId: BigInt!) {
@@ -592,8 +598,31 @@ class Notebook:
         )
 
 
+# todo(rteqs): remove duplication with entrypoint.py
+latch_p = Path("/root/.latch")
+notebook_id_file = latch_p / "notebook-id"
+notebook_id: str | None = None
+with contextlib.suppress(Exception):
+    notebook_id = (
+        notebook_id_file.read_text().strip() if notebook_id_file.exists() else None
+    )
+
+notebook: Notebook | None = None
+
+
+async def get_notebook() -> Notebook:
+    global notebook
+
+    assert notebook_id is not None
+
+    if notebook is None:
+        notebook = await Notebook.create(notebook_id=notebook_id)
+
+    return notebook
+
+
 async def main() -> None:
-    notebook = await Notebook.create(52793)
+    notebook = await Notebook.create("52793")
     # print(notebook.owner_id)
     # print(
     #     notebook.loro_doc.get_container(

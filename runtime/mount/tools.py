@@ -12,6 +12,9 @@ from claude_agent_sdk import (
 )
 from lplots import _inject
 
+from runtime.mount.loro.notebook import get_notebook
+from runtime.mount.utils import auth_token_sdk, gql_query
+
 if TYPE_CHECKING:
     from agent import AgentHarness
 
@@ -1617,6 +1620,44 @@ async def redeem_package(args: dict[str, Any]) -> dict[str, Any]:
     package_code = args.get("package_code")
     package_version_id = args.get("package_version_id")
     redemption_reason = args.get("redemption_reason")
+
+    notebook = await get_notebook()
+
+    # todo(rteqs): refactor to use this
+    await gql_query(
+        query="""
+            mutation RedeemPackage(
+                $argTargetAccountId: BigInt
+                $argPackageCode: String!
+                $argPackageVersionId: BigInt!
+                $argAllowSharing: Boolean
+            ) {
+                redeemPackage(
+                    input: {
+                    argTargetAccountId: $argTargetAccountId
+                    argPackageCode: $argPackageCode
+                    argPackageVersionId: $argPackageVersionId
+                    argAllowSharing: $argAllowSharing
+                    }
+                ) {
+                    clientMutationId
+                    result {
+                        resPackageId
+                        resPackageVersionId
+                        resRedeemedInAccountId
+                    }
+                }
+            }
+        """,
+        variables={
+            "argTargetAccountId": notebook.owner_id,
+            "argPackageCode": package_code,
+            "argPackageVersionid": package_version_id,
+            "argAllowSharing": True,
+        },
+        auth=auth_token_sdk,
+    )
+
     if package_code is None or package_version_id is None or redemption_reason is None:
         return ok({
             "tool_name": "redeem_package",
