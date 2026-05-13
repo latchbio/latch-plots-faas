@@ -102,7 +102,6 @@ NOTEBOOK_MUTATION_TOOL_MATCHER = (
     "^mcp__" + MCP_SERVER_NAME + "__(" + "|".join(NOTEBOOK_MUTATION_TOOL_NAMES) + ")$"
 )
 
-# todo(rteqs): "plan", "build"
 Behavior = Literal["step_by_step", "proactive"]
 
 HistoryRole = Literal["user", "assistant", "system"]
