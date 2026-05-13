@@ -342,39 +342,49 @@ async def run_cell(args: dict[str, Any]) -> dict[str, Any]:
     },
 )
 async def delete_cell(args: dict[str, Any]) -> dict[str, Any]:
-    h = harness()
     cell_id = args["cell_id"]
     title = args["title"]
     action_summary = args["action_summary"]
 
     print(f"[tool] delete_cell id={cell_id}")
-    result = await h.atomic_operation("delete_cell", {"cell_id": cell_id})
-    if result.get("status") == "success":
-        remaining = result.get("remaining_cells", [])
-        cell_count = result.get("cell_count", 0)
-        if remaining:
-            cell_list = ", ".join([
-                f"{c['index']}: {c['cell_type']}" for c in remaining[:5]
-            ])
-            if len(remaining) > 5:
-                cell_list += f", ... ({len(remaining) - 5} more)"
-            msg = f"Cell {cell_id} deleted. {cell_count} cells remain: [{cell_list}]"
-        else:
-            msg = f"Cell {cell_id} deleted. No cells remain in notebook."
-        print(f"[tool] delete_cell -> {msg}")
+    try:
+        notebook = await get_notebook()
+        await notebook.delete_cell(cell_id=cell_id)
+    except Exception as e:
         return ok({
             "tool_name": "delete_cell",
-            "summary": msg,
-            "cell_id": cell_id,
-            "cell_name": title,
-            "message": action_summary,
-            "success": True,
+            "summary": f"Failed to delete cell: {e!s}",
+            "success": False,
         })
 
+    remaining: list[dict[str, Any]] = []
+    for i, cid in enumerate(notebook.cells.to_vec()):
+        container = notebook.loro_doc.get_container(id=cid)
+        cell_type = "unknown"
+        if isinstance(container, LoroMap):
+            deep = container.get_deep_value()
+            if isinstance(deep, dict):
+                cell_type = str(deep.get("cellType", "unknown"))
+        remaining.append({"index": i, "cell_type": cell_type})
+    cell_count = len(remaining)
+
+    if remaining:
+        cell_list = ", ".join([
+            f"{c['index']}: {c['cell_type']}" for c in remaining[:5]
+        ])
+        if len(remaining) > 5:
+            cell_list += f", ... ({len(remaining) - 5} more)"
+        msg = f"Cell {cell_id} deleted. {cell_count} cells remain: [{cell_list}]"
+    else:
+        msg = f"Cell {cell_id} deleted. No cells remain in notebook."
+    print(f"[tool] delete_cell -> {msg}")
     return ok({
         "tool_name": "delete_cell",
-        "summary": f"Failed to delete cell: {result.get('error', 'Unknown error')}",
-        "success": False,
+        "summary": msg,
+        "cell_id": cell_id,
+        "cell_name": title,
+        "message": action_summary,
+        "success": True,
     })
 
 
