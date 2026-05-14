@@ -575,19 +575,19 @@ class Notebook:
 
         await gql_query(
             query="""
-                mutation DeleteCell($loroCellId: String!) {
-                    plotsTransformDeleteByLoroCellId(input: { argLoroCellId: $loroCellId }) {
+                mutation DeleteCell($loroCellId: String!, $notebookId: BigInt!) {
+                    plotsTransformDeleteByLoroCellId(input: { argLoroCellId: $loroCellId, argNotebookId: $notebookId }) {
                         clientMutationId
                     }
-                    plotsDeleteByLoroCellId(input: { argLoroCellId: $loroCellId }) {
+                    plotsDeleteByLoroCellId(input: { argLoroCellId: $loroCellId, argNotebookId: $notebookId }) {
                         clientMutationId
                     }
-                    plotCellValueViewerDeleteByLoroCellId(input: { argLoroCellId: $loroCellId }) {
+                    plotCellValueViewerDeleteByLoroCellId(input: { argLoroCellId: $loroCellId, argNotebookId: $notebookId }) {
                         clientMutationId
                     }
                 }
             """,
-            variables={"loroCellId": cell_id},
+            variables={"loroCellId": cell_id, "notebookId": self.notebook_id},
             auth=auth_token_sdk,
         )
 
