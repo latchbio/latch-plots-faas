@@ -576,13 +576,13 @@ class Notebook:
         await gql_query(
             query="""
                 mutation DeleteCell($loroCellId: String!) {
-                    plotsTransformDeleteByLoroCellId(input: { loroCellId: $loroCellId }) {
+                    plotsTransformDeleteByLoroCellId(input: { argLoroCellId: $loroCellId }) {
                         clientMutationId
                     }
-                    plotsDeleteByLoroCellId(input: { loroCellId: $loroCellId }) {
+                    plotsDeleteByLoroCellId(input: { argLoroCellId: $loroCellId }) {
                         clientMutationId
                     }
-                    plotCellValueViewerDeleteByLoroCellId(input: { loroCellId: $loroCellId }) {
+                    plotCellValueViewerDeleteByLoroCellId(input: { argLoroCellId: $loroCellId }) {
                         clientMutationId
                     }
                 }
