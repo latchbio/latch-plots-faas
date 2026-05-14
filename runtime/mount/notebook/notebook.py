@@ -524,10 +524,17 @@ class Notebook:
         if cell is None:
             raise
 
-        assert isinstance(cell, LoroMap)
-        assert cell.get("cellType") == "tabMarker"
+        cell = self.loro_doc.get_container(id=parse_ts_container_id(cell_id))
+        if cell is None:
+            raise
 
-        source = cell.get("source")
+        assert isinstance(cell, LoroMap)
+
+        cell_value = cell.get_deep_value()
+        assert cell_value is not None
+        assert cell_value.get("cellType") == "tabMarker"
+
+        source = cell_value.get("source")
         if source is None:
             raise
 
