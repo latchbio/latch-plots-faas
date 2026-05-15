@@ -1738,10 +1738,16 @@ class AgentHarness:
 
             elif nested_type == "set_widget_value" and len(self.pending_widgets) > 0:
                 data = nested_msg.get("data", {})
+
+                has_exepcted_key = False
                 for key, value in data.items():
                     if key in self.pending_widgets:
+                        has_exepcted_key = True
                         self.pending_widgets[key] = value
                         print(f"        Set widget {key}")
+
+                if not has_exepcted_key:
+                    return
 
                 if all(v is not None for v in self.pending_widgets.values()):
                     await self.set_agent_status("thinking")
