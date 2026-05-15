@@ -85,7 +85,7 @@ action_handler_ready_ev = asyncio.Event()
 
 pending_user_browser_actions: dict[str, dict] = {}  # tx_id -> original message
 
-cell_logs_buffer: defaultdict[str, str] = defaultdict(str)
+cell_logs = defaultdict(str)
 
 
 def mark_action_handled(tx_id: str) -> None:
@@ -353,7 +353,7 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                 if cell_id is not None:
                     cell_sequencers[cell_id] = msg["run_sequencer"]
                     cell_status[cell_id] = "running"
-                    cell_logs_buffer.pop(cell_id, None)
+                    cell_logs.pop(cell_id, None)
 
                     await gql_query(
                         auth=auth,
@@ -379,7 +379,7 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                 active_cell = msg.get("active_cell")
                 data = msg.get("data", "")
                 if active_cell is not None and isinstance(data, str):
-                    cell_logs_buffer[active_cell] += data
+                    cell_logs[active_cell] += data
 
             elif msg["type"] == "cell_result":
                 cell_id = msg["cell_id"]
@@ -443,15 +443,11 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                     except Exception:
                         traceback.print_exc()
 
-                    logs = cell_logs_buffer.pop(cell_id, None)
+                    logs = cell_logs.pop(cell_id, None)
 
                     await a_proc.msg_io.send({
                         "type": "kernel_message",
-                        "message": {
-                            **msg,
-                            "display_name": display_name,
-                            "logs": logs,
-                        },
+                        "message": {**msg, "display_name": display_name, "logs": logs},
                     })
 
             elif msg["type"] == "cell_widgets":
@@ -666,9 +662,7 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                     })
                     continue
 
-            elif (
-                msg["type"] == "set_widget_value_response" and "agent_tx_id" in msg
-            ):
+            elif msg["type"] == "set_widget_value_response" and "agent_tx_id" in msg:
                 tx_id = msg.get("agent_tx_id")
 
                 if a_proc.msg_io is not None:
@@ -683,9 +677,7 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                     })
                     continue
 
-            elif (
-                msg["type"] == "get_widget_value_response" and "agent_tx_id" in msg
-            ):
+            elif msg["type"] == "get_widget_value_response" and "agent_tx_id" in msg:
                 tx_id = msg.get("agent_tx_id")
 
                 if a_proc.msg_io is not None:
@@ -702,10 +694,7 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                     continue
 
             if msg.get("type") == "set_widget_value" and a_proc.msg_io is not None:
-                await a_proc.msg_io.send({
-                    "type": "kernel_message",
-                    "message": msg,
-                })
+                await a_proc.msg_io.send({"type": "kernel_message", "message": msg})
 
             await plots_ctx_manager.broadcast_message(orjson.dumps(msg).decode())
 
