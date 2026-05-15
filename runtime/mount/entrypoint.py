@@ -609,6 +609,41 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                     })
                     continue
 
+            elif (
+                msg["type"] == "set_widget_value_response" and "agent_tx_id" in msg
+            ):
+                tx_id = msg.get("agent_tx_id")
+
+                if a_proc.msg_io is not None:
+                    print(
+                        f"[entrypoint] Routing set_widget_value response to agent (tx_id={tx_id})"
+                    )
+                    await a_proc.msg_io.send({
+                        "type": "agent_action_response",
+                        "tx_id": tx_id,
+                        "status": msg.get("status", "error"),
+                        "error": msg.get("error"),
+                    })
+                    continue
+
+            elif (
+                msg["type"] == "get_widget_value_response" and "agent_tx_id" in msg
+            ):
+                tx_id = msg.get("agent_tx_id")
+
+                if a_proc.msg_io is not None:
+                    print(
+                        f"[entrypoint] Routing get_widget_value response to agent (tx_id={tx_id})"
+                    )
+                    await a_proc.msg_io.send({
+                        "type": "agent_action_response",
+                        "tx_id": tx_id,
+                        "status": msg.get("status", "error"),
+                        "state": msg.get("state"),
+                        "error": msg.get("error"),
+                    })
+                    continue
+
             await plots_ctx_manager.broadcast_message(orjson.dumps(msg).decode())
 
         except Exception:
@@ -682,6 +717,65 @@ async def handle_agent_messages(conn_a: SocketIo) -> None:
                 await conn_a.send({
                     "type": "agent_action_response",
                     "tx_id": msg.get("tx_id"),
+                    "status": "error",
+                    "error": "Kernel not connected",
+                })
+            continue
+
+        if msg_type == "agent_action" and msg.get("action") == "run_cell":
+            if k_proc.msg_io is not None:
+                params = msg.get("params", {})
+                await k_proc.msg_io.send({
+                    "type": "run_cell",
+                    "cell_id": params.get("cell_id"),
+                    "code": params.get("code", ""),
+                    "parallel": params.get("parallel", False),
+                })
+                if tx_id is not None:
+                    await conn_a.send({
+                        "type": "agent_action_response",
+                        "tx_id": tx_id,
+                        "status": "success",
+                        "cell_id": params.get("cell_id"),
+                    })
+            elif tx_id is not None:
+                await conn_a.send({
+                    "type": "agent_action_response",
+                    "tx_id": tx_id,
+                    "status": "error",
+                    "error": "Kernel not connected",
+                })
+            continue
+
+        if msg_type == "agent_action" and msg.get("action") == "set_widget":
+            if k_proc.msg_io is not None:
+                params = msg.get("params", {})
+                await k_proc.msg_io.send({
+                    "type": "set_widget_value",
+                    "data": {params.get("key"): params.get("value")},
+                    "agent_tx_id": tx_id,
+                })
+            else:
+                await conn_a.send({
+                    "type": "agent_action_response",
+                    "tx_id": tx_id,
+                    "status": "error",
+                    "error": "Kernel not connected",
+                })
+            continue
+
+        if msg_type == "agent_action" and msg.get("action") == "get_widget":
+            if k_proc.msg_io is not None:
+                params = msg.get("params", {})
+                await k_proc.msg_io.send({
+                    "type": "get_widget_value",
+                    "key": params.get("key"),
+                    "agent_tx_id": tx_id,
+                })
+            else:
+                await conn_a.send({
+                    "type": "agent_action_response",
+                    "tx_id": tx_id,
                     "status": "error",
                     "error": "Kernel not connected",
                 })

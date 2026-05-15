@@ -2168,20 +2168,69 @@ class Kernel:
                 )
 
         if msg["type"] == "set_widget_value":
+            agent_tx_id = msg.get("agent_tx_id")
+            errors: list[str] = []
             for w_key, payload in msg["data"].items():
                 try:
                     if w_key not in self.widget_signals:
+                        errors.append(f"widget '{w_key}' not found")
                         continue
 
                     async with ctx.transaction:
                         self.widget_signals[w_key](
                             orjson.loads(payload), _ui_update=True
                         )
-                except Exception:
+                except Exception as e:
                     traceback.print_exc()
+                    errors.append(f"widget '{w_key}': {e!s}")
                     continue
 
-            await self.send(msg)
+            broadcast_msg = {k: v for k, v in msg.items() if k != "agent_tx_id"}
+            await self.send(broadcast_msg)
+
+            if agent_tx_id is not None:
+                await self.send({
+                    "type": "set_widget_value_response",
+                    "agent_tx_id": agent_tx_id,
+                    "status": "error" if errors else "success",
+                    "error": "; ".join(errors) if errors else None,
+                })
+            return
+
+        if msg["type"] == "get_widget_value":
+            agent_tx_id = msg.get("agent_tx_id")
+            key = msg.get("key", "")
+
+            widget_state = None
+            for n in self.nodes_with_widgets.values():
+                path = n.name_path()
+                for k, v in n.widget_states.items():
+                    if f"{path}/{k}" == key:
+                        widget_state = copy(v)
+                        break
+                if widget_state is not None:
+                    break
+
+            if widget_state is None:
+                await self.send({
+                    "type": "get_widget_value_response",
+                    "agent_tx_id": agent_tx_id,
+                    "status": "error",
+                    "error": f"Widget '{key}' not found",
+                })
+                return
+
+            if key in self.widget_signals:
+                val = self.widget_signals[key].sample()
+                if val is not Nothing.x:
+                    widget_state["value"] = val
+
+            await self.send({
+                "type": "get_widget_value_response",
+                "agent_tx_id": agent_tx_id,
+                "status": "success",
+                "state": widget_state,
+            })
             return
 
         if msg["type"] == "globals_summary":

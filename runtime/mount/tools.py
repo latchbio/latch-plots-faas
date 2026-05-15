@@ -1,5 +1,4 @@
 import json
-import traceback
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -40,6 +39,54 @@ class RedeemPackageRes:
     data: RedeemPackageData
 
 
+@dataclass(frozen=True)
+class PlotTransformInfoNode:
+    id: str
+
+
+@dataclass(frozen=True)
+class PlotTransformInfoNodes:
+    nodes: list[PlotTransformInfoNode]
+
+
+@dataclass(frozen=True)
+class ResolveTfIdData:
+    plotTransformInfos: PlotTransformInfoNodes
+
+
+@dataclass(frozen=True)
+class ResolveTfIdRes:
+    data: ResolveTfIdData
+
+
+async def resolve_tf_id(notebook_id: str, loro_cell_id: str) -> str | None:
+    gql_res = await gql_query(
+        query="""
+            query ResolveTfId($notebookId: BigInt!, $loroCellId: String!) {
+                plotTransformInfos(
+                    filter: {
+                        parentNotebookId: { equalTo: $notebookId }
+                        loroCellId: { equalTo: $loroCellId }
+                        removalTime: { isNull: true }
+                    }
+                    first: 1
+                ) {
+                    nodes {
+                        id
+                    }
+                }
+            }
+        """,
+        variables={"notebookId": notebook_id, "loroCellId": loro_cell_id},
+        auth=auth_token_sdk,
+    )
+    res = validate(gql_res, ResolveTfIdRes)
+    nodes = res.data.plotTransformInfos.nodes
+    if len(nodes) == 0:
+        return None
+    return nodes[0].id
+
+
 if TYPE_CHECKING:
     from agent import AgentHarness
 
@@ -62,6 +109,7 @@ MCP_TOOL_NAMES = [
     "get_global_info",
     "capture_widget_image",
     "set_widget",
+    "get_widget",
     "h5_filter_by",
     "h5_color_by",
     "h5_refresh",
@@ -139,11 +187,11 @@ async def create_cell(args: dict[str, Any]) -> dict[str, Any]:
             "success": False,
         })
 
-    h.pending_cells.add(cell_id)
+    h.pending_cells.add(tf_id)
     await h.send({
         "type": "agent_action",
         "action": "run_cell",
-        "params": {"cell_id": cell_id},
+        "params": {"cell_id": tf_id, "code": code, "parallel": False},
     })
 
     msg = f"Created cell at position {position} (cell_id: {cell_id}, tf_id: {tf_id}, title: {title})"
@@ -245,8 +293,6 @@ async def edit_cell(args: dict[str, Any]) -> dict[str, Any]:
     title = args["title"]
     action_summary = args["action_summary"]
 
-    h.pending_cells.add(cell_id)
-
     print(f"[tool] edit_cell id={cell_id}")
     try:
         notebook = await get_notebook()
@@ -257,6 +303,14 @@ async def edit_cell(args: dict[str, Any]) -> dict[str, Any]:
             if isinstance(deep, dict):
                 original_code = str(deep.get("source", "") or "")
 
+        tf_id = await resolve_tf_id(notebook.notebook_id, cell_id)
+        if tf_id is None:
+            return ok({
+                "tool_name": "edit_cell",
+                "summary": f"Failed to edit cell: no transform found for cell_id {cell_id}",
+                "success": False,
+            })
+
         await notebook.edit_cell(cell_id=cell_id, new_code=new_code)
     except Exception as e:
         return ok({
@@ -265,10 +319,11 @@ async def edit_cell(args: dict[str, Any]) -> dict[str, Any]:
             "success": False,
         })
 
+    h.pending_cells.add(tf_id)
     await h.send({
         "type": "agent_action",
         "action": "run_cell",
-        "params": {"cell_id": cell_id},
+        "params": {"cell_id": tf_id, "code": new_code, "parallel": False},
     })
 
     msg = f"Cell {cell_id} edited successfully"
@@ -311,14 +366,47 @@ async def run_cell(args: dict[str, Any]) -> dict[str, Any]:
     title = args["title"]
     action_summary = args["action_summary"]
 
-    params = {"cell_id": cell_id}
-    await h.send({"type": "agent_action", "action": "run_cell", "params": params})
-    h.pending_cells.add(cell_id)
+    print(f"[tool] run_cell id={cell_id}")
+    try:
+        notebook = await get_notebook()
+        container = notebook.loro_doc.get_container(id=parse_ts_container_id(cell_id))
+        if not isinstance(container, LoroMap):
+            return ok({
+                "tool_name": "run_cell",
+                "summary": f"Failed to run cell: cell {cell_id} not found",
+                "success": False,
+            })
+        deep = container.get_deep_value()
+        source = ""
+        if isinstance(deep, dict):
+            source = str(deep.get("source", "") or "")
+
+        tf_id = await resolve_tf_id(notebook.notebook_id, cell_id)
+        if tf_id is None:
+            return ok({
+                "tool_name": "run_cell",
+                "summary": f"Failed to run cell: no transform found for cell_id {cell_id}",
+                "success": False,
+            })
+    except Exception as e:
+        return ok({
+            "tool_name": "run_cell",
+            "summary": f"Failed to run cell: {e!s}",
+            "success": False,
+        })
+
+    h.pending_cells.add(tf_id)
+    await h.send({
+        "type": "agent_action",
+        "action": "run_cell",
+        "params": {"cell_id": tf_id, "code": source, "parallel": False},
+    })
 
     return ok({
         "tool_name": "run_cell",
         "summary": f"Cell {cell_id} execution started",
         "cell_id": cell_id,
+        "tf_id": tf_id,
         "cell_name": title,
         "message": action_summary,
         "success": True,
@@ -443,7 +531,6 @@ async def delete_all_cells(args: dict[str, Any]) -> dict[str, Any]:  # noqa: ARG
         deleted_count = len(notebook.cells)
         await notebook.delete_all_cells()
     except Exception as e:
-        traceback.print_exc()
         return ok({
             "tool_name": "delete_all_cells",
             "summary": f"Failed to delete cells: {e!s}",
@@ -482,7 +569,6 @@ async def rename_notebook(args: dict[str, Any]) -> dict[str, Any]:
         notebook = await get_notebook()
         await notebook.rename_notebook(name=name)
     except Exception as e:
-        traceback.print_exc()
         return ok({
             "tool_name": "rename_notebook",
             "summary": f"Failed to rename notebook: {e!s}",
@@ -860,6 +946,52 @@ async def set_widget(args: dict[str, Any]) -> dict[str, Any]:
     return ok({
         "tool_name": "set_widget",
         "summary": f"Failed to update widget value: {result.get('error', 'Unknown error')}",
+        "success": False,
+    })
+
+
+@tool(
+    "get_widget",
+    "Get the state of a widget by widget key (type, def, current value).",
+    {
+        "type": "object",
+        "properties": {
+            "key": {
+                "type": "string",
+                "description": (
+                    "Full widget key including tf_id and widget_id in the format "
+                    "<tf_id>/<widget_id>"
+                ),
+            }
+        },
+        "required": ["key"],
+    },
+)
+async def get_widget(args: dict[str, Any]) -> dict[str, Any]:
+    h = harness()
+    key = args.get("key")
+    if not key:
+        return ok({
+            "tool_name": "get_widget",
+            "summary": "Failed to get widget: Widget key is required",
+            "success": False,
+        })
+
+    print(f"[tool] get_widget key={key}")
+    result = await h.atomic_operation("get_widget", {"key": key})
+    if result.get("status") == "success":
+        state = result.get("state")
+        return ok({
+            "tool_name": "get_widget",
+            "success": True,
+            "summary": f"Retrieved widget state for: {key}",
+            "key": key,
+            "state": state,
+        })
+
+    return ok({
+        "tool_name": "get_widget",
+        "summary": f"Failed to get widget: {result.get('error', 'Unknown error')}",
         "success": False,
     })
 
@@ -1968,6 +2100,7 @@ all_tools = [
     capture_widget_image,
     update_plan,
     set_widget,
+    get_widget,
     h5_filter_by,
     h5_color_by,
     h5_refresh,
