@@ -443,6 +443,8 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                         traceback.print_exc()
 
                     logs = cell_logs.pop(cell_id, None)
+                    print(f"{logs=}")
+                    print(f"{cell_logs}")
 
                     await a_proc.msg_io.send({
                         "type": "kernel_message",
