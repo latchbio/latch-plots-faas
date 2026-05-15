@@ -279,6 +279,22 @@ class AgentBootstrapPodInfoData:
 
 
 @dataclass(frozen=True)
+class PlotTransformInfoAgentData:
+    displayName: str | None
+    logs: str | None
+
+
+@dataclass(frozen=True)
+class GetCodeCellAgentDataData:
+    plotTransformInfo: PlotTransformInfoAgentData | None
+
+
+@dataclass(frozen=True)
+class GetCodeCellAgentDataResp:
+    data: GetCodeCellAgentDataData
+
+
+@dataclass(frozen=True)
 class AgentBootstrapPodInfoResp:
     data: AgentBootstrapPodInfoData
 
@@ -396,6 +412,39 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                     "exception": exc,
                     **outputs_data,
                 }
+
+                if a_proc.msg_io is not None:
+                    display_name: str | None = None
+                    logs: str | None = None
+                    try:
+                        cc_resp = await gql_query(
+                            auth=auth,
+                            query="""
+                                query PlotsGetCodeCellAgentData($id: BigInt!) {
+                                    plotTransformInfo(id: $id) {
+                                        displayName
+                                        logs
+                                    }
+                                }
+                            """,
+                            variables={"id": cell_id},
+                        )
+                        cc_data = validate(cc_resp, GetCodeCellAgentDataResp)
+                        tf = cc_data.data.plotTransformInfo
+                        if tf is not None:
+                            display_name = tf.displayName
+                            logs = tf.logs
+                    except Exception:
+                        traceback.print_exc()
+
+                    await a_proc.msg_io.send({
+                        "type": "kernel_message",
+                        "message": {
+                            **msg,
+                            "display_name": display_name,
+                            "logs": logs,
+                        },
+                    })
 
             elif msg["type"] == "cell_widgets":
                 await gql_query(
@@ -643,6 +692,12 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                         "error": msg.get("error"),
                     })
                     continue
+
+            if msg.get("type") == "set_widget_value" and a_proc.msg_io is not None:
+                await a_proc.msg_io.send({
+                    "type": "kernel_message",
+                    "message": msg,
+                })
 
             await plots_ctx_manager.broadcast_message(orjson.dumps(msg).decode())
 
