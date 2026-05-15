@@ -843,9 +843,7 @@ class AgentHarness:
             for block in content
         )
 
-    def _build_retried_query(
-        self, entry: StoredAgentHistoryEntry
-    ) -> AgentQuery | None:
+    def _build_retried_query(self, entry: StoredAgentHistoryEntry) -> AgentQuery | None:
         payload = entry.get("payload")
         if not isinstance(payload, dict):
             return None
@@ -1689,8 +1687,7 @@ class AgentHarness:
                     print(f"[agent] Ignoring cell_result for {cell_id} ")
                     return
 
-                if cell_id is not None:
-                    self.pending_cells.discard(str(cell_id))
+                self.pending_cells.discard(str(cell_id))
 
                 if success:
                     result_message = (
@@ -1753,6 +1750,7 @@ class AgentHarness:
                         f"{k}={v}" for k, v in self.pending_widgets.items()
                     )
                     content = f"User provided input via widget(s): {widget_info}"
+                    self.pending_widgets.clear()
 
                     await self._insert_history(
                         payload={"content": content, "hidden": True}
