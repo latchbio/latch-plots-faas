@@ -1738,6 +1738,7 @@ class AgentHarness:
 
             elif nested_type == "set_widget_value":
                 if len(self.pending_widgets) == 0:
+                    print("Ignoring. No pending widgets")
                     return
 
                 data = nested_msg.get("data", {})
@@ -1750,6 +1751,7 @@ class AgentHarness:
                         print(f"        Set widget {key}")
 
                 if not has_exepcted_key:
+                    print("Ignoring. Not an expected widget updated")
                     return
 
                 if all(v is not None for v in self.pending_widgets.values()):
