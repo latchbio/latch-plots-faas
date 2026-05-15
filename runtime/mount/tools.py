@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import json
 import traceback
 from dataclasses import dataclass
@@ -87,7 +85,7 @@ def ok(d: dict) -> dict[str, Any]:
     return {"content": [{"type": "text", "text": json.dumps(d)}]}
 
 
-def harness() -> AgentHarness:
+def harness() -> "AgentHarness":
     h = _inject.agent
     if h is None:
         raise RuntimeError("Agent harness is not initialized")
