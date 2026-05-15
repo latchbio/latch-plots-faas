@@ -6,6 +6,7 @@ import socket
 import sys
 import traceback
 from asyncio.subprocess import Process
+from collections import defaultdict
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from io import TextIOWrapper
@@ -83,6 +84,8 @@ action_handler_ctx: Context | None = None
 action_handler_ready_ev = asyncio.Event()
 
 pending_user_browser_actions: dict[str, dict] = {}  # tx_id -> original message
+
+cell_logs_buffer: defaultdict[str, str] = defaultdict(str)
 
 
 def mark_action_handled(tx_id: str) -> None:
@@ -281,7 +284,6 @@ class AgentBootstrapPodInfoData:
 @dataclass(frozen=True)
 class PlotTransformInfoAgentData:
     displayName: str | None
-    logs: str | None
 
 
 @dataclass(frozen=True)
@@ -351,6 +353,7 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                 if cell_id is not None:
                     cell_sequencers[cell_id] = msg["run_sequencer"]
                     cell_status[cell_id] = "running"
+                    cell_logs_buffer.pop(cell_id, None)
 
                     await gql_query(
                         auth=auth,
@@ -371,6 +374,12 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                     "cell_id": msg["cell_id"],
                     "run_sequencer": msg["run_sequencer"],
                 }
+
+            elif msg["type"] == "kernel_stdio":
+                active_cell = msg.get("active_cell")
+                data = msg.get("data", "")
+                if active_cell is not None and isinstance(data, str):
+                    cell_logs_buffer[active_cell] += data
 
             elif msg["type"] == "cell_result":
                 cell_id = msg["cell_id"]
@@ -415,7 +424,6 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
 
                 if a_proc.msg_io is not None:
                     display_name: str | None = None
-                    logs: str | None = None
                     try:
                         cc_resp = await gql_query(
                             auth=auth,
@@ -423,7 +431,6 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                                 query PlotsGetCodeCellAgentData($id: BigInt!) {
                                     plotTransformInfo(id: $id) {
                                         displayName
-                                        logs
                                     }
                                 }
                             """,
@@ -433,9 +440,10 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                         tf = cc_data.data.plotTransformInfo
                         if tf is not None:
                             display_name = tf.displayName
-                            logs = tf.logs
                     except Exception:
                         traceback.print_exc()
+
+                    logs = cell_logs_buffer.pop(cell_id, None)
 
                     await a_proc.msg_io.send({
                         "type": "kernel_message",
