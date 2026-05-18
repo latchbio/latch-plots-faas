@@ -1788,6 +1788,11 @@ class Kernel:
                 "obsm_keys": list(value.obsm.keys()) if hasattr(value, "obsm") else [],
             }
 
+        if isinstance(value, Figure) or (
+            hasattr(value, "figure") and isinstance(value, Figure)
+        ):
+            return {"type": "image", "data": value, "mime_type": "webp"}
+
         return {"type": type(value).__name__, "repr": str(value)[:1000]}
 
     async def send_globals_summary(self, agent_tx_id: str | None = None) -> None:
