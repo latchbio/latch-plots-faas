@@ -107,7 +107,6 @@ MCP_TOOL_NAMES = [
     "restore_checkpoint",
     "execute_code",
     "get_global_info",
-    "capture_widget_image",
     "set_widget",
     "get_widget",
     "h5_filter_by",
@@ -806,82 +805,6 @@ async def get_global_info(args: dict[str, Any]) -> dict[str, Any]:
         "tool_name": "get_global_info",
         "success": False,
         "summary": f"Failed to get global info: {result.get('error', 'Unknown error')}",
-    })
-
-
-@tool(
-    "capture_widget_image",
-    (
-        "Capture a visual screenshot of an h5/AnnData or plot widget displayed in the "
-        "notebook. Returns a base64-encoded PNG image and metadata about the current "
-        "visualization state (such as color_by settings, filters, and cell counts for "
-        "h5 widgets). Use this to visually inspect plots, clustering results, or any "
-        "Plotly-based visualization the user is seeing."
-    ),
-    {
-        "type": "object",
-        "properties": {
-            "widget_key": {
-                "type": "string",
-                "description": "Full widget key in format <tf_id>/<widget_id>",
-            }
-        },
-        "required": ["widget_key"],
-    },
-)
-async def capture_widget_image(args: dict[str, Any]) -> dict[str, Any]:
-    h = harness()
-    widget_key = args.get("widget_key")
-    if widget_key is None:
-        return ok({
-            "tool_name": "capture_widget_image",
-            "success": False,
-            "summary": "No widget_key provided",
-        })
-
-    print(f"[tool] capture_widget_image: {widget_key}")
-
-    await h.set_agent_status("awaiting_user_widget_input")
-    h.pending_widgets[widget_key] = None
-
-    result = await h.atomic_operation(
-        "capture_widget_image", {"widget_key": widget_key}
-    )
-    if result.get("status") == "success":
-        widget_type = result.get("widget_type", "unknown")
-        metadata = result.get("metadata", {})
-        image = result.get("image")
-        if not isinstance(image, str) or not image.startswith("data:"):
-            return ok({
-                "tool_name": "capture_widget_image",
-                "success": False,
-                "summary": "Capture succeeded but image data was invalid",
-            })
-
-        header, base64_data = image.split(",", 1)
-        media_type = header.split(";")[0].removeprefix("data:")
-
-        return {
-            "content": [
-                {
-                    "type": "text",
-                    "text": json.dumps({
-                        "tool_name": "capture_widget_image",
-                        "success": True,
-                        "summary": f"Captured image from {widget_type} widget '{widget_key}'",
-                        "widget_key": widget_key,
-                        "widget_type": widget_type,
-                        "metadata": metadata,
-                    }),
-                },
-                {"type": "image", "data": base64_data, "mimeType": media_type},
-            ]
-        }
-
-    return ok({
-        "tool_name": "capture_widget_image",
-        "success": False,
-        "summary": f"Failed to capture widget image: {result.get('error', 'Unknown error')}",
     })
 
 
@@ -2097,7 +2020,6 @@ all_tools = [
     restore_checkpoint,
     execute_code,
     get_global_info,
-    capture_widget_image,
     update_plan,
     set_widget,
     get_widget,
