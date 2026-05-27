@@ -109,6 +109,7 @@ MCP_TOOL_NAMES = [
     "get_global_info",
     "set_widget",
     "get_widget",
+    "get_plot_image",
     "h5_filter_by",
     "h5_color_by",
     "h5_refresh",
@@ -915,6 +916,83 @@ async def get_widget(args: dict[str, Any]) -> dict[str, Any]:
     return ok({
         "tool_name": "get_widget",
         "summary": f"Failed to get widget: {result.get('error', 'Unknown error')}",
+        "success": False,
+    })
+
+
+@tool(
+    "get_plot_image",
+    (
+        "Render a matplotlib Figure global as a webp image. Returns a base64-encoded "
+        "data URL. The global must be a matplotlib Figure (or have a .figure attribute)."
+    ),
+    {
+        "type": "object",
+        "properties": {
+            "key": {
+                "type": "string",
+                "description": "Name of the global variable holding the Figure.",
+            },
+            "scale": {
+                "type": "number",
+                "description": "DPI multiplier (base DPI 100). Default 1.0.",
+            },
+            "width": {
+                "type": "integer",
+                "description": "Output width in pixels. Default 800.",
+            },
+            "height": {
+                "type": "integer",
+                "description": "Output height in pixels. Default 600.",
+            },
+            "viewport": {
+                "type": ["object", "null"],
+                "description": (
+                    "Optional axis limits: {x: [lo, hi], y: [lo, hi]}. Applied to all axes."
+                ),
+                "properties": {
+                    "x": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2},
+                    "y": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2},
+                },
+            },
+        },
+        "required": ["key", "scale", "width", "height"],
+    },
+)
+async def get_plot_image(args: dict[str, Any]) -> dict[str, Any]:
+    h = harness()
+    key = args.get("key")
+    if not key:
+        return ok({
+            "tool_name": "get_plot_image",
+            "summary": "Failed to get plot image: key is required",
+            "success": False,
+        })
+
+    params = {
+        "key": key,
+        "scale": args.get("scale", 1.0),
+        "width": args.get("width", 800),
+        "height": args.get("height", 600),
+        "viewport": args.get("viewport"),
+    }
+
+    print(f"[tool] get_plot_image key={key} scale={params['scale']} "
+          f"{params['width']}x{params['height']} viewport={params['viewport']}")
+    result = await h.atomic_operation("get_plot_image", params)
+    if result.get("status") == "success":
+        return ok({
+            "tool_name": "get_plot_image",
+            "success": True,
+            "summary": f"Rendered plot image for: {key}",
+            "key": key,
+            "image": result.get("image"),
+            "mime_type": result.get("mime_type", "image/webp"),
+        })
+
+    return ok({
+        "tool_name": "get_plot_image",
+        "summary": f"Failed to get plot image: {result.get('error', 'Unknown error')}",
         "success": False,
     })
 
@@ -2023,6 +2101,7 @@ all_tools = [
     update_plan,
     set_widget,
     get_widget,
+    get_plot_image,
     h5_filter_by,
     h5_color_by,
     h5_refresh,
