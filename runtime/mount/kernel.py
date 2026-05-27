@@ -2287,6 +2287,82 @@ class Kernel:
             })
             return
 
+        if msg["type"] == "get_plot_image":
+            agent_tx_id = msg.get("agent_tx_id")
+            key = msg.get("key", "")
+            scale = float(msg.get("scale", 1.0))
+            width = int(msg.get("width", 800))
+            height = int(msg.get("height", 600))
+            viewport = msg.get("viewport")
+
+            if key not in self.k_globals:
+                await self.send({
+                    "type": "get_plot_image_response",
+                    "agent_tx_id": agent_tx_id,
+                    "status": "error",
+                    "error": f"Global variable '{key}' not found",
+                })
+                return
+
+            value = self.k_globals[key]
+            if isinstance(value, Signal):
+                value = value.sample()
+
+            fig: Figure | None = None
+            if isinstance(value, Figure):
+                fig = value
+            elif hasattr(value, "figure") and isinstance(value.figure, Figure):
+                fig = value.figure
+
+            if fig is None:
+                await self.send({
+                    "type": "get_plot_image_response",
+                    "agent_tx_id": agent_tx_id,
+                    "status": "error",
+                    "error": f"Global '{key}' is not a matplotlib Figure (got {type(value).__name__})",
+                })
+                return
+
+            try:
+                if viewport is not None:
+                    x_range = viewport.get("x")
+                    y_range = viewport.get("y")
+                    for ax in fig.axes:
+                        if x_range is not None:
+                            ax.set_xlim(x_range[0], x_range[1])
+                        if y_range is not None:
+                            ax.set_ylim(y_range[0], y_range[1])
+
+                dpi = 100.0 * scale
+                fig.set_size_inches(width / 100.0, height / 100.0)
+
+                buf = io.BytesIO()
+                fig.canvas.print_figure(
+                    buf,
+                    format="webp",
+                    dpi=dpi,
+                    bbox_inches="tight",
+                    pil_kwargs={"quality": 80, "lossless": False},
+                )
+                img_b64 = b64encode(buf.getvalue()).decode("utf-8")
+            except Exception as e:
+                await self.send({
+                    "type": "get_plot_image_response",
+                    "agent_tx_id": agent_tx_id,
+                    "status": "error",
+                    "error": f"Failed to render figure: {type(e).__name__}: {e}",
+                })
+                return
+
+            await self.send({
+                "type": "get_plot_image_response",
+                "agent_tx_id": agent_tx_id,
+                "status": "success",
+                "image": f"data:image/webp;base64,{img_b64}",
+                "mime_type": "image/webp",
+            })
+            return
+
         if msg["type"] == "h5":
             response = await handle_h5_widget_message(msg, self.send)
             if response is not None:
