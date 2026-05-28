@@ -1271,8 +1271,8 @@ class Kernel:
 
     def emit_widget(self, key: str, data: WidgetState) -> None:
         assert ctx.cur_comp is not None
-        assert loop is not None
 
+        loop = asyncio.get_running_loop()
         ctx.cur_comp.widget_states[key] = data
         self.nodes_with_widgets[ctx.cur_comp.id] = ctx.cur_comp
 
