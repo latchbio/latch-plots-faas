@@ -1,4 +1,3 @@
-import asyncio
 import traceback
 from base64 import b64encode
 from collections.abc import Awaitable, Callable
@@ -20,10 +19,6 @@ from .ops import (
 ad = auto_install.ad
 
 alignment_is_running = False
-
-# Strong refs to fire-and-forget background tasks so the GC can't collect
-# (and therefore cancel) them mid-await. asyncio only holds weak refs to tasks.
-_background_tasks: set[asyncio.Task[Any]] = set()
 
 contexts: dict[str, Context] = {}
 
@@ -485,52 +480,40 @@ async def process_h5ad_request(
             alignment_is_running = True
             print("[h5ad align_image] set alignment_is_running=True", flush=True)
 
-            async def run_alignment() -> None:
-                global alignment_is_running
-
-                print("[h5ad align_image] run_alignment task started", flush=True)
-                try:
-                    await align_image(
-                        msg["scatter_data_key"],
-                        msg["new_scatter_data_key"],
-                        msg["points_I"],
-                        msg["points_J"],
-                        msg["alignment_method"],
-                        image_bytes,
-                        adata,
-                        widget_session_key,
-                        send,
-                    )
-                    print(
-                        "[h5ad align_image] align_image() returned normally",
-                        flush=True,
-                    )
-                except BaseException:
-                    print(
-                        "[h5ad align_image] align_image() raised:\n"
-                        + traceback.format_exc(),
-                        flush=True,
-                    )
-                    raise
-                finally:
-                    alignment_is_running = False
-                    print(
-                        "[h5ad align_image] run_alignment task done; "
-                        "alignment_is_running=False",
-                        flush=True,
-                    )
-
-            # todo(aidan): our websocket handler processes messages in serial
-            task = asyncio.create_task(run_alignment())
-            # Keep a strong reference until the task is done; otherwise the GC
-            # can collect (and cancel) it mid-await — see CPython issue #91887.
-            _background_tasks.add(task)
-            task.add_done_callback(_background_tasks.discard)
-            print(
-                f"[h5ad align_image] scheduled run_alignment task: {task!r} "
-                f"(background_tasks={len(_background_tasks)})",
-                flush=True,
-            )
+            # note: kernel.py dispatches each ws message via
+            # `executor.submit(asyncio.run, ...)`, so each message runs on its own
+            # short-lived event loop. A fire-and-forget `asyncio.create_task` here
+            # would be cancelled by `asyncio.run`'s teardown the moment this
+            # handler returns. So we must await alignment inline.
+            try:
+                await align_image(
+                    msg["scatter_data_key"],
+                    msg["new_scatter_data_key"],
+                    msg["points_I"],
+                    msg["points_J"],
+                    msg["alignment_method"],
+                    image_bytes,
+                    adata,
+                    widget_session_key,
+                    send,
+                )
+                print(
+                    "[h5ad align_image] align_image() returned normally",
+                    flush=True,
+                )
+            except BaseException:
+                print(
+                    "[h5ad align_image] align_image() raised:\n"
+                    + traceback.format_exc(),
+                    flush=True,
+                )
+                raise
+            finally:
+                alignment_is_running = False
+                print(
+                    "[h5ad align_image] alignment_is_running=False",
+                    flush=True,
+                )
 
             return None
 
