@@ -21,6 +21,10 @@ ad = auto_install.ad
 
 alignment_is_running = False
 
+# Strong refs to fire-and-forget background tasks so the GC can't collect
+# (and therefore cancel) them mid-await. asyncio only holds weak refs to tasks.
+_background_tasks: set[asyncio.Task[Any]] = set()
+
 contexts: dict[str, Context] = {}
 
 
@@ -518,8 +522,13 @@ async def process_h5ad_request(
 
             # todo(aidan): our websocket handler processes messages in serial
             task = asyncio.create_task(run_alignment())
+            # Keep a strong reference until the task is done; otherwise the GC
+            # can collect (and cancel) it mid-await — see CPython issue #91887.
+            _background_tasks.add(task)
+            task.add_done_callback(_background_tasks.discard)
             print(
-                f"[h5ad align_image] scheduled run_alignment task: {task!r}",
+                f"[h5ad align_image] scheduled run_alignment task: {task!r} "
+                f"(background_tasks={len(_background_tasks)})",
                 flush=True,
             )
 
