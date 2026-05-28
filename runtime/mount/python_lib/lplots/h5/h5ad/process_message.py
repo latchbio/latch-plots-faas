@@ -434,9 +434,25 @@ async def process_h5ad_request(
             )
 
         case "align_image":
+            print(
+                f"[h5ad align_image] received request: node_id={msg.get('node_id')!r} "
+                f"scatter_data_key={msg.get('scatter_data_key')!r} "
+                f"new_scatter_data_key={msg.get('new_scatter_data_key')!r} "
+                f"alignment_method={msg.get('alignment_method')!r} "
+                f"widget_session_key={widget_session_key!r} "
+                f"alignment_is_running={alignment_is_running} "
+                f"pil_image_cache_keys={list(pil_image_cache.keys())}",
+                flush=True,
+            )
+
             try:
                 image_bytes = pil_image_cache[msg["node_id"]]
             except KeyError:
+                print(
+                    f"[h5ad align_image] KeyError: node_id={msg.get('node_id')!r} "
+                    f"not in pil_image_cache (keys={list(pil_image_cache.keys())}); aborting",
+                    flush=True,
+                )
                 return make_response(
                     data={
                         "stage": "fetch_image",
@@ -446,16 +462,29 @@ async def process_h5ad_request(
                     }
                 )
 
+            print(
+                f"[h5ad align_image] image_bytes retrieved: "
+                f"len={len(image_bytes) if image_bytes is not None else None}",
+                flush=True,
+            )
+
             if alignment_is_running:
+                print(
+                    "[h5ad align_image] rejecting request: alignment_is_running=True "
+                    "(previous run did not clear the flag)",
+                    flush=True,
+                )
                 return make_response(
                     data={"stage": "validation", "error": "alignment already running"}
                 )
 
             alignment_is_running = True
+            print("[h5ad align_image] set alignment_is_running=True", flush=True)
 
             async def run_alignment() -> None:
                 global alignment_is_running
 
+                print("[h5ad align_image] run_alignment task started", flush=True)
                 try:
                     await align_image(
                         msg["scatter_data_key"],
@@ -468,11 +497,31 @@ async def process_h5ad_request(
                         widget_session_key,
                         send,
                     )
+                    print(
+                        "[h5ad align_image] align_image() returned normally",
+                        flush=True,
+                    )
+                except BaseException:
+                    print(
+                        "[h5ad align_image] align_image() raised:\n"
+                        + traceback.format_exc(),
+                        flush=True,
+                    )
+                    raise
                 finally:
                     alignment_is_running = False
+                    print(
+                        "[h5ad align_image] run_alignment task done; "
+                        "alignment_is_running=False",
+                        flush=True,
+                    )
 
             # todo(aidan): our websocket handler processes messages in serial
-            asyncio.create_task(run_alignment())
+            task = asyncio.create_task(run_alignment())
+            print(
+                f"[h5ad align_image] scheduled run_alignment task: {task!r}",
+                flush=True,
+            )
 
             return None
 
