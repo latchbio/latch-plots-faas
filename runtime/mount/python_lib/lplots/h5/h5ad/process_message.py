@@ -1,4 +1,3 @@
-import asyncio
 import traceback
 from base64 import b64encode
 from collections.abc import Awaitable, Callable
@@ -453,26 +452,33 @@ async def process_h5ad_request(
 
             alignment_is_running = True
 
-            async def run_alignment() -> None:
-                global alignment_is_running
-
-                try:
-                    await align_image(
-                        msg["scatter_data_key"],
-                        msg["new_scatter_data_key"],
-                        msg["points_I"],
-                        msg["points_J"],
-                        msg["alignment_method"],
-                        image_bytes,
-                        adata,
-                        widget_session_key,
-                        send,
-                    )
-                finally:
-                    alignment_is_running = False
-
-            # todo(aidan): our websocket handler processes messages in serial
-            asyncio.create_task(run_alignment())
+            try:
+                await align_image(
+                    msg["scatter_data_key"],
+                    msg["new_scatter_data_key"],
+                    msg["points_I"],
+                    msg["points_J"],
+                    msg["alignment_method"],
+                    image_bytes,
+                    adata,
+                    widget_session_key,
+                    send,
+                )
+            except Exception as e:
+                await send({
+                    "type": "h5",
+                    "op": "align_image",
+                    "progress": True,
+                    "key": widget_session_key,
+                    "value": {
+                        "data": {
+                            "stage": "error",
+                            "error": f"Alignment error: {e!s}\n{traceback.format_exc()}",
+                        }
+                    },
+                })
+            finally:
+                alignment_is_running = False
 
             return None
 
