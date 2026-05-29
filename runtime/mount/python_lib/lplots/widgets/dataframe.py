@@ -34,12 +34,12 @@ class DataframePicker(widget.BaseWidget):
     @property
     def value(self) -> Any | None:
         key = self._select.value
-        assert isinstance(key, str)
+        assert isinstance(key, str | None)
         return self._value(key)
 
     def sample(self) -> Any | None:
-        key = self._select.sample
-        assert isinstance(key, str)
+        key = self._select.sample()
+        assert isinstance(key, str | None)
         return self._value(key)
 
 
