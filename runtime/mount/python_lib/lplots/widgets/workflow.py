@@ -95,9 +95,6 @@ def w_workflow(
             id=val["id"], python_outputs=val["python_outputs"]
         )
 
-    print(
-        f"{val=} {isinstance(val, dict)=} {res._state=} {res._state.get('execution')=} {automatic=}"
-    )
     _emit.emit_widget(key, res._state)
 
     if automatic and res._state.get("execution") is None:
