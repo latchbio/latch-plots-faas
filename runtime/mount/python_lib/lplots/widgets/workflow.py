@@ -82,6 +82,7 @@ def w_workflow(
     )
 
     val = sig.sample()
+    print(f"{val=}")
     if isinstance(val, Execution):
         res._state["execution"] = val
 
