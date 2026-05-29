@@ -98,7 +98,7 @@ def w_workflow(
             res._state["execution"] = untraced_validate(val_raw, Execution)
 
     print(
-        f"{val_raw=} {isinstance(val_raw, dict)=} {res._state.get("execution")=} {automatic=}"
+        f"{val_raw=} {isinstance(val_raw, dict)=} {res._state=} {res._state.get('execution')=} {automatic=}"
     )
     _emit.emit_widget(key, res._state)
 
