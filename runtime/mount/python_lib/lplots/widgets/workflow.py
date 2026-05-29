@@ -97,6 +97,7 @@ def w_workflow(
         with contextlib.suppress(DataValidationError):
             res._state["execution"] = untraced_validate(val_raw, Execution)
 
+    print(f"{val_raw=} {isinstance(val_raw, dict)=} {res._state=}")
     _emit.emit_widget(key, res._state)
 
     if automatic and res._state.get("execution") is None:
