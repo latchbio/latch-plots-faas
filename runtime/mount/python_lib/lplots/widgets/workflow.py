@@ -1,7 +1,9 @@
+import contextlib
 from dataclasses import dataclass
 from typing import Any, Literal, NotRequired
 
 from latch_cli.services.launch.launch_v2 import Execution, launch
+from latch_data_validation.data_validation import DataValidationError, untraced_validate
 
 from ..reactive import Signal
 from . import _emit, _state, widget
@@ -29,10 +31,15 @@ class WorkflowWidget(widget.BaseWidget):
     @property
     def value(self) -> Execution | None:
         val = self._signal.sample()
-        if isinstance(val, Execution):
-            return val
+        if isinstance(val, dict):
+            with contextlib.suppress(DataValidationError):
+                return untraced_validate(val, Execution)
 
-        if not self._state.get("automatic") and self._button is not None and self._button.value:
+        if (
+            not self._state.get("automatic")
+            and self._button is not None
+            and self._button.value
+        ):
             execution = launch(
                 wf_name=self._state.get("wf_name"),
                 params=self._state.get("params"),
@@ -65,7 +72,11 @@ def w_workflow(
     key = _state.use_state_key(key=key)
     sig = _state.use_value_signal(key)
 
-    button = None if automatic else w_button(key=f"{key}-button", label=label, readonly=readonly)
+    button = (
+        None
+        if automatic
+        else w_button(key=f"{key}-button", label=label, readonly=readonly)
+    )
     res = WorkflowWidget(
         _key=key,
         _button=button,
@@ -81,19 +92,15 @@ def w_workflow(
         },
     )
 
-    val = sig.sample()
-    print(f"{val=} {isinstance(val, Execution)}")
-    if isinstance(val, Execution):
-        res._state["execution"] = val
+    val_raw = sig.sample()
+    if isinstance(val_raw, dict):
+        with contextlib.suppress(DataValidationError):
+            res._state["execution"] = untraced_validate(val_raw, Execution)
 
     _emit.emit_widget(key, res._state)
 
     if automatic and res._state.get("execution") is None:
-        execution = launch(
-            wf_name=wf_name,
-            params=params,
-            version=version,
-        )
+        execution = launch(wf_name=wf_name, params=params, version=version)
         res._state["execution"] = execution
         sig(execution)
         _state.submit_widget_state()
