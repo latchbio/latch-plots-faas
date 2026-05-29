@@ -1,9 +1,7 @@
-import contextlib
 from dataclasses import dataclass
 from typing import Any, Literal, NotRequired
 
 from latch_cli.services.launch.launch_v2 import Execution, launch
-from latch_data_validation.data_validation import DataValidationError, untraced_validate
 
 from ..reactive import Signal
 from . import _emit, _state, widget
@@ -31,9 +29,8 @@ class WorkflowWidget(widget.BaseWidget):
     @property
     def value(self) -> Execution | None:
         val = self._signal.sample()
-        if isinstance(val, dict):
-            with contextlib.suppress(DataValidationError):
-                return untraced_validate(val, Execution)
+        if isinstance(val, dict) and "id" in val and "python_outputs" in val:
+            return Execution(id=val["id"], python_outputs=val["python_outputs"])
 
         if (
             not self._state.get("automatic")
@@ -92,13 +89,14 @@ def w_workflow(
         },
     )
 
-    val_raw = sig.sample()
-    if isinstance(val_raw, dict):
-        with contextlib.suppress(DataValidationError):
-            res._state["execution"] = untraced_validate(val_raw, Execution)
+    val = sig.sample()
+    if isinstance(val, dict) and "id" in val and "python_outputs" in val:
+        res._state["execution"] = Execution(
+            id=val["id"], python_outputs=val["python_outputs"]
+        )
 
     print(
-        f"{val_raw=} {isinstance(val_raw, dict)=} {res._state=} {res._state.get('execution')=} {automatic=}"
+        f"{val=} {isinstance(val, dict)=} {res._state=} {res._state.get('execution')=} {automatic=}"
     )
     _emit.emit_widget(key, res._state)
 
