@@ -29,6 +29,8 @@ class WorkflowWidget(widget.BaseWidget):
     @property
     def value(self) -> Execution | None:
         val = self._signal.sample()
+        if isinstance(val, Execution):
+            return val
         if isinstance(val, dict) and "id" in val and "python_outputs" in val:
             return Execution(id=val["id"], python_outputs=val["python_outputs"])
 
