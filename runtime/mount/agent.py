@@ -966,7 +966,7 @@ class AgentHarness:
                 mcp_servers={MCP_SERVER_NAME: self.mcp_server},
                 allowed_tools=[*self.mcp_allowed_tools, *SDK_BUILTIN_ALLOWED_TOOLS],
                 permission_mode="acceptEdits",
-                model="claude-opus-4-7",
+                model="claude-opus-4-8",
                 thinking={"type": "adaptive"},
                 setting_sources=["project"],
                 resume=resume_session_id,
@@ -1596,7 +1596,7 @@ class AgentHarness:
         return {
             "system_prompt": self.system_prompt,
             "messages": messages,
-            "model": "claude-opus-4-7",
+            "model": "claude-opus-4-8",
             "cells": self.latest_notebook_state
             if self.latest_notebook_state is not None
             else "Interact with agent to populate notebook state.",
