@@ -130,6 +130,25 @@ def profile_request_by_op(fn: F) -> F:
 
 
 @contextmanager
+def measure(label: str):
+    """Standalone span that emits its own line immediately on exit.
+
+    Unlike `profile`, this does not require an active `profile_request`, so it
+    can be used to time code that runs *after* the request handler returns
+    (e.g. response serialization + socket send).
+    """
+    if not PROFILE_ENABLED:
+        yield
+        return
+
+    start = time.perf_counter()
+    try:
+        yield
+    finally:
+        _emit(f"[h5prof] {label}={(time.perf_counter() - start) * 1000:.1f}ms")
+
+
+@contextmanager
 def profile(name: str):
     """Named sub-span. No-op unless inside an enabled profile_request."""
     run = _current_run.get()

@@ -2239,9 +2239,12 @@ class Kernel:
             return
 
         if msg["type"] == "h5":
+            from lplots.h5.h5ad.profiling import measure
+
             response = await handle_h5_widget_message(msg, self.send)
             if response is not None:
-                await self.send(response)
+                with measure(f"kernel_send op={msg.get('op')}"):
+                    await self.send(response)
             return
 
 
