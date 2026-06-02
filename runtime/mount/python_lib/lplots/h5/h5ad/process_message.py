@@ -15,6 +15,7 @@ from .ops import (
     pil_image_cache,
     save_h5ad_to_latch,
 )
+from .profiling import profile, profile_request_by_op
 
 ad = auto_install.ad
 
@@ -23,6 +24,7 @@ alignment_is_running = False
 contexts: dict[str, Context] = {}
 
 
+@profile_request_by_op
 async def process_h5ad_request(
     msg: dict[str, Any],
     *,
@@ -219,8 +221,9 @@ async def process_h5ad_request(
             if obsm is None:
                 return make_response(error="Obsm not found")
 
-            res["obsm"] = obsm.data.tolist()
-            res["index"] = obsm.index.tolist()
+            with profile("get_obsm.serialize_obsm"):
+                res["obsm"] = obsm.data.tolist()
+                res["index"] = obsm.index.tolist()
 
             if "colored_by_type" in msg and "colored_by_key" in msg:
                 if msg["colored_by_type"] == "obs":
@@ -228,9 +231,10 @@ async def process_h5ad_request(
 
                     if obs is not None:
                         res["fetched_for_obs_key"] = msg["colored_by_key"]
-                        res["values"] = obs.data.tolist()
-                        res["unique_values"] = obs.top_values.tolist()
-                        res["counts"] = obs.top_value_counts.tolist()
+                        with profile("get_obsm.serialize_obs"):
+                            res["values"] = obs.data.tolist()
+                            res["unique_values"] = obs.top_values.tolist()
+                            res["counts"] = obs.top_value_counts.tolist()
                         res["nrof_values"] = obs.total_unique
 
                         res["color_by_endpoints"] = [obs.min, obs.max]
@@ -239,11 +243,12 @@ async def process_h5ad_request(
                     res["fetched_for_var_keys"] = keys
 
                     res["var_values"] = []
-                    for x in keys:
-                        cur = ctx.get_obs_vector(x)
-                        assert cur is not None
+                    with profile("get_obsm.serialize_var"):
+                        for x in keys:
+                            cur = ctx.get_obs_vector(x)
+                            assert cur is not None
 
-                        res["var_values"].append(cur.tolist())
+                            res["var_values"].append(cur.tolist())
 
                     endpoints = ctx.get_vars_range(keys)
                     if endpoints is not None:
