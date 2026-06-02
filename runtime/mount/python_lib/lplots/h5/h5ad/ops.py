@@ -285,6 +285,25 @@ class Context:
 
 rng = np.random.default_rng()
 
+
+def encode_f32_b64(arr: NDArray[Any]) -> dict[str, Any]:
+    """
+    Encode a numeric array as little-endian float32 + base64.
+    Wire format consumed by the frontend:
+        {
+            "encoding": "base64-f32le",
+            "shape": [...],            # e.g. [n, 2] for obsm
+            "data": "<base64 of raw little-endian float32 bytes>",
+        }
+    """
+    a = np.ascontiguousarray(arr, dtype="<f4")
+    return {
+        "encoding": "base64-f32le",
+        "shape": list(a.shape),
+        "data": base64.b64encode(a.tobytes()).decode("ascii"),
+    }
+
+
 pil_image_cache: dict[str, bytes] = {}
 
 

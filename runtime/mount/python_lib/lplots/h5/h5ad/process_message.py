@@ -8,6 +8,7 @@ from ..utils import auto_install
 from ..utils.align import align_image
 from .ops import (
     Context,
+    encode_f32_b64,
     fetch_and_process_image,
     get_var_index,
     mutate_obs_by_lasso,
@@ -153,7 +154,9 @@ async def process_h5ad_request(
                     "init_obs_key": init_obs_key,
                     "init_obsm_key": init_obsm_key,
                     "init_recomputed_index": recomputed_index,
-                    "init_obsm_values": obsm.data if obsm is not None else None,
+                    "init_obsm_values": encode_f32_b64(obsm.data)
+                    if obsm is not None
+                    else None,
                     "init_obsm_index": obsm.index.tolist()
                     if obsm is not None
                     else None,
@@ -222,7 +225,7 @@ async def process_h5ad_request(
                 return make_response(error="Obsm not found")
 
             with profile("get_obsm.serialize_obsm"):
-                res["obsm"] = obsm.data.tolist()
+                res["obsm"] = encode_f32_b64(obsm.data)
                 res["index"] = obsm.index.tolist()
 
             if "colored_by_type" in msg and "colored_by_key" in msg:
