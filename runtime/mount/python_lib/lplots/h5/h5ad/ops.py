@@ -286,6 +286,15 @@ class Context:
 rng = np.random.default_rng()
 
 
+def _encode_b64(arr: NDArray[Any], np_dtype: str, encoding: str) -> dict[str, Any]:
+    a = np.ascontiguousarray(arr, dtype=np_dtype)
+    return {
+        "encoding": encoding,
+        "shape": list(a.shape),
+        "data": base64.b64encode(a.tobytes()).decode("ascii"),
+    }
+
+
 def encode_f32_b64(arr: NDArray[Any]) -> dict[str, Any]:
     """
     Encode a numeric array as little-endian float32 + base64.
@@ -296,12 +305,22 @@ def encode_f32_b64(arr: NDArray[Any]) -> dict[str, Any]:
             "data": "<base64 of raw little-endian float32 bytes>",
         }
     """
-    a = np.ascontiguousarray(arr, dtype="<f4")
-    return {
-        "encoding": "base64-f32le",
-        "shape": list(a.shape),
-        "data": base64.b64encode(a.tobytes()).decode("ascii"),
-    }
+    return _encode_b64(arr, "<f4", "base64-f32le")
+
+
+def encode_i32_b64(arr: NDArray[Any]) -> dict[str, Any]:
+    """
+    Encode an integer array as little-endian int32 + base64.
+    Used for the per-point `index` (positions into the full AnnData), replacing
+    the per-cell obs-name strings: ~7x smaller and preserves a stable identity
+    so a point can be mapped back to its cell (e.g. lazy name lookup on hover).
+        {
+            "encoding": "base64-i32le",
+            "shape": [n],
+            "data": "<base64 of raw little-endian int32 bytes>",
+        }
+    """
+    return _encode_b64(arr, "<i4", "base64-i32le")
 
 
 pil_image_cache: dict[str, bytes] = {}

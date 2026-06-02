@@ -9,6 +9,7 @@ from ..utils.align import align_image
 from .ops import (
     Context,
     encode_f32_b64,
+    encode_i32_b64,
     fetch_and_process_image,
     get_var_index,
     mutate_obs_by_lasso,
@@ -157,7 +158,7 @@ async def process_h5ad_request(
                     "init_obsm_values": encode_f32_b64(obsm.data)
                     if obsm is not None
                     else None,
-                    "init_obsm_index": obsm.index.tolist()
+                    "init_obsm_index": encode_i32_b64(ctx.index)
                     if obsm is not None
                     else None,
                     "init_obsm_filters": filters,
@@ -226,7 +227,7 @@ async def process_h5ad_request(
 
             with profile("get_obsm.serialize_obsm"):
                 res["obsm"] = encode_f32_b64(obsm.data)
-                res["index"] = obsm.index.tolist()
+                res["index"] = encode_i32_b64(ctx.index)
 
             if "colored_by_type" in msg and "colored_by_key" in msg:
                 if msg["colored_by_type"] == "obs":
