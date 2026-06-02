@@ -1,5 +1,6 @@
 import functools
 import os
+import sys
 import time
 from collections.abc import Awaitable, Callable
 from contextlib import contextmanager
@@ -10,6 +11,40 @@ from typing import Any, TypeVar
 # Enable by setting LPLOTS_H5_PROFILE=1 in the environment on the dev box.
 # Output lines are prefixed with "[h5prof]" so they are easy to grep in logs.
 PROFILE_ENABLED = os.environ.get("LPLOTS_H5_PROFILE", "") not in ("", "0", "false")
+
+
+def _emit(line: str) -> None:
+    """Write a profiling line to the process's real stderr (→ systemd journal).
+
+    The kernel reassigns ``sys.stdout``/``sys.stderr`` to a SocketWriter that
+    pipes output to the frontend notebook, so a plain ``print`` would NOT reach
+    journald. ``sys.__stderr__`` still references the original fd, which systemd
+    captures into the journal. Fall back to a raw write on fd 2.
+    """
+    payload = line if line.endswith("\n") else line + "\n"
+    try:
+        real_err = sys.__stderr__
+        if real_err is not None:
+            real_err.write(payload)
+            real_err.flush()
+            return
+    except Exception:
+        pass
+
+    try:
+        os.write(2, payload.encode("utf-8", errors="replace"))
+    except OSError:
+        pass
+
+
+# Unconditional one-time marker at import so we can confirm the new code is
+# actually deployed and see whether the flag is on. Remove once debugging done.
+_emit(
+    f"[h5prof] profiling module loaded "
+    f"enabled={PROFILE_ENABLED} "
+    f"LPLOTS_H5_PROFILE={os.environ.get('LPLOTS_H5_PROFILE')!r} "
+    f"pid={os.getpid()}"
+)
 
 
 @dataclass
@@ -53,7 +88,7 @@ def profile_request(label: str):
             else:
                 parts.append(f"{name}={ms:.1f}ms")
         detail = " ".join(parts)
-        print(f"[h5prof] {label} total={total_ms:.1f}ms {detail}", flush=True)
+        _emit(f"[h5prof] {label} total={total_ms:.1f}ms {detail}")
 
 
 F = TypeVar("F", bound=Callable[..., Awaitable[Any]])
@@ -89,7 +124,7 @@ def profile_request_by_op(fn: F) -> F:
                 else:
                     parts.append(f"{name}={ms:.1f}ms")
             detail = " ".join(parts)
-            print(f"[h5prof] {run.label} total={total_ms:.1f}ms {detail}", flush=True)
+            _emit(f"[h5prof] {run.label} total={total_ms:.1f}ms {detail}")
 
     return wrapper  # type: ignore[return-value]
 
