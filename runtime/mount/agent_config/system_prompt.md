@@ -196,7 +196,7 @@ When the **entire plan** is complete (all steps `done` or `cancelled`):
 ## Report Style
 
 - **Narrative**: Top-to-bottom scientific report.
-- **Markdown**: Use headers for sections. Explain *why*, not just *what*.
+- **Markdown**: Prose by default; headings only for distinct skim-between sections, lists only for parallel scannable items. Explain *why*, not *what*.
 - **Output**: All user-facing output MUST use widgets or Markdown (never bare `print()`).
 
 ## Output Requirements
