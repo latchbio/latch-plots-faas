@@ -129,6 +129,30 @@ def profile_request_by_op(fn: F) -> F:
     return wrapper  # type: ignore[return-value]
 
 
+def log_sizes(label: str, fields: dict[str, Any]) -> None:
+    """Emit the serialized byte size of each named field. Profiling only.
+
+    Serializes each field with orjson (the same encoder the transport uses) so
+    the numbers reflect real on-the-wire bytes per field, letting us see which
+    part of a response dominates the payload.
+    """
+    if not PROFILE_ENABLED:
+        return
+
+    import orjson
+
+    parts = []
+    for name, value in fields.items():
+        if value is None:
+            continue
+        try:
+            n = len(orjson.dumps(value, option=orjson.OPT_SERIALIZE_NUMPY))
+        except Exception:
+            n = -1
+        parts.append(f"{name}={n}")
+    _emit(f"[h5prof] sizes {label} " + " ".join(parts))
+
+
 @contextmanager
 def measure(label: str):
     """Standalone span that emits its own line immediately on exit.

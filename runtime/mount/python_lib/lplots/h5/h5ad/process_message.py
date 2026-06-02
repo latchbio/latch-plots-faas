@@ -16,7 +16,7 @@ from .ops import (
     pil_image_cache,
     save_h5ad_to_latch,
 )
-from .profiling import profile, profile_request_by_op
+from .profiling import log_sizes, profile, profile_request_by_op
 
 ad = auto_install.ad
 
@@ -256,6 +256,16 @@ async def process_h5ad_request(
                     endpoints = ctx.get_vars_range(keys)
                     if endpoints is not None:
                         res["color_by_endpoints"] = list(endpoints)
+
+            log_sizes(
+                "op=get_obsm",
+                {
+                    "obsm": res.get("obsm"),
+                    "index": res.get("index"),
+                    "values": res.get("values"),
+                    "var_values": res.get("var_values"),
+                },
+            )
 
             return make_response(data=res)
 
