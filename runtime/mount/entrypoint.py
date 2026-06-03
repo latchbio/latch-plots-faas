@@ -1245,7 +1245,7 @@ async def shutdown() -> None:
     global action_handler_ctx, headless_browser, shutting_down, user_agent_ctx
     shutting_down = True
 
-    close_reason = "entrypoint shutting down"
+    close_reason = "notebook shutting down"
     await plots_ctx_manager.close_all(reason=close_reason)
 
     if user_agent_ctx is not None:
