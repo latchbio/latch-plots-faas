@@ -10,6 +10,7 @@ from .ops import (
     Context,
     encode_f32_b64,
     encode_i32_b64,
+    encode_obs_color_values,
     fetch_and_process_image,
     get_var_index,
     mutate_obs_by_lasso,
@@ -162,7 +163,11 @@ async def process_h5ad_request(
                     if obsm is not None
                     else None,
                     "init_obsm_filters": filters,
-                    "init_obs_values": obs.data.tolist() if obs is not None else None,
+                    "init_obs_values": encode_obs_color_values(
+                        adata, init_obs_key, ctx.index
+                    )
+                    if obs is not None and init_obs_key is not None
+                    else None,
                     "init_obs_unique_values": (
                         obs.top_values.tolist() if obs is not None else None
                     ),
@@ -236,7 +241,9 @@ async def process_h5ad_request(
                     if obs is not None:
                         res["fetched_for_obs_key"] = msg["colored_by_key"]
                         with profile("get_obsm.serialize_obs"):
-                            res["values"] = obs.data.tolist()
+                            res["values"] = encode_obs_color_values(
+                                adata, msg["colored_by_key"], ctx.index
+                            )
                             res["unique_values"] = obs.top_values.tolist()
                             res["counts"] = obs.top_value_counts.tolist()
                         res["nrof_values"] = obs.total_unique
@@ -284,7 +291,9 @@ async def process_h5ad_request(
             return make_response(
                 data={
                     "fetched_for_key": msg["obs_key"],
-                    "values": obs.data.tolist(),
+                    "values": encode_obs_color_values(
+                        adata, msg["obs_key"], ctx.index
+                    ),
                     "unique_values": obs.top_values.tolist(),
                     "counts": obs.top_value_counts.tolist(),
                     "nrof_values": obs.total_unique,
@@ -373,7 +382,7 @@ async def process_h5ad_request(
                     "fetched_for_key": msg["obs_key"],
                     "mutated_for_key": mutated_for_key,
                     "created_for_key": created_for_key,
-                    "values": obs.data.tolist(),
+                    "values": encode_obs_color_values(adata, obs_key, ctx.index),
                     "unique_values": obs.top_values.tolist(),
                     "counts": obs.top_value_counts.tolist(),
                     "nrof_values": obs.total_unique,

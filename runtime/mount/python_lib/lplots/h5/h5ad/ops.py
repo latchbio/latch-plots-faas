@@ -323,6 +323,64 @@ def encode_i32_b64(arr: NDArray[Any]) -> dict[str, Any]:
     return _encode_b64(arr, "<i4", "base64-i32le")
 
 
+def _encode_int_b64(arr: NDArray[Any]) -> dict[str, Any]:
+    """Encode an integer array using the smallest signed int dtype that fits.
+
+    Codes use -1 as a NaN/missing sentinel, so signed types are required.
+    """
+    a = np.asarray(arr)
+    mn = int(a.min()) if a.size else 0
+    mx = int(a.max()) if a.size else 0
+    if mn >= -128 and mx <= 127:
+        return _encode_b64(a, "<i1", "base64-i8le")
+    if mn >= -32768 and mx <= 32767:
+        return _encode_b64(a, "<i2", "base64-i16le")
+    return _encode_b64(a, "<i4", "base64-i32le")
+
+
+def encode_obs_color_values(
+    adata: ad.AnnData, key: str, index: NDArray[np.intp]
+) -> dict[str, Any]:
+    """Encode a per-cell obs column (subset by `index`) for the color channel.
+
+    - numeric columns (int/uint/float, excluding bool) -> base64 float32
+    - everything else (category/object/bool/datetime) -> categorical codes:
+        {
+            "encoding": "categorical",
+            "categories": [...],          # raw category values, sent once
+            "codes": {<int b64 envelope>} # per-cell index into categories, -1 = NaN
+        }
+
+    Replaces sending the per-cell category *strings* (which dominate the
+    payload when coloring by a categorical column). The frontend reconstructs
+    the per-cell values via `categories[code]`.
+    """
+    s = adata.obs[key]
+    dtype = s.dtype
+
+    if isinstance(dtype, pd.CategoricalDtype):
+        codes = np.asarray(s.cat.codes)[index]
+        return {
+            "encoding": "categorical",
+            "categories": s.cat.categories.tolist(),
+            "codes": _encode_int_b64(codes),
+        }
+
+    # note(aidan): is_numeric_dtype(bool) is True, so bool must be handled before
+    # the numeric branch (frontend treats bool as categorical)
+    if not pd.api.types.is_bool_dtype(dtype) and pd.api.types.is_numeric_dtype(
+        dtype
+    ):
+        return encode_f32_b64(np.asarray(s, dtype=np.float64)[index])
+
+    codes_full, uniques = pd.factorize(s, use_na_sentinel=True)
+    return {
+        "encoding": "categorical",
+        "categories": np.asarray(uniques).tolist(),
+        "codes": _encode_int_b64(np.asarray(codes_full)[index]),
+    }
+
+
 pil_image_cache: dict[str, bytes] = {}
 
 
