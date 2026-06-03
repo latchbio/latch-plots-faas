@@ -618,6 +618,8 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
 
             if _H5_PROFILE and msg.get("type") == "h5":
                 _t = time.perf_counter()
+
+                # todo(aidan): remove double serialization
                 _payload = orjson.dumps(msg).decode()
                 _dumps_ms = (time.perf_counter() - _t) * 1000
 

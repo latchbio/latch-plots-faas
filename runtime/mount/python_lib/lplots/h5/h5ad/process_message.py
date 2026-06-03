@@ -265,6 +265,28 @@ async def process_h5ad_request(
                     if endpoints is not None:
                         res["color_by_endpoints"] = list(endpoints)
 
+            extra_obs: dict[str, Any] = {}
+            for extra_key in msg.get("extra_obs_keys") or []:
+                extra = ctx.get_obs(extra_key, max_cells=max_cells)
+                if extra is None:
+                    continue
+                extra_obs[extra_key] = {
+                    "values": encode_obs_color_values(adata, extra_key, ctx.index),
+                    "unique_values": extra.top_values.tolist(),
+                    "counts": extra.top_value_counts.tolist(),
+                    "nrof_values": extra.total_unique,
+                    "endpoints": [extra.min, extra.max],
+                }
+            res["extra_obs"] = extra_obs
+
+            extra_vars: dict[str, Any] = {}
+            for extra_var in msg.get("extra_var_indexes") or []:
+                vec = ctx.get_obs_vector(extra_var)
+                if vec is None:
+                    continue
+                extra_vars[extra_var] = vec.tolist()
+            res["extra_vars"] = extra_vars
+
             log_sizes(
                 "op=get_obsm",
                 {
