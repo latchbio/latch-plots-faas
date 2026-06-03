@@ -45,12 +45,20 @@ if __name__ == "__main__":
     loop = asyncio.new_event_loop()
 
     shutdown_event = asyncio.Event()
+    shutdown_task: asyncio.Task[None] | None = None
 
     async def await_shutdown() -> None:
         await shutdown_event.wait()
 
-    def shutdown_signal(*args) -> None:
+    async def shutdown_before_hypercorn() -> None:
+        await shutdown()
         shutdown_event.set()
+
+    def shutdown_signal(*args) -> None:
+        global shutdown_task
+
+        if shutdown_task is None:
+            shutdown_task = loop.create_task(shutdown())
 
     loop.add_signal_handler(signal.SIGTERM, shutdown_signal)
     loop.add_signal_handler(signal.SIGINT, shutdown_signal)
