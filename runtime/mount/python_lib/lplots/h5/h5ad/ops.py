@@ -219,6 +219,7 @@ class Context:
         width: int,
         height: int,
         viewport: PlotViewport | None,
+        image_format: str = "png",
     ) -> bytes:
         import plotly.graph_objects as go
 
@@ -270,7 +271,9 @@ class Context:
 
         layout.setdefault("template", {})
         fig = go.Figure(data=data, layout=layout)
-        return fig.to_image(format="png", scale=scale, width=width, height=height)
+        return fig.to_image(
+            format=image_format, scale=scale, width=width, height=height
+        )
 
 
 rng = np.random.default_rng()

@@ -2363,6 +2363,75 @@ class Kernel:
             })
             return
 
+        if msg["type"] == "get_h5_image":
+            agent_tx_id = msg.get("agent_tx_id")
+            key = msg.get("key", "")
+
+            widget_state = None
+            for n in self.nodes_with_widgets.values():
+                path = n.name_path()
+                for k, v in n.widget_states.items():
+                    if f"{path}/{k}" == key:
+                        widget_state = copy(v)
+                        break
+                if widget_state is not None:
+                    break
+
+            if widget_state is None:
+                await self.send({
+                    "type": "get_h5_image_response",
+                    "agent_tx_id": agent_tx_id,
+                    "status": "error",
+                    "error": f"Widget '{key}' not found",
+                })
+                return
+
+            if widget_state.get("type") != "h5":
+                await self.send({
+                    "type": "get_h5_image_response",
+                    "agent_tx_id": agent_tx_id,
+                    "status": "error",
+                    "error": f"Widget '{key}' is not an h5 widget",
+                })
+                return
+
+            h5_msg = {
+                "type": "h5",
+                "key": key,
+                "data_type": "h5ad",
+                "op": "agent_export_image",
+                "state": widget_state,
+                "obsm_key": msg.get("obsm_key"),
+                "color_by": msg.get("color_by"),
+                "scale": float(msg.get("scale", 1.0)),
+                "width": int(msg.get("width", 800)),
+                "height": int(msg.get("height", 600)),
+                "viewport": msg.get("viewport"),
+            }
+
+            response = await handle_h5_widget_message(h5_msg, self.send)
+            value = (response or {}).get("value", {})
+
+            if "error" in value:
+                await self.send({
+                    "type": "get_h5_image_response",
+                    "agent_tx_id": agent_tx_id,
+                    "status": "error",
+                    "error": value.get("error"),
+                })
+                return
+
+            data = value.get("data", {})
+            await self.send({
+                "type": "get_h5_image_response",
+                "agent_tx_id": agent_tx_id,
+                "status": "success",
+                "image": data.get("image"),
+                "mime_type": data.get("mime_type", "image/webp"),
+                "obsm_key": data.get("obsm_key"),
+            })
+            return
+
         if msg["type"] == "h5":
             response = await handle_h5_widget_message(msg, self.send)
             if response is not None:

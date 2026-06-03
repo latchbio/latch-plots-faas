@@ -567,6 +567,98 @@ async def process_h5ad_request(
                     error_detail=traceback.format_exc(),
                 )
 
+        case "agent_export_image":
+            try:
+                widget_state: dict[str, Any] = msg.get("state") or {}
+                presets = widget_state.get("viewer_presets") or {}
+
+                obsm_key = msg.get("obsm_key") or presets.get("default_obsm_key")
+                if obsm_key is None:
+                    obsm_keys = (
+                        list(adata.obsm.keys()) if hasattr(adata, "obsm") else []
+                    )
+                    if len(obsm_keys) == 0:
+                        return make_response(
+                            error="AnnData object has no obsm embeddings to plot"
+                        )
+                    obsm_key = obsm_keys[0]
+
+                if obsm_key not in adata.obsm:
+                    return make_response(
+                        error=f"obsm key '{obsm_key}' not found in AnnData object"
+                    )
+
+                color_by_raw = msg.get("color_by") or presets.get("default_color_by")
+
+                categorical_palette = presets.get("categorical_color_palette") or [
+                    "#C33530", "#282E66", "#43884A", "#7E2F8A", "#E48341",
+                    "#FAE64D", "#8E9ECD", "#B570A8", "#E0C3DA", "#9FD3E2",
+                    "#96C56C", "#E38180", "#9584B9", "#C25434", "#63B9A8",
+                    "#694D99", "#33707A", "#731F1C", "#D0A970", "#3D3D3D",
+                ]
+                continuous_palette = presets.get("continuous_color_palette") or [
+                    "#313695", "#4a7bb7", "#80b7d6", "#bde2ee", "#eef8df",
+                    "#feeea5", "#fdbf71", "#f67b4a", "#da372a", "#a50026",
+                ]
+
+                color_palettes: dict[str, Any] = {
+                    "categorical": categorical_palette,
+                    "continuous": continuous_palette,
+                    "default_color": "#DFE1E6",
+                    "obs_type_overrides": {},
+                }
+
+                color_by: (
+                    tuple[str, str] | tuple[str, list[str]] | None
+                ) = None
+                if color_by_raw is not None:
+                    if color_by_raw.get("type") == "obs":
+                        color_by = ("obs", color_by_raw["key"])
+                    elif color_by_raw.get("type") == "var":
+                        color_by = ("var", color_by_raw["keys"])
+
+                data: list[dict[str, Any]] = [{
+                    "type": "scattergl",
+                    "mode": "markers",
+                    "marker": {
+                        "size": 3,
+                        "color": color_palettes["default_color"],
+                    },
+                }]
+                layout: dict[str, Any] = {
+                    "xaxis": {"visible": False},
+                    "yaxis": {"visible": False},
+                    "showlegend": False,
+                    "margin": {"l": 0, "r": 0, "t": 0, "b": 0},
+                    "plot_bgcolor": "white",
+                    "paper_bgcolor": "white",
+                }
+
+                img = ctx.export_png(
+                    obsm_key=obsm_key,
+                    data=data,
+                    layout=layout,
+                    color_palettes=color_palettes,
+                    color_by=color_by,
+                    scale=msg.get("scale", 1.0),
+                    width=msg.get("width", 800),
+                    height=msg.get("height", 600),
+                    viewport=msg.get("viewport"),
+                    image_format="webp",
+                )
+                return make_response(
+                    data={
+                        "image": f"data:image/webp;base64,{b64encode(img).decode()}",
+                        "mime_type": "image/webp",
+                        "obsm_key": obsm_key,
+                    }
+                )
+            except Exception as e:
+                return make_response(
+                    error=f"Failed to export image: {type(e).__name__}: {e}",
+                    error_detail=traceback.format_exc(),
+                )
+
         case "save_to_latch":
             try:
                 if "latch_path" not in msg:
