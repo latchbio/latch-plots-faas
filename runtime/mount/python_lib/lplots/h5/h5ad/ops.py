@@ -311,9 +311,6 @@ def encode_f32_b64(arr: NDArray[Any]) -> dict[str, Any]:
 def encode_i32_b64(arr: NDArray[Any]) -> dict[str, Any]:
     """
     Encode an integer array as little-endian int32 + base64.
-    Used for the per-point `index` (positions into the full AnnData), replacing
-    the per-cell obs-name strings: ~7x smaller and preserves a stable identity
-    so a point can be mapped back to its cell (e.g. lazy name lookup on hover).
         {
             "encoding": "base64-i32le",
             "shape": [n],
@@ -350,10 +347,6 @@ def encode_obs_color_values(
             "categories": [...],          # raw category values, sent once
             "codes": {<int b64 envelope>} # per-cell index into categories, -1 = NaN
         }
-
-    Replaces sending the per-cell category *strings* (which dominate the
-    payload when coloring by a categorical column). The frontend reconstructs
-    the per-cell values via `categories[code]`.
     """
     s = adata.obs[key]
     dtype = s.dtype
