@@ -95,10 +95,12 @@ async def agent(s: Span, ctx: Context) -> HandlerResult:
         if connection_role == "user":
             entrypoint_module.user_agent_ctx = None
             # note(aidan): not sure if this is preferable to the agent figuring it out
-            await handle_user_disconnect_fallback()
+            if not entrypoint_module.shutting_down:
+                await handle_user_disconnect_fallback()
         elif connection_role == "action_handler":
             entrypoint_module.action_handler_ctx = None
             action_handler_ready_ev.clear()
-            await restart_headless_browser()
+            if not entrypoint_module.shutting_down:
+                await restart_headless_browser()
 
     return "Ok"

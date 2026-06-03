@@ -7,7 +7,11 @@ from pathlib import Path
 
 import orjson
 from latch_asgi.context.websocket import Context
-from latch_asgi.framework.websocket import WebsocketConnectionClosedError
+from latch_asgi.framework.websocket import (
+    WebsocketConnectionClosedError,
+    WebsocketStatus,
+    close_connection,
+)
 
 session_count_file = Path("/tmp/user-session-count")  # noqa: S108
 
@@ -23,6 +27,15 @@ class UserProfile:
 async def try_send_message(ctx: Context, msg: str) -> None:
     with contextlib.suppress(WebsocketConnectionClosedError):
         await ctx.send_message(zlib.compress(msg.encode("utf-8"), level=1))
+
+
+async def try_close_context(ctx: Context, *, reason: str) -> None:
+    with contextlib.suppress(Exception):
+        await close_connection(
+            ctx.send,
+            status=WebsocketStatus.going_away,
+            reason=reason,
+        )
 
 
 agent_session_sub = "agent-session"
@@ -102,6 +115,18 @@ class PlotsContextManager:
         async with asyncio.TaskGroup() as tg:
             for ctx, _ in self.contexts.values():
                 _ = tg.create_task(try_send_message(ctx, msg))
+
+    async def close_all(self, *, reason: str) -> None:
+        contexts = [ctx for ctx, _ in self.contexts.values()]
+        async with asyncio.TaskGroup() as tg:
+            for ctx in contexts:
+                _ = tg.create_task(try_close_context(ctx, reason=reason))
+
+        self.contexts.clear()
+        self.session_count_by_user.clear()
+        self.session_owner = None
+        self.unique_users.clear()
+        self._write_user_session_count()
 
     async def broadcast_users(self) -> None:
         visible_users = [u for u in self.unique_users if not u.is_agent]

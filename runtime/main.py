@@ -17,7 +17,7 @@ from .mount.entrypoint import shutdown, startup
 cfg = HypercornConfig()
 cfg.bind = ["[::]:5000"]
 cfg.use_reloader = config.auto_reload
-cfg.graceful_timeout = 0.1
+cfg.graceful_timeout = 3
 
 
 latch_server = LatchASGIServer(

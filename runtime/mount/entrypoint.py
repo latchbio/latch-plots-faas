@@ -16,7 +16,7 @@ import orjson
 from latch_asgi.context.websocket import Context
 from latch_data_validation.data_validation import validate
 
-from runtime.mount.plots_context_manager import PlotsContextManager
+from runtime.mount.plots_context_manager import PlotsContextManager, try_close_context
 
 from .headless_browser import HeadlessBrowser
 from .socketio import SocketIo
@@ -1242,8 +1242,20 @@ async def startup() -> None:
 
 
 async def shutdown() -> None:
-    global shutting_down
+    global action_handler_ctx, headless_browser, shutting_down, user_agent_ctx
     shutting_down = True
+
+    close_reason = "entrypoint shutting down"
+    await plots_ctx_manager.close_all(reason=close_reason)
+
+    if user_agent_ctx is not None:
+        await try_close_context(user_agent_ctx, reason=close_reason)
+        user_agent_ctx = None
+
+    if action_handler_ctx is not None:
+        await try_close_context(action_handler_ctx, reason=close_reason)
+        action_handler_ctx = None
+        action_handler_ready_ev.clear()
 
     await k_proc.stop()
     await a_proc.stop()
@@ -1251,9 +1263,8 @@ async def shutdown() -> None:
     for task in async_tasks:
         _ = task.cancel()
 
-    _ = await asyncio.gather(*async_tasks)
+    _ = await asyncio.gather(*async_tasks, return_exceptions=True)
 
-    global headless_browser
     if headless_browser is not None:
         with contextlib.suppress(Exception):
             await headless_browser.stop()
