@@ -1241,8 +1241,8 @@ async def startup() -> None:
     async_tasks.append(asyncio.create_task(bootstrap_headless_browser_on_startup()))
 
 
-async def shutdown() -> None:
-    global action_handler_ctx, headless_browser, shutting_down, user_agent_ctx
+async def close_websocket_connections() -> None:
+    global action_handler_ctx, shutting_down, user_agent_ctx
     shutting_down = True
 
     close_reason = "notebook shutting down"
@@ -1257,14 +1257,20 @@ async def shutdown() -> None:
         action_handler_ctx = None
         action_handler_ready_ev.clear()
 
+
+async def shutdown() -> None:
+    global shutting_down
+    shutting_down = True
+
     await k_proc.stop()
     await a_proc.stop()
 
     for task in async_tasks:
         _ = task.cancel()
 
-    _ = await asyncio.gather(*async_tasks, return_exceptions=True)
+    _ = await asyncio.gather(*async_tasks)
 
+    global headless_browser
     if headless_browser is not None:
         with contextlib.suppress(Exception):
             await headless_browser.stop()

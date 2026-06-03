@@ -12,7 +12,7 @@ from latch_asgi.server import LatchASGIServer
 
 from .config import config
 from .mount.endpoints import http_routes, websocket_routes
-from .mount.entrypoint import shutdown, startup
+from .mount.entrypoint import close_websocket_connections, shutdown, startup
 
 cfg = HypercornConfig()
 cfg.bind = ["[::]:5000"]
@@ -45,20 +45,16 @@ if __name__ == "__main__":
     loop = asyncio.new_event_loop()
 
     shutdown_event = asyncio.Event()
-    shutdown_task: asyncio.Task[None] | None = None
 
     async def await_shutdown() -> None:
         await shutdown_event.wait()
 
-    async def shutdown_before_hypercorn() -> None:
-        await shutdown()
+    async def close_websockets_then_shutdown() -> None:
+        await close_websocket_connections()
         shutdown_event.set()
 
     def shutdown_signal(*args) -> None:
-        global shutdown_task
-
-        if shutdown_task is None:
-            shutdown_task = loop.create_task(shutdown())
+        loop.create_task(close_websockets_then_shutdown())
 
     loop.add_signal_handler(signal.SIGTERM, shutdown_signal)
     loop.add_signal_handler(signal.SIGINT, shutdown_signal)
