@@ -2209,6 +2209,7 @@ all_tools = [
     h5_add_selected_cells_to_categorical_obs,
     h5_set_marker_opacity,
     h5_manage_obs,
+    h5_get_image,
     redeem_package,
     smart_ui_spotlight,
     submit_response,
