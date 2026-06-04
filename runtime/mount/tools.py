@@ -122,6 +122,7 @@ MCP_TOOL_NAMES = [
     "h5_add_selected_cells_to_categorical_obs",
     "h5_set_marker_opacity",
     "h5_manage_obs",
+    "h5_get_image",
     "redeem_package",
     "smart_ui_spotlight",
     "submit_response",
@@ -1748,6 +1749,100 @@ async def h5_manage_obs(args: dict[str, Any]) -> dict[str, Any]:
         "tool_name": "h5_manage_obs",
         "success": False,
         "summary": f"Failed to {operation} observation column: {result.get('error', 'Unknown error')}",
+    })
+
+@tool(
+    "h5_get_image",
+    (
+        "Render the current scatter/embedding view of an h5/AnnData widget as a webp "
+        "image. Returns a base64-encoded data URL. Uses the widget's default embedding "
+        "and color-by unless overridden."
+    ),
+    {
+        "type": "object",
+        "properties": {
+            "key": {
+                "type": "string",
+                "description": (
+                    "Full widget key including tf_id and widget_id in the format "
+                    "<tf_id>/<widget_id>"
+                ),
+            },
+            "obsm_key": {
+                "type": ["string", "null"],
+                "description": "Optional obsm embedding key. Defaults to widget preset / first obsm.",
+            },
+            "color_by": {
+                "type": ["object", "null"],
+                "description": (
+                    "Optional color-by: {type: 'obs', key: str} or "
+                    "{type: 'var', keys: [str]}."
+                ),
+            },
+            "scale": {
+                "type": "number",
+                "description": "DPI multiplier. Default 1.0.",
+            },
+            "width": {
+                "type": "integer",
+                "description": "Output width in pixels. Default 800.",
+            },
+            "height": {
+                "type": "integer",
+                "description": "Output height in pixels. Default 600.",
+            },
+            "viewport": {
+                "type": ["object", "null"],
+                "description": (
+                    "Optional embedding bounds: {x: [lo, hi], y: [lo, hi]}."
+                ),
+                "properties": {
+                    "x": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2},
+                    "y": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2},
+                },
+            },
+        },
+        "required": ["key", "scale", "width", "height"],
+    },
+)
+async def h5_get_image(args: dict[str, Any]) -> dict[str, Any]:
+    h = harness()
+    key = args.get("key")
+    if not key:
+        return ok({
+            "tool_name": "h5_get_image",
+            "summary": "Failed to get h5 image: key is required",
+            "success": False,
+        })
+
+    params = {
+        "key": key,
+        "obsm_key": args.get("obsm_key"),
+        "color_by": args.get("color_by"),
+        "scale": args.get("scale", 1.0),
+        "width": args.get("width", 800),
+        "height": args.get("height", 600),
+        "viewport": args.get("viewport"),
+    }
+
+    print(f"[tool] h5_get_image key={key} obsm_key={params['obsm_key']} "
+          f"scale={params['scale']} {params['width']}x{params['height']}")
+    result = await h.atomic_operation("h5_get_image", params, timeout=60.0)
+    if result.get("status") == "success":
+        return ok({
+            "tool_name": "h5_get_image",
+            "success": True,
+            "summary": f"Rendered h5 image for: {key}",
+            "key": key,
+            "image": result.get("image"),
+            "mime_type": result.get("mime_type", "image/webp"),
+            "obsm_key": result.get("obsm_key"),
+        })
+
+    return ok({
+        "tool_name": "h5_get_image",
+        "summary": f"Failed to get h5 image: {result.get('error', 'Unknown error')}",
+        "success": False,
     })
 
 

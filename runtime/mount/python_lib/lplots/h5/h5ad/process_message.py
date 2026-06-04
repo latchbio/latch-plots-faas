@@ -539,7 +539,7 @@ async def process_h5ad_request(
             try:
                 color_by = msg["color_by"]
 
-                img = ctx.export_png(
+                img = ctx.export_image(
                     obsm_key=msg["obsm_key"],
                     data=msg["data"],
                     layout=msg["layout"],

@@ -207,7 +207,7 @@ class Context:
         p0, p100 = np.quantile(means, [0, 1])
         return p0, p100
 
-    def export_png(
+    def export_image(
         self,
         *,
         obsm_key: str,
@@ -219,6 +219,7 @@ class Context:
         width: int,
         height: int,
         viewport: PlotViewport | None,
+        image_format: str = "png",
     ) -> bytes:
         import plotly.graph_objects as go
 
@@ -261,7 +262,7 @@ class Context:
                     # todo(maximsmol): there might be a better way of doing this
                     # using just numpy arrays
                     data[0].setdefault("marker", {})["color"] = [
-                      palette[color_idx_map[x]] for x in xs.iloc[idx].astype(str)
+                        palette[color_idx_map[x]] for x in xs.iloc[idx].astype(str)
                     ]
             elif color_by[0] == "var":
                 xs = self.get_vars_color_values(color_by[1], index=idx)
@@ -270,7 +271,9 @@ class Context:
 
         layout.setdefault("template", {})
         fig = go.Figure(data=data, layout=layout)
-        return fig.to_image(format="png", scale=scale, width=width, height=height)
+        return fig.to_image(
+            format=image_format, scale=scale, width=width, height=height
+        )
 
 
 rng = np.random.default_rng()
@@ -356,7 +359,7 @@ def generate_filter_mask(
             if len(valid_keys) == 1:
                 var_values = np.asarray(
                     adata[:, valid_keys[0]].to_df().iloc[:, 0:].values.ravel()
-                )  # noqa: PD011
+                )
             else:
                 gene_values = [
                     np.asarray(adata[:, key].to_df().iloc[:, 0:].values.ravel())  # noqa: PD011
@@ -505,11 +508,7 @@ def mutate_obs_by_value(
         )
 
 
-def save_h5ad_to_latch(
-    adata: ad.AnnData,
-    latch_path: str | LPath,
-) -> LPath:
-
+def save_h5ad_to_latch(adata: ad.AnnData, latch_path: str | LPath) -> LPath:
     if isinstance(latch_path, str):
         dest_lpath = LPath(latch_path)
     else:

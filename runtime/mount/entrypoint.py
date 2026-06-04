@@ -704,6 +704,24 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                     })
                     continue
 
+            elif msg["type"] == "h5_get_image_response" and "agent_tx_id" in msg:
+                tx_id = msg.get("agent_tx_id")
+
+                if a_proc.msg_io is not None:
+                    print(
+                        f"[entrypoint] Routing get_h5_image response to agent (tx_id={tx_id})"
+                    )
+                    await a_proc.msg_io.send({
+                        "type": "agent_action_response",
+                        "tx_id": tx_id,
+                        "status": msg.get("status", "error"),
+                        "image": msg.get("image"),
+                        "mime_type": msg.get("mime_type"),
+                        "obsm_key": msg.get("obsm_key"),
+                        "error": msg.get("error"),
+                    })
+                    continue
+
             if msg.get("type") == "set_widget_value" and a_proc.msg_io is not None:
                 await a_proc.msg_io.send({"type": "kernel_message", "message": msg})
 
@@ -850,6 +868,29 @@ async def handle_agent_messages(conn_a: SocketIo) -> None:
                 await k_proc.msg_io.send({
                     "type": "get_plot_image",
                     "key": params.get("key"),
+                    "scale": params.get("scale", 1.0),
+                    "width": params.get("width", 800),
+                    "height": params.get("height", 600),
+                    "viewport": params.get("viewport"),
+                    "agent_tx_id": tx_id,
+                })
+            else:
+                await conn_a.send({
+                    "type": "agent_action_response",
+                    "tx_id": tx_id,
+                    "status": "error",
+                    "error": "Kernel not connected",
+                })
+            continue
+
+        if msg_type == "agent_action" and msg.get("action") == "h5_get_image":
+            if k_proc.msg_io is not None:
+                params = msg.get("params", {})
+                await k_proc.msg_io.send({
+                    "type": "h5_get_image",
+                    "key": params.get("key"),
+                    "obsm_key": params.get("obsm_key"),
+                    "color_by": params.get("color_by"),
                     "scale": params.get("scale", 1.0),
                     "width": params.get("width", 800),
                     "height": params.get("height", 600),
@@ -1131,8 +1172,7 @@ async def poll_skills_branch() -> None:
             variables={"podId": pod_id},
         )
         metadata_str = (
-            resp
-            .get("data", {})
+            resp.get("data", {})
             .get("podInfo", {})
             .get("plotNotebook", {})
             .get("metadata")
