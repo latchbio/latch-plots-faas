@@ -844,9 +844,7 @@ class AgentHarness:
             for block in content
         )
 
-    def _build_retried_query(
-        self, entry: StoredAgentHistoryEntry
-    ) -> AgentQuery | None:
+    def _build_retried_query(self, entry: StoredAgentHistoryEntry) -> AgentQuery | None:
         payload = entry.get("payload")
         if not isinstance(payload, dict):
             return None
@@ -1740,7 +1738,7 @@ class AgentHarness:
                     )
                 )
 
-            elif nested_type == "set_widget_value":
+            elif nested_type == "set_widget_value" and len(self.pending_widgets) > 0:
                 data = nested_msg.get("data", {})
                 for key, value in data.items():
                     if key in self.pending_widgets:
