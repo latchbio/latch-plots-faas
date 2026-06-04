@@ -19,6 +19,8 @@ from loro import (
 )
 from utils import auth_token_sdk, gql_query, pod_id
 
+# todo(rteqs): ldata-fuse gql generator
+
 
 @dataclass(frozen=True)
 class NotebookCrdtUpdates:
@@ -322,19 +324,15 @@ def parse_ts_container_id(s: str) -> ContainerID:
     raise
 
 
+@dataclass
 class Notebook:
-    def __init__(
-        self,
-        notebook_id: str,
-        loro_doc: LoroDoc,
-        latest_update_id: str | None,
-        owner_id: str,
-    ) -> None:
-        self.notebook_id = notebook_id
-        self.loro_doc = loro_doc
-        self.latest_update_id = latest_update_id
+    notebook_id: str
+    loro_doc: LoroDoc
+    latest_update_id: str | None
+    owner_id: str
+
+    def __post_init__(self) -> None:
         self.last_persisted_version = self.loro_doc.oplog_vv
-        self.owner_id = owner_id
 
     @classmethod
     async def create(cls, notebook_id: str) -> "Notebook":
@@ -354,7 +352,7 @@ class Notebook:
         self.latest_update_id = res.latest_update_id
         self.loro_doc.import_batch(res.updates)
 
-    async def export_updates(self) -> None:
+    async def push_updates(self) -> None:
         upd = self.loro_doc.export(mode=ExportMode.Updates(self.last_persisted_version))
         self.last_persisted_version = self.loro_doc.oplog_vv
         try:
@@ -449,7 +447,7 @@ class Notebook:
             traceback.print_exc()
             raise
 
-        await self.export_updates()
+        await self.push_updates()
         return cell_id, tf_id
 
     async def create_markdown_cell(self, pos: int, content: str | None) -> str:
@@ -462,7 +460,7 @@ class Notebook:
         if content is not None:
             source.insert(0, content)
 
-        await self.export_updates()
+        await self.push_updates()
 
         return loro_ts_container_id(cell.id)
 
@@ -476,7 +474,7 @@ class Notebook:
         if name is not None:
             source.insert(0, name)
 
-        await self.export_updates()
+        await self.push_updates()
 
         return loro_ts_container_id(cell.id)
 
@@ -538,7 +536,7 @@ class Notebook:
         assert isinstance(source, LoroText)
         source.update(new_name)
 
-        await self.export_updates()
+        await self.push_updates()
 
     async def edit_cell(self, cell_id: str, new_code: str) -> None:
         await self.fetch_updates()
@@ -560,7 +558,7 @@ class Notebook:
         assert isinstance(source, LoroText)
         source.update(new_code)
 
-        await self.export_updates()
+        await self.push_updates()
 
     async def delete_cell(self, cell_id: str) -> None:
         await self.fetch_updates()
@@ -571,7 +569,7 @@ class Notebook:
                 break
 
         self.cells.delete(pos, 1)
-        await self.export_updates()
+        await self.push_updates()
 
         await gql_query(
             query="""
@@ -594,7 +592,7 @@ class Notebook:
     async def delete_all_cells(self) -> None:
         await self.fetch_updates()
         self.cells.clear()
-        await self.export_updates()
+        await self.push_updates()
 
         await gql_query(
             query="""

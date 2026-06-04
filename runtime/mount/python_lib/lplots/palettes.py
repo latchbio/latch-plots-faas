@@ -78,6 +78,9 @@ async def get() -> Palettes:
     return palettes
 
 
+# todo(rteqs): code duplication with console
+
+
 class Palette(TypedDict):
     colors: list[str]
     type: Literal["categorical", "continuous"]

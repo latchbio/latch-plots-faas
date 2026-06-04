@@ -656,7 +656,7 @@ def _split_violin_groups(
     split_idx = np.flatnonzero(np.diff(cat_idx_sorted)) + 1
     groups = np.split(order_idx, split_idx)
     group_traces: list[dict[str, Any]] = []
-    for label, idxs in zip(order, groups, strict=False):
+    for label, idxs in zip(order, groups, strict=True):
         child = deepcopy(trace)
         child[data_axis] = vals_arr[idxs]
 
