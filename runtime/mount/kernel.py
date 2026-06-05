@@ -19,7 +19,7 @@ import socket
 import sys
 import threading
 import traceback
-from base64 import b64decode
+from base64 import b64decode, b64encode
 from collections import defaultdict
 from collections.abc import Generator, Iterator
 from concurrent.futures import ThreadPoolExecutor
@@ -41,7 +41,8 @@ from duckdb import DuckDBPyConnection
 from latch.ldata.path import LPath
 from latch.registry.table import Table
 from latch_cli.utils import urljoins
-from lplots import _inject
+from lplots import _inject, palettes
+from lplots.h5.h5ad.process_message import contexts
 from lplots.h5.process_message import handle_h5_widget_message
 from lplots.h5.utils import auto_install
 from lplots.h5.utils.persistence import load_anndata, serialize_anndata
@@ -619,7 +620,6 @@ class CategorizedCellOutputs:
 def _split_violin_groups(
     trace: dict[str, Any],
 ) -> tuple[list[dict[str, Any]] | None, bool]:
-
     orientation = trace.get("orientation", "v")
     data_axis = "y" if orientation == "v" else "x"
     index_axis = "x" if orientation == "v" else "y"
@@ -656,7 +656,7 @@ def _split_violin_groups(
     split_idx = np.flatnonzero(np.diff(cat_idx_sorted)) + 1
     groups = np.split(order_idx, split_idx)
     group_traces: list[dict[str, Any]] = []
-    for label, idxs in zip(order, groups):
+    for label, idxs in zip(order, groups, strict=True):
         child = deepcopy(trace)
         child[data_axis] = vals_arr[idxs]
 
@@ -1141,7 +1141,6 @@ class Kernel:
         await self.update_kernel_snapshot_status("save_kernel_snapshot", "done")
 
     async def load_kernel_snapshot(self) -> None:
-
         snapshot_f = snapshot_dir / snapshot_f_name
         if not snapshot_f.exists():
             await self.update_kernel_snapshot_status("load_kernel_snapshot", "done")
@@ -2168,20 +2167,69 @@ class Kernel:
                 )
 
         if msg["type"] == "set_widget_value":
+            agent_tx_id = msg.get("agent_tx_id")
+            errors: list[str] = []
             for w_key, payload in msg["data"].items():
                 try:
                     if w_key not in self.widget_signals:
+                        errors.append(f"widget '{w_key}' not found")
                         continue
 
                     async with ctx.transaction:
                         self.widget_signals[w_key](
                             orjson.loads(payload), _ui_update=True
                         )
-                except Exception:
+                except Exception as e:
                     traceback.print_exc()
+                    errors.append(f"widget '{w_key}': {e!s}")
                     continue
 
-            await self.send(msg)
+            broadcast_msg = {k: v for k, v in msg.items() if k != "agent_tx_id"}
+            await self.send(broadcast_msg)
+
+            if agent_tx_id is not None:
+                await self.send({
+                    "type": "set_widget_value_response",
+                    "agent_tx_id": agent_tx_id,
+                    "status": "error" if errors else "success",
+                    "error": "; ".join(errors) if errors else None,
+                })
+            return
+
+        if msg["type"] == "get_widget_value":
+            agent_tx_id = msg.get("agent_tx_id")
+            key = msg.get("key", "")
+
+            widget_state = None
+            for n in self.nodes_with_widgets.values():
+                path = n.name_path()
+                for k, v in n.widget_states.items():
+                    if f"{path}/{k}" == key:
+                        widget_state = copy(v)
+                        break
+                if widget_state is not None:
+                    break
+
+            if widget_state is None:
+                await self.send({
+                    "type": "get_widget_value_response",
+                    "agent_tx_id": agent_tx_id,
+                    "status": "error",
+                    "error": f"Widget '{key}' not found",
+                })
+                return
+
+            if key in self.widget_signals:
+                val = self.widget_signals[key].sample()
+                if val is not Nothing.x:
+                    widget_state["value"] = val
+
+            await self.send({
+                "type": "get_widget_value_response",
+                "agent_tx_id": agent_tx_id,
+                "status": "success",
+                "state": widget_state,
+            })
             return
 
         if msg["type"] == "globals_summary":
@@ -2238,6 +2286,234 @@ class Kernel:
             })
             return
 
+        if msg["type"] == "get_plot_image":
+            agent_tx_id = msg.get("agent_tx_id")
+            key = msg.get("key", "")
+            scale = float(msg.get("scale", 1.0))
+            width = int(msg.get("width", 800))
+            height = int(msg.get("height", 600))
+            viewport = msg.get("viewport")
+
+            if key not in self.k_globals:
+                await self.send({
+                    "type": "get_plot_image_response",
+                    "agent_tx_id": agent_tx_id,
+                    "status": "error",
+                    "error": f"Global variable '{key}' not found",
+                })
+                return
+
+            value = self.k_globals[key]
+            if isinstance(value, Signal):
+                value = value.sample()
+
+            fig: Figure | None = None
+            if isinstance(value, Figure):
+                fig = value
+            elif hasattr(value, "figure") and isinstance(value.figure, Figure):
+                fig = value.figure
+
+            if fig is None:
+                await self.send({
+                    "type": "get_plot_image_response",
+                    "agent_tx_id": agent_tx_id,
+                    "status": "error",
+                    "error": f"Global '{key}' is not a matplotlib Figure (got {type(value).__name__})",
+                })
+                return
+
+            try:
+                if viewport is not None:
+                    x_range = viewport.get("x")
+                    y_range = viewport.get("y")
+                    for ax in fig.axes:
+                        if x_range is not None:
+                            ax.set_xlim(x_range[0], x_range[1])
+                        if y_range is not None:
+                            ax.set_ylim(y_range[0], y_range[1])
+
+                dpi = 100.0 * scale
+                fig.set_size_inches(width / 100.0, height / 100.0)
+
+                buf = io.BytesIO()
+                fig.canvas.print_figure(
+                    buf,
+                    format="webp",
+                    dpi=dpi,
+                    bbox_inches="tight",
+                    pil_kwargs={"quality": 80, "lossless": False},
+                )
+                img_b64 = b64encode(buf.getvalue()).decode("utf-8")
+            except Exception as e:
+                await self.send({
+                    "type": "get_plot_image_response",
+                    "agent_tx_id": agent_tx_id,
+                    "status": "error",
+                    "error": f"Failed to render figure: {type(e).__name__}: {e}",
+                })
+                return
+
+            await self.send({
+                "type": "get_plot_image_response",
+                "agent_tx_id": agent_tx_id,
+                "status": "success",
+                "image": f"data:image/webp;base64,{img_b64}",
+                "mime_type": "image/webp",
+            })
+            return
+
+        if msg["type"] == "h5_get_image":
+            agent_tx_id = msg.get("agent_tx_id")
+            key = msg.get("key", "")
+
+            widget_state = None
+            for n in self.nodes_with_widgets.values():
+                path = n.name_path()
+                for k, v in n.widget_states.items():
+                    if f"{path}/{k}" == key:
+                        widget_state = copy(v)
+                        break
+                if widget_state is not None:
+                    break
+
+            if widget_state is None:
+                await self.send({
+                    "type": "h5_get_image_response",
+                    "agent_tx_id": agent_tx_id,
+                    "status": "error",
+                    "error": f"Widget '{key}' not found",
+                })
+                return
+
+            if widget_state.get("type") != "h5":
+                await self.send({
+                    "type": "h5_get_image_response",
+                    "agent_tx_id": agent_tx_id,
+                    "status": "error",
+                    "error": f"Widget '{key}' is not an h5 widget",
+                })
+                return
+
+            obj_id = widget_state.get("obj_id")
+            ctx = contexts.get(obj_id) if obj_id is not None else None
+
+            if ctx is None:
+                await self.send({
+                    "type": "h5_get_image_response",
+                    "agent_tx_id": agent_tx_id,
+                    "status": "error",
+                    "error": "H5 Viewer context not found",
+                })
+                return
+
+            presets = widget_state.get("viewer_presets") or {}
+
+            obsm_key = msg.get("obsm_key") or presets.get("default_obsm_key")
+            if obsm_key is None:
+                obsm_keys = list(ctx.adata.obsm.keys())
+                if len(obsm_keys) == 0:
+                    await self.send({
+                        "type": "h5_get_image_response",
+                        "agent_tx_id": agent_tx_id,
+                        "status": "error",
+                        "error": "AnnData object has no obsm embeddings to plot",
+                    })
+                    return
+                obsm_key = obsm_keys[0]
+
+            color_by_raw = msg.get("color_by") or presets.get("default_color_by")
+            color_by = None
+            if color_by_raw is not None:
+                if color_by_raw.get("type") == "obs":
+                    color_by = ("obs", color_by_raw["key"])
+                elif color_by_raw.get("type") == "var":
+                    color_by = ("var", color_by_raw["keys"])
+
+            color_palettes = {
+                "categorical": (
+                    presets.get("categorical_color_palette")
+                    or palettes.default_categorical_color_palette
+                ),
+                "continuous": (
+                    presets.get("continuous_color_palette")
+                    or palettes.default_continuous_color_palette
+                ),
+                "default_color": "#DFE1E6",
+                "obs_type_overrides": {},
+            }
+
+            if ctx._index is None:
+                ctx.compute_index(filters=None, max_cells=100_000)
+
+            data = [{
+                "type": "scattergl",
+                "mode": "markers",
+                "marker": {
+                    "size": 3,
+                    "sizemode": "area",
+                    "color": color_palettes["default_color"],
+                },
+                "name": obsm_key,
+            }]
+            layout = {
+                "title": "",
+                "showlegend": False,
+                "hovermode": "closest",
+                "autosize": True,
+                "margin": {"l": 0, "r": 0, "t": 0, "b": 0, "pad": 0},
+                "plot_bgcolor": "white",
+                "paper_bgcolor": "white",
+                "xaxis": {
+                    "showgrid": False,
+                    "zeroline": False,
+                    "showline": False,
+                    "showticklabels": False,
+                    "title": "",
+                },
+                "yaxis": {
+                    "showgrid": False,
+                    "zeroline": False,
+                    "showline": False,
+                    "showticklabels": False,
+                    "title": "",
+                    "scaleanchor": "x",
+                    "scaleratio": 1,
+                },
+            }
+
+            try:
+                image = ctx.export_image(
+                    obsm_key=obsm_key,
+                    data=data,
+                    layout=layout,
+                    color_palettes=color_palettes,
+                    color_by=color_by,
+                    scale=float(msg.get("scale", 1.0)),
+                    width=int(msg.get("width", 800)),
+                    height=int(msg.get("height", 600)),
+                    viewport=msg.get("viewport"),
+                    image_format="webp",
+                )
+            except Exception as e:
+                await self.send({
+                    "type": "h5_get_image_response",
+                    "agent_tx_id": agent_tx_id,
+                    "status": "error",
+                    "error": f"Failed to render h5 image: {type(e).__name__}: {e}",
+                })
+                return
+
+            img_b64 = b64encode(image).decode("utf-8")
+            await self.send({
+                "type": "h5_get_image_response",
+                "agent_tx_id": agent_tx_id,
+                "status": "success",
+                "image": f"data:image/webp;base64,{img_b64}",
+                "mime_type": "image/webp",
+                "obsm_key": obsm_key,
+            })
+            return
+
         if msg["type"] == "h5":
             response = await handle_h5_widget_message(msg, self.send)
             if response is not None:
@@ -2258,7 +2534,6 @@ def sigterm_handler(signum: int, frame: FrameType | None) -> None:
 
 
 async def main() -> None:
-
     global loop
     loop = asyncio.get_running_loop()
 
