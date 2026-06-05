@@ -3,7 +3,7 @@ import contextlib
 import json
 import re
 import traceback
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -195,6 +195,96 @@ class GetPlotNotebookCheckpointRes:
     data: GetPlotNotebookCheckpointData
 
 
+@dataclass(frozen=True)
+class PlotTransformContextNode:
+    id: str
+    loroCellId: str | None
+    displayName: str | None
+    widgetState: str | None
+
+
+@dataclass(frozen=True)
+class PlotTransformContextNodes:
+    nodes: list[PlotTransformContextNode]
+
+
+@dataclass(frozen=True)
+class NotebookMetadataAndTransformsInfo:
+    displayName: str | None
+    metadata: str | None
+
+
+@dataclass(frozen=True)
+class NotebookMetadataAndTransformsData:
+    plotNotebookInfo: NotebookMetadataAndTransformsInfo | None
+    plotTransformInfos: PlotTransformContextNodes
+
+
+@dataclass(frozen=True)
+class NotebookMetadataAndTransformsRes:
+    data: NotebookMetadataAndTransformsData
+
+
+@dataclass(frozen=True, kw_only=True)
+class NotebookMetadataAndTransforms:
+    display_name: str | None
+    metadata: dict[str, Any] | None
+    tf_by_loro_cell_id: dict[str, PlotTransformContextNode]
+
+
+async def get_notebook_metadata_and_transforms(
+    notebook_id: str,
+) -> NotebookMetadataAndTransforms:
+    gql_res = await gql_query(
+        query="""
+            query GetNotebookMetadataAndTransforms($notebookId: BigInt!) {
+                plotNotebookInfo(id: $notebookId) {
+                    displayName
+                    metadata
+                }
+                plotTransformInfos(
+                    filter: {
+                        parentNotebookId: { equalTo: $notebookId }
+                        removalTime: { isNull: true }
+                    }
+                ) {
+                    nodes {
+                        id
+                        loroCellId
+                        displayName
+                        widgetState
+                    }
+                }
+            }
+        """,
+        variables={"notebookId": notebook_id},
+        auth=auth_token_sdk,
+    )
+    res = validate(gql_res, NotebookMetadataAndTransformsRes)
+
+    info = res.data.plotNotebookInfo
+    display_name = info.displayName if info is not None else None
+
+    metadata: dict[str, Any] | None = None
+    if info is not None and info.metadata:
+        try:
+            metadata = json.loads(info.metadata)
+        except Exception:
+            metadata = None
+
+    tf_by_loro_cell_id = {
+        n.loroCellId: n
+        for n in res.data.plotTransformInfos.nodes
+        if n.loroCellId is not None
+    }
+
+    return NotebookMetadataAndTransforms(
+        display_name=display_name,
+        metadata=metadata,
+        tf_by_loro_cell_id=tf_by_loro_cell_id,
+    )
+
+
 @dataclass(frozen=True, kw_only=True)
 class NotebookCrdt:
     loro_doc: LoroDoc
@@ -330,6 +420,11 @@ class Notebook:
     loro_doc: LoroDoc
     latest_update_id: str | None
     owner_id: str
+    display_name: str | None = None
+    metadata: dict[str, Any] | None = None
+    tf_by_loro_cell_id: dict[str, PlotTransformContextNode] = field(
+        default_factory=dict
+    )
 
     def __post_init__(self) -> None:
         self.last_persisted_version = self.loro_doc.oplog_vv
@@ -337,12 +432,28 @@ class Notebook:
     @classmethod
     async def create(cls, notebook_id: str) -> "Notebook":
         res = await get_notebook_doc(notebook_id)
-        return cls(
+        notebook = cls(
             notebook_id=notebook_id,
             loro_doc=res.loro_doc,
             latest_update_id=res.latest_update_id,
             owner_id=res.owner_id,
         )
+        await notebook._refresh_metadata_and_transforms()
+        return notebook
+
+    @property
+    def default_tab_name(self) -> str:
+        if self.metadata is not None:
+            name = self.metadata.get("defaultTabName")
+            if name:
+                return str(name)
+        return "Tab 1"
+
+    async def _refresh_metadata_and_transforms(self) -> None:
+        info = await get_notebook_metadata_and_transforms(self.notebook_id)
+        self.display_name = info.display_name
+        self.metadata = info.metadata
+        self.tf_by_loro_cell_id = info.tf_by_loro_cell_id
 
     async def fetch_updates(self) -> None:
         res = await get_notebook_crdt_updates(
@@ -351,6 +462,8 @@ class Notebook:
 
         self.latest_update_id = res.latest_update_id
         self.loro_doc.import_batch(res.updates)
+
+        await self._refresh_metadata_and_transforms()
 
     async def push_updates(self) -> None:
         upd = self.loro_doc.export(mode=ExportMode.Updates(self.last_persisted_version))

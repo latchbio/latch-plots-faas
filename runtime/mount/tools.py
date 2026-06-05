@@ -12,7 +12,7 @@ from claude_agent_sdk import (
 from latch_data_validation.data_validation import validate
 from loro import LoroMap
 from lplots import _inject
-from notebook import get_notebook, parse_ts_container_id
+from notebook import get_notebook, loro_ts_container_id, parse_ts_container_id
 from utils import auth_token_sdk, gql_query
 
 
@@ -39,52 +39,76 @@ class RedeemPackageRes:
     data: RedeemPackageData
 
 
-@dataclass(frozen=True)
-class PlotTransformInfoNode:
-    id: str
+# todo(rteqs): could use a refactor to simplify
+async def build_notebook_context() -> dict[str, Any]:
+    h = harness()
+    notebook = await get_notebook()
+    await notebook.fetch_updates()
 
+    cells: list[dict[str, Any]] = []
+    cids = notebook.cells.to_vec()
+    for index, cid in enumerate(cids):
+        cell_id = loro_ts_container_id(cid)
+        container = notebook.loro_doc.get_container(id=cid)
+        source = ""
+        cell_type = "unknown"
+        if isinstance(container, LoroMap):
+            deep = container.get_deep_value()
+            if isinstance(deep, dict):
+                cell_type = str(deep.get("cellType", "unknown"))
+                if cell_type == "tabMarker":
+                    source = str(deep.get("displayName", "") or "")
+                else:
+                    source = str(deep.get("source", "") or "")
 
-@dataclass(frozen=True)
-class PlotTransformInfoNodes:
-    nodes: list[PlotTransformInfoNode]
+        cell: dict[str, Any] = {
+            "index": index,
+            "user_id": index,
+            "cell_id": cell_id,
+            "cell_type": cell_type,
+            "source": source,
+            "status": "idle",
+        }
 
+        if cell_type == "code":
+            tf = notebook.tf_by_loro_cell_id.get(cell_id)
+            if tf is not None:
+                cell["tf_id"] = tf.id
+                if tf.displayName is not None:
+                    cell["display_name"] = tf.displayName
+                cell["status"] = "running" if tf.id in h.pending_cells else "idle"
 
-@dataclass(frozen=True)
-class ResolveTfIdData:
-    plotTransformInfos: PlotTransformInfoNodes
+                if tf.widgetState:
+                    try:
+                        widget_state = json.loads(tf.widgetState)
+                    except Exception:
+                        widget_state = None
 
+                    if isinstance(widget_state, dict):
+                        widgets: list[dict[str, Any]] = []
+                        for wkey, widget in widget_state.items():
+                            if not isinstance(widget, dict):
+                                continue
+                            winfo: dict[str, Any] = {
+                                "key": wkey,
+                                "type": widget.get("type"),
+                            }
+                            if "label" in widget:
+                                winfo["label"] = widget["label"]
+                            if "value" in widget:
+                                winfo["value"] = widget["value"]
+                            widgets.append(winfo)
+                        if len(widgets) > 0:
+                            cell["widgets"] = widgets
 
-@dataclass(frozen=True)
-class ResolveTfIdRes:
-    data: ResolveTfIdData
+        cells.append(cell)
 
-
-async def resolve_tf_id(notebook_id: str, loro_cell_id: str) -> str | None:
-    gql_res = await gql_query(
-        query="""
-            query ResolveTfId($notebookId: BigInt!, $loroCellId: String!) {
-                plotTransformInfos(
-                    filter: {
-                        parentNotebookId: { equalTo: $notebookId }
-                        loroCellId: { equalTo: $loroCellId }
-                        removalTime: { isNull: true }
-                    }
-                    first: 1
-                ) {
-                    nodes {
-                        id
-                    }
-                }
-            }
-        """,
-        variables={"notebookId": notebook_id, "loroCellId": loro_cell_id},
-        auth=auth_token_sdk,
-    )
-    res = validate(gql_res, ResolveTfIdRes)
-    nodes = res.data.plotTransformInfos.nodes
-    if len(nodes) == 0:
-        return None
-    return nodes[0].id
+    return {
+        "cell_count": len(cells),
+        "cells": cells,
+        "notebook_name": notebook.display_name,
+        "default_tab_name": notebook.default_tab_name,
+    }
 
 
 if TYPE_CHECKING:
@@ -297,6 +321,7 @@ async def edit_cell(args: dict[str, Any]) -> dict[str, Any]:
     print(f"[tool] edit_cell id={cell_id}")
     try:
         notebook = await get_notebook()
+        await notebook.fetch_updates()
         original_code = ""
         container = notebook.loro_doc.get_container(id=parse_ts_container_id(cell_id))
         if isinstance(container, LoroMap):
@@ -304,13 +329,14 @@ async def edit_cell(args: dict[str, Any]) -> dict[str, Any]:
             if isinstance(deep, dict):
                 original_code = str(deep.get("source", "") or "")
 
-        tf_id = await resolve_tf_id(notebook.notebook_id, cell_id)
-        if tf_id is None:
+        tf = notebook.tf_by_loro_cell_id.get(cell_id)
+        if tf is None:
             return ok({
                 "tool_name": "edit_cell",
                 "summary": f"Failed to edit cell: no transform found for cell_id {cell_id}",
                 "success": False,
             })
+        tf_id = tf.id
 
         await notebook.edit_cell(cell_id=cell_id, new_code=new_code)
     except Exception as e:
@@ -370,6 +396,7 @@ async def run_cell(args: dict[str, Any]) -> dict[str, Any]:
     print(f"[tool] run_cell id={cell_id}")
     try:
         notebook = await get_notebook()
+        await notebook.fetch_updates()
         container = notebook.loro_doc.get_container(id=parse_ts_container_id(cell_id))
         if not isinstance(container, LoroMap):
             return ok({
@@ -382,13 +409,14 @@ async def run_cell(args: dict[str, Any]) -> dict[str, Any]:
         if isinstance(deep, dict):
             source = str(deep.get("source", "") or "")
 
-        tf_id = await resolve_tf_id(notebook.notebook_id, cell_id)
-        if tf_id is None:
+        tf = notebook.tf_by_loro_cell_id.get(cell_id)
+        if tf is None:
             return ok({
                 "tool_name": "run_cell",
                 "summary": f"Failed to run cell: no transform found for cell_id {cell_id}",
                 "success": False,
             })
+        tf_id = tf.id
     except Exception as e:
         return ok({
             "tool_name": "run_cell",
@@ -500,24 +528,40 @@ async def stop_cell(args: dict[str, Any]) -> dict[str, Any]:
     title = args["title"]
     action_summary = args["action_summary"]
 
-    params = {"cell_id": cell_id}
-
-    result = await h.atomic_operation("stop_cell", params)
-    if result.get("status") == "success":
-        h.pending_cells.discard(cell_id)
+    print(f"[tool] stop_cell id={cell_id}")
+    try:
+        notebook = await get_notebook()
+        await notebook.fetch_updates()
+        tf = notebook.tf_by_loro_cell_id.get(cell_id)
+        if tf is None:
+            return ok({
+                "tool_name": "stop_cell",
+                "summary": f"Failed to stop cell: no transform found for cell_id {cell_id}",
+                "success": False,
+            })
+        tf_id = tf.id
+    except Exception as e:
         return ok({
             "tool_name": "stop_cell",
-            "summary": f"Stopped cell {cell_id}",
-            "cell_id": cell_id,
-            "cell_name": title,
-            "message": action_summary,
-            "success": True,
+            "summary": f"Failed to stop cell: {e!s}",
+            "success": False,
         })
+
+    h.pending_cells.discard(tf_id)
+    await h.send({
+        "type": "agent_action",
+        "action": "stop_cell",
+        "params": {"cell_id": tf_id},
+    })
 
     return ok({
         "tool_name": "stop_cell",
-        "summary": f"Failed to stop cell {cell_id}: {result.get('error', 'Unknown error')}",
-        "success": False,
+        "summary": f"Stopped cell {cell_id}",
+        "cell_id": cell_id,
+        "tf_id": tf_id,
+        "cell_name": title,
+        "message": action_summary,
+        "success": True,
     })
 
 

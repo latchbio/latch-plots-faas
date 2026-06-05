@@ -601,6 +601,24 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                     latest_reactivity_summary = cell_reactivity
                 continue
 
+            elif (
+                msg["type"] == "reset_kernel_globals_complete"
+                and "agent_tx_id" in msg
+            ):
+                tx_id = msg.get("agent_tx_id")
+
+                if a_proc.msg_io is not None:
+                    print(
+                        f"[entrypoint] Routing reset_kernel_globals response to agent (tx_id={tx_id})"
+                    )
+                    await a_proc.msg_io.send({
+                        "type": "agent_action_response",
+                        "tx_id": tx_id,
+                        "status": "success",
+                    })
+
+                continue
+
             elif msg["type"] == "globals_summary" and "agent_tx_id" in msg:
                 tx_id = msg.get("agent_tx_id")
 
@@ -819,6 +837,44 @@ async def handle_agent_messages(conn_a: SocketIo) -> None:
                         "status": "success",
                         "cell_id": params.get("cell_id"),
                     })
+            elif tx_id is not None:
+                await conn_a.send({
+                    "type": "agent_action_response",
+                    "tx_id": tx_id,
+                    "status": "error",
+                    "error": "Kernel not connected",
+                })
+            continue
+
+        if msg_type == "agent_action" and msg.get("action") == "stop_cell":
+            if k_proc.msg_io is not None:
+                params = msg.get("params", {})
+                await k_proc.msg_io.send({
+                    "type": "stop_cell",
+                    "cell_id": params.get("cell_id"),
+                })
+                if tx_id is not None:
+                    await conn_a.send({
+                        "type": "agent_action_response",
+                        "tx_id": tx_id,
+                        "status": "success",
+                        "cell_id": params.get("cell_id"),
+                    })
+            elif tx_id is not None:
+                await conn_a.send({
+                    "type": "agent_action_response",
+                    "tx_id": tx_id,
+                    "status": "error",
+                    "error": "Kernel not connected",
+                })
+            continue
+
+        if msg_type == "agent_action" and msg.get("action") == "reset_kernel_globals":
+            if k_proc.msg_io is not None:
+                await k_proc.msg_io.send({
+                    "type": "reset_kernel_globals",
+                    "agent_tx_id": tx_id,
+                })
             elif tx_id is not None:
                 await conn_a.send({
                     "type": "agent_action_response",

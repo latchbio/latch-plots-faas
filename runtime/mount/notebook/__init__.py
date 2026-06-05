@@ -1,5 +1,6 @@
 from notebook.notebook import (
     Notebook,
+    PlotTransformContextNode,
     get_notebook,
     loro_ts_container_id,
     parse_ts_container_id,
@@ -7,6 +8,7 @@ from notebook.notebook import (
 
 __all__ = [
     "Notebook",
+    "PlotTransformContextNode",
     "get_notebook",
     "loro_ts_container_id",
     "parse_ts_container_id",

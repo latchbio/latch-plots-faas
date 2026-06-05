@@ -50,7 +50,13 @@ from claude_agent_sdk.types import (
 from latch_data_validation.data_validation import validate
 from lplots import _inject
 from socketio_thread import SocketIoThread
-from tools import MCP_ALLOWED_TOOL_NAMES, MCP_SERVER_NAME, agent_tools_mcp, can_use_tool
+from tools import (
+    MCP_ALLOWED_TOOL_NAMES,
+    MCP_SERVER_NAME,
+    agent_tools_mcp,
+    build_notebook_context,
+    can_use_tool,
+)
 from utils import auth_token_sdk, gql_query, nucleus_url, pod_id, sdk_token
 
 sys.stdout.reconfigure(line_buffering=True)
@@ -471,13 +477,14 @@ class AgentHarness:
         return [{"type": "text", "text": json.dumps(result_payload)}]
 
     async def refresh_cells_context(self) -> str:
-        context_result, reactivity_result = await asyncio.gather(
-            self.atomic_operation("get_context"),
-            self.atomic_operation("request_reactivity_summary", timeout=1.0),
+        reactivity_result = await self.atomic_operation(
+            "request_reactivity_summary", timeout=1.0
         )
 
-        if context_result.get("status") != "success":
-            print(f"[agent] Failed to get notebook context: {context_result}")
+        try:
+            context = await build_notebook_context()
+        except Exception as e:
+            print(f"[agent] Failed to get notebook context: {e!r}")
             return "Latch Plots is unable to provide context for this notebook due to an unknown error. Please inform the user that Latch Plots is having an issue and they should report it to support."
 
         reactivity_available: bool = reactivity_result.get("status") == "success"
@@ -486,7 +493,6 @@ class AgentHarness:
                 f"[agent] Reactivity summary unavailable: {reactivity_result.get('error', 'unknown')}"
             )
 
-        context = context_result.get("context", {})
         self.latest_notebook_context = context
 
         notebook_name = context.get("notebook_name")
