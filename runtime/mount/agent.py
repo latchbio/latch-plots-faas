@@ -1294,10 +1294,6 @@ class AgentHarness:
         assistant_message_started_at: float | None = None
         try:
             async for res in self.claude.receive_response():
-                print(
-                    f"[repro] res={type(res).__name__} {getattr(res, 'subtype', None)} stop={getattr(res, 'stop_reason', None)} err={getattr(res, 'error', None)}"
-                )
-
                 self.current_request_id = request_id
                 if (
                     isinstance(res, SystemMessage)
@@ -1310,6 +1306,10 @@ class AgentHarness:
                     if s_id is not None:
                         await self._persist_claude_session_id(s_id)
 
+                if isinstance(res, SystemMessage) and res.subtype == "api_retry":
+                    print("[agent] api_retry from CLI; surfacing 'retrying' status")
+                    await self.set_agent_status("retrying")
+
                 if isinstance(res, StreamEvent):
                     event = self._parse_stream_event(res.event)
                     if (
@@ -1321,6 +1321,54 @@ class AgentHarness:
                     await self._handle_stream_event(res)
 
                 elif isinstance(res, AssistantMessage):
+                    if res.model == "<synthetic>":
+                        synthetic_text = "".join(
+                            c.text for c in res.content if isinstance(c, TextBlock)
+                        ).strip()
+
+                        error_message = (
+                            synthetic_text
+                            if len(synthetic_text) > 0
+                            else (
+                                f"The agent encountered an error ({res.error})."
+                                if res.error is not None
+                                else "The agent encountered an error and could not complete the request."
+                            )
+                        )
+                        print(
+                            "[agent] synthetic error message detected "
+                            f"(error={res.error}): {error_message!r}"
+                        )
+                        await self.send({
+                            "type": "agent_error",
+                            "error": error_message,
+                            "fatal": False,
+                        })
+                        try:
+                            await self._insert_history(
+                                role="system",
+                                event_type="error",
+                                payload={
+                                    "message": error_message,
+                                    "raw_error": synthetic_text,
+                                    "assistant_error_type": (
+                                        str(res.error)
+                                        if res.error is not None
+                                        else None
+                                    ),
+                                    "should_contact_support": True,
+                                },
+                                request_id=request_id,
+                            )
+                        except Exception:
+                            print("[agent] Failed to persist synthetic error history")
+
+                        try:
+                            await self.claude.interrupt()
+                        except Exception:
+                            print("[agent] interrupt after synthetic error failed")
+                        break
+
                     turn_duration: float | None = None
                     if assistant_message_started_at is not None:
                         turn_duration = max(
