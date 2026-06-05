@@ -1294,6 +1294,10 @@ class AgentHarness:
         assistant_message_started_at: float | None = None
         try:
             async for res in self.claude.receive_response():
+                print(
+                    f"[repro] res={type(res).__name__} {getattr(res, 'subtype', None)} stop={getattr(res, 'stop_reason', None)} err={getattr(res, 'error', None)}"
+                )
+
                 self.current_request_id = request_id
                 if (
                     isinstance(res, SystemMessage)
