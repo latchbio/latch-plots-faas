@@ -50,13 +50,7 @@ from claude_agent_sdk.types import (
 from latch_data_validation.data_validation import validate
 from lplots import _inject
 from socketio_thread import SocketIoThread
-from tools import (
-    MCP_ALLOWED_TOOL_NAMES,
-    MCP_SERVER_NAME,
-    agent_tools_mcp,
-    build_notebook_context,
-    can_use_tool,
-)
+from tools import MCP_ALLOWED_TOOL_NAMES, MCP_SERVER_NAME, agent_tools_mcp, can_use_tool
 from utils import auth_token_sdk, gql_query, nucleus_url, pod_id, sdk_token
 
 sys.stdout.reconfigure(line_buffering=True)
@@ -108,6 +102,7 @@ NOTEBOOK_MUTATION_TOOL_MATCHER = (
     "^mcp__" + MCP_SERVER_NAME + "__(" + "|".join(NOTEBOOK_MUTATION_TOOL_NAMES) + ")$"
 )
 
+# todo(rteqs): "plan", "build"
 Behavior = Literal["step_by_step", "proactive"]
 
 HistoryRole = Literal["user", "assistant", "system"]
@@ -477,14 +472,13 @@ class AgentHarness:
         return [{"type": "text", "text": json.dumps(result_payload)}]
 
     async def refresh_cells_context(self) -> str:
-        reactivity_result = await self.atomic_operation(
-            "request_reactivity_summary", timeout=1.0
+        context_result, reactivity_result = await asyncio.gather(
+            self.atomic_operation("get_context"),
+            self.atomic_operation("request_reactivity_summary", timeout=1.0),
         )
 
-        try:
-            context = await build_notebook_context()
-        except Exception as e:
-            print(f"[agent] Failed to get notebook context: {e!r}")
+        if context_result.get("status") != "success":
+            print(f"[agent] Failed to get notebook context: {context_result}")
             return "Latch Plots is unable to provide context for this notebook due to an unknown error. Please inform the user that Latch Plots is having an issue and they should report it to support."
 
         reactivity_available: bool = reactivity_result.get("status") == "success"
@@ -493,6 +487,7 @@ class AgentHarness:
                 f"[agent] Reactivity summary unavailable: {reactivity_result.get('error', 'unknown')}"
             )
 
+        context = context_result.get("context", {})
         self.latest_notebook_context = context
 
         notebook_name = context.get("notebook_name")
@@ -1693,7 +1688,8 @@ class AgentHarness:
                     print(f"[agent] Ignoring cell_result for {cell_id} ")
                     return
 
-                self.pending_cells.discard(str(cell_id))
+                if cell_id is not None:
+                    self.pending_cells.discard(str(cell_id))
 
                 if success:
                     result_message = (
@@ -1744,17 +1740,10 @@ class AgentHarness:
 
             elif nested_type == "set_widget_value" and len(self.pending_widgets) > 0:
                 data = nested_msg.get("data", {})
-
-                has_expected_key = False
                 for key, value in data.items():
                     if key in self.pending_widgets:
-                        has_expected_key = True
                         self.pending_widgets[key] = value
                         print(f"        Set widget {key}")
-
-                if not has_expected_key:
-                    print("Ignoring. Not an expected widget updated")
-                    return
 
                 if all(v is not None for v in self.pending_widgets.values()):
                     await self.set_agent_status("thinking")
@@ -1763,7 +1752,6 @@ class AgentHarness:
                         f"{k}={v}" for k, v in self.pending_widgets.items()
                     )
                     content = f"User provided input via widget(s): {widget_info}"
-                    self.pending_widgets.clear()
 
                     await self._insert_history(
                         payload={"content": content, "hidden": True}

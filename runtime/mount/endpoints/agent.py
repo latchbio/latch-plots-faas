@@ -1,4 +1,5 @@
 import asyncio
+from typing import Literal
 
 import orjson
 from latch_asgi.context.websocket import Context, HandlerResult
@@ -10,15 +11,20 @@ import runtime.mount.entrypoint as entrypoint_module
 
 from ..entrypoint import (
     a_proc,
+    action_handler_ready_ev,
     handle_user_disconnect_fallback,
     mark_action_handled,
     pod_id,
     pod_session_id,
+    restart_headless_browser,
     start_agent_proc,
+    start_headless_browser,
 )
 
 connection_idx = 0
 agent_start_lock = asyncio.Lock()
+
+ConnectionRole = Literal["user", "action_handler", "unknown"]
 
 
 @trace_app_function_with_span
@@ -32,6 +38,8 @@ async def agent(s: Span, ctx: Context) -> HandlerResult:
         "pod_session_id": pod_session_id,
         "connection_idx": connection_idx,
     })
+
+    connection_role: ConnectionRole = "unknown"
 
     async with agent_start_lock:
         if a_proc.msg_io is None:
@@ -56,11 +64,26 @@ async def agent(s: Span, ctx: Context) -> HandlerResult:
 
             msg_type = msg.get("type")
             if msg_type == "init":
-                entrypoint_module.user_agent_ctx = ctx
+                local_storage = msg.get("local_storage")
 
-                notebook_id = msg.get("notebook_id")
-                if notebook_id is None:
-                    raise ValueError("notebook_id required in init message")
+                if isinstance(local_storage, dict) and len(local_storage) > 0:
+                    connection_role = "user"
+                    entrypoint_module.user_agent_ctx = ctx
+
+                    notebook_id = msg.get("notebook_id")
+                    if notebook_id is None:
+                        raise ValueError("notebook_id required in init message")
+
+                    # This will be a noop if the browser is already running with the same local storage or if its an agent calling init
+                    # If this is called by a user session and the local storage has changed then the browser will be restarted
+                    await start_headless_browser(
+                        notebook_id,
+                        local_storage=local_storage,
+                    )
+                else:
+                    connection_role = "action_handler"
+                    entrypoint_module.action_handler_ctx = ctx
+                    action_handler_ready_ev.set()
 
             if msg_type == "agent_action_response":
                 tx_id = msg.get("tx_id")
@@ -69,8 +92,13 @@ async def agent(s: Span, ctx: Context) -> HandlerResult:
 
             await conn_a.send(msg)
     finally:
-        entrypoint_module.user_agent_ctx = None
-        # note(aidan): not sure if this is preferable to the agent figuring it out
-        await handle_user_disconnect_fallback()
+        if connection_role == "user":
+            entrypoint_module.user_agent_ctx = None
+            # note(aidan): not sure if this is preferable to the agent figuring it out
+            await handle_user_disconnect_fallback()
+        elif connection_role == "action_handler":
+            entrypoint_module.action_handler_ctx = None
+            action_handler_ready_ev.clear()
+            await restart_headless_browser()
 
     return "Ok"

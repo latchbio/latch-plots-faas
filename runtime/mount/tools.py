@@ -1,5 +1,6 @@
+from __future__ import annotations
+
 import json
-from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from claude_agent_sdk import (
@@ -9,107 +10,7 @@ from claude_agent_sdk import (
     create_sdk_mcp_server,
     tool,
 )
-from latch_data_validation.data_validation import validate
-from loro import LoroMap
 from lplots import _inject
-from notebook import get_notebook, loro_ts_container_id, parse_ts_container_id
-from utils import auth_token_sdk, gql_query
-
-
-@dataclass(frozen=True)
-class RedeemPackageResult:
-    resPackageId: str
-    resPackageVersionId: str
-    resRedeemedInAccountId: str
-
-
-@dataclass(frozen=True)
-class RedeemPackagePayload:
-    clientMutationId: str | None
-    result: RedeemPackageResult | None
-
-
-@dataclass(frozen=True)
-class RedeemPackageData:
-    redeemPackage: RedeemPackagePayload | None
-
-
-@dataclass(frozen=True)
-class RedeemPackageRes:
-    data: RedeemPackageData
-
-
-# todo(rteqs): could use a refactor to simplify
-async def build_notebook_context() -> dict[str, Any]:
-    h = harness()
-    notebook = await get_notebook()
-    await notebook.fetch_updates()
-
-    cells: list[dict[str, Any]] = []
-    cids = notebook.cells.to_vec()
-    for index, cid in enumerate(cids):
-        cell_id = loro_ts_container_id(cid)
-        container = notebook.loro_doc.get_container(id=cid)
-        source = ""
-        cell_type = "unknown"
-        if isinstance(container, LoroMap):
-            deep = container.get_deep_value()
-            if isinstance(deep, dict):
-                cell_type = str(deep.get("cellType", "unknown"))
-                if cell_type == "tabMarker":
-                    source = str(deep.get("displayName", "") or "")
-                else:
-                    source = str(deep.get("source", "") or "")
-
-        cell: dict[str, Any] = {
-            "index": index,
-            "user_id": index,
-            "cell_id": cell_id,
-            "cell_type": cell_type,
-            "source": source,
-            "status": "idle",
-        }
-
-        if cell_type == "code":
-            tf = notebook.tf_by_loro_cell_id.get(cell_id)
-            if tf is not None:
-                cell["tf_id"] = tf.id
-                if tf.displayName is not None:
-                    cell["display_name"] = tf.displayName
-                cell["status"] = "running" if tf.id in h.pending_cells else "idle"
-
-                if tf.widgetState:
-                    try:
-                        widget_state = json.loads(tf.widgetState)
-                    except Exception:
-                        widget_state = None
-
-                    if isinstance(widget_state, dict):
-                        widgets: list[dict[str, Any]] = []
-                        for wkey, widget in widget_state.items():
-                            if not isinstance(widget, dict):
-                                continue
-                            winfo: dict[str, Any] = {
-                                "key": wkey,
-                                "type": widget.get("type"),
-                            }
-                            if "label" in widget:
-                                winfo["label"] = widget["label"]
-                            if "value" in widget:
-                                winfo["value"] = widget["value"]
-                            widgets.append(winfo)
-                        if len(widgets) > 0:
-                            cell["widgets"] = widgets
-
-        cells.append(cell)
-
-    return {
-        "cell_count": len(cells),
-        "cells": cells,
-        "notebook_name": notebook.display_name,
-        "default_tab_name": notebook.default_tab_name,
-    }
-
 
 if TYPE_CHECKING:
     from agent import AgentHarness
@@ -131,9 +32,8 @@ MCP_TOOL_NAMES = [
     "restore_checkpoint",
     "execute_code",
     "get_global_info",
+    "capture_widget_image",
     "set_widget",
-    "get_widget",
-    "get_plot_image",
     "h5_filter_by",
     "h5_color_by",
     "h5_refresh",
@@ -146,7 +46,6 @@ MCP_TOOL_NAMES = [
     "h5_add_selected_cells_to_categorical_obs",
     "h5_set_marker_opacity",
     "h5_manage_obs",
-    "h5_get_image",
     "redeem_package",
     "smart_ui_spotlight",
     "submit_response",
@@ -158,7 +57,7 @@ def ok(d: dict) -> dict[str, Any]:
     return {"content": [{"type": "text", "text": json.dumps(d)}]}
 
 
-def harness() -> "AgentHarness":
+def harness() -> AgentHarness:
     h = _inject.agent
     if h is None:
         raise RuntimeError("Agent harness is not initialized")
@@ -200,37 +99,40 @@ async def create_cell(args: dict[str, Any]) -> dict[str, Any]:
         })
 
     print(f'[tool] create_cell pos={position} title="{title}"')
-    try:
-        notebook = await get_notebook()
-        cell_id, tf_id = await notebook.create_code_cell(
-            pos=position, code=code, display_name=title
-        )
-    except Exception as e:
+    params = {
+        "position": position,
+        "cell_type": "code",
+        "source": code,
+        "title": title,
+        "auto_run": True,
+    }
+    result = await h.atomic_operation("create_cell", params)
+
+    if result.get("status") == "success":
+        cell_id = result.get("cell_id", "unknown")
+
+        # todo(rteqs): we can run into a case where create cell finishes before we get here.
+        # fix this by having fronten return cell_id first then running the cell
+        h.pending_cells.add(cell_id)
+
+        tf_id = result.get("tf_id", "unknown")
+        msg = f"Created cell at position {position} (cell_id: {cell_id}, tf_id: {tf_id}, title: {title})"
+        print(f"[tool] create_cell -> {msg}")
         return ok({
             "tool_name": "create_cell",
-            "summary": f"Failed to create cell: {e!s}",
-            "success": False,
+            "summary": msg,
+            "code": code,
+            "cell_id": cell_id,
+            "tf_id": tf_id,
+            "cell_name": title,
+            "position": position,
+            "message": action_summary,
+            "success": True,
         })
-
-    h.pending_cells.add(tf_id)
-    await h.send({
-        "type": "agent_action",
-        "action": "run_cell",
-        "params": {"cell_id": tf_id, "code": code, "parallel": False},
-    })
-
-    msg = f"Created cell at position {position} (cell_id: {cell_id}, tf_id: {tf_id}, title: {title})"
-    print(f"[tool] create_cell -> {msg}")
     return ok({
         "tool_name": "create_cell",
-        "summary": msg,
-        "code": code,
-        "cell_id": cell_id,
-        "tf_id": tf_id,
-        "cell_name": title,
-        "position": position,
-        "message": action_summary,
-        "success": True,
+        "summary": f"Failed to create cell: {result.get('error', 'Unknown error')}",
+        "success": False,
     })
 
 
@@ -258,6 +160,7 @@ async def create_cell(args: dict[str, Any]) -> dict[str, Any]:
     },
 )
 async def create_markdown_cell(args: dict[str, Any]) -> dict[str, Any]:
+    h = harness()
     position = args["position"]
     code = args["code"]
     title = args["title"]
@@ -267,27 +170,27 @@ async def create_markdown_cell(args: dict[str, Any]) -> dict[str, Any]:
         return ok({"summary": "Error: Position must be non-negative", "success": False})
 
     print(f"[tool] create_markdown_cell pos={position}")
-    try:
-        notebook = await get_notebook()
-        cell_id = await notebook.create_markdown_cell(pos=position, content=code)
-    except Exception as e:
+    params = {"position": position, "cell_type": "markdown", "source": code}
+    result = await h.atomic_operation("create_markdown_cell", params)
+
+    if result.get("status") == "success":
+        cell_id = result.get("cell_id", "unknown")
+        msg = f"Created markdown cell at position {position} (ID: {cell_id})"
+        print(f"[tool] create_markdown_cell -> {msg}")
         return ok({
             "tool_name": "create_markdown_cell",
-            "message": f"Failed to create cell: {e!s}",
-            "success": False,
+            "summary": msg,
+            "code": code,
+            "cell_id": cell_id,
+            "cell_name": title,
+            "position": position,
+            "message": action_summary,
+            "success": True,
         })
-
-    msg = f"Created markdown cell at position {position} (ID: {cell_id})"
-    print(f"[tool] create_markdown_cell -> {msg}")
     return ok({
         "tool_name": "create_markdown_cell",
-        "summary": msg,
-        "code": code,
-        "cell_id": cell_id,
-        "cell_name": title,
-        "position": position,
-        "message": action_summary,
-        "success": True,
+        "message": f"Failed to create cell: {result.get('error', 'Unknown error')}",
+        "success": False,
     })
 
 
@@ -318,52 +221,43 @@ async def edit_cell(args: dict[str, Any]) -> dict[str, Any]:
     title = args["title"]
     action_summary = args["action_summary"]
 
+    h.pending_cells.add(cell_id)
+
     print(f"[tool] edit_cell id={cell_id}")
-    try:
-        notebook = await get_notebook()
-        await notebook.fetch_updates()
-        original_code = ""
-        container = notebook.loro_doc.get_container(id=parse_ts_container_id(cell_id))
-        if isinstance(container, LoroMap):
-            deep = container.get_deep_value()
-            if isinstance(deep, dict):
-                original_code = str(deep.get("source", "") or "")
+    original_code = ""
+    context_result = await h.atomic_operation("get_context", {})
+    if context_result.get("status") == "success":
+        cells = context_result.get("context", {}).get("cells", [])
+        for cell in cells:
+            if cell.get("cell_id") == cell_id:
+                original_code = cell.get("source", "")
+                break
+    else:
+        print(
+            "[tool] edit_cell: failed to refresh notebook context: "
+            f"{context_result.get('error', 'Unknown error')}"
+        )
 
-        tf = notebook.tf_by_loro_cell_id.get(cell_id)
-        if tf is None:
-            return ok({
-                "tool_name": "edit_cell",
-                "summary": f"Failed to edit cell: no transform found for cell_id {cell_id}",
-                "success": False,
-            })
-        tf_id = tf.id
+    params = {"cell_id": cell_id, "source": new_code, "auto_run": True}
+    result = await h.atomic_operation("edit_cell", params)
 
-        await notebook.edit_cell(cell_id=cell_id, new_code=new_code)
-    except Exception as e:
+    if result.get("status") == "success":
+        msg = f"Cell {cell_id} edited successfully"
+        print(f"[tool] edit_cell -> {msg}")
         return ok({
             "tool_name": "edit_cell",
-            "summary": f"Failed to edit cell: {e!s}",
-            "success": False,
+            "summary": msg,
+            "code": new_code,
+            "original_code": original_code,
+            "cell_id": cell_id,
+            "cell_name": title,
+            "message": action_summary,
+            "success": True,
         })
-
-    h.pending_cells.add(tf_id)
-    await h.send({
-        "type": "agent_action",
-        "action": "run_cell",
-        "params": {"cell_id": tf_id, "code": new_code, "parallel": False},
-    })
-
-    msg = f"Cell {cell_id} edited successfully"
-    print(f"[tool] edit_cell -> {msg}")
     return ok({
         "tool_name": "edit_cell",
-        "summary": msg,
-        "code": new_code,
-        "original_code": original_code,
-        "cell_id": cell_id,
-        "cell_name": title,
-        "message": action_summary,
-        "success": True,
+        "summary": f"Failed to edit cell: {result.get('error', 'Unknown error')}",
+        "success": False,
     })
 
 
@@ -393,49 +287,14 @@ async def run_cell(args: dict[str, Any]) -> dict[str, Any]:
     title = args["title"]
     action_summary = args["action_summary"]
 
-    print(f"[tool] run_cell id={cell_id}")
-    try:
-        notebook = await get_notebook()
-        await notebook.fetch_updates()
-        container = notebook.loro_doc.get_container(id=parse_ts_container_id(cell_id))
-        if not isinstance(container, LoroMap):
-            return ok({
-                "tool_name": "run_cell",
-                "summary": f"Failed to run cell: cell {cell_id} not found",
-                "success": False,
-            })
-        deep = container.get_deep_value()
-        source = ""
-        if isinstance(deep, dict):
-            source = str(deep.get("source", "") or "")
-
-        tf = notebook.tf_by_loro_cell_id.get(cell_id)
-        if tf is None:
-            return ok({
-                "tool_name": "run_cell",
-                "summary": f"Failed to run cell: no transform found for cell_id {cell_id}",
-                "success": False,
-            })
-        tf_id = tf.id
-    except Exception as e:
-        return ok({
-            "tool_name": "run_cell",
-            "summary": f"Failed to run cell: {e!s}",
-            "success": False,
-        })
-
-    h.pending_cells.add(tf_id)
-    await h.send({
-        "type": "agent_action",
-        "action": "run_cell",
-        "params": {"cell_id": tf_id, "code": source, "parallel": False},
-    })
+    params = {"cell_id": cell_id}
+    await h.send({"type": "agent_action", "action": "run_cell", "params": params})
+    h.pending_cells.add(cell_id)
 
     return ok({
         "tool_name": "run_cell",
         "summary": f"Cell {cell_id} execution started",
         "cell_id": cell_id,
-        "tf_id": tf_id,
         "cell_name": title,
         "message": action_summary,
         "success": True,
@@ -459,49 +318,39 @@ async def run_cell(args: dict[str, Any]) -> dict[str, Any]:
     },
 )
 async def delete_cell(args: dict[str, Any]) -> dict[str, Any]:
+    h = harness()
     cell_id = args["cell_id"]
     title = args["title"]
     action_summary = args["action_summary"]
 
     print(f"[tool] delete_cell id={cell_id}")
-    try:
-        notebook = await get_notebook()
-        await notebook.delete_cell(cell_id=cell_id)
-    except Exception as e:
+    result = await h.atomic_operation("delete_cell", {"cell_id": cell_id})
+    if result.get("status") == "success":
+        remaining = result.get("remaining_cells", [])
+        cell_count = result.get("cell_count", 0)
+        if remaining:
+            cell_list = ", ".join([
+                f"{c['index']}: {c['cell_type']}" for c in remaining[:5]
+            ])
+            if len(remaining) > 5:
+                cell_list += f", ... ({len(remaining) - 5} more)"
+            msg = f"Cell {cell_id} deleted. {cell_count} cells remain: [{cell_list}]"
+        else:
+            msg = f"Cell {cell_id} deleted. No cells remain in notebook."
+        print(f"[tool] delete_cell -> {msg}")
         return ok({
             "tool_name": "delete_cell",
-            "summary": f"Failed to delete cell: {e!s}",
-            "success": False,
+            "summary": msg,
+            "cell_id": cell_id,
+            "cell_name": title,
+            "message": action_summary,
+            "success": True,
         })
 
-    remaining: list[dict[str, Any]] = []
-    for i, cid in enumerate(notebook.cells.to_vec()):
-        container = notebook.loro_doc.get_container(id=cid)
-        cell_type = "unknown"
-        if isinstance(container, LoroMap):
-            deep = container.get_deep_value()
-            if isinstance(deep, dict):
-                cell_type = str(deep.get("cellType", "unknown"))
-        remaining.append({"index": i, "cell_type": cell_type})
-    cell_count = len(remaining)
-
-    if remaining:
-        cell_list = ", ".join([
-            f"{c['index']}: {c['cell_type']}" for c in remaining[:5]
-        ])
-        if len(remaining) > 5:
-            cell_list += f", ... ({len(remaining) - 5} more)"
-        msg = f"Cell {cell_id} deleted. {cell_count} cells remain: [{cell_list}]"
-    else:
-        msg = f"Cell {cell_id} deleted. No cells remain in notebook."
-    print(f"[tool] delete_cell -> {msg}")
     return ok({
         "tool_name": "delete_cell",
-        "summary": msg,
-        "cell_id": cell_id,
-        "cell_name": title,
-        "message": action_summary,
-        "success": True,
+        "summary": f"Failed to delete cell: {result.get('error', 'Unknown error')}",
+        "success": False,
     })
 
 
@@ -528,40 +377,24 @@ async def stop_cell(args: dict[str, Any]) -> dict[str, Any]:
     title = args["title"]
     action_summary = args["action_summary"]
 
-    print(f"[tool] stop_cell id={cell_id}")
-    try:
-        notebook = await get_notebook()
-        await notebook.fetch_updates()
-        tf = notebook.tf_by_loro_cell_id.get(cell_id)
-        if tf is None:
-            return ok({
-                "tool_name": "stop_cell",
-                "summary": f"Failed to stop cell: no transform found for cell_id {cell_id}",
-                "success": False,
-            })
-        tf_id = tf.id
-    except Exception as e:
+    params = {"cell_id": cell_id}
+
+    result = await h.atomic_operation("stop_cell", params)
+    if result.get("status") == "success":
+        h.pending_cells.discard(cell_id)
         return ok({
             "tool_name": "stop_cell",
-            "summary": f"Failed to stop cell: {e!s}",
-            "success": False,
+            "summary": f"Stopped cell {cell_id}",
+            "cell_id": cell_id,
+            "cell_name": title,
+            "message": action_summary,
+            "success": True,
         })
-
-    h.pending_cells.discard(tf_id)
-    await h.send({
-        "type": "agent_action",
-        "action": "stop_cell",
-        "params": {"cell_id": tf_id},
-    })
 
     return ok({
         "tool_name": "stop_cell",
-        "summary": f"Stopped cell {cell_id}",
-        "cell_id": cell_id,
-        "tf_id": tf_id,
-        "cell_name": title,
-        "message": action_summary,
-        "success": True,
+        "summary": f"Failed to stop cell {cell_id}: {result.get('error', 'Unknown error')}",
+        "success": False,
     })
 
 
@@ -571,16 +404,25 @@ async def stop_cell(args: dict[str, Any]) -> dict[str, Any]:
     {"type": "object", "properties": {}},
 )
 async def delete_all_cells(args: dict[str, Any]) -> dict[str, Any]:  # noqa: ARG001
-    try:
-        notebook = await get_notebook()
-        deleted_count = len(notebook.cells)
-        await notebook.delete_all_cells()
-    except Exception as e:
+    h = harness()
+
+    context_result = await h.atomic_operation("get_context", {})
+    if context_result.get("status") != "success":
+        error_msg = context_result.get("error", "Unknown error")
         return ok({
             "tool_name": "delete_all_cells",
-            "summary": f"Failed to delete cells: {e!s}",
+            "summary": f"Failed to delete cells: {error_msg}",
             "success": False,
         })
+
+    cells = context_result.get("context", {}).get("cells", [])
+    deleted_count = 0
+    for cell in reversed(cells):
+        cell_id = cell.get("cell_id")
+        if cell_id:
+            result = await h.atomic_operation("delete_cell", {"cell_id": cell_id})
+            if result.get("status") == "success":
+                deleted_count += 1
 
     return ok({
         "tool_name": "delete_all_cells",
@@ -608,23 +450,22 @@ async def delete_all_cells(args: dict[str, Any]) -> dict[str, Any]:  # noqa: ARG
     },
 )
 async def rename_notebook(args: dict[str, Any]) -> dict[str, Any]:
+    h = harness()
     name = args["name"]
     print(f"[tool] rename_notebook name={name}")
-    try:
-        notebook = await get_notebook()
-        await notebook.rename_notebook(name=name)
-    except Exception as e:
+    result = await h.atomic_operation("rename_notebook", {"name": name})
+    if result.get("status") == "success":
         return ok({
             "tool_name": "rename_notebook",
-            "summary": f"Failed to rename notebook: {e!s}",
-            "success": False,
+            "success": True,
+            "summary": f"Notebook renamed to '{name}'",
+            "name": name,
         })
 
     return ok({
         "tool_name": "rename_notebook",
-        "success": True,
-        "summary": f"Notebook renamed to '{name}'",
-        "name": name,
+        "summary": f"Failed to rename notebook: {result.get('error', 'Unknown error')}",
+        "success": False,
     })
 
 
@@ -647,6 +488,7 @@ async def rename_notebook(args: dict[str, Any]) -> dict[str, Any]:
     },
 )
 async def create_tab(args: dict[str, Any]) -> dict[str, Any]:
+    h = harness()
     position = args["position"]
     display_name = args["display_name"]
     if position < 0:
@@ -657,25 +499,26 @@ async def create_tab(args: dict[str, Any]) -> dict[str, Any]:
         })
 
     print(f'[tool] create_tab pos={position} name="{display_name}"')
-    try:
-        notebook = await get_notebook()
-        tab_id = await notebook.create_tab_marker_cell(pos=position, name=display_name)
-    except Exception as e:
+    result = await h.atomic_operation(
+        "create_tab", {"position": position, "display_name": display_name}
+    )
+    if result.get("status") == "success":
+        tab_id = result.get("tab_id", "unknown")
+        msg = f"Created tab at position {position} (ID: {tab_id}, Name: {display_name})"
+        print(f"[tool] create_tab -> {msg}")
         return ok({
             "tool_name": "create_tab",
-            "summary": f"Failed to create tab: {e!s}",
-            "success": False,
+            "summary": msg,
+            "tab_id": tab_id,
+            "display_name": display_name,
+            "position": position,
+            "success": True,
         })
 
-    msg = f"Created tab at position {position} (ID: {tab_id}, Name: {display_name})"
-    print(f"[tool] create_tab -> {msg}")
     return ok({
         "tool_name": "create_tab",
-        "summary": msg,
-        "tab_id": tab_id,
-        "display_name": display_name,
-        "position": position,
-        "success": True,
+        "summary": f"Failed to create tab: {result.get('error', 'Unknown error')}",
+        "success": False,
     })
 
 
@@ -698,29 +541,30 @@ async def create_tab(args: dict[str, Any]) -> dict[str, Any]:
     },
 )
 async def rename_tab(args: dict[str, Any]) -> dict[str, Any]:
+    h = harness()
     tab_id = args["tab_id"]
     new_name = args["new_name"]
 
     print(f'[tool] rename_tab tab_id={tab_id} new_name="{new_name}"')
-    try:
-        notebook = await get_notebook()
-        await notebook.rename_tab(cell_id=tab_id, new_name=new_name)
-    except Exception as e:
+    result = await h.atomic_operation(
+        "rename_tab", {"tab_id": tab_id, "new_name": new_name}
+    )
+    if result.get("status") == "success":
+        target = "Tab 1" if tab_id == "DEFAULT" else f"tab {tab_id}"
+        msg = f"Renamed {target} to '{new_name}'"
+        print(f"[tool] rename_tab -> {msg}")
         return ok({
             "tool_name": "rename_tab",
-            "summary": f"Failed to rename tab: {e!s}",
-            "success": False,
+            "summary": msg,
+            "tab_id": tab_id,
+            "new_name": new_name,
+            "success": True,
         })
 
-    target = "Tab 1" if tab_id == "DEFAULT" else f"tab {tab_id}"
-    msg = f"Renamed {target} to '{new_name}'"
-    print(f"[tool] rename_tab -> {msg}")
     return ok({
         "tool_name": "rename_tab",
-        "summary": msg,
-        "tab_id": tab_id,
-        "new_name": new_name,
-        "success": True,
+        "summary": f"Failed to rename tab: {result.get('error', 'Unknown error')}",
+        "success": False,
     })
 
 
@@ -743,30 +587,24 @@ async def rename_tab(args: dict[str, Any]) -> dict[str, Any]:
     },
 )
 async def restore_checkpoint(args: dict[str, Any]) -> dict[str, Any]:
+    h = harness()
     template_version_id = args.get("template_version_id")
     print(f"[tool] restore_checkpoint template_version_id={template_version_id}")
-    if template_version_id is None:
+    result = await h.atomic_operation(
+        "restore_checkpoint", {"template_version_id": template_version_id}
+    )
+    if result.get("status") == "success":
         return ok({
             "tool_name": "restore_checkpoint",
-            "summary": "Failed to restore checkpoint: template_version_id is required",
-            "success": False,
-        })
-
-    try:
-        notebook = await get_notebook()
-        await notebook.restore_checkpoint(template_version_id=template_version_id)
-    except Exception as e:
-        return ok({
-            "tool_name": "restore_checkpoint",
-            "summary": f"Failed to restore checkpoint: {e!s}",
-            "success": False,
+            "success": True,
+            "summary": f"Restored checkpoint to template version {template_version_id}",
+            "template_version_id": template_version_id,
         })
 
     return ok({
         "tool_name": "restore_checkpoint",
-        "success": True,
-        "summary": f"Restored checkpoint to template version {template_version_id}",
-        "template_version_id": template_version_id,
+        "summary": f"Failed to restore checkpoint: {result.get('error', 'Unknown error')}",
+        "success": False,
     })
 
 
@@ -854,6 +692,82 @@ async def get_global_info(args: dict[str, Any]) -> dict[str, Any]:
     })
 
 
+@tool(
+    "capture_widget_image",
+    (
+        "Capture a visual screenshot of an h5/AnnData or plot widget displayed in the "
+        "notebook. Returns a base64-encoded PNG image and metadata about the current "
+        "visualization state (such as color_by settings, filters, and cell counts for "
+        "h5 widgets). Use this to visually inspect plots, clustering results, or any "
+        "Plotly-based visualization the user is seeing."
+    ),
+    {
+        "type": "object",
+        "properties": {
+            "widget_key": {
+                "type": "string",
+                "description": "Full widget key in format <tf_id>/<widget_id>",
+            }
+        },
+        "required": ["widget_key"],
+    },
+)
+async def capture_widget_image(args: dict[str, Any]) -> dict[str, Any]:
+    h = harness()
+    widget_key = args.get("widget_key")
+    if widget_key is None:
+        return ok({
+            "tool_name": "capture_widget_image",
+            "success": False,
+            "summary": "No widget_key provided",
+        })
+
+    print(f"[tool] capture_widget_image: {widget_key}")
+
+    await h.set_agent_status("awaiting_user_widget_input")
+    h.pending_widgets[widget_key] = None
+
+    result = await h.atomic_operation(
+        "capture_widget_image", {"widget_key": widget_key}
+    )
+    if result.get("status") == "success":
+        widget_type = result.get("widget_type", "unknown")
+        metadata = result.get("metadata", {})
+        image = result.get("image")
+        if not isinstance(image, str) or not image.startswith("data:"):
+            return ok({
+                "tool_name": "capture_widget_image",
+                "success": False,
+                "summary": "Capture succeeded but image data was invalid",
+            })
+
+        header, base64_data = image.split(",", 1)
+        media_type = header.split(";")[0].removeprefix("data:")
+
+        return {
+            "content": [
+                {
+                    "type": "text",
+                    "text": json.dumps({
+                        "tool_name": "capture_widget_image",
+                        "success": True,
+                        "summary": f"Captured image from {widget_type} widget '{widget_key}'",
+                        "widget_key": widget_key,
+                        "widget_type": widget_type,
+                        "metadata": metadata,
+                    }),
+                },
+                {"type": "image", "data": base64_data, "mimeType": media_type},
+            ]
+        }
+
+    return ok({
+        "tool_name": "capture_widget_image",
+        "success": False,
+        "summary": f"Failed to capture widget image: {result.get('error', 'Unknown error')}",
+    })
+
+
 # todo(rteqs): when ClaudeCode support MCP tasks (https://modelcontextprotocol.io/seps/1686-tasks) we should make this a background task and handle tasks from SystemMessges
 @tool(
     "set_widget",
@@ -915,141 +829,6 @@ async def set_widget(args: dict[str, Any]) -> dict[str, Any]:
     return ok({
         "tool_name": "set_widget",
         "summary": f"Failed to update widget value: {result.get('error', 'Unknown error')}",
-        "success": False,
-    })
-
-
-@tool(
-    "get_widget",
-    "Get the state of a widget by key: type, default, current value.",
-    {
-        "type": "object",
-        "properties": {
-            "key": {
-                "type": "string",
-                "description": (
-                    "Full widget key including tf_id and widget_id in the format "
-                    "<tf_id>/<widget_id>"
-                ),
-            }
-        },
-        "required": ["key"],
-    },
-)
-async def get_widget(args: dict[str, Any]) -> dict[str, Any]:
-    h = harness()
-    key = args.get("key")
-    if not key:
-        return ok({
-            "tool_name": "get_widget",
-            "summary": "Failed to get widget: Widget key is required",
-            "success": False,
-        })
-
-    print(f"[tool] get_widget key={key}")
-    result = await h.atomic_operation("get_widget", {"key": key})
-    if result.get("status") == "success":
-        state = result.get("state")
-        return ok({
-            "tool_name": "get_widget",
-            "success": True,
-            "summary": f"Retrieved widget state for: {key}",
-            "key": key,
-            "state": state,
-        })
-
-    return ok({
-        "tool_name": "get_widget",
-        "summary": f"Failed to get widget: {result.get('error', 'Unknown error')}",
-        "success": False,
-    })
-
-
-@tool(
-    "get_plot_image",
-    (
-        "Render a matplotlib Figure global as a webp image. Returns a base64-encoded "
-        "data URL. The global must be a matplotlib Figure (or have a .figure attribute)."
-    ),
-    {
-        "type": "object",
-        "properties": {
-            "key": {
-                "type": "string",
-                "description": "Name of the global variable holding the Figure.",
-            },
-            "scale": {
-                "type": "number",
-                "description": "DPI multiplier (base DPI 100). Default 1.0.",
-            },
-            "width": {
-                "type": "integer",
-                "description": "Output width in pixels. Default 800.",
-            },
-            "height": {
-                "type": "integer",
-                "description": "Output height in pixels. Default 600.",
-            },
-            "viewport": {
-                "type": ["object", "null"],
-                "description": (
-                    "Optional axis limits: {x: [lo, hi], y: [lo, hi]}. Applied to all axes."
-                ),
-                "properties": {
-                    "x": {
-                        "type": "array",
-                        "items": {"type": "number"},
-                        "minItems": 2,
-                        "maxItems": 2,
-                    },
-                    "y": {
-                        "type": "array",
-                        "items": {"type": "number"},
-                        "minItems": 2,
-                        "maxItems": 2,
-                    },
-                },
-            },
-        },
-        "required": ["key", "scale", "width", "height"],
-    },
-)
-async def get_plot_image(args: dict[str, Any]) -> dict[str, Any]:
-    h = harness()
-    key = args.get("key")
-    if not key:
-        return ok({
-            "tool_name": "get_plot_image",
-            "summary": "Failed to get plot image: key is required",
-            "success": False,
-        })
-
-    params = {
-        "key": key,
-        "scale": args.get("scale", 1.0),
-        "width": args.get("width", 800),
-        "height": args.get("height", 600),
-        "viewport": args.get("viewport"),
-    }
-
-    print(
-        f"[tool] get_plot_image key={key} scale={params['scale']} "
-        f"{params['width']}x{params['height']} viewport={params['viewport']}"
-    )
-    result = await h.atomic_operation("get_plot_image", params)
-    if result.get("status") == "success":
-        return ok({
-            "tool_name": "get_plot_image",
-            "success": True,
-            "summary": f"Rendered plot image for: {key}",
-            "key": key,
-            "image": result.get("image"),
-            "mime_type": result.get("mime_type", "image/webp"),
-        })
-
-    return ok({
-        "tool_name": "get_plot_image",
-        "summary": f"Failed to get plot image: {result.get('error', 'Unknown error')}",
         "success": False,
     })
 
@@ -1809,109 +1588,6 @@ async def h5_manage_obs(args: dict[str, Any]) -> dict[str, Any]:
 
 
 @tool(
-    "h5_get_image",
-    (
-        "Render the current scatter/embedding view of an h5/AnnData widget as a webp "
-        "image. Returns a base64-encoded data URL. "
-    ),
-    {
-        "type": "object",
-        "properties": {
-            "key": {
-                "type": "string",
-                "description": (
-                    "Full widget key including tf_id and widget_id in the format "
-                    "<tf_id>/<widget_id>"
-                ),
-            },
-            "obsm_key": {
-                "type": ["string", "null"],
-                "description": "Optional obsm embedding key. Defaults to widget preset / first obsm.",
-            },
-            "color_by": {
-                "type": ["object", "null"],
-                "description": (
-                    "Optional color-by: {type: 'obs', key: str} or "
-                    "{type: 'var', keys: [str]}."
-                ),
-            },
-            "scale": {"type": "number", "description": "DPI multiplier. Default 1.0."},
-            "width": {
-                "type": "integer",
-                "description": "Output width in pixels. Default 800.",
-            },
-            "height": {
-                "type": "integer",
-                "description": "Output height in pixels. Default 600.",
-            },
-            "viewport": {
-                "type": ["object", "null"],
-                "description": (
-                    "Optional embedding bounds: {x: [lo, hi], y: [lo, hi]}."
-                ),
-                "properties": {
-                    "x": {
-                        "type": "array",
-                        "items": {"type": "number"},
-                        "minItems": 2,
-                        "maxItems": 2,
-                    },
-                    "y": {
-                        "type": "array",
-                        "items": {"type": "number"},
-                        "minItems": 2,
-                        "maxItems": 2,
-                    },
-                },
-            },
-        },
-        "required": ["key", "scale", "width", "height"],
-    },
-)
-async def h5_get_image(args: dict[str, Any]) -> dict[str, Any]:
-    h = harness()
-    key = args.get("key")
-    if not key:
-        return ok({
-            "tool_name": "h5_get_image",
-            "summary": "Failed to get h5 image: key is required",
-            "success": False,
-        })
-
-    params = {
-        "key": key,
-        "obsm_key": args.get("obsm_key"),
-        "color_by": args.get("color_by"),
-        "scale": args.get("scale", 1.0),
-        "width": args.get("width", 800),
-        "height": args.get("height", 600),
-        "viewport": args.get("viewport"),
-    }
-
-    print(
-        f"[tool] h5_get_image key={key} obsm_key={params['obsm_key']} "
-        f"scale={params['scale']} {params['width']}x{params['height']}"
-    )
-    result = await h.atomic_operation("h5_get_image", params, timeout=60.0)
-    if result.get("status") == "success":
-        return ok({
-            "tool_name": "h5_get_image",
-            "success": True,
-            "summary": f"Rendered h5 image for: {key}",
-            "key": key,
-            "image": result.get("image"),
-            "mime_type": result.get("mime_type", "image/webp"),
-            "obsm_key": result.get("obsm_key"),
-        })
-
-    return ok({
-        "tool_name": "h5_get_image",
-        "summary": f"Failed to get h5 image: {result.get('error', 'Unknown error')}",
-        "success": False,
-    })
-
-
-@tool(
     "redeem_package",
     "Redeem a package so the workspace gains access to technology-specific assets.",
     {
@@ -1937,10 +1613,10 @@ async def h5_get_image(args: dict[str, Any]) -> dict[str, Any]:
     },
 )
 async def redeem_package(args: dict[str, Any]) -> dict[str, Any]:
+    h = harness()
     package_code = args.get("package_code")
     package_version_id = args.get("package_version_id")
     redemption_reason = args.get("redemption_reason")
-
     if package_code is None or package_version_id is None or redemption_reason is None:
         return ok({
             "tool_name": "redeem_package",
@@ -1954,56 +1630,27 @@ async def redeem_package(args: dict[str, Any]) -> dict[str, Any]:
     package_code = str(package_code)
     package_version_id = str(package_version_id)
     print("[tool] redeem_package")
-    try:
-        notebook = await get_notebook()
-        gql_res = await gql_query(
-            query="""
-                mutation RedeemPackage(
-                    $argTargetAccountId: BigInt
-                    $argPackageCode: String!
-                    $argPackageVersionId: BigInt!
-                    $argAllowSharing: Boolean
-                ) {
-                    redeemPackage(
-                        input: {
-                            argTargetAccountId: $argTargetAccountId
-                            argPackageCode: $argPackageCode
-                            argPackageVersionId: $argPackageVersionId
-                            argAllowSharing: $argAllowSharing
-                        }
-                    ) {
-                        clientMutationId
-                        result {
-                            resPackageId
-                            resPackageVersionId
-                            resRedeemedInAccountId
-                        }
-                    }
-                }
-            """,
-            variables={
-                "argTargetAccountId": notebook.owner_id,
-                "argPackageCode": package_code,
-                "argPackageVersionId": package_version_id,
-                "argAllowSharing": True,
-            },
-            auth=auth_token_sdk,
-        )
-        validate(gql_res, RedeemPackageRes)
-    except Exception as e:
+    result = await h.atomic_operation(
+        "redeem_package",
+        {
+            "package_code": str(package_code),
+            "package_version_id": str(package_version_id),
+        },
+    )
+    if result.get("status") == "success":
         return ok({
             "tool_name": "redeem_package",
-            "success": False,
-            "summary": f"Failed to redeem package: {e!s}",
+            "success": True,
+            "summary": f"Redeemed package {package_code} (version {package_version_id})",
+            "package_code": package_code,
+            "package_version_id": package_version_id,
+            "redemption_reason": redemption_reason,
         })
 
     return ok({
         "tool_name": "redeem_package",
-        "success": True,
-        "summary": f"Redeemed package {package_code} (version {package_version_id})",
-        "package_code": package_code,
-        "package_version_id": package_version_id,
-        "redemption_reason": redemption_reason,
+        "success": False,
+        "summary": f"Failed to redeem package: {result.get('error', 'Unknown error')}",
     })
 
 
@@ -2258,10 +1905,9 @@ all_tools = [
     restore_checkpoint,
     execute_code,
     get_global_info,
+    capture_widget_image,
     update_plan,
     set_widget,
-    get_widget,
-    get_plot_image,
     h5_filter_by,
     h5_color_by,
     h5_refresh,
@@ -2274,7 +1920,6 @@ all_tools = [
     h5_add_selected_cells_to_categorical_obs,
     h5_set_marker_opacity,
     h5_manage_obs,
-    h5_get_image,
     redeem_package,
     smart_ui_spotlight,
     submit_response,

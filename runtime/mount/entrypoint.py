@@ -6,7 +6,6 @@ import socket
 import sys
 import traceback
 from asyncio.subprocess import Process
-from collections import defaultdict
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from io import TextIOWrapper
@@ -19,6 +18,7 @@ from latch_data_validation.data_validation import validate
 
 from runtime.mount.plots_context_manager import PlotsContextManager
 
+from .headless_browser import HeadlessBrowser
 from .socketio import SocketIo
 from .utils import (
     KernelSnapshotStatus,
@@ -83,8 +83,6 @@ action_handler_ctx: Context | None = None
 action_handler_ready_ev = asyncio.Event()
 
 pending_user_browser_actions: dict[str, dict] = {}  # tx_id -> original message
-
-cell_logs = defaultdict(str)
 
 
 def mark_action_handled(tx_id: str) -> None:
@@ -192,6 +190,10 @@ class ProcessManager:
 k_proc = ProcessManager(name="kernel")
 a_proc = ProcessManager(name="agent")
 
+headless_browser: HeadlessBrowser | None = None
+latest_local_storage: dict[str, str] | None = None
+headless_browser_notebook_id: str | None = None
+
 
 # todo(maximsmol): typing
 # todo(maximsmol): share types with kernel.py
@@ -277,21 +279,6 @@ class AgentBootstrapPodInfoData:
 
 
 @dataclass(frozen=True)
-class PlotTransformInfoAgentData:
-    displayName: str | None
-
-
-@dataclass(frozen=True)
-class GetCodeCellAgentDataData:
-    plotTransformInfo: PlotTransformInfoAgentData | None
-
-
-@dataclass(frozen=True)
-class GetCodeCellAgentDataResp:
-    data: GetCodeCellAgentDataData
-
-
-@dataclass(frozen=True)
 class AgentBootstrapPodInfoResp:
     data: AgentBootstrapPodInfoData
 
@@ -369,12 +356,6 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                     "run_sequencer": msg["run_sequencer"],
                 }
 
-            elif msg["type"] == "kernel_stdio":
-                active_cell = msg.get("active_cell")
-                data = msg.get("data", "")
-                if active_cell is not None and isinstance(data, str):
-                    cell_logs[active_cell] += data
-
             elif msg["type"] == "cell_result":
                 cell_id = msg["cell_id"]
                 cell_status[cell_id] = "ran" if "exception" not in msg else "error"
@@ -415,34 +396,6 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                     "exception": exc,
                     **outputs_data,
                 }
-
-                if a_proc.msg_io is not None:
-                    display_name: str | None = None
-                    try:
-                        cc_resp = await gql_query(
-                            auth=auth,
-                            query="""
-                                query PlotsGetCodeCellAgentData($id: BigInt!) {
-                                    plotTransformInfo(id: $id) {
-                                        displayName
-                                    }
-                                }
-                            """,
-                            variables={"id": cell_id},
-                        )
-                        cc_data = validate(cc_resp, GetCodeCellAgentDataResp)
-                        tf = cc_data.data.plotTransformInfo
-                        if tf is not None:
-                            display_name = tf.displayName
-                    except Exception:
-                        traceback.print_exc()
-
-                    logs = cell_logs.pop(cell_id, None)
-
-                    await a_proc.msg_io.send({
-                        "type": "kernel_message",
-                        "message": {**msg, "display_name": display_name, "logs": logs},
-                    })
 
             elif msg["type"] == "cell_widgets":
                 await gql_query(
@@ -601,24 +554,6 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                     latest_reactivity_summary = cell_reactivity
                 continue
 
-            elif (
-                msg["type"] == "reset_kernel_globals_complete"
-                and "agent_tx_id" in msg
-            ):
-                tx_id = msg.get("agent_tx_id")
-
-                if a_proc.msg_io is not None:
-                    print(
-                        f"[entrypoint] Routing reset_kernel_globals response to agent (tx_id={tx_id})"
-                    )
-                    await a_proc.msg_io.send({
-                        "type": "agent_action_response",
-                        "tx_id": tx_id,
-                        "status": "success",
-                    })
-
-                continue
-
             elif msg["type"] == "globals_summary" and "agent_tx_id" in msg:
                 tx_id = msg.get("agent_tx_id")
 
@@ -673,75 +608,6 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                         "error": msg.get("error"),
                     })
                     continue
-
-            elif msg["type"] == "set_widget_value_response" and "agent_tx_id" in msg:
-                tx_id = msg.get("agent_tx_id")
-
-                if a_proc.msg_io is not None:
-                    print(
-                        f"[entrypoint] Routing set_widget_value response to agent (tx_id={tx_id})"
-                    )
-                    await a_proc.msg_io.send({
-                        "type": "agent_action_response",
-                        "tx_id": tx_id,
-                        "status": msg.get("status", "error"),
-                        "error": msg.get("error"),
-                    })
-                    continue
-
-            elif msg["type"] == "get_widget_value_response" and "agent_tx_id" in msg:
-                tx_id = msg.get("agent_tx_id")
-
-                if a_proc.msg_io is not None:
-                    print(
-                        f"[entrypoint] Routing get_widget_value response to agent (tx_id={tx_id})"
-                    )
-                    await a_proc.msg_io.send({
-                        "type": "agent_action_response",
-                        "tx_id": tx_id,
-                        "status": msg.get("status", "error"),
-                        "state": msg.get("state"),
-                        "error": msg.get("error"),
-                    })
-                    continue
-
-            elif msg["type"] == "get_plot_image_response" and "agent_tx_id" in msg:
-                tx_id = msg.get("agent_tx_id")
-
-                if a_proc.msg_io is not None:
-                    print(
-                        f"[entrypoint] Routing get_plot_image response to agent (tx_id={tx_id})"
-                    )
-                    await a_proc.msg_io.send({
-                        "type": "agent_action_response",
-                        "tx_id": tx_id,
-                        "status": msg.get("status", "error"),
-                        "image": msg.get("image"),
-                        "mime_type": msg.get("mime_type"),
-                        "error": msg.get("error"),
-                    })
-                    continue
-
-            elif msg["type"] == "h5_get_image_response" and "agent_tx_id" in msg:
-                tx_id = msg.get("agent_tx_id")
-
-                if a_proc.msg_io is not None:
-                    print(
-                        f"[entrypoint] Routing get_h5_image response to agent (tx_id={tx_id})"
-                    )
-                    await a_proc.msg_io.send({
-                        "type": "agent_action_response",
-                        "tx_id": tx_id,
-                        "status": msg.get("status", "error"),
-                        "image": msg.get("image"),
-                        "mime_type": msg.get("mime_type"),
-                        "obsm_key": msg.get("obsm_key"),
-                        "error": msg.get("error"),
-                    })
-                    continue
-
-            if msg.get("type") == "set_widget_value" and a_proc.msg_io is not None:
-                await a_proc.msg_io.send({"type": "kernel_message", "message": msg})
 
             await plots_ctx_manager.broadcast_message(orjson.dumps(msg).decode())
 
@@ -816,147 +682,6 @@ async def handle_agent_messages(conn_a: SocketIo) -> None:
                 await conn_a.send({
                     "type": "agent_action_response",
                     "tx_id": msg.get("tx_id"),
-                    "status": "error",
-                    "error": "Kernel not connected",
-                })
-            continue
-
-        if msg_type == "agent_action" and msg.get("action") == "run_cell":
-            if k_proc.msg_io is not None:
-                params = msg.get("params", {})
-                await k_proc.msg_io.send({
-                    "type": "run_cell",
-                    "cell_id": params.get("cell_id"),
-                    "code": params.get("code", ""),
-                    "parallel": params.get("parallel", False),
-                })
-                if tx_id is not None:
-                    await conn_a.send({
-                        "type": "agent_action_response",
-                        "tx_id": tx_id,
-                        "status": "success",
-                        "cell_id": params.get("cell_id"),
-                    })
-            elif tx_id is not None:
-                await conn_a.send({
-                    "type": "agent_action_response",
-                    "tx_id": tx_id,
-                    "status": "error",
-                    "error": "Kernel not connected",
-                })
-            continue
-
-        if msg_type == "agent_action" and msg.get("action") == "stop_cell":
-            if k_proc.msg_io is not None:
-                params = msg.get("params", {})
-                await k_proc.msg_io.send({
-                    "type": "stop_cell",
-                    "cell_id": params.get("cell_id"),
-                })
-                if tx_id is not None:
-                    await conn_a.send({
-                        "type": "agent_action_response",
-                        "tx_id": tx_id,
-                        "status": "success",
-                        "cell_id": params.get("cell_id"),
-                    })
-            elif tx_id is not None:
-                await conn_a.send({
-                    "type": "agent_action_response",
-                    "tx_id": tx_id,
-                    "status": "error",
-                    "error": "Kernel not connected",
-                })
-            continue
-
-        if msg_type == "agent_action" and msg.get("action") == "reset_kernel_globals":
-            if k_proc.msg_io is not None:
-                await k_proc.msg_io.send({
-                    "type": "reset_kernel_globals",
-                    "agent_tx_id": tx_id,
-                })
-            elif tx_id is not None:
-                await conn_a.send({
-                    "type": "agent_action_response",
-                    "tx_id": tx_id,
-                    "status": "error",
-                    "error": "Kernel not connected",
-                })
-            continue
-
-        if msg_type == "agent_action" and msg.get("action") == "set_widget":
-            if k_proc.msg_io is not None:
-                params = msg.get("params", {})
-                await k_proc.msg_io.send({
-                    "type": "set_widget_value",
-                    "data": {params.get("key"): params.get("value")},
-                    "agent_tx_id": tx_id,
-                })
-            else:
-                await conn_a.send({
-                    "type": "agent_action_response",
-                    "tx_id": tx_id,
-                    "status": "error",
-                    "error": "Kernel not connected",
-                })
-            continue
-
-        if msg_type == "agent_action" and msg.get("action") == "get_widget":
-            if k_proc.msg_io is not None:
-                params = msg.get("params", {})
-                await k_proc.msg_io.send({
-                    "type": "get_widget_value",
-                    "key": params.get("key"),
-                    "agent_tx_id": tx_id,
-                })
-            else:
-                await conn_a.send({
-                    "type": "agent_action_response",
-                    "tx_id": tx_id,
-                    "status": "error",
-                    "error": "Kernel not connected",
-                })
-            continue
-
-        if msg_type == "agent_action" and msg.get("action") == "get_plot_image":
-            if k_proc.msg_io is not None:
-                params = msg.get("params", {})
-                await k_proc.msg_io.send({
-                    "type": "get_plot_image",
-                    "key": params.get("key"),
-                    "scale": params.get("scale", 1.0),
-                    "width": params.get("width", 800),
-                    "height": params.get("height", 600),
-                    "viewport": params.get("viewport"),
-                    "agent_tx_id": tx_id,
-                })
-            else:
-                await conn_a.send({
-                    "type": "agent_action_response",
-                    "tx_id": tx_id,
-                    "status": "error",
-                    "error": "Kernel not connected",
-                })
-            continue
-
-        if msg_type == "agent_action" and msg.get("action") == "h5_get_image":
-            if k_proc.msg_io is not None:
-                params = msg.get("params", {})
-                await k_proc.msg_io.send({
-                    "type": "h5_get_image",
-                    "key": params.get("key"),
-                    "obsm_key": params.get("obsm_key"),
-                    "color_by": params.get("color_by"),
-                    "scale": params.get("scale", 1.0),
-                    "width": params.get("width", 800),
-                    "height": params.get("height", 600),
-                    "viewport": params.get("viewport"),
-                    "agent_tx_id": tx_id,
-                })
-            else:
-                await conn_a.send({
-                    "type": "agent_action_response",
-                    "tx_id": tx_id,
                     "status": "error",
                     "error": "Kernel not connected",
                 })
@@ -1207,7 +932,141 @@ async def start_agent_proc() -> None:
     )
 
 
+async def bootstrap_headless_browser_on_startup() -> None:
+    await ready_ev.wait()
+    try:
+        resp = await gql_query(
+            auth=auth_token_sdk,
+            query="""
+                query AgentBootstrapPodInfo($podId: BigInt!) {
+                    podInfos(filter: { id: { equalTo: $podId } }, first: 1) {
+                        nodes {
+                            plotNotebookId
+                            accountId
+                        }
+                    }
+                }
+            """,
+            variables={"podId": pod_id},
+        )
+        data = validate(resp, AgentBootstrapPodInfoResp).data
+        nodes = data.podInfos.nodes
+        if len(nodes) == 0:
+            raise RuntimeError("No pod found for headless browser bootstrap")
+
+        node = nodes[0]
+        notebook_id = node.plotNotebookId
+        workspace_id = node.accountId
+        if notebook_id is None or workspace_id is None:
+            raise RuntimeError("Missing notebook or workspace id for bootstrap")
+
+        local_storage = {
+            "plots.is_agent_controlled": "yes",
+            "viewAccountId": str(workspace_id),
+            "latch.authData": orjson.dumps({
+                "status": "done",
+                "auth0Data": {
+                    "idToken": sdk_token.strip(),
+                    "idTokenPayload": {
+                        "sub": "agent-session",
+                        "latch.bio/tos_ok": "true",
+                    },
+                },
+            }).decode(),
+        }
+
+        print("[entrypoint] Starting headless browser during startup")
+        await start_headless_browser(str(notebook_id), local_storage=local_storage)
+    except Exception as e:
+        print(f"[entrypoint] Failed to bootstrap headless browser: {e!s}")
+
+
 restarts = 0
+
+
+async def start_headless_browser(
+    notebook_id: str, local_storage: dict[str, str]
+) -> None:
+    global \
+        headless_browser, \
+        headless_browser_notebook_id, \
+        latest_local_storage, \
+        restarts
+
+    local_storage_changed = local_storage and local_storage != latest_local_storage
+
+    if not local_storage_changed and headless_browser is not None:
+        return
+
+    if restarts >= 3:
+        return
+
+    restarts += 1
+
+    if local_storage_changed:
+        latest_local_storage = local_storage
+        print("[entrypoint] Local storage changed")
+
+    if headless_browser is not None:
+        print("[entrypoint] Stopping existing headless browser before starting new one")
+        with contextlib.suppress(Exception):
+            await headless_browser.stop()
+        headless_browser = None
+
+    headless_browser_notebook_id = notebook_id
+
+    try:
+        notebook_url = f"https://console.latch.bio/plots/{notebook_id}"
+
+        headless_browser = HeadlessBrowser()
+        await headless_browser.start(notebook_url, local_storage=local_storage)
+
+        try:
+            await asyncio.wait_for(action_handler_ready_ev.wait(), timeout=30)
+            print(
+                "[entrypoint] Headless browser action_handler connected successfully!"
+            )
+        except TimeoutError:
+            print(
+                "[entrypoint] Timed out waiting for action_handler websocket connection"
+            )
+
+    except Exception as e:
+        print(f"[entrypoint] Error starting headless browser: {e}")
+        traceback.print_exc()
+        if headless_browser is not None:
+            with contextlib.suppress(Exception):
+                await headless_browser.screenshot("/var/log/headless_browser_error.png")
+            with contextlib.suppress(Exception):
+                await headless_browser.stop()
+            headless_browser = None
+
+
+async def restart_headless_browser() -> None:
+    global headless_browser, restarts
+
+    if restarts >= 3:
+        return
+
+    restarts += 1
+
+    notebook_id = headless_browser_notebook_id
+    local_storage = latest_local_storage
+
+    if notebook_id is None or local_storage is None:
+        print(
+            "[entrypoint] Cannot restart headless browser: missing notebook_id or local_storage"
+        )
+        return
+
+    print("[entrypoint] Restarting headless browser after disconnect...")
+
+    if headless_browser is not None:
+        with contextlib.suppress(Exception):
+            await headless_browser.stop()
+        headless_browser = None
+
+    await start_headless_browser(notebook_id, local_storage)
 
 
 async def poll_skills_branch() -> None:
@@ -1228,7 +1087,8 @@ async def poll_skills_branch() -> None:
             variables={"podId": pod_id},
         )
         metadata_str = (
-            resp.get("data", {})
+            resp
+            .get("data", {})
             .get("podInfo", {})
             .get("plotNotebook", {})
             .get("metadata")
@@ -1378,6 +1238,7 @@ async def startup() -> None:
     async_tasks.append(asyncio.create_task(start_poll_skills_branch()))
     async_tasks.append(asyncio.create_task(k_proc.watchdog(cleanup=kernel_died)))
     async_tasks.append(asyncio.create_task(a_proc.watchdog()))
+    async_tasks.append(asyncio.create_task(bootstrap_headless_browser_on_startup()))
 
 
 async def shutdown() -> None:
@@ -1391,6 +1252,12 @@ async def shutdown() -> None:
         _ = task.cancel()
 
     _ = await asyncio.gather(*async_tasks)
+
+    global headless_browser
+    if headless_browser is not None:
+        with contextlib.suppress(Exception):
+            await headless_browser.stop()
+        headless_browser = None
 
     with contextlib.suppress(Exception):
         sess = get_global_http_sess()
