@@ -877,7 +877,7 @@ async def set_widget(args: dict[str, Any]) -> dict[str, Any]:
 
 @tool(
     "get_widget",
-    "Get the state of a widget by widget key (type, def, current value).",
+    "Get the state of a widget by key: type, default, current value.",
     {
         "type": "object",
         "properties": {
@@ -952,8 +952,18 @@ async def get_widget(args: dict[str, Any]) -> dict[str, Any]:
                     "Optional axis limits: {x: [lo, hi], y: [lo, hi]}. Applied to all axes."
                 ),
                 "properties": {
-                    "x": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2},
-                    "y": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2},
+                    "x": {
+                        "type": "array",
+                        "items": {"type": "number"},
+                        "minItems": 2,
+                        "maxItems": 2,
+                    },
+                    "y": {
+                        "type": "array",
+                        "items": {"type": "number"},
+                        "minItems": 2,
+                        "maxItems": 2,
+                    },
                 },
             },
         },
@@ -978,8 +988,10 @@ async def get_plot_image(args: dict[str, Any]) -> dict[str, Any]:
         "viewport": args.get("viewport"),
     }
 
-    print(f"[tool] get_plot_image key={key} scale={params['scale']} "
-          f"{params['width']}x{params['height']} viewport={params['viewport']}")
+    print(
+        f"[tool] get_plot_image key={key} scale={params['scale']} "
+        f"{params['width']}x{params['height']} viewport={params['viewport']}"
+    )
     result = await h.atomic_operation("get_plot_image", params)
     if result.get("status") == "success":
         return ok({
@@ -1751,12 +1763,12 @@ async def h5_manage_obs(args: dict[str, Any]) -> dict[str, Any]:
         "summary": f"Failed to {operation} observation column: {result.get('error', 'Unknown error')}",
     })
 
+
 @tool(
     "h5_get_image",
     (
         "Render the current scatter/embedding view of an h5/AnnData widget as a webp "
-        "image. Returns a base64-encoded data URL. Uses the widget's default embedding "
-        "and color-by unless overridden."
+        "image. Returns a base64-encoded data URL. "
     ),
     {
         "type": "object",
@@ -1779,10 +1791,7 @@ async def h5_manage_obs(args: dict[str, Any]) -> dict[str, Any]:
                     "{type: 'var', keys: [str]}."
                 ),
             },
-            "scale": {
-                "type": "number",
-                "description": "DPI multiplier. Default 1.0.",
-            },
+            "scale": {"type": "number", "description": "DPI multiplier. Default 1.0."},
             "width": {
                 "type": "integer",
                 "description": "Output width in pixels. Default 800.",
@@ -1797,8 +1806,18 @@ async def h5_manage_obs(args: dict[str, Any]) -> dict[str, Any]:
                     "Optional embedding bounds: {x: [lo, hi], y: [lo, hi]}."
                 ),
                 "properties": {
-                    "x": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2},
-                    "y": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2},
+                    "x": {
+                        "type": "array",
+                        "items": {"type": "number"},
+                        "minItems": 2,
+                        "maxItems": 2,
+                    },
+                    "y": {
+                        "type": "array",
+                        "items": {"type": "number"},
+                        "minItems": 2,
+                        "maxItems": 2,
+                    },
                 },
             },
         },
@@ -1825,8 +1844,10 @@ async def h5_get_image(args: dict[str, Any]) -> dict[str, Any]:
         "viewport": args.get("viewport"),
     }
 
-    print(f"[tool] h5_get_image key={key} obsm_key={params['obsm_key']} "
-          f"scale={params['scale']} {params['width']}x{params['height']}")
+    print(
+        f"[tool] h5_get_image key={key} obsm_key={params['obsm_key']} "
+        f"scale={params['scale']} {params['width']}x{params['height']}"
+    )
     result = await h.atomic_operation("h5_get_image", params, timeout=60.0)
     if result.get("status") == "success":
         return ok({
