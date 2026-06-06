@@ -8,6 +8,9 @@ from ..utils import auto_install
 from ..utils.align import align_image
 from .ops import (
     Context,
+    encode_f32_b64,
+    encode_i32_b64,
+    encode_obs_color_values,
     fetch_and_process_image,
     get_var_index,
     mutate_obs_by_lasso,
@@ -15,6 +18,7 @@ from .ops import (
     pil_image_cache,
     save_h5ad_to_latch,
 )
+from .profiling import log_sizes, profile, profile_request_by_op
 
 ad = auto_install.ad
 
@@ -23,6 +27,7 @@ alignment_is_running = False
 contexts: dict[str, Context] = {}
 
 
+@profile_request_by_op
 async def process_h5ad_request(
     msg: dict[str, Any],
     *,
@@ -151,12 +156,18 @@ async def process_h5ad_request(
                     "init_obs_key": init_obs_key,
                     "init_obsm_key": init_obsm_key,
                     "init_recomputed_index": recomputed_index,
-                    "init_obsm_values": obsm.data if obsm is not None else None,
-                    "init_obsm_index": obsm.index.tolist()
+                    "init_obsm_values": encode_f32_b64(obsm.data)
+                    if obsm is not None
+                    else None,
+                    "init_obsm_index": encode_i32_b64(ctx.index)
                     if obsm is not None
                     else None,
                     "init_obsm_filters": filters,
-                    "init_obs_values": obs.data.tolist() if obs is not None else None,
+                    "init_obs_values": encode_obs_color_values(
+                        adata, init_obs_key, ctx.index
+                    )
+                    if obs is not None and init_obs_key is not None
+                    else None,
                     "init_obs_unique_values": (
                         obs.top_values.tolist() if obs is not None else None
                     ),
@@ -219,8 +230,9 @@ async def process_h5ad_request(
             if obsm is None:
                 return make_response(error="Obsm not found")
 
-            res["obsm"] = obsm.data.tolist()
-            res["index"] = obsm.index.tolist()
+            with profile("get_obsm.serialize_obsm"):
+                res["obsm"] = encode_f32_b64(obsm.data)
+                res["index"] = encode_i32_b64(ctx.index)
 
             if "colored_by_type" in msg and "colored_by_key" in msg:
                 if msg["colored_by_type"] == "obs":
@@ -228,9 +240,12 @@ async def process_h5ad_request(
 
                     if obs is not None:
                         res["fetched_for_obs_key"] = msg["colored_by_key"]
-                        res["values"] = obs.data.tolist()
-                        res["unique_values"] = obs.top_values.tolist()
-                        res["counts"] = obs.top_value_counts.tolist()
+                        with profile("get_obsm.serialize_obs"):
+                            res["values"] = encode_obs_color_values(
+                                adata, msg["colored_by_key"], ctx.index
+                            )
+                            res["unique_values"] = obs.top_values.tolist()
+                            res["counts"] = obs.top_value_counts.tolist()
                         res["nrof_values"] = obs.total_unique
 
                         res["color_by_endpoints"] = [obs.min, obs.max]
@@ -239,15 +254,48 @@ async def process_h5ad_request(
                     res["fetched_for_var_keys"] = keys
 
                     res["var_values"] = []
-                    for x in keys:
-                        cur = ctx.get_obs_vector(x)
-                        assert cur is not None
+                    with profile("get_obsm.serialize_var"):
+                        for x in keys:
+                            cur = ctx.get_obs_vector(x)
+                            assert cur is not None
 
-                        res["var_values"].append(cur.tolist())
+                            res["var_values"].append(cur.tolist())
 
                     endpoints = ctx.get_vars_range(keys)
                     if endpoints is not None:
                         res["color_by_endpoints"] = list(endpoints)
+
+            extra_obs: dict[str, Any] = {}
+            for extra_key in msg.get("extra_obs_keys") or []:
+                extra = ctx.get_obs(extra_key, max_cells=max_cells)
+                if extra is None:
+                    continue
+                extra_obs[extra_key] = {
+                    "values": encode_obs_color_values(adata, extra_key, ctx.index),
+                    "unique_values": extra.top_values.tolist(),
+                    "counts": extra.top_value_counts.tolist(),
+                    "nrof_values": extra.total_unique,
+                    "endpoints": [extra.min, extra.max],
+                }
+            res["extra_obs"] = extra_obs
+
+            extra_vars: dict[str, Any] = {}
+            for extra_var in msg.get("extra_var_indexes") or []:
+                vec = ctx.get_obs_vector(extra_var)
+                if vec is None:
+                    continue
+                extra_vars[extra_var] = vec.tolist()
+            res["extra_vars"] = extra_vars
+
+            log_sizes(
+                "op=get_obsm",
+                {
+                    "obsm": res.get("obsm"),
+                    "index": res.get("index"),
+                    "values": res.get("values"),
+                    "var_values": res.get("var_values"),
+                },
+            )
 
             return make_response(data=res)
 
@@ -265,7 +313,9 @@ async def process_h5ad_request(
             return make_response(
                 data={
                     "fetched_for_key": msg["obs_key"],
-                    "values": obs.data.tolist(),
+                    "values": encode_obs_color_values(
+                        adata, msg["obs_key"], ctx.index
+                    ),
                     "unique_values": obs.top_values.tolist(),
                     "counts": obs.top_value_counts.tolist(),
                     "nrof_values": obs.total_unique,
@@ -354,7 +404,7 @@ async def process_h5ad_request(
                     "fetched_for_key": msg["obs_key"],
                     "mutated_for_key": mutated_for_key,
                     "created_for_key": created_for_key,
-                    "values": obs.data.tolist(),
+                    "values": encode_obs_color_values(adata, obs_key, ctx.index),
                     "unique_values": obs.top_values.tolist(),
                     "counts": obs.top_value_counts.tolist(),
                     "nrof_values": obs.total_unique,

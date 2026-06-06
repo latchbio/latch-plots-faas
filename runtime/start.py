@@ -42,6 +42,10 @@ env_vars = {
     "CONDA_PREFIX": "/opt/mamba/envs/plots-faas",
     "PATH": "/opt/mamba/envs/plots-faas/bin:" + os.environ["PATH"],
     "PYTHON_GIL": "1",
+    # TODO(aidan): revert before merging — hardcoded ON for dev profiling.
+    # execle replaces the environment, so this must be passed through here to
+    # reach the kernel subprocess (systemd/shell env does not propagate).
+    "LPLOTS_H5_PROFILE": "1",
 }
 
 os.system(

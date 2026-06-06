@@ -16,6 +16,7 @@ from PIL import Image
 
 from ... import _inject
 from ..utils import auto_install
+from .profiling import profile
 
 Image.MAX_IMAGE_PIXELS = None  # TIFFs can be huge, and PIL detects a decompression bomb on many ~400mb examples otherwise
 
@@ -94,22 +95,26 @@ class Context:
         if filters is None:
             filters = []
 
-        mask = generate_filter_mask(self.adata, filters)
+        with profile("compute_index.generate_mask"):
+            mask = generate_filter_mask(self.adata, filters)
 
         cached = self._index
-        if (
-            cached is not None
-            and np.array_equal(cached.mask, mask)
-            and cached.max_cells == max_cells
-        ):
+        with profile("compute_index.mask_equal"):
+            unchanged = (
+                cached is not None
+                and cached.max_cells == max_cells
+                and np.array_equal(cached.mask, mask)
+            )
+        if unchanged:
             return False
 
-        visible_cells = np.sum(mask)
+        with profile("compute_index.where_sample"):
+            visible_cells = np.sum(mask)
 
-        index = np.where(mask)[0]
-        if visible_cells > max_cells:
-            # todo(aidan): intelligent downsampling to preserve outliers / information in general
-            index = rng.choice(index, size=max_cells, replace=False)
+            index = np.where(mask)[0]
+            if visible_cells > max_cells:
+                # todo(aidan): intelligent downsampling to preserve outliers / information in general
+                index = rng.choice(index, size=max_cells, replace=False)
 
         self._index = IndexEntry(max_cells=max_cells, mask=mask, index=index)
 
@@ -121,13 +126,16 @@ class Context:
 
         # todo(aidan): allow specifying dimensions to fetch (PCA components is an example where this is useful)
         # todo(aidan): support sparse data?
-        data = self.adata.obsm[key]
-        if isinstance(data, pd.DataFrame):
-            res = data.iloc[self.index, :2].to_numpy(dtype=np.float32, copy=False)
-        else:
-            res = np.asarray(data[self.index, :2], dtype=np.float32)
+        with profile("get_obsm.index"):
+            data = self.adata.obsm[key]
+            if isinstance(data, pd.DataFrame):
+                res = data.iloc[self.index, :2].to_numpy(dtype=np.float32, copy=False)
+            else:
+                res = np.asarray(data[self.index, :2], dtype=np.float32)
 
-        return ObsmData(data=res, index=np.asarray(self.adata.obs_names[self.index]))
+            obsm_index = np.asarray(self.adata.obs_names[self.index])
+
+        return ObsmData(data=res, index=obsm_index)
 
     def get_obs(self, key: str, *, max_cells: int) -> ObsData | None:
         if key not in self.adata.obs:
@@ -135,9 +143,10 @@ class Context:
 
         obs = np.asarray(self.adata.obs[key])
 
-        value_counts = pd.Series(obs).value_counts(dropna=False)
-        unique_obs = value_counts.index.to_numpy()
-        counts = value_counts.values.astype(np.int64)  # noqa: PD011
+        with profile("get_obs.value_counts"):
+            value_counts = pd.Series(obs).value_counts(dropna=False)
+            unique_obs = value_counts.index.to_numpy()
+            counts = value_counts.values.astype(np.int64)  # noqa: PD011
 
         top = unique_obs
         if len(top) > max_cells:
@@ -167,9 +176,10 @@ class Context:
             return None
 
         # note(aidan): this is ~3+ times faster than using `.to_numpy()` in place of `.values`
-        return np.asarray(
-            self.adata[self.index, var].to_df().iloc[:, 0:].values.ravel()  # noqa: PD011
-        )
+        with profile("get_obs_vector.to_df"):
+            return np.asarray(
+                self.adata[self.index, var].to_df().iloc[:, 0:].values.ravel()  # noqa: PD011
+            )
 
     def get_vars_color_values(
         self, keys: list[str], *, index: NDArray[np.intp] | None = None
@@ -275,6 +285,95 @@ class Context:
 
 rng = np.random.default_rng()
 
+
+def _encode_b64(arr: NDArray[Any], np_dtype: str, encoding: str) -> dict[str, Any]:
+    a = np.ascontiguousarray(arr, dtype=np_dtype)
+    return {
+        "encoding": encoding,
+        "shape": list(a.shape),
+        "data": base64.b64encode(a.tobytes()).decode("ascii"),
+    }
+
+
+def encode_f32_b64(arr: NDArray[Any]) -> dict[str, Any]:
+    """
+    Encode a numeric array as little-endian float32 + base64.
+    Wire format consumed by the frontend:
+        {
+            "encoding": "base64-f32le",
+            "shape": [...],            # e.g. [n, 2] for obsm
+            "data": "<base64 of raw little-endian float32 bytes>",
+        }
+    """
+    return _encode_b64(arr, "<f4", "base64-f32le")
+
+
+def encode_i32_b64(arr: NDArray[Any]) -> dict[str, Any]:
+    """
+    Encode an integer array as little-endian int32 + base64.
+        {
+            "encoding": "base64-i32le",
+            "shape": [n],
+            "data": "<base64 of raw little-endian int32 bytes>",
+        }
+    """
+    return _encode_b64(arr, "<i4", "base64-i32le")
+
+
+def _encode_int_b64(arr: NDArray[Any]) -> dict[str, Any]:
+    """Encode an integer array using the smallest signed int dtype that fits.
+
+    Codes use -1 as a NaN/missing sentinel, so signed types are required.
+    """
+    a = np.asarray(arr)
+    mn = int(a.min()) if a.size else 0
+    mx = int(a.max()) if a.size else 0
+    if mn >= -128 and mx <= 127:
+        return _encode_b64(a, "<i1", "base64-i8le")
+    if mn >= -32768 and mx <= 32767:
+        return _encode_b64(a, "<i2", "base64-i16le")
+    return _encode_b64(a, "<i4", "base64-i32le")
+
+
+def encode_obs_color_values(
+    adata: ad.AnnData, key: str, index: NDArray[np.intp]
+) -> dict[str, Any]:
+    """Encode a per-cell obs column (subset by `index`) for the color channel.
+
+    - numeric columns (int/uint/float, excluding bool) -> base64 float32
+    - everything else (category/object/bool/datetime) -> categorical codes:
+        {
+            "encoding": "categorical",
+            "categories": [...],          # raw category values, sent once
+            "codes": {<int b64 envelope>} # per-cell index into categories, -1 = NaN
+        }
+    """
+    s = adata.obs[key]
+    dtype = s.dtype
+
+    if isinstance(dtype, pd.CategoricalDtype):
+        codes = np.asarray(s.cat.codes)[index]
+        return {
+            "encoding": "categorical",
+            "categories": s.cat.categories.tolist(),
+            "codes": _encode_int_b64(codes),
+        }
+
+    # note(aidan): is_numeric_dtype(bool) is True, so bool must be handled before
+    # the numeric branch (frontend treats bool as categorical)
+    if not pd.api.types.is_bool_dtype(dtype) and pd.api.types.is_numeric_dtype(
+        dtype
+    ):
+        return encode_f32_b64(np.asarray(s, dtype=np.float64)[index])
+
+    codes_full, uniques = pd.factorize(s, use_na_sentinel=True)
+    return {
+        "encoding": "categorical",
+        "categories": np.asarray(uniques).tolist(),
+        "codes": _encode_int_b64(np.asarray(codes_full)[index]),
+    }
+
+
 pil_image_cache: dict[str, bytes] = {}
 
 
@@ -353,16 +452,17 @@ def generate_filter_mask(
             op = f["operation"]
             value = op["value"]
 
-            if len(valid_keys) == 1:
-                var_values = np.asarray(
-                    adata[:, valid_keys[0]].to_df().iloc[:, 0:].values.ravel()
-                )  # noqa: PD011
-            else:
-                gene_values = [
-                    np.asarray(adata[:, key].to_df().iloc[:, 0:].values.ravel())  # noqa: PD011
-                    for key in valid_keys
-                ]
-                var_values = np.mean(gene_values, axis=0)
+            with profile("filter_mask.var_extract"):
+                if len(valid_keys) == 1:
+                    var_values = np.asarray(
+                        adata[:, valid_keys[0]].to_df().iloc[:, 0:].values.ravel()
+                    )  # noqa: PD011
+                else:
+                    gene_values = [
+                        np.asarray(adata[:, key].to_df().iloc[:, 0:].values.ravel())  # noqa: PD011
+                        for key in valid_keys
+                    ]
+                    var_values = np.mean(gene_values, axis=0)
 
             if op["type"] == "geq":
                 mask &= var_values >= value

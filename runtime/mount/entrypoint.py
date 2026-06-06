@@ -4,6 +4,7 @@ import json
 import os
 import socket
 import sys
+import time
 import traceback
 from asyncio.subprocess import Process
 from collections.abc import Awaitable, Callable
@@ -310,13 +311,19 @@ async def add_pod_event(*, auth: str, event_type: str) -> None:
         traceback.print_exc()
 
 
+# TODO(aidan): revert — h5 relay profiling. Prints to parent stdout (→ journald).
+_H5_PROFILE = os.environ.get("LPLOTS_H5_PROFILE", "") not in ("", "0", "false")
+
+
 async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
     global latest_reactivity_summary
 
     print("Starting kernel message listener")
     while True:
         msg_raw = await conn_k.recv_raw()
+        _t_loads = time.perf_counter()
         msg = orjson.loads(msg_raw)
+        _loads_ms = (time.perf_counter() - _t_loads) * 1000
 
         try:
             print(f"> {msg.get('type', 'unknown')}: {len(msg_raw)}")
@@ -609,7 +616,25 @@ async def handle_kernel_messages(conn_k: SocketIo, auth: str) -> None:
                     })
                     continue
 
-            await plots_ctx_manager.broadcast_message(orjson.dumps(msg).decode())
+            if _H5_PROFILE and msg.get("type") == "h5":
+                _t = time.perf_counter()
+
+                # todo(aidan): remove double serialization
+                _payload = orjson.dumps(msg).decode()
+                _dumps_ms = (time.perf_counter() - _t) * 1000
+
+                _t = time.perf_counter()
+                await plots_ctx_manager.broadcast_message(_payload)
+                _bc_ms = (time.perf_counter() - _t) * 1000
+
+                print(
+                    f"[h5prof-parent] op={msg.get('op')} raw_in={len(msg_raw)} "
+                    f"loads={_loads_ms:.1f}ms dumps={_dumps_ms:.1f}ms "
+                    f"broadcast={_bc_ms:.1f}ms clients={len(plots_ctx_manager.contexts)}",
+                    flush=True,
+                )
+            else:
+                await plots_ctx_manager.broadcast_message(orjson.dumps(msg).decode())
 
         except Exception:
             err_msg = {"type": "error", "data": traceback.format_exc()}
