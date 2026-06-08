@@ -20,9 +20,8 @@ dependencies = [
     "seaborn>=0.13.2",
     "kaleido>=1.1.0",
     "pillow>=11.2.1",
-    "scanpy[leiden]>=1.12.0",
     "igraph>=1.0.0",
-    "leidenalg>=0.11.1",
+    "scanpy[leiden]>=1.12.0",
     "squidpy>=1.8.0",
     "molviewspec",
     "dask>=2026.1.2",
@@ -41,6 +40,7 @@ dependencies = [
     "xarray>=2026.1.0",
     "molviewspec>=0.1.0",
     "playwright==1.57.0",
+    "loro>=1.10.3",
 ]
 requires-python = "==3.14.*"
 readme = "README.md"
@@ -49,18 +49,9 @@ license = { text = "CC0-1.0" }
 [tool.uv.extra-build-dependencies]
 latch-plots-faas = ["setuptools"]
 
-# todo(rteqs): get rid of this once they release pytables 3.11.1
-[tool.uv.sources]
-tables = { git = "https://github.com/PyTables/PyTables.git", branch = "master" }
-orjson = { path = "wheels/orjson-3.11.7-cp314-cp314t-macosx_11_0_arm64.whl" }
-igraph = { path = "wheels/igraph-1.0.0-cp314-cp314t-macosx_11_0_arm64.whl" }
-leidenalg = { path = "wheels/leidenalg-0.11.1.dev4+g36147642d.d20260212-cp314-cp314t-macosx_15_0_arm64.whl" }
-
 [build-system]
-requires = ["cffi>=2.0.0"]
-# [build-system]
-# requires = ["hatchling"]
-# build-backend = "hatchling.build"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [dependency-groups]
 dev = ["ruff>=0.9.5", "pandas>=2.2.2", "pyarrow>=23.0.0"]
