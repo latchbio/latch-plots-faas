@@ -2395,9 +2395,9 @@ class Kernel:
                 return
 
             obj_id = widget_state.get("obj_id")
-            ctx = contexts.get(obj_id) if obj_id is not None else None
+            h5_ctx = contexts.get(obj_id) if obj_id is not None else None
 
-            if ctx is None:
+            if h5_ctx is None:
                 await self.send({
                     "type": "h5_get_image_response",
                     "agent_tx_id": agent_tx_id,
@@ -2410,7 +2410,7 @@ class Kernel:
 
             obsm_key = msg.get("obsm_key") or presets.get("default_obsm_key")
             if obsm_key is None:
-                obsm_keys = list(ctx.adata.obsm.keys())
+                obsm_keys = list(h5_ctx.adata.obsm.keys())
                 if len(obsm_keys) == 0:
                     await self.send({
                         "type": "h5_get_image_response",
@@ -2442,8 +2442,8 @@ class Kernel:
                 "obs_type_overrides": {},
             }
 
-            if ctx._index is None:
-                ctx.compute_index(filters=None, max_cells=100_000)
+            if h5_ctx._index is None:
+                h5_ctx.compute_index(filters=None, max_cells=100_000)
 
             data = [{
                 "type": "scattergl",
@@ -2482,7 +2482,7 @@ class Kernel:
             }
 
             try:
-                image = ctx.export_image(
+                image = h5_ctx.export_image(
                     obsm_key=obsm_key,
                     data=data,
                     layout=layout,
