@@ -4,6 +4,8 @@ from collections.abc import Awaitable, Callable
 from typing import Any, overload
 from urllib.parse import quote_plus
 
+from latch.ldata.path import LPath
+
 from ..utils import auto_install
 from ..utils.align import align_image
 from .ops import (
@@ -40,10 +42,15 @@ async def process_h5ad_request(
             "value": {"error": ("Invalid operation: `op` key missing from message")},
         }
 
+    sync_to_raw = msg["state"].get("sync_to")
+    sync_to = LPath(sync_to_raw["path"]) if sync_to_raw is not None else None
+
     ctx = contexts.get(obj_id)
     if ctx is None:
-        ctx = Context(id=obj_id)
+        ctx = Context(id=obj_id, sync_to=sync_to)
         contexts[obj_id] = ctx
+    else:
+        ctx.sync_to = sync_to
     adata = ctx.adata
 
     @overload
@@ -346,6 +353,12 @@ async def process_h5ad_request(
                 )
                 mutated_for_key = obs_key
 
+            if (
+                (created_for_key is not None or mutated_for_key is not None)
+                and ctx.sync_to is not None
+            ):
+                save_h5ad_to_latch(adata, ctx.sync_to)
+
             obs = ctx.get_obs(obs_key, max_cells=max_cells)
             assert obs is not None
 
@@ -378,6 +391,9 @@ async def process_h5ad_request(
 
             adata.obs = adata.obs.drop(columns=[obs_key])
 
+            if ctx.sync_to is not None:
+                save_h5ad_to_latch(adata, ctx.sync_to)
+
             return make_response(data={"dropped_key": obs_key})
 
         case "rename_obs":
@@ -393,6 +409,9 @@ async def process_h5ad_request(
                 return make_response(error="Observation key not found")
 
             adata.obs = adata.obs.rename(columns={old_obs_key: new_obs_key})
+
+            if ctx.sync_to is not None:
+                save_h5ad_to_latch(adata, ctx.sync_to)
 
             return make_response(data={"old_key": old_obs_key, "new_key": new_obs_key})
 
@@ -427,6 +446,9 @@ async def process_h5ad_request(
             image_data["transformations"] = msg["transformations"]
             images[image_id] = image_data
             adata.uns["latch_images"] = images
+
+            if ctx.sync_to is not None:
+                save_h5ad_to_latch(adata, ctx.sync_to)
 
             return make_response(
                 data={"image_data": image_data, "fetched_for_image_id": image_id}
@@ -464,6 +486,8 @@ async def process_h5ad_request(
                     widget_session_key,
                     send,
                 )
+                if ctx.sync_to is not None:
+                    save_h5ad_to_latch(adata, ctx.sync_to)
             except Exception as e:
                 await send({
                     "type": "h5",
@@ -496,6 +520,9 @@ async def process_h5ad_request(
             image_data["transformations"] = msg["image_transformation"]
             adata.uns["latch_images"][msg["id"]] = image_data
 
+            if ctx.sync_to is not None:
+                save_h5ad_to_latch(adata, ctx.sync_to)
+
             return make_response(
                 data={"updated_image_transformations_for_id": msg["id"]}
             )
@@ -506,6 +533,9 @@ async def process_h5ad_request(
 
             adata.uns["latch_images"].pop(msg["id"], None)
 
+            if ctx.sync_to is not None:
+                save_h5ad_to_latch(adata, ctx.sync_to)
+
             return make_response(data={"removed_image_id": msg["id"]})
 
         case "store_views":
@@ -513,6 +543,9 @@ async def process_h5ad_request(
                 return make_response(error="`views` key missing from message")
 
             adata.uns["latch_views"] = msg["views"]
+
+            if ctx.sync_to is not None:
+                save_h5ad_to_latch(adata, ctx.sync_to)
 
             return make_response(data={"stored_views": adata.uns["latch_views"]})
 

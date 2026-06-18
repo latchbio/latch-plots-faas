@@ -57,6 +57,7 @@ class H5State(_emit.WidgetState[h5_widget_type, str | ad.AnnData | None]):
     obj_id: str | None
     label: str | None
     spatial_dir: LPath | None
+    sync_to: LPath | None
     readonly: bool
     ann_tiles: LPath | None
     appearance: OutputAppearance | None
@@ -122,6 +123,7 @@ def w_h5(
     label: str | None = None,
     ann_data: ad.AnnData | None = None,
     spatial_dir: LPath | None = None,
+    sync_to: LPath | None = None,
     ann_tiles: LPath | None = None,
     readonly: bool = False,
     appearance: OutputAppearance | None = None,
@@ -143,6 +145,7 @@ def w_h5(
             "obj_id": obj_id,
             "label": label,
             "spatial_dir": spatial_dir,
+            "sync_to": sync_to,
             "ann_tiles": ann_tiles,
             "readonly": readonly,
             "viewer_presets": viewer_presets,
