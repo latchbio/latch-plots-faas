@@ -69,6 +69,7 @@ class PlotViewport(TypedDict):
 @dataclass(kw_only=True)
 class Context:
     id: str
+    sync_to: LPath | None = None
 
     _index: IndexEntry | None = None
     _var_index: VarIndexEntry | None = None
