@@ -73,6 +73,11 @@ else:
         w_plot(label="Histogram", source=fig_obs_hist)
 ```
 
+Structured output:
+```json
+{"summary":"I created the loading and initial exploration cells and am waiting for them to finish.","next_status":"awaiting_cell_execution","expected_widgets":[]}
+```
+
 **Turn 2: Chaining Execution**
 
 ```python
@@ -86,7 +91,17 @@ update_plan(
 )
 ```
 
+Structured output:
+```json
+{"summary":"The data loaded successfully; I marked loading done and started QC.","next_status":"awaiting_cell_execution","expected_widgets":[]}
+```
+
 **Turn 3: Auto-Correction**
 
 # [Agent does QC, then evaluates <self_eval_criteria>]
 # [Self-eval criterion failed: retention=2% (<20% target) at 500 counts]
+
+Structured output:
+```json
+{"summary":"QC retained too few cells at the current threshold, so I will adjust and rerun the QC cell.","next_status":"fixing","expected_widgets":[]}
+```

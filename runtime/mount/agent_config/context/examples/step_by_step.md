@@ -14,6 +14,11 @@ update_plan(plan=[
 
 AskUserQuestion: Does this threshold work for you?
 
+Structured output:
+```json
+{"summary":"I drafted a step-by-step plan and asked you to approve the first thresholding step.","next_status":"awaiting_user_response","expected_widgets":[]}
+```
+
 **Turn 2: User Confirms -> Step Execution**
 
 User: "Yes, proceed."
@@ -100,7 +105,12 @@ update_plan(
     ]
 )
 ```
-AskUserQeustion "How would you like to adjust the threshold before rerunning? (e.g., 100 or 150 genes)",
+AskUserQuestion: "How would you like to adjust the threshold before rerunning? (e.g., 100 or 150 genes)"
+
+Structured output:
+```json
+{"summary":"The first filtering attempt retained too few cells, so I asked how to adjust the threshold.","next_status":"awaiting_user_response","expected_widgets":[]}
+```
 
 **Turn 3: User Adjusts Threshold. Agent Executes Cells Successfully and Asks for User Confirmation**
 
@@ -117,3 +127,8 @@ update_plan(
 )
 ```
 AskUserQuestion: "Are you satisfied with these results? Should I proceed to the normalization step?"
+
+Structured output:
+```json
+{"summary":"Filtering now passes the checks. Please confirm before I mark the step done and move to normalization.","next_status":"awaiting_user_response","expected_widgets":[]}
+```
