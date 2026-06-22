@@ -146,8 +146,6 @@ agent_turn_output_schema: dict[str, Any] = {
     "additionalProperties": False,
 }
 
-structured_output_tool_name = "StructuredOutput"
-
 HistoryRole = Literal["user", "assistant", "system"]
 
 
@@ -1404,7 +1402,6 @@ class AgentHarness:
             await self.claude.query(prompt=prompt, session_id=self.claude_session_id)
 
         tool_name_by_tool_use_id: dict[str, str] = {}
-        structured_output_seen = False
 
         error_type: AssistantMessageError | None = None
         assistant_message_started_at: float | None = None
@@ -1445,9 +1442,6 @@ class AgentHarness:
                         print(f"[agent] assistant message error={res.error}")
 
                     for c in res.content:
-                        hide_history = (
-                            structured_output_seen and res.stop_reason == "end_turn"
-                        )
                         if isinstance(c, TextBlock):
                             await self._insert_history(
                                 role="assistant",
@@ -1464,7 +1458,6 @@ class AgentHarness:
                                         if res.parent_tool_use_id is not None
                                         else {}
                                     ),
-                                    "hidden": hide_history,
                                 },
                             )
 
@@ -1486,15 +1479,11 @@ class AgentHarness:
                                         if res.parent_tool_use_id is not None
                                         else {}
                                     ),
-                                    "hidden": hide_history,
                                 },
                             )
 
                         elif isinstance(c, ToolUseBlock):
                             tool_name_by_tool_use_id[c.id] = c.name
-                            if c.name == structured_output_tool_name:
-                                structured_output_seen = True
-
                             if c.name == "AskUserQuestion":
                                 try:
                                     tx_id = await self.create_atomic_operation(
@@ -1530,7 +1519,6 @@ class AgentHarness:
                                         if res.parent_tool_use_id is not None
                                         else {}
                                     ),
-                                    "hidden": hide_history,
                                 },
                             )
 
