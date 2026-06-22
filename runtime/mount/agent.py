@@ -229,7 +229,7 @@ AnthropicStreamEvent = (
 
 
 class AgentTurnOutput(TypedDict):
-    summary: str | None
+    summary: str
     next_status: AgentTurnStatus
 
 
