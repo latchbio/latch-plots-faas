@@ -10,7 +10,7 @@ from collections.abc import Iterable
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Literal, NotRequired, TypedDict, cast
+from typing import Any, Literal, NotRequired, TypedDict
 
 from anthropic.types import (
     MessageDeltaUsage,
@@ -133,7 +133,7 @@ agent_turn_output_schema: dict[str, Any] = {
     "type": "object",
     "properties": {
         "summary": {
-            "anyOf": [{"type": "string"}, {"type": "null"}],
+            "type": "string",
             "description": "Short user-facing progress, answer, or next step.",
         },
         "next_status": {
@@ -237,7 +237,6 @@ AnthropicStreamEvent = (
 class AgentTurnOutput(TypedDict):
     summary: str | None
     next_status: AgentTurnStatus
-    expected_widgets: list[str]
 
 
 class AgentQuery(TypedDict):
@@ -782,65 +781,31 @@ class AgentHarness:
             "context_limit": 1_000_000,
         })
 
-    def _normalize_turn_output(self, structured_output: Any) -> AgentTurnOutput:
-        if not isinstance(structured_output, dict):
-            next_status: AgentTurnStatus = "done"
-            if len(self.pending_cells) > 0:
-                next_status = "awaiting_cell_execution"
-            return {"summary": None, "next_status": next_status, "expected_widgets": []}
-
-        summary_raw = structured_output.get("summary")
-        summary = summary_raw if isinstance(summary_raw, str) else None
-
-        next_status_raw = structured_output.get("next_status")
-        next_status: AgentTurnStatus = "done"
-        if isinstance(next_status_raw, str) and next_status_raw in agent_turn_status:
-            next_status = cast(AgentTurnStatus, next_status_raw)
-
-        if len(self.pending_cells) > 0:
-            next_status = "awaiting_cell_execution"
-
-        expected_widgets_raw = structured_output.get("expected_widgets")
-        expected_widgets: list[str] = []
-        if isinstance(expected_widgets_raw, list):
-            expected_widgets = [
-                widget_key
-                for widget_key in expected_widgets_raw
-                if isinstance(widget_key, str)
-            ]
-
-        return {
-            "summary": summary,
-            "next_status": next_status,
-            "expected_widgets": expected_widgets,
-        }
-
     async def _handle_turn_output(
         self, structured_output: Any, *, request_id: str | None
     ) -> None:
-        output = self._normalize_turn_output(structured_output)
-        next_status = output["next_status"]
-
-        if next_status == "awaiting_user_widget_input":
-            self.pending_widgets = dict.fromkeys(output["expected_widgets"])
+        # todo(rteqs): latch data validation?
+        next_status_raw = structured_output.get("next_status", "done")
+        if len(self.pending_cells) > 0:
+            next_status = "awaiting_cell_execution"
+        elif len(self.pending_widgets) > 0:
+            next_status = "awaiting_user_widget_input"
+        elif next_status_raw not in agent_turn_status:
+            next_status = "done"
         else:
-            self.pending_widgets.clear()
-
-        print(
-            "[agent] structured turn output "
-            f"status={next_status} pending_cells={len(self.pending_cells)} "
-            f"expected_widgets={len(output['expected_widgets'])}"
-        )
-
-        content: list[dict[str, Any]] = []
-        summary = output["summary"]
-        if summary is not None and summary != "":
-            content.append({"type": "text", "text": summary})
+            next_status = next_status_raw
 
         await self.set_agent_status(next_status)
+
+        summary: str = structured_output.get("summary", "")
+        content = [{"type": "text", "text": summary}]
+
         await self._insert_history(
             role="assistant",
-            payload={"content": content, "structured_output": output},
+            payload={
+                "content": content,
+                "structured_output": {"summary": summary, "next_status": next_status},
+            },
             request_id=request_id,
         )
 
