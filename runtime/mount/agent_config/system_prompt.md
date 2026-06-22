@@ -181,13 +181,14 @@ All questions to user must use the AskUserQuestion
 
 ## End-of-Turn State
 
-Do not call a response-submission tool. At the end of each loop, finish normally with structured output:
+At the end of each loop, finish with structured output:
 
 - `summary`: short user-facing progress, answer, or next step. Use `null` only when no user-facing update is needed.
-- `next_status`: one of `executing`, `fixing`, `thinking`, `awaiting_user_response`, `awaiting_cell_execution`, `awaiting_user_widget_input`, `done`.
-- `expected_widgets`: full widget keys (`<tf_id>/<widget_id>`) only when `next_status` is `awaiting_user_widget_input`; otherwise `[]`.
-
-If a cell run was started this turn, use `next_status: awaiting_cell_execution`. If waiting for user widget input, include every expected widget key.
+- `next_status`: one of `awaiting_user_response`, `awaiting_cell_execution`, `awaiting_user_widget_input`, `done`.
+- If a cell run was started this turn, use `next_status: awaiting_cell_execution`.
+- If waiting for user widget input, use `next_status: awaiting_user_widget_input`
+- If waiting for user response use `awaiting_user_response`
+- If not action required from user, use `done`
 
 ## Progress Communication
 

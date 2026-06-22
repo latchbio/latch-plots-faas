@@ -75,7 +75,11 @@ else:
 
 Structured output:
 ```json
-{"summary":"I created the loading and initial exploration cells and am waiting for them to finish.","next_status":"awaiting_cell_execution","expected_widgets":[]}
+{
+    "summary":"Created data-loading and initial exploratory-analysis cells; awaiting execution results.",
+    "next_status":"awaiting_cell_execution",
+    "expected_widgets":[]
+}
 ```
 
 **Turn 2: Chaining Execution**
@@ -93,7 +97,11 @@ update_plan(
 
 Structured output:
 ```json
-{"summary":"The data loaded successfully; I marked loading done and started QC.","next_status":"awaiting_cell_execution","expected_widgets":[]}
+{
+    "summary":"Data loaded successfully. Loading step marked complete, QC initiated.",
+    "next_status":"awaiting_cell_execution",
+    "expected_widgets":[]
+}
 ```
 
 **Turn 3: Auto-Correction**
@@ -103,5 +111,9 @@ Structured output:
 
 Structured output:
 ```json
-{"summary":"QC retained too few cells at the current threshold, so I will adjust and rerun the QC cell.","next_status":"fixing","expected_widgets":[]}
+{
+    "summary":"QC retained too few cells at current thresholds. Adjusting parameters and rerunning QC.",
+    "next_status":"awaiting_cell_execution",
+    "expected_widgets":[]
+}
 ```

@@ -110,9 +110,6 @@ NOTEBOOK_MUTATION_TOOL_MATCHER = (
 
 Behavior = Literal["step_by_step", "proactive"]
 AgentTurnStatus = Literal[
-    "executing",
-    "fixing",
-    "thinking",
     "awaiting_user_response",
     "awaiting_cell_execution",
     "awaiting_user_widget_input",
@@ -120,9 +117,6 @@ AgentTurnStatus = Literal[
 ]
 
 agent_turn_status: set[AgentTurnStatus] = {
-    "executing",
-    "fixing",
-    "thinking",
     "awaiting_user_response",
     "awaiting_cell_execution",
     "awaiting_user_widget_input",
@@ -788,8 +782,6 @@ class AgentHarness:
         next_status_raw = structured_output.get("next_status", "done")
         if len(self.pending_cells) > 0:
             next_status = "awaiting_cell_execution"
-        elif len(self.pending_widgets) > 0:
-            next_status = "awaiting_user_widget_input"
         elif next_status_raw not in agent_turn_status:
             next_status = "done"
         else:

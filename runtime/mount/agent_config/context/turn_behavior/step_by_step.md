@@ -26,4 +26,4 @@
    - Ask confirmation question
    - End with `next_status: awaiting_user_response`
 6. If user confirmed previous step: mark it `done`, then begin next step
-7. End every loop with structured output (`summary`, `next_status`, `expected_widgets`).
+7. End every loop with structured output (`summary`, `next_status`).
