@@ -73,6 +73,15 @@ else:
         w_plot(label="Histogram", source=fig_obs_hist)
 ```
 
+Structured output:
+```json
+{
+    "summary":"Created data-loading and initial exploratory-analysis cells; awaiting execution results.",
+    "next_status":"awaiting_cell_execution",
+    "expected_widgets":[]
+}
+```
+
 **Turn 2: Chaining Execution**
 
 ```python
@@ -86,7 +95,25 @@ update_plan(
 )
 ```
 
+Structured output:
+```json
+{
+    "summary":"Data loaded successfully. Loading step marked complete, QC initiated.",
+    "next_status":"awaiting_cell_execution",
+    "expected_widgets":[]
+}
+```
+
 **Turn 3: Auto-Correction**
 
 # [Agent does QC, then evaluates <self_eval_criteria>]
 # [Self-eval criterion failed: retention=2% (<20% target) at 500 counts]
+
+Structured output:
+```json
+{
+    "summary":"QC retained too few cells at current thresholds. Adjusting parameters and rerunning QC.",
+    "next_status":"awaiting_cell_execution",
+    "expected_widgets":[]
+}
+```

@@ -100,7 +100,7 @@ update_plan(
     ]
 )
 ```
-AskUserQeustion "How would you like to adjust the threshold before rerunning? (e.g., 100 or 150 genes)",
+AskUserQuestion: "How would you like to adjust the threshold before rerunning? (e.g., 100 or 150 genes)"
 
 **Turn 3: User Adjusts Threshold. Agent Executes Cells Successfully and Asks for User Confirmation**
 

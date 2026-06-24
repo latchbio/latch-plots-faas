@@ -109,6 +109,36 @@ NOTEBOOK_MUTATION_TOOL_MATCHER = (
 )
 
 Behavior = Literal["step_by_step", "proactive"]
+AgentTurnStatus = Literal[
+    "awaiting_user_response",
+    "awaiting_cell_execution",
+    "awaiting_user_widget_input",
+    "done",
+]
+
+agent_turn_status: set[AgentTurnStatus] = {
+    "awaiting_user_response",
+    "awaiting_cell_execution",
+    "awaiting_user_widget_input",
+    "done",
+}
+
+agent_turn_output_schema: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "summary": {
+            "type": "string",
+            "description": "Short user-facing progress, answer, or next step.",
+        },
+        "next_status": {
+            "type": "string",
+            "enum": list(agent_turn_status),
+            "description": "Agent state after this turn.",
+        },
+    },
+    "required": ["summary", "next_status"],
+    "additionalProperties": False,
+}
 
 HistoryRole = Literal["user", "assistant", "system"]
 
@@ -196,6 +226,11 @@ AnthropicStreamEvent = (
     | RawContentBlockDeltaEvent
     | RawContentBlockStopEvent
 )
+
+
+class AgentTurnOutput(TypedDict):
+    summary: str
+    next_status: AgentTurnStatus
 
 
 class AgentQuery(TypedDict):
@@ -740,6 +775,32 @@ class AgentHarness:
             "context_limit": 1_000_000,
         })
 
+    async def _handle_turn_output(
+        self, structured_output: Any, *, request_id: str | None
+    ) -> None:
+        # todo(rteqs): latch data validation?
+        next_status_raw = structured_output.get("next_status", "done")
+        if len(self.pending_cells) > 0:
+            next_status = "awaiting_cell_execution"
+        elif next_status_raw not in agent_turn_status:
+            next_status = "done"
+        else:
+            next_status = next_status_raw
+
+        await self.set_agent_status(next_status)
+
+        summary: str = structured_output.get("summary", "")
+        content = [{"type": "text", "text": summary}]
+
+        await self._insert_history(
+            role="assistant",
+            payload={
+                "content": content,
+                "structured_output": {"summary": summary, "next_status": next_status},
+            },
+            request_id=request_id,
+        )
+
     async def set_agent_status(self, status: str) -> None:
         self.current_status = status
         await self.send({"type": "agent_status", "status": status})
@@ -971,6 +1032,10 @@ class AgentHarness:
                 permission_mode="acceptEdits",
                 model="claude-opus-4-8",
                 thinking={"type": "adaptive"},
+                output_format={
+                    "type": "json_schema",
+                    "schema": agent_turn_output_schema,
+                },
                 setting_sources=["project"],
                 resume=resume_session_id,
                 env=sdk_env,
@@ -1484,6 +1549,9 @@ class AgentHarness:
                     await self._send_usage_update(usage)
 
                     if res.subtype == "success":
+                        await self._handle_turn_output(
+                            res.structured_output, request_id=request_id
+                        )
                         break
 
                     # todo(rteqs): the old error handling is erroneous. we know from the docs that res.result will be None if subtype != success.

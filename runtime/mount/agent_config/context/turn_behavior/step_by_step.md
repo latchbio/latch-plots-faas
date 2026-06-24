@@ -24,6 +24,6 @@
    - Keep step `in_progress`
    - Present results and evidence
    - Ask confirmation question
-   - Set `continue: false` and `next_status: awaiting_user_response`
+   - End with `next_status: awaiting_user_response`
 6. If user confirmed previous step: mark it `done`, then begin next step
-7. If this is the final turn call `submit_response`. Required at the end of every **loop** before ResultMessage is sent.
+7. End every loop with structured output (`summary`, `next_status`).

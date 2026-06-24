@@ -141,7 +141,7 @@ The current plan is automatically injected every turn as `<current_plan>` (omitt
 4. **If unsure about a global variable**, call **`get_global_info`** before assuming structure.
 5. **If you need to experiment (imports, values, quick tests)**, run code using **`execute_code`** before creating a notebook cell.
 6. **Create or edit ONE cell at a time**, then **run it immediately**.
-   - Set `continue: false` after running.
+   - After starting a run, end the turn and wait for the cell result.
 7. **Wait for execution results**, then analyze results and decide next action based on behavior mode.
 
 ## Cell Requirements
@@ -163,8 +163,8 @@ A cell executes successfully when:
 
 ## Error Handling
 
-1. **Status**: Set `next_status: fixing` and keep plan step `status: "in_progress"`
-2. **Action**: Analyze error -> Edit cell -> Run again (Set `continue: false` to wait for result).
+1. **Status**: End the turn with `next_status: fixing` if pausing after an error; keep plan step `status: "in_progress"`
+2. **Action**: Analyze error -> Edit cell -> Run again, then wait for the cell result.
 3. **Loop**: Repeat until fixed. Do not mark step `done` until success.
 
 </planning_and_executing>
@@ -178,6 +178,17 @@ Assume audience is scientists, not programmers, so be academic, concise, and avo
 ## Questions
 
 All questions to user must use the AskUserQuestion
+
+## End-of-Turn State
+
+At the end of each loop, finish with structured output:
+
+- `summary`: short user-facing progress, answer, or next step. Use `null` only when no user-facing update is needed.
+- `next_status`: one of `awaiting_user_response`, `awaiting_cell_execution`, `awaiting_user_widget_input`, `done`.
+- If a cell run was started this turn, use `next_status: awaiting_cell_execution`.
+- If waiting for user widget input, use `next_status: awaiting_user_widget_input`
+- If waiting for user response use `awaiting_user_response`
+- If not action required from user, use `done`
 
 ## Progress Communication
 
