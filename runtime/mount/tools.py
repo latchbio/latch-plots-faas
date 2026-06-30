@@ -172,7 +172,7 @@ def harness() -> "AgentHarness":
         "properties": {
             "position": {
                 "type": "integer",
-                "description": "Position to insert the cell",
+                "description": "Zero-indexed position to insert the cell",
             },
             "code": {"type": "string", "description": "Python code for the cell"},
             "title": {"type": "string", "description": "Name for the cell"},
@@ -241,7 +241,7 @@ async def create_cell(args: dict[str, Any]) -> dict[str, Any]:
         "properties": {
             "position": {
                 "type": "integer",
-                "description": "Position to insert the cell",
+                "description": "Zero-indexed position to insert the cell",
             },
             "code": {"type": "string", "description": "Markdown content"},
             "title": {
