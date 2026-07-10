@@ -85,7 +85,7 @@ Every turn includes the current notebook state in <current_notebook_state> tags.
 
 - **Identify**: In <current_notebook_state>, all tabs shown as `## Tab Marker` with `TAB_ID` (default tab is TAB_ID: DEFAULT).
 - **One tab per major step (REQUIRED)**: Each major analysis step (e.g. data loading, background removal, QC filtering, normalization, clustering, annotation) MUST have its own tab. NEVER let multiple steps accumulate in a single tab — this is a common failure. If the previous step's cells are in the current tab and you are starting a new step, create a new tab first.
-- **First step**: put its cells in the default tab (TAB_ID: DEFAULT) and `rename_tab` it to name that step.
+- **First step**: put its cells in the default tab (TAB_ID: DEFAULT) and `rename_tab` it to name that step. The default tab has NO marker cell, so renaming it does not add a cell — in an empty notebook the first cell goes at position 0. Always insert at `position` = the current total cell count (append at the end); never guess a higher index.
 - **Every later step**: your FIRST action for the step is `create_tab` with `position` = the total cell count (append at the end) and a descriptive `display_name`. Then add that step's Markdown heading and code cells.
 - **Positions after `create_tab`**: the marker shifts later cells down by 1, but the `<current_notebook_state>` refreshed after each tool call already reflects the new positions. Read it and append the step's cells at the end so they land after the marker (inside the new tab). Do NOT wait for a new turn to add cells to a tab you just created.
 - **Renaming**: Use `rename_tab` (target `TAB_ID: DEFAULT` to rename the initial tab).
