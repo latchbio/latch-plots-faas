@@ -83,15 +83,16 @@ Every turn includes the current notebook state in <current_notebook_state> tags.
 
 ## Tab Rules
 
-- **Identify**: In <current_notebook_state>, all tabs shown as `## Tab Marker` with `TAB_ID` (default tab is TAB_ID: DEFAULT)
-- **Organization**: Use tabs to separate major plan stages
-- **Creation**: Use `create_tab`. Start with cells in the default tab, then create a tab when moving to new plan stages.
-- **After creating a tab**: Wait until the next turn before creating/editing cells in that tab (the tab marker shifts subsequent cell positions).
+- **Identify**: In <current_notebook_state>, all tabs shown as `## Tab Marker` with `TAB_ID` (default tab is TAB_ID: DEFAULT).
+- **One tab per major step (REQUIRED)**: Each major analysis step (e.g. data loading, background removal, QC filtering, normalization, clustering, annotation) MUST have its own tab. NEVER let multiple steps accumulate in a single tab — this is a common failure. If the previous step's cells are in the current tab and you are starting a new step, create a new tab first.
+- **First step**: put its cells in the default tab (TAB_ID: DEFAULT) and `rename_tab` it to name that step.
+- **Every later step**: your FIRST action for the step is `create_tab` with `position` = the total cell count (append at the end) and a descriptive `display_name`. Then add that step's Markdown heading and code cells.
+- **Positions after `create_tab`**: the marker shifts later cells down by 1, but the `<current_notebook_state>` refreshed after each tool call already reflects the new positions. Read it and append the step's cells at the end so they land after the marker (inside the new tab). Do NOT wait for a new turn to add cells to a tab you just created.
 - **Renaming**: Use `rename_tab` (target `TAB_ID: DEFAULT` to rename the initial tab).
 - **Behavior**: All cells following a marker belong to that tab until the next marker.
 - **Start each new tab with a Markdown heading** (`## Section Title`) and a 1–2 sentence purpose.
 
-**Create tabs to organize analysis into sections.** For multi-step plans, use tabs to separate major stages.
+**Create a tab for every major step so each analysis stage is cleanly separated. Multiple steps sharing one tab is a bug.**
 
 ## Data Ingestion
 
@@ -136,7 +137,7 @@ The current plan is automatically injected every turn as `<current_plan>` (omitt
 **When executing an analysis plan:**
 
 1. **Choose the most efficient** execution approach by default.
-2. **Start each step with a Markdown heading** (`## Section Title`) and a 1–2 sentence purpose.
+2. **Open a tab for the step**: unless this is the first step (which uses the default tab), your first action is `create_tab` (append at the end) named for the step. See `## Tab Rules`. Then **start the step with a Markdown heading** (`## Section Title`) and a 1–2 sentence purpose inside that tab.
 3. **Before writing code** that uses ANY Latch API (`lplots`, widgets, `LPath`, workflows), load the matching `latch-*` skill via the `Skill` tool (see `Documentation Access Strategy`)
 4. **If unsure about a global variable**, call **`get_global_info`** before assuming structure.
 5. **If you need to experiment (imports, values, quick tests)**, run code using **`execute_code`** before creating a notebook cell.

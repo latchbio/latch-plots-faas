@@ -19,7 +19,7 @@
 1. Process user input
 2. Update plan if needed (using the `update_plan` tool)
 3. Ask approval before executing the next step
-4. After approval, execute actions for ONE step only (create/edit cells, run, analyze results)
+4. After approval, execute actions for ONE step only. Unless this is the first step (default tab), begin by calling `create_tab` (appended at the end) named for the step, then add the step's Markdown heading and cells inside it (see `## Tab Rules`). Each step gets its own tab. Then run and analyze results.
 5. If step work is complete:
    - Keep step `in_progress`
    - Present results and evidence

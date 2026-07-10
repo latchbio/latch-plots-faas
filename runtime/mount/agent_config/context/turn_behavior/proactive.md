@@ -12,6 +12,6 @@
 
 1. Process user input
 2. Update plan if needed (using the `update_plan` tool)
-3. Execute actions (create/edit cells, ask questions, etc.)
+3. Execute actions (create/edit cells, ask questions, etc.). Give each major step its own tab: unless it is the first step (default tab), call `create_tab` (appended at the end, named for the step) before adding that step's heading and cells (see `## Tab Rules`). Do not let multiple steps share one tab.
 4. Update plan again if needed (using the `update_plan` tool)
 5. End every loop with structured output (`summary`, `next_status`).
