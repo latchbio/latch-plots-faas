@@ -1,5 +1,7 @@
+import asyncio
 import json
-from dataclasses import dataclass
+import traceback
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any
 
 from claude_agent_sdk import (
@@ -2189,6 +2191,32 @@ all_tools = [
     redeem_package,
     smart_ui_spotlight,
 ]
+
+def _guard_tool_handler(t: Any) -> Any:
+    # A tool handler that raises escapes the SDK's control-request task without
+    # returning a result, so the `claude` subprocess blocks forever awaiting the
+    # tool response and the whole agent hangs. Native bindings (e.g. loro) raise
+    # bare BaseException, which the per-tool `except Exception` blocks miss.
+    # Convert any such error into a normal error result so the agent keeps going.
+    orig = t.handler
+
+    async def guarded(args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            return await orig(args)
+        except (asyncio.CancelledError, KeyboardInterrupt):
+            raise
+        except BaseException as e:  # noqa: BLE001
+            traceback.print_exc()
+            return ok({
+                "tool_name": t.name,
+                "summary": f"Tool '{t.name}' failed: {e!s}",
+                "success": False,
+            })
+
+    return replace(t, handler=guarded)
+
+
+all_tools = [_guard_tool_handler(t) for t in all_tools]
 
 agent_tools_mcp = create_sdk_mcp_server(name=MCP_SERVER_NAME, tools=all_tools)
 

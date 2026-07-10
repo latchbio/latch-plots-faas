@@ -18,7 +18,13 @@ AskUserQuestion: Does this threshold work for you?
 
 User: "Yes, proceed."
 
-**Example cells**
+First step uses the default tab — name it for the step:
+
+```python
+rename_tab(tab_id="DEFAULT", new_name="Load & Filter")
+```
+
+**Example cells** (added inside the default tab)
 
 ```python
 from lplots.widgets.ldata import w_ldata_picker
@@ -116,4 +122,23 @@ update_plan(
     ]
 )
 ```
-AskUserQuestion: "Are you satisfied with these results? Should I proceed to the normalization step?"
+AskUserQuestion: "Are you satisfied with these results? Should I proceed to the QC step?"
+
+**Turn 4: User Confirms -> New Step in Its Own Tab**
+
+User: "Yes, continue to QC."
+
+The QC step is a new major step, so open a new tab first (append at the end), then add its heading and cells inside it. The `<current_notebook_state>` returned after `create_tab` reflects the shifted positions, so append the following cells at the end:
+
+```python
+create_tab(position=<total cell count>, display_name="Quality Control")
+```
+
+```markdown
+## Quality Control
+Per-cell QC metrics (genes/cell, mitochondrial %, UMI counts) with a histogram for each.
+```
+
+```python
+# [QC code cells: one histogram per metric, all inside the "Quality Control" tab]
+```

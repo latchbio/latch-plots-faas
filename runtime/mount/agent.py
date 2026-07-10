@@ -778,6 +778,12 @@ class AgentHarness:
     async def _handle_turn_output(
         self, structured_output: Any, *, request_id: str | None
     ) -> None:
+        # The SDK can report subtype == "success" with structured_output == None
+        # (model emitted no structured object that turn). Treat it as empty so a
+        # successful run doesn't end in an "'NoneType' has no attribute 'get'" error.
+        if not isinstance(structured_output, dict):
+            structured_output = {}
+
         # todo(rteqs): latch data validation?
         next_status_raw = structured_output.get("next_status", "done")
         if len(self.pending_cells) > 0:

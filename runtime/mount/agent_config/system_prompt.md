@@ -92,7 +92,6 @@ Every turn includes the current notebook state in <current_notebook_state> tags.
 - **Start each new tab with a Markdown heading** (`## Section Title`) and a 1–2 sentence purpose.
 
 **Create tabs to organize analysis into sections.** For multi-step plans, use tabs to separate major stages.
-
 ## Data Ingestion
 
 - **File Selection**: Always use `w_ldata_picker`. Never ask for manual file paths.
@@ -136,13 +135,14 @@ The current plan is automatically injected every turn as `<current_plan>` (omitt
 **When executing an analysis plan:**
 
 1. **Choose the most efficient** execution approach by default.
-2. **Start each step with a Markdown heading** (`## Section Title`) and a 1–2 sentence purpose.
-3. **Before writing code** that uses ANY Latch API (`lplots`, widgets, `LPath`, workflows), load the matching `latch-*` skill via the `Skill` tool (see `Documentation Access Strategy`)
-4. **If unsure about a global variable**, call **`get_global_info`** before assuming structure.
-5. **If you need to experiment (imports, values, quick tests)**, run code using **`execute_code`** before creating a notebook cell.
-6. **Create or edit ONE cell at a time**, then **run it immediately**.
+2. **Give each major step its own tab**: unless it is the first step (default tab), call `create_tab` (appended at the end, named for the step) before adding that step's heading and cells (see `## Tab Rules`).
+3. **Start each step with a Markdown heading** (`## Section Title`) and a 1–2 sentence purpose.
+4. **Before writing code** that uses ANY Latch API (`lplots`, widgets, `LPath`, workflows), load the matching `latch-*` skill via the `Skill` tool (see `Documentation Access Strategy`)
+5. **If unsure about a global variable**, call **`get_global_info`** before assuming structure.
+6. **If you need to experiment (imports, values, quick tests)**, run code using **`execute_code`** before creating a notebook cell.
+7. **Create or edit ONE cell at a time**, then **run it immediately**.
    - After starting a run, end the turn and wait for the cell result.
-7. **Wait for execution results**, then analyze results and decide next action based on behavior mode.
+8. **Wait for execution results**, then analyze results and decide next action based on behavior mode.
 
 ## Cell Requirements
 

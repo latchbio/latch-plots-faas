@@ -504,10 +504,19 @@ class Notebook:
     def cells(self) -> LoroMovableList:
         return self.loro_doc.get_movable_list("cells")
 
+    def _clamp_insert_pos(self, pos: int) -> int:
+        # loro raises a bare BaseException on out-of-bounds inserts, which
+        # escapes the tool handlers and deadlocks the agent SDK (it never gets a
+        # tool result). Clamp to a valid index; an out-of-range pos becomes an
+        # append, matching the agent's usual intent.
+        n = len(self.cells.to_vec())
+        return max(0, min(pos, n))
+
     async def create_code_cell(
         self, pos: int, code: str | None, display_name: str
     ) -> tuple[str, str]:
         await self.fetch_updates()
+        pos = self._clamp_insert_pos(pos)
         cell: LoroMap = self.cells.insert_container(pos, LoroMap())  # type: ignore
 
         cell.insert("cellType", "code")
@@ -565,6 +574,7 @@ class Notebook:
 
     async def create_markdown_cell(self, pos: int, content: str | None) -> str:
         await self.fetch_updates()
+        pos = self._clamp_insert_pos(pos)
         cell: LoroMap = self.cells.insert_container(pos, LoroMap())  # type: ignore
 
         cell.insert("cellType", "markdown")
@@ -579,6 +589,7 @@ class Notebook:
 
     async def create_tab_marker_cell(self, pos: int, name: str) -> str:
         await self.fetch_updates()
+        pos = self._clamp_insert_pos(pos)
         cell: LoroMap = self.cells.insert_container(pos, LoroMap())  # type: ignore
 
         cell.insert("cellType", "tabMarker")
