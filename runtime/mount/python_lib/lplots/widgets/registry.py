@@ -86,8 +86,8 @@ class RegistryTableState(_emit.WidgetState[registry_table_type, str]):
 
 
 class RegistryTableValue(TypedDict):
-    table: Table | None
-    selected_rows: list[Record] | None
+    table: Table
+    selected_rows: list[Record]
 
 
 @dataclass(frozen=True, kw_only=True)
