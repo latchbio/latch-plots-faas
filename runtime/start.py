@@ -2,6 +2,7 @@
 
 import os
 import re
+import subprocess
 import sys
 from io import TextIOWrapper
 from pathlib import Path
@@ -44,19 +45,19 @@ env_vars = {
     "PYTHON_GIL": "1",
 }
 
-os.system(
-    "git -C /opt/latch/plots-faas remote add forgejo-mirror https://git.latch.bio/LatchBio/latch-plots-faas.git"
+subprocess.Popen(
+    "git -C /opt/latch/plots-faas submodule update --init --depth 1 --single-branch"
 )
 
-os.system(
-    "git -C /opt/latch/plots-faas pull origin main || git -C /opt/latch/plots-faas forgejo-mirror main"
+subprocess.Popen(
+    "git -C /opt/latch/plots-faas rev-parse HEAD > /opt/latch/plots_faas_version"
 )
-os.system("git -C /opt/latch/plots-faas submodule update --init --remote")
-os.system("git -C /opt/latch/plots-faas rev-parse HEAD > /opt/latch/plots_faas_version")
+
+subprocess.Popen(
+    "/opt/mamba/envs/plots-faas/bin/pip install --upgrade --upgrade-strategy only-if-needed latch"
+)
 
 os.chdir("/opt/latch/plots-faas")
-
-os.system("/opt/mamba/envs/plots-faas/bin/pip install --upgrade latch")
 
 os.execle(
     "/usr/bin/nice",
