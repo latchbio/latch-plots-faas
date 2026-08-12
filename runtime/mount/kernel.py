@@ -793,6 +793,14 @@ class Kernel:
     ] = field(default_factory=pagination_settings_dict_factory)
 
     plot_configs: dict[str, PlotConfig | None] = field(default_factory=dict)
+
+    # { global variable name -> identity of the w_plot widget displaying it }
+    # Used to detect two plots pointing at the same figure variable, which
+    # would otherwise silently overwrite each other (the plot viewer tracks the
+    # live global variable by name). Cell-scoped entries are cleared whenever a
+    # cell (re)runs, in `set_active_cell`.
+    plot_source_owners: dict[str, str] = field(default_factory=dict)
+
     duckdb: DuckDBPyConnection = field(default=initialize_duckdb())
 
     session_snapshot_mode: bool = False
@@ -892,6 +900,18 @@ class Kernel:
 
         if cell_id is not None:
             self.thread_local.active_cell = cell_id
+
+            # Forget the figure variables this cell previously claimed so a
+            # (re)run rebuilds ownership from scratch. Widget identities are
+            # `<cell name_path>/<key>`, and a cell body's name_path is its
+            # cell_id, so every identity for this cell shares this prefix.
+            owner_prefix = f"{cell_id}/"
+            for global_key in [
+                gk
+                for gk, owner in self.plot_source_owners.items()
+                if owner.startswith(owner_prefix)
+            ]:
+                del self.plot_source_owners[global_key]
 
         await self.send({
             "type": "start_cell",
