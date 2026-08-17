@@ -166,6 +166,17 @@ def harness() -> "AgentHarness":
     return h
 
 
+async def dispose_kernel_cells(cell_ids: list[str]) -> None:
+    h = harness()
+    for cell_id in cell_ids:
+        h.pending_cells.discard(cell_id)
+        await h.send({
+            "type": "agent_action",
+            "action": "dispose_cell",
+            "params": {"cell_id": cell_id},
+        })
+
+
 @tool(
     "create_cell",
     "Create a new code cell at specified position. The cell will automatically run after creation.",
@@ -467,7 +478,11 @@ async def delete_cell(args: dict[str, Any]) -> dict[str, Any]:
     print(f"[tool] delete_cell id={cell_id}")
     try:
         notebook = await get_notebook()
+        await notebook.fetch_updates()
+        tf = notebook.tf_by_loro_cell_id.get(cell_id)
         await notebook.delete_cell(cell_id=cell_id)
+        if tf is not None:
+            await dispose_kernel_cells([tf.id])
     except Exception as e:
         return ok({
             "tool_name": "delete_cell",
@@ -574,8 +589,16 @@ async def stop_cell(args: dict[str, Any]) -> dict[str, Any]:
 async def delete_all_cells(args: dict[str, Any]) -> dict[str, Any]:  # noqa: ARG001
     try:
         notebook = await get_notebook()
+        await notebook.fetch_updates()
         deleted_count = len(notebook.cells)
+        tf_ids = [
+            tf.id
+            for cid in notebook.cells.to_vec()
+            if (tf := notebook.tf_by_loro_cell_id.get(loro_ts_container_id(cid)))
+            is not None
+        ]
         await notebook.delete_all_cells()
+        await dispose_kernel_cells(tf_ids)
     except Exception as e:
         return ok({
             "tool_name": "delete_all_cells",

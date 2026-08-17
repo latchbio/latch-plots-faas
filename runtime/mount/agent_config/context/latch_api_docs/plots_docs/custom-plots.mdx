@@ -64,6 +64,7 @@ fig_iris_scatter = px.scatter(
 
 * Use `fig_<what>` (e.g., `fig_iris_scatter`).
 * If that name already exists in `<current_layout>` or `<target_cell_contents>`, create a unique variant: `fig_iris_scatter_1`, `fig_iris_scatter_2`, …
+* **Every `w_plot` needs its own figure variable.** The plot viewer tracks the live global variable by name, so reusing one variable (e.g. `fig`) across two plots makes the second overwrite the first. `w_plot` now raises a `ValueError` when it detects a figure variable already displayed by another plot—rename to a unique `fig_*` variable to fix it.
 
 ---
 

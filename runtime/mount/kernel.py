@@ -793,6 +793,14 @@ class Kernel:
     ] = field(default_factory=pagination_settings_dict_factory)
 
     plot_configs: dict[str, PlotConfig | None] = field(default_factory=dict)
+
+    # { global variable name -> identity of the w_plot widget displaying it }
+    # Used to detect two plots pointing at the same figure variable, which
+    # would otherwise silently overwrite each other (the plot viewer tracks the
+    # live global variable by name). Entries are cleared when their owning
+    # reactive node is disposed or its cell reruns.
+    plot_source_owners: dict[str, str] = field(default_factory=dict)
+
     duckdb: DuckDBPyConnection = field(default=initialize_duckdb())
 
     session_snapshot_mode: bool = False
@@ -827,6 +835,16 @@ class Kernel:
     def get_cell_seq(self) -> int:
         with self.cell_seq_lock:
             return self.cell_seq
+
+    def release_plot_source_owners(self, owner_path: str) -> None:
+        """Release plots owned by a reactive node and any of its descendants."""
+        owner_prefix = f"{owner_path}/"
+        for global_key in [
+            gk
+            for gk, owner in self.plot_source_owners.items()
+            if owner.startswith(owner_prefix)
+        ]:
+            del self.plot_source_owners[global_key]
 
     def debug_state(self) -> dict[str, object]:
         return {
@@ -892,6 +910,9 @@ class Kernel:
 
         if cell_id is not None:
             self.thread_local.active_cell = cell_id
+
+            # A (re)run rebuilds this cell's ownership from scratch.
+            self.release_plot_source_owners(cell_id)
 
         await self.send({
             "type": "start_cell",
@@ -1305,6 +1326,11 @@ class Kernel:
         ).result()
 
     def on_dispose(self, node: Node) -> None:
+        # Widget identities begin with their reactive node's name path. Release
+        # ownership for this node and all descendants so deleted cells and
+        # removed reactive subtrees do not reserve figure variable names.
+        self.release_plot_source_owners(node.name_path())
+
         if node.id not in self.nodes_with_widgets:
             return
 
@@ -1475,7 +1501,10 @@ class Kernel:
                 self.running_cells.pop(cell_id)
 
     async def stop_cell(self, cell_id: str) -> None:
-        if self.cell_status[cell_id] != "running" or cell_id not in self.running_cells:
+        if (
+            self.cell_status.get(cell_id) != "running"
+            or cell_id not in self.running_cells
+        ):
             return
 
         running_cell = self.running_cells[cell_id]
@@ -1488,6 +1517,20 @@ class Kernel:
         ctypes.pythonapi.PyThreadState_SetAsyncExc(
             ctypes.c_ulong(thread_id), ctypes.py_object(StopCellError)
         )
+
+    async def dispose_cell(self, cell_id: str) -> None:
+        await self.stop_cell(cell_id)
+
+        with self.cell_locks[cell_id]:
+            node = self.cell_rnodes.pop(cell_id, None)
+            if node is not None:
+                node.dispose()
+
+            self.cell_status.pop(cell_id, None)
+
+            # Normally node disposal releases these entries. Keep this direct
+            # cleanup as a backstop for an orphaned owner without a live node.
+            self.release_plot_source_owners(cell_id)
 
     async def send_cell_result(self, cell_id: str) -> None:
         await self.send_global_updates()
@@ -2039,17 +2082,7 @@ class Kernel:
             return
 
         if msg["type"] == "dispose_cell":
-            cell_id = msg["cell_id"]
-
-            await self.stop_cell(cell_id)
-
-            node = self.cell_rnodes.get(cell_id)
-            with self.cell_locks[cell_id]:
-                if node is not None:
-                    node.dispose()
-                    del self.cell_rnodes[cell_id]
-                    del self.cell_status[cell_id]
-
+            await self.dispose_cell(msg["cell_id"])
             return
 
         if msg["type"] == "stop_cell":
@@ -2071,6 +2104,7 @@ class Kernel:
 
             self.cell_rnodes.clear()
             self.cell_status.clear()
+            self.plot_source_owners.clear()
 
             self.ldata_dataframes.clear()
             self.registry_dataframes.clear()

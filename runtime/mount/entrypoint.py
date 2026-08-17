@@ -869,6 +869,35 @@ async def handle_agent_messages(conn_a: SocketIo) -> None:
                 })
             continue
 
+        if msg_type == "agent_action" and msg.get("action") == "dispose_cell":
+            if k_proc.msg_io is not None:
+                params = msg.get("params", {})
+                cell_id = params.get("cell_id")
+
+                cell_status.pop(cell_id, None)
+                cell_last_run_outputs.pop(cell_id, None)
+                cell_sequencers.pop(cell_id, None)
+
+                await k_proc.msg_io.send({
+                    "type": "dispose_cell",
+                    "cell_id": cell_id,
+                })
+                if tx_id is not None:
+                    await conn_a.send({
+                        "type": "agent_action_response",
+                        "tx_id": tx_id,
+                        "status": "success",
+                        "cell_id": cell_id,
+                    })
+            elif tx_id is not None:
+                await conn_a.send({
+                    "type": "agent_action_response",
+                    "tx_id": tx_id,
+                    "status": "error",
+                    "error": "Kernel not connected",
+                })
+            continue
+
         if msg_type == "agent_action" and msg.get("action") == "reset_kernel_globals":
             if k_proc.msg_io is not None:
                 await k_proc.msg_io.send({

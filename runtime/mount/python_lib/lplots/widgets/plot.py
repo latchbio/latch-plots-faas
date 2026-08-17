@@ -69,6 +69,25 @@ def w_plot(
     assert ctx.cur_comp is not None
     value_viewer_key = f"{ctx.cur_comp.name_path()}/{key}"
     if global_key is not None:
+        # The plot viewer tracks the live global variable by name rather than a
+        # snapshot of the figure. If two w_plot widgets point at the same
+        # variable, reassigning it (or plotting into it again) overwrites the
+        # earlier plot. Guard against this by giving each figure variable a
+        # single owning widget and surfacing an error to the agent otherwise.
+        widget_identity = value_viewer_key
+        owners = _inject.kernel.plot_source_owners
+        prev_owner = owners.get(global_key)
+        if prev_owner is not None and prev_owner != widget_identity:
+            raise ValueError(
+                f"w_plot: the figure variable `{global_key}` is already "
+                "displayed by another w_plot. Reusing one variable for "
+                "multiple plots makes them overwrite each other, because the "
+                "plot viewer tracks the live global variable by name. Assign "
+                f"this figure to a unique variable (e.g. `{global_key}_1` or "
+                f"`{global_key}_umap`) and pass that to w_plot."
+            )
+        owners[global_key] = widget_identity
+
         value_viewer_key = f"{global_key}_{key}"
 
     res = Plot(
