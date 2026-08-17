@@ -797,8 +797,8 @@ class Kernel:
     # { global variable name -> identity of the w_plot widget displaying it }
     # Used to detect two plots pointing at the same figure variable, which
     # would otherwise silently overwrite each other (the plot viewer tracks the
-    # live global variable by name). Cell-scoped entries are cleared whenever a
-    # cell (re)runs, in `set_active_cell`.
+    # live global variable by name). Entries are cleared when their owning
+    # reactive node is disposed or its cell reruns.
     plot_source_owners: dict[str, str] = field(default_factory=dict)
 
     duckdb: DuckDBPyConnection = field(default=initialize_duckdb())
@@ -835,6 +835,16 @@ class Kernel:
     def get_cell_seq(self) -> int:
         with self.cell_seq_lock:
             return self.cell_seq
+
+    def release_plot_source_owners(self, owner_path: str) -> None:
+        """Release plots owned by a reactive node and any of its descendants."""
+        owner_prefix = f"{owner_path}/"
+        for global_key in [
+            gk
+            for gk, owner in self.plot_source_owners.items()
+            if owner.startswith(owner_prefix)
+        ]:
+            del self.plot_source_owners[global_key]
 
     def debug_state(self) -> dict[str, object]:
         return {
@@ -901,17 +911,8 @@ class Kernel:
         if cell_id is not None:
             self.thread_local.active_cell = cell_id
 
-            # Forget the figure variables this cell previously claimed so a
-            # (re)run rebuilds ownership from scratch. Widget identities are
-            # `<cell name_path>/<key>`, and a cell body's name_path is its
-            # cell_id, so every identity for this cell shares this prefix.
-            owner_prefix = f"{cell_id}/"
-            for global_key in [
-                gk
-                for gk, owner in self.plot_source_owners.items()
-                if owner.startswith(owner_prefix)
-            ]:
-                del self.plot_source_owners[global_key]
+            # A (re)run rebuilds this cell's ownership from scratch.
+            self.release_plot_source_owners(cell_id)
 
         await self.send({
             "type": "start_cell",
@@ -1325,6 +1326,11 @@ class Kernel:
         ).result()
 
     def on_dispose(self, node: Node) -> None:
+        # Widget identities begin with their reactive node's name path. Release
+        # ownership for this node and all descendants so deleted cells and
+        # removed reactive subtrees do not reserve figure variable names.
+        self.release_plot_source_owners(node.name_path())
+
         if node.id not in self.nodes_with_widgets:
             return
 
@@ -2091,6 +2097,7 @@ class Kernel:
 
             self.cell_rnodes.clear()
             self.cell_status.clear()
+            self.plot_source_owners.clear()
 
             self.ldata_dataframes.clear()
             self.registry_dataframes.clear()
