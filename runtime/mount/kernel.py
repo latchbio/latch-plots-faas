@@ -1501,7 +1501,10 @@ class Kernel:
                 self.running_cells.pop(cell_id)
 
     async def stop_cell(self, cell_id: str) -> None:
-        if self.cell_status[cell_id] != "running" or cell_id not in self.running_cells:
+        if (
+            self.cell_status.get(cell_id) != "running"
+            or cell_id not in self.running_cells
+        ):
             return
 
         running_cell = self.running_cells[cell_id]
@@ -1514,6 +1517,20 @@ class Kernel:
         ctypes.pythonapi.PyThreadState_SetAsyncExc(
             ctypes.c_ulong(thread_id), ctypes.py_object(StopCellError)
         )
+
+    async def dispose_cell(self, cell_id: str) -> None:
+        await self.stop_cell(cell_id)
+
+        with self.cell_locks[cell_id]:
+            node = self.cell_rnodes.pop(cell_id, None)
+            if node is not None:
+                node.dispose()
+
+            self.cell_status.pop(cell_id, None)
+
+            # Normally node disposal releases these entries. Keep this direct
+            # cleanup as a backstop for an orphaned owner without a live node.
+            self.release_plot_source_owners(cell_id)
 
     async def send_cell_result(self, cell_id: str) -> None:
         await self.send_global_updates()
@@ -2065,17 +2082,7 @@ class Kernel:
             return
 
         if msg["type"] == "dispose_cell":
-            cell_id = msg["cell_id"]
-
-            await self.stop_cell(cell_id)
-
-            node = self.cell_rnodes.get(cell_id)
-            with self.cell_locks[cell_id]:
-                if node is not None:
-                    node.dispose()
-                    del self.cell_rnodes[cell_id]
-                    del self.cell_status[cell_id]
-
+            await self.dispose_cell(msg["cell_id"])
             return
 
         if msg["type"] == "stop_cell":
